@@ -20,7 +20,11 @@ One source offer fans out to declared peripheral inputs and their GPIO peers.
 Masked updates preserve unrelated driven/floating/unknown pins and contention.
 DAX core rates follow the existing reference PLL/EXTAL boundary contract.
 Missing inputs, rates and unsupported pin modes retain visible failures.
-Independent same-time sources and competing ESAI input routes still reject.
+Independent same-time sources now join one bounded input deadline. A preflight
+target mask distinguishes TIO0/1, ESAI0/1, DAX and the MCU SCI route; actual
+duplicate targets still reject. The whole set uses the configured input/DSP
+ordering, with no native instruction between its observations. Source cursors
+advance only after successful observations and stay in ordinary checkpoints.
 Failed fanout quarantines the Board; retry requires a joint trusted restore.
 
 Source phase survives guest/peripheral reset and is included in Board checkpoints
@@ -45,3 +49,15 @@ clock/format programming, causal NAND power, literal signed PCM/bit periods and
 joint fresh-owner replay in both initial MCU schedules. All six affected Board/
 NAND/audio groups pass under ASan/UBSan and separate TSan. Original connected
 instrument audio, voice operation and realtime performance remain unqualified.
+
+Four schedule/order cases combine both TIO inputs, both ESAI instances and DAX
+at an actual common deadline, while one literal A5 byte uses normal 31250 baud.
+Native DSP priming produces independently checked signed PCM/BMC payloads;
+the inputs preserve CPU progress, audio data and clocks against an otherwise
+identical control. Four partial-byte checkpoints reproduce eight fresh-owner
+suffixes. CLI cases also retain exact ESAI bits and original MIDI reception
+beside an independent timer input; duplicate target failures remain covered.
+Eight affected groups pass per ASan/UBSan and separate TSan. These component
+results do not establish original reset-to-instrument note audio.
+Local receipts: doc/local/coincident-dsp-inputs/qualified.json.
+SHA-256: 595af1f09a73d0d3490fe05e97f9cb5766795cf25202d4bb006a7fe85385d6ca

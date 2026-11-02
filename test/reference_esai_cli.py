@@ -172,15 +172,23 @@ class EsaiCli(unittest.TestCase):
         self.assertEqual([int(row["actual"]) for row in observed],
                          [START + i * HALF for i in range(len(observed))])
 
-    def test_periodic_collisions_fail_at_the_actual_due_boundary(self):
+    def test_periodic_independent_sources_join_and_duplicate_targets_refuse(self):
         for name, extra in (("static", f"dsp-at {START} tio 0 high raw\n"),
                             ("second-clock", f"dsp-clock esai 0 hckt {START} 31 2 reference-reset-edges\n")):
-            result, trace = self.invoke("periodic-collision-" + name, periodic() + extra)
-            self.assertEqual(result.returncode, 2, result.stderr)
-            self.assertIn(f"Simultaneous reference DSP input sources at={START}", result.stderr)
-            self.assertNotIn("DSP-ESAI requested=", trace)
-            self.assertNotIn("DSP-INPUT requested=", trace)
-            self.assertIn("DSP-ESAI-CLOCK instance=1 observed=0 configured=516", result.stderr)
+            result, trace = self.invoke("periodic-coincident-" + name, periodic() + extra)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.verify_frame(trace)
+            if name == "static":
+                self.assertIn(f"DSP-INPUT requested={START} actual={START} tio=0 level=high", trace)
+            else:
+                other = [row for row in rows(trace) if int(row["instance"]) == 0]
+                self.assertEqual([int(row["actual"]) for row in other], [START, START + 31])
+        result, trace = self.invoke("periodic-conflict", periodic() +
+                                    f"dsp-at {START} esai 1 unknown unknown low reference-reset-edges\n")
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn(f"Simultaneous reference DSP input sources at={START}", result.stderr)
+        self.assertNotIn("DSP-ESAI requested=", trace)
+        self.assertNotIn("DSP-INPUT requested=", trace)
         # A static unknown HCKT snapshot follows151 real periodic observations.
         result, trace = self.invoke("periodic-fault-replay", periodic() +
                                     "dsp-at 5451 esai 1 unknown unknown unknown reference-reset-edges\n"

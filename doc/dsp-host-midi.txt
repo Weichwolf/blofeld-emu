@@ -15,8 +15,9 @@ Start must not precede DSP release. Initial idle-high observations remain caller
 inputs if the guest reads DI before the first bit event. Native timer setup,
 GPIO mux, interrupts, capture/sampling and parser execution remain required.
 SCI and DSP routes are mutually exclusive. Static timed writes to the selected
-TIO reject; simultaneous independent DSP sources still require qualification
-and fail with both CPU contexts rather than dropping or reordering an input.
+TIO reject. Simultaneous independent DSP inputs share one bounded deadline on
+the configured side of the DSP cycle; no instruction executes between them.
+Duplicate targets fail with both CPU contexts. See reference-audio-clock.txt.
 
 The default wire is 31250 baud, start-low/eight LSB-first data/stop-high, without
 an extra inter-frame bit. Deadlines use independent integer common-time units:

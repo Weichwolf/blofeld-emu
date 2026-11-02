@@ -135,8 +135,11 @@ reject plus a positive event budget per MCU period. dsp-input-write-order select
 input-before-mcu, mcu-before-input or reject for a simultaneous actual shared MCU
 write. Unqualified ties and cyclic three-way orders fail before consuming them.
 All six acyclic orders execute the actual native effects. Exhausted sources remain
-bound; snapshots retain their cursors. Simultaneous independent external sources
-remain unsupported even when their order relative to a DSP cycle is qualified.
+bound; snapshots retain their cursors. Independent sources at the same timestamp
+form one input deadline: all apply on the selected side of the DSP cycle, without
+executing native work between them. The per-period budget counts these deadlines;
+each contains at most six distinct source targets. Competing TIO, ESAI or DAX
+writers still fail with both CPU contexts. See reference-audio-clock.txt.
 
 With actual POR, declared observations may start at tick0 under reset. The nominal
 MCU-start profile retains the post-release timestamp restrictions. Static initial

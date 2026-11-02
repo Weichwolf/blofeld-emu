@@ -82,12 +82,20 @@ all byte values, speed, or a separate TSan result. The ordinary directed test
 scopes above retain their existing declared timing. Next integration must feed
 normal MIDI into connected original execution without modifying guest state.
 
-The same functional DSP clock also reaches genuine cold NAND loading with the
-MCU kept at 12 MHz: all 107 row/read deadlines and 56496 original byte reads/
-stores pass; the loader verifies all 18287 resident DSP words. Both joint
-continuations reach original Timer0 configuration and reproduce the diagnostic
-decoder control. Reception has not started: the private driver must reapply its
-held synchronized idle level after reset before capture clocks. One silent PCM
-frame is observed. This qualifies cold loading at the candidate clock, with no
-timer/firmware guard changes; it does not qualify connected MIDI or played audio.
-own-dsp-nand-reference.json pins this distinct audit and its remaining scope.
+The connected frozen original MCU/DSP reference now also qualifies normal MIDI
+input after genuine cold loading at this functional clock. MCU stays at 12 MHz;
+107 NAND rows/deadlines, 56496 actual byte reads/stores and 18287 resident words
+are checked. All six bytes of NoteOn 90,3c,64 and NoteOff 80,3c,00 reach the real
+ring through six producer-cursor advances. 54 native Timer0 vector entries and
+54 RTIs balance; the 42 intermediate sample-return observations are not extra
+received bytes. Both joint continuations and the diagnostic decoder control
+match. The driver holds its last observed level across reset, with queue/level
+included in its checkpoint; it never substitutes a future queued bit.
+
+The selected original factory StartUp preset has Arp Mode 1 and Clocked Delay.
+Its real note dispatcher appends one held note; this short 15 ms gate reaches no
+positive voice-allocation entry. 6722 DMA words decode to 1679 silent stereo
+frames. The next genuine refusal is the Delay read at Y:016000, P:0022d5,
+after its clear cursor passes the mapped RAM window. No address, routine or
+firmware word is patched. Original note audio and normal standalone operation
+remain unqualified. own-dsp-nand-reference.json pins the complete audit.

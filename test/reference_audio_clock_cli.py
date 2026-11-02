@@ -125,15 +125,12 @@ class AudioClockCli(unittest.TestCase):
         self.assertIn(f"DSP-INPUT requested={at} actual={at} tio=0 level=high", trace)
         self.verify(trace, 1)
 
-    def test_independent_source_collision_is_not_silently_ordered(self):
-        result, trace = self.invoke("collision", config() + f"dsp-at {EPOCH} tio 0 high raw\n")
-        # Nominal MCU reset/vector fetch already ends at this exact epoch.
-        # Source discovery therefore refuses during Board construction.
-        self.assertEqual(result.returncode, 1, result.stderr)
-        self.assertIn(f"Simultaneous reference DSP input sources at={EPOCH}", result.stderr)
-        self.assertIn("mcu-pc=", result.stderr)
-        self.assertIn("dsp-pc=", result.stderr)
-        self.assertNotIn("DSP-AUDIO-CLOCK requested=", trace)
+    def test_simultaneous_independent_input_preserves_native_audio(self):
+        result, trace = self.invoke("coincident", config() + f"dsp-at {EPOCH} tio 0 high raw\n")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"DSP-INPUT requested={EPOCH} actual={EPOCH} tio=0 level=high", trace)
+        self.verify(trace, 1)
+
 
 
 if __name__ == "__main__":

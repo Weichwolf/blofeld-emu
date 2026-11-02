@@ -186,7 +186,7 @@ struct Fixture {
                   .specification = BLOFELD_DEFAULT_SLA,
                   .flash_out = {},
                   .trace = &trace,
-                  .instructions = operations},
+                  .instructions = configuration.operations},
         board(configuration, execution) {}
 
   blofeld::McuFlashImage flash;
@@ -389,6 +389,120 @@ void nand_audio() {
   }
 }
 
+constexpr std::uint64_t coincident_offset = 512 * half_period;
+constexpr std::uint64_t midi_bit_ticks = timebase / 31250;
+
+reference::Config coincident_config(const bool pipeline, const blofeld::DspPeerOrder order) {
+  auto result = config(pipeline);
+  constexpr unsigned coincident_operations = 5000;
+  result.operations = coincident_operations;
+  const auto coincident_start = (pipeline ? 0U : release_ticks) + coincident_offset;
+  result.dsp_input_order = order;
+  result.midi_dsp = reference::DspMidiRoute{.after_ticks = coincident_start, .synchronized = true};
+  result.dsp_initial = {{.level = true, .synchronized = true}};
+  result.dsp_events = {{.ticks = coincident_start, .index = 1, .level = true, .synchronized = true},
+                       {.ticks = coincident_start + (3 * midi_bit_ticks),
+                        .index = 1,
+                        .level = false,
+                        .synchronized = true}};
+  result.dsp_clocks = {
+      {.start_ticks = coincident_start, .half_period_ticks = half_period, .edges = 4, .index = 0}};
+  return result;
+}
+
+void verify_coincident_trace(const std::string &trace, const std::uint64_t epoch) {
+  verify_trace(trace, epoch);
+  const auto coincident_start = epoch + coincident_offset;
+  constexpr std::string_view byte_bits = "0101001011"; // UART 8N1, authored A5.
+  std::istringstream lines(trace);
+  unsigned serial = 0;
+  unsigned joined = 0;
+  for (std::string line; std::getline(lines, line);) {
+    if (line.starts_with("DSP-MIDI-BIT ")) {
+      const auto at = coincident_start + (serial * midi_bit_ticks);
+      require(field(line, "requested") == at && field(line, "actual") == at &&
+                  field(line, "level") == (serial < byte_bits.size()
+                                               ? static_cast<unsigned>(byte_bits.at(serial) - '0')
+                                               : 1U),
+              "Independent normal31250baud bit grid and literal UART payload remain exact");
+      if (serial < byte_bits.size()) {
+        require(field(line, "bit") == serial, "Every queued byte bit is observed exactly once");
+      } else {
+        require(line.contains("bit=idle"), "Completed MIDI frame retains its idle source");
+      }
+      ++serial;
+    }
+    if (line.starts_with("DSP-INPUT ") || line.starts_with("DSP-ESAI ") ||
+        line.starts_with("DSP-MIDI-BIT ")) {
+      if (field(line, "requested") == coincident_start) { ++joined; }
+    }
+  }
+  if (serial <= byte_bits.size() || joined != 4) {
+    throw blofeld::Fault("Coincident source observations serial=" + std::to_string(serial) +
+                         " joined=" + std::to_string(joined) + " epoch=" + std::to_string(epoch));
+  }
+  require(serial > byte_bits.size() && joined == 4,
+          "Both timers, both ESAI instances and DAX receive the same actual input deadline");
+}
+
+void coincident_branch(const bool pipeline, const blofeld::DspPeerOrder order) {
+  const auto configuration = coincident_config(pipeline, order);
+  auto baseline_config = config(pipeline);
+  baseline_config.operations = configuration.operations;
+  baseline_config.dsp_input_order = order;
+  Fixture baseline(baseline_config);
+  while (!baseline.board.finished()) { baseline.board.advance(); }
+  Fixture f(configuration);
+  f.board.initialize();
+  constexpr std::array<std::uint8_t, 1> bytes{0xa5};
+  f.board.enqueue_midi(bytes);
+  constexpr unsigned partial = 500;
+  steps(f.board, partial);
+  const auto prefix = f.board.status();
+  require(prefix.midi_dsp_events > 1 && prefix.midi_dsp_frames == 0 && prefix.midi_queued == 1,
+          "Joint checkpoint is inside a normal MIDI byte while native audio clocks continue");
+  const auto checkpoint = f.board.checkpoint();
+  const auto before = f.trace.str();
+  f.trace.str({});
+  while (!f.board.finished()) { f.board.advance(); }
+  const auto expected = f.board.status();
+  const auto suffix = f.trace.str();
+  const auto unchanged = baseline.board.status();
+  if (!expected.pcm || !expected.last_pcm || !unchanged.pcm || !unchanged.last_pcm ||
+      !configuration.audio_clock) {
+    throw blofeld::Fault("Concurrent input comparison requires both native PCM states and source");
+  }
+  constexpr std::int32_t coincident_signed_sample = -8388607;
+  require(expected.midi_dsp_frames == 1 && expected.midi_queued == 0 && expected.pcm &&
+              expected.pcm->completed_frames() > 2 && expected.last_pcm &&
+              expected.last_pcm->samples[0] == coincident_signed_sample &&
+              expected.last_pcm->samples[1] == coincident_signed_sample,
+          "Normal MIDI completes beside actual native DSP/ESAI signed PCM");
+  require(expected.common_ticks == unchanged.common_ticks && expected.dsp == unchanged.dsp &&
+              expected.dsp_steps == unchanged.dsp_steps &&
+              expected.dsp_units == unchanged.dsp_units && unchanged.pcm &&
+              expected.pcm->completed_frames() == unchanged.pcm->completed_frames() &&
+              unchanged.last_pcm && expected.last_pcm->samples == unchanged.last_pcm->samples,
+          "Independent simultaneous inputs preserve native CPU progress, audio data and clocks");
+  verify_coincident_trace(before + suffix, configuration.audio_clock->epoch_ticks);
+  for (unsigned replay = 0; replay < 2; ++replay) {
+    f.board.restore(checkpoint);
+    require(f.board.status() == prefix, "Restored input batch and all native owners match");
+    f.trace.str({});
+    while (!f.board.finished()) { f.board.advance(); }
+    require(f.board.status() == expected && f.trace.str() == suffix,
+            "Same-time sources and partial MIDI/PCM reproduce their full native suffix");
+  }
+}
+
+void coincident_inputs() {
+  for (const bool pipeline : {false, true}) {
+    for (const auto order : {blofeld::DspPeerOrder::peer_first, blofeld::DspPeerOrder::dsp_first}) {
+      coincident_branch(pipeline, order);
+    }
+  }
+}
+
 void guards() {
   blofeld::DspGpio port(blofeld::DspPort::e);
   constexpr unsigned hckt = 0x20;
@@ -414,7 +528,12 @@ void guards() {
     static_cast<void>(rejects([&] { const Fixture f(configuration); }));
   }
   auto collision = config(false);
-  collision.dsp_events = {{.ticks = release_ticks, .level = false}};
+  collision.dsp_events = {{.ticks = release_ticks,
+                           .kind = reference::DspInputKind::esai,
+                           .index = 0,
+                           .esai = {.high_clock = false}}};
+  collision.dsp_clocks = {
+      {.start_ticks = release_ticks, .half_period_ticks = half_period, .edges = 2, .index = 0}};
   const auto error = rejects([&] { const Fixture f(collision); });
   require(error.contains("Simultaneous") && error.contains("at=176400") &&
               error.contains("mcu-pc=0x9000") && error.contains("dsp-pc=0xff0000"),
@@ -459,6 +578,8 @@ int main(const int argc, char **argv) {
       restore();
     } else if (mode == "nand") {
       nand_audio();
+    } else if (mode == "inputs") {
+      coincident_inputs();
     } else if (mode == "guards") {
       guards();
     } else {

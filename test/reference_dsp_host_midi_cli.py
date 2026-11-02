@@ -126,13 +126,14 @@ class DspHostMidiCli(unittest.TestCase):
             self.assertEqual(result.returncode, 1, result.stderr)
             self.assertEqual(trace, "")
 
-    def test_unqualified_simultaneous_sources_fail_with_both_cpu_contexts(self):
+    def test_simultaneous_other_timer_preserves_original_reception(self):
         text = configuration() + f"dsp-at {START} tio 1 high synchronized\n"
-        result, _, _ = self.invoke("collision", text=text)
-        self.assertEqual(result.returncode, 2)
-        self.assertIn(f"Simultaneous reference DSP input sources at={START}", result.stderr)
-        self.assertIn("mcu-pc=", result.stderr)
-        self.assertIn("dsp-pc=", result.stderr)
+        result, trace, _ = self.invoke("coincident-timer", text=text)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"DSP-INPUT requested={START} actual={START} tio=1 level=high", trace)
+        self.assertIn("MCU pc=0x9013 d=0xbeef", result.stdout)
+        self.verify_reference_frames(trace, 0x40)
+
 
 
 if __name__ == "__main__":

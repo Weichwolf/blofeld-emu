@@ -4155,6 +4155,24 @@ conflict remain unresolved; connected original startup, normal host MIDI,
 parser/voices/audio and a separate TSan scope are not qualified by this run.
 See dsp-clocked-wire.txt and own-dsp-nand-reference.json.
 
+Connected original normal-baud input (requirements 2/3/6): unchanged cold loading
+at the functional DSP clock now leads to six correctly received NoteOn/Off bytes
+through original Timer0 vectors and the real ring. Six cursor advances and 54
+native IRQ/RTI pairs are checked, with both joint suffixes and diagnostic control.
+The original factory preset uses an arpeggiator and Clocked Delay; no positive
+voice allocation occurs in this short gate. 1679 stereo frames remain silent.
+The Delay's first Y:016000 read is still unmodeled; no firmware repair is used.
+This frozen reference evidence does not qualify regular standalone MIDI/audio.
+
+Coincident independent DSP inputs (requirements 2/3/6): the regular Board now
+applies a bounded set of independent inputs at one actual deadline, on the
+configured side of the native DSP cycle. Duplicate targets retain visible
+failures. Four native schedule/order cases join both TIO/ESAI inputs and DAX;
+normal 31250 baud, literal PCM/BMC and unchanged CPU/audio progress are checked.
+Four partial-byte checkpoints reproduce eight fresh-owner suffixes. Eight
+affected groups pass per ASan/UBSan and separate TSan; original note audio
+remains unqualified. See reference-audio-clock.txt.
+
 Functional MCU/DSP GPIO peer (requirements 2/3/6): the regular Board can connect
 Q[7:0]/C[7:0], J0/IRQA and PE9/PE0-XIRQ using actual chip drivers. Tests cover
 512 byte transfers, partial reads, unknown/conflicting pads, native IRQ masks,
