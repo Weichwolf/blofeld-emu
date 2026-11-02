@@ -3,6 +3,7 @@
 #include "display/st7565.hpp"
 #include "display/st7565_parallel.hpp"
 
+#include <array>
 #include <cstdint>
 #include <exception>
 #include <iostream>
@@ -226,6 +227,45 @@ void test_unknown_controls_and_status() {
   reject([&] { bus.sample(invalid); }, "pin/known/drive masks");
 }
 
+void test_low_enable_masks_unknown_controls() {
+  blofeld::St7565Parallel bus;
+  reset(bus);
+  // E low makes the 6800 overlap inactive, independently of CS1B/CS2/RW/A0.
+  // Enumerate each other control as unknown, low or high without inventing it.
+  constexpr unsigned combinations = 81;
+  constexpr std::array controls{pin::cs1_n, pin::cs2, pin::read, pin::data};
+  for (unsigned code = 0; code < combinations; ++code) {
+    blofeld::LcdHostPins input{.control = pin::reset_n, .known = pin::reset_n | pin::enable};
+    auto remaining = code;
+    for (const auto control : controls) {
+      constexpr unsigned states = 3;
+      const auto state = remaining % states;
+      remaining /= states;
+      if (state != 0) { input.known |= control; }
+      if (state == 2) { input.control |= control; }
+    }
+    const auto result = bus.sample(input);
+    require(result.drive == 0 && !result.completed && bus.controller().state().column == 0,
+            "Known-low E never drives data or invents a bus transaction");
+  }
+  constexpr unsigned value = 0xa5;
+  bus.sample(pins(writing | pin::enable, value));
+  const auto result = bus.sample({.control = pin::reset_n,
+                                  .known = pin::reset_n | pin::enable,
+                                  .drive = byte_mask,
+                                  .data = {.value = value, .known = byte_mask}});
+  require(result.completed && completed(result).data && !completed(result).read,
+          "Falling E completes the selected write even if the new selects are unknown");
+  byte(bus.controller().ram(0, 0), value);
+  command(bus, 0);
+  bus.sample(pins(reading | pin::enable));
+  const auto read = bus.sample({.control = pin::reset_n, .known = pin::reset_n | pin::enable});
+  require(read.drive == 0 && completed(read).read,
+          "Falling E completes and releases the previous read with unknown new selects");
+  byte(completed(read).byte, 0);
+  require(bus.controller().state().column == 0, "The completed dummy read does not advance RAM");
+}
+
 void test_unstable_and_partial_write() {
   blofeld::St7565Parallel bus;
   reset(bus);
@@ -264,6 +304,7 @@ int main() {
     test_unknown_data_and_reset_abort();
     test_zero_address_hold_at_completion();
     test_unknown_controls_and_status();
+    test_low_enable_masks_unknown_controls();
     test_unstable_and_partial_write();
     std::cout << "ST7565 parallel overlap, read drive/completion, reset and unknown/fault checks "
                  "passed.\n";

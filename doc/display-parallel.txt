@@ -14,6 +14,9 @@ CS2, E, R/W, A0 and /RES (bits 0..5). Known masks distinguish unobserved control
 host data has separate drive and known masks. The result reports LCD output drive,
 known data bits and at most one completed cycle. Unknown driven bits remain
 unknown; unselected outputs are high impedance. No ready/status byte is supplied.
+Known-low E or an inactive chip select proves inactivity without guessing other
+controls. Falling E ends the previous overlap even with newly unknown selects;
+the preceding R/W/A0 still determine its completion. Reset must remain known.
 
 Read data is available combinationally during a selected high phase. The new
 read_output inspection does not consume a dummy read or advance the RAM address.

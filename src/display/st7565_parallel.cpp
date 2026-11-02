@@ -23,7 +23,8 @@ bool St7565Parallel::enabled(const LcdHostPins pins) {
   const auto levels = pins.control;
   const auto known = pins.known;
   if (((known & st7565_pin::cs1_n) != 0 && (levels & st7565_pin::cs1_n) != 0) ||
-      ((known & st7565_pin::cs2) != 0 && (levels & st7565_pin::cs2) == 0)) {
+      ((known & st7565_pin::cs2) != 0 && (levels & st7565_pin::cs2) == 0) ||
+      ((known & st7565_pin::enable) != 0 && (levels & st7565_pin::enable) == 0)) {
     return false;
   }
   constexpr unsigned selects = st7565_pin::cs1_n | st7565_pin::cs2;
