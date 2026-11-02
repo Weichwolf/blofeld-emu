@@ -4225,16 +4225,20 @@ profiles. Host publication, original connected LCD boot and instrument reset
 remain open. Local proof: board-lcd-runtime/qualified.json.
 
 Regular Board original cold-start experiment (requirements 2/3/6): actual POR,
-native U0 and GPIO/NAND load 97 exact original SPI stage frames and 107 cold pages.
-The functional 11.2896 MHz DSP candidate now passes runtime PLL/audio setup with
-continuous audio and 31250-baud MIDI idle from POR. All 83496 observed NAND output
-bytes (56496 cold + 27000 runtime) match the declared image; cold deadlines are 15us.
-A001 contains the official Init preset as ordinary mutable state. Next stop:
-DSP P002662 reads PortC control Xffffbf beside active DMA/F2; MCU Pb752 is in the
-actual F4 protocol. No MIDI data/PCM capture, resident-RAM comparison, full boot
-or update/recovery claim. Clocks/topology remain hypotheses. The separate 12MHz
-PLL experiment retains its exact normalized-prefix proof in
-regular-board-start-reference.json, alongside current audit/input hashes.
+native U0 and GPIO/NAND load 107 cold pages. The functional 11.2896 MHz DSP
+candidate passes runtime PLL/audio setup with continuous audio and 31250-baud
+MIDI idle from POR. A001 contains the official Init preset as mutable state.
+After GPIO/DMA admission, all 83496 NAND output bytes and 159 read segments
+exactly match the prior run, including 27000 runtime bytes. The latest run ends
+at MCU8211/DSP000c72 when startup releases B1..4 and SPI pads become unknown;
+it retires 5180314 DSP instructions. Its final SPI counters remain 97 frames /
+7346 writes; only the earlier traced run qualifies their exact byte sequence.
+A separate early-POR LCD preflight stops at unknown chip selects after external
+inputs change, before DSP release. Released SPI nets and early LCD input/idle
+levels need a declared functional board model. No MIDI data/PCM capture,
+resident-RAM comparison, full instrument or update/recovery claim follows.
+Clocks/topology remain hypotheses. The earlier 12 MHz PLL trace-prefix proof
+and each current audit/input hash remain in regular-board-start-reference.json.
 Peer configuration now also rejects duplicate J0 sources, including SHI and
 loopback routes. Fifteen collision cases and unrelated J1 acceptance pass in
 the Board group under ASan/UBSan and separate TSan.

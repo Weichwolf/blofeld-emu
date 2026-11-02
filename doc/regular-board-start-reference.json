@@ -1,6 +1,6 @@
 {
   "scope": "Regular Board original-POR evidence; each experiment retains its own clocks, inputs and limits",
-  "latest": "audio_midi_continuation",
+  "latest": "GPIO_configuration_continuation",
   "cold_PLL": {
     "scope": "Actual regular reference Board from digital POR with original firmware1.25; declared external inputs, clocks and functional NAND/GPIO topology",
     "source_commit": "b703b9d548e4efdc1ac3555927fb2f3d5ed1ccd3",
@@ -110,5 +110,61 @@
     },
     "NAND_output_bytes": 83496,
     "NAND_output_matches_image": true
+  },
+  "GPIO_configuration_continuation": {
+    "scope": "Actual regular Board digital POR after GPIO/DMA admission; same original firmware, Init NAND, inputs and clock hypotheses as audio_midi_continuation",
+    "source_commit": "0aded5c3cbfd086bf94cc5379b4ed0b860205c74",
+    "executable_sha256": "e34d089fc8286cf22ba3d9b357d2042f043163c820aaee19d1323866f949c901",
+    "production_sources_matched_to_commit": 468,
+    "NAND_bytes": 83496,
+    "cold_NAND_pages": 107,
+    "runtime_NAND_bytes": 27000,
+    "exact_NAND_address_and_output_sequence_matches_previous_run": true,
+    "SPI_frames_observed_in_final_counters": 97,
+    "SPI_writes_observed_in_final_counters": 7346,
+    "SPI_byte_sequence_rechecked": false,
+    "MCU_operations": 4076396,
+    "MCU_instructions": 4075946,
+    "DSP_instructions": 5180314,
+    "DSP_reference_periods": 26044294,
+    "frontier": {
+      "MCU_PC": "8211",
+      "DSP_PC": "000c72",
+      "operation": "MCU DDRB direction change releases B1..4; continuously sampled SPI pads become unknown",
+      "SPI_mask_hex": "16",
+      "known_hex": "00",
+      "reason": "Missing released/inactive SPI bus model; no firmware replacement or successful peripheral reply supplied"
+    },
+    "audits": {
+      "doc/local/normal-board-start/r5/audit.json": "c89b063b487205dbebfc6bbb2036e195490c834e0e7ed2758e3ac18767b802a6",
+      "doc/local/normal-board-start/r5/nand-comparison.json": "132685182bfac82539043740fb71e7f0ce92a41574451a14edaabcab5ff7a847",
+      "doc/local/normal-board-start/r5/published-source-proof.json": "705fe03c522856c37b31ac2eb08c90b95aef0a7f471f7adfff83f4d11314a83d",
+      "doc/local/normal-board-start/r5/source-frontier.json": "dbb77dca93d26ac08d665fc2591a6c6c69e537e94114b5b15b89495314ae1e55"
+    },
+    "limits": {
+      "complete_instrument": false,
+      "LCD_attached": false,
+      "MIDI_bytes_sent": false,
+      "PCM_capture": false,
+      "full_cycle_trace": false,
+      "trace_prefix_identity": false,
+      "retired_CPU_byte_observer": false,
+      "physical_traffic": false,
+      "fuzz_execution": false
+    }
+  },
+  "early_LCD_connection": {
+    "scope": "Separate original-POR preflight, limited to 100000 MCU operations, frozen same executable",
+    "LCD_reset_release_microseconds": 100,
+    "B_input_hypothesis": "B:e8 floating instead of strong low",
+    "MCU_operations": 90507,
+    "MCU_PC": "8200",
+    "DSP_held_reset": true,
+    "DSP_instructions": 0,
+    "frontier": "Unknown ST7565 chip select inputs at external input event tick4964626296",
+    "complete_instrument": false,
+    "audit": {
+      "doc/local/normal-board-start/lcd-preflight-r1/audit.json": "c12b0adf7c582e3541d909ecf780560d2b36dd018d2318b7d89348d4843012eb"
+    }
   }
 }
