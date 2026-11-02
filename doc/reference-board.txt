@@ -273,3 +273,23 @@ both physical polarities, actual MCU cold/warm pulses and a real idle MIDI sourc
 Raw/unknown guards and NAND/MIDI ownership conflicts remain explicit. These
 qualify authored functional cases; original instrument reset, interrupted NAND
 transactions, full boot and audio remain separate requirements.
+
+Board observation
+
+status() includes encoded MCU cold NVM; runtime_status() returns the same live
+fields with cold_nvm empty. Both require an inactive boundary and change no guest
+state, clocks or file publications. Release retained PCM histories before advance
+to avoid copy-on-write. Empty cold_nvm is not a persistence checkpoint.
+
+  cmake --build build/strict --target blofeld-reference-runtime-status-test blofeld-reference-flash-test --parallel 1
+  ctest --test-dir build/strict -R '^reference_(runtime_status|flash)$' --output-on-failure
+Repeat with build/thread for TSan; strict uses ASan/UBSan. No fuzz.
+
+Paired authored POR/flash programs use polling or WAI/flash IRQ, with DSP held in
+reset. Frequent queries preserve complete final state, trace, publication counts
+and expected flash word0x1234 against an unobserved control. Both profiles pass
+these and existing full-status cut/publication-failure regressions; sixteen unit
+files match independent complete wire expectations. Host-only query timings have
+no threshold and do not establish whole-instrument real-time performance.
+Source/ELF/log pins: reference-runtime-status-reference.json. Full original boot,
+Desktop/Keyboard functions and storage/update/recovery remain open in coverage.txt.

@@ -1,0 +1,115 @@
+{
+  "scope": "Read-only Board runtime observation without cold-NVM serialization; authored actual MCU POR, flash polling and WAI/flash IRQ, DSP held reset.",
+  "independent_core_revision": "9563020c1fb06daec0d81fa96fde52bd3c8dc01e",
+  "contract": {
+    "status": "Existing complete cold-NVM image, getters and evaluation order retained.",
+    "runtime_status": "All live Status fields retained; cold_nvm is empty. No guest clock/state/file publication changes.",
+    "PCM_lifetime": "Release retained immutable recording history before advancing to avoid copy-on-write."
+  },
+  "paired_programs": 2,
+  "controls": "Each observed program is compared with an independently executed unobserved Board; identical complete final state and native trace, expected flash word0x1234.",
+  "profiles": {
+    "strict": {
+      "native_cases": [
+        {
+          "test": "blofeld-reference-runtime-status-test",
+          "native_exit": 0,
+          "actual_argv_verified": true,
+          "elapsed_seconds": 0.8001013889443129,
+          "native_ELF_sha256": "d1f6d20cf888d5a55b6ffc4d8b220b4f5dad737f113d5a04cbc5e1819caede8d",
+          "log_sha256": "b50fcfbbe9e70819b7bb4d0d6f242a826899007b9af0b31b33e4e1a1c37fa880",
+          "independent_complete_NVM_files": 4
+        },
+        {
+          "test": "blofeld-reference-flash-test",
+          "native_exit": 0,
+          "actual_argv_verified": true,
+          "elapsed_seconds": 0.7550297130364925,
+          "native_ELF_sha256": "79f25769fab4451c12376cdf601ab0e0223e242b1bad805bd781f555b9440fae",
+          "log_sha256": "aad0df425174fde16cd6d6326baa85e87d6ad7e0b4876f439465b3ec8a5350e2",
+          "independent_complete_NVM_files": 4
+        }
+      ],
+      "host_only_observation_samples": [
+        {
+          "reads": 128,
+          "serialized_bytes": 4983296,
+          "full_ns": 51467975,
+          "runtime_ns": 164327
+        },
+        {
+          "reads": 128,
+          "serialized_bytes": 4983296,
+          "full_ns": 54430585,
+          "runtime_ns": 162694
+        }
+      ],
+      "archives": 40,
+      "transitive_layout_consumers": 28
+    },
+    "thread": {
+      "native_cases": [
+        {
+          "test": "blofeld-reference-runtime-status-test",
+          "native_exit": 0,
+          "actual_argv_verified": true,
+          "elapsed_seconds": 1.2987405711319298,
+          "native_ELF_sha256": "2cbf287a9195b09b339aaf94c5b57ea635d2a1dd356729dcfe6e1b813dc15c78",
+          "log_sha256": "e516e95eb6a52246b9878cab38fb5cb2787a31a17f32a9a73a4041642e78b375",
+          "independent_complete_NVM_files": 4
+        },
+        {
+          "test": "blofeld-reference-flash-test",
+          "native_exit": 0,
+          "actual_argv_verified": true,
+          "elapsed_seconds": 0.8803858640603721,
+          "native_ELF_sha256": "2b4cd469f4727c9996e057bbca88445c412cc8ca688bd89f12d0e73407012dcd",
+          "log_sha256": "aad0df425174fde16cd6d6326baa85e87d6ad7e0b4876f439465b3ec8a5350e2",
+          "independent_complete_NVM_files": 4
+        }
+      ],
+      "host_only_observation_samples": [
+        {
+          "reads": 128,
+          "serialized_bytes": 4983296,
+          "full_ns": 141013247,
+          "runtime_ns": 227585
+        },
+        {
+          "reads": 128,
+          "serialized_bytes": 4983296,
+          "full_ns": 144800165,
+          "runtime_ns": 452155
+        }
+      ],
+      "archives": 40,
+      "transitive_layout_consumers": 28
+    }
+  },
+  "source_sha256": {
+    "src/board/reference_board.hpp": "ddf971cd6098ea56f39a3dbf6bae5381e238d416cfc535de0c19d4480910cc30",
+    "src/board/reference_checkpoint.cpp": "dc8742c8ef7051a2655b17ebb3290a188862978d2ff7de766418e2bea2189cfe",
+    "test/reference_runtime_status_test.cpp": "63d983b4f7c13053c8b9ec1d5439c52c81fb3f676dc6c427768e30bdee63be71",
+    "test/reference_flash_test.cpp": "5b7cf7bde4fe53d7e22b83f7690bb794ea46cf6ec7458bfddc75e344ab566443",
+    "test/mcu_flash_live_fixture.hpp": "d24b6b1d853b97e14e2b84aa5e8ed9a753d8f173ef480a69cfcac0912bf3f656",
+    "test/mcu_flash_live_wire.py": "338fdef0ba07e0609d38bdcac4405551385e1c3b5d1cc2b85e12152997025f87"
+  },
+  "evidence_sha256": {
+    "doc/local/board-runtime-status-r2/build.json": "25ae89930bb97e2ea43aeabb97085634c573ff8c215a3c112873ab25a8bd5496",
+    "doc/local/board-runtime-status-r2/qualification.json": "7b8a837f6a3ac96fcaa90321350fe2d91d0e7839b2117c44d2271412fc84fccc",
+    "doc/local/board-runtime-status-r2/final-design-proof.json": "dd23eb9b7821f900af4e96e233d98ac4c75aa3b11ab73bd481ad36540a81cd41",
+    "doc/local/board-runtime-status-r1/strict-layout-build.log": "5cd79b99c4deffae8c5786b5484c296f040d8338784b324ef881390bc572688e",
+    "doc/local/board-runtime-status-r1/thread-layout-build.log": "c2efb5e889c5a62599c0fe2a2b99df30c0ae4aacc4d93aa2510bc09db13cdcb8"
+  },
+  "compiler_format_tidy": "zero project findings",
+  "ELF_PIE_RELRO_NOW_NX": true,
+  "OwnFetch_layout_consumers_verified": true,
+  "fuzz": false,
+  "physical_traffic": false,
+  "complete_instrument": false,
+  "limits": [
+    "Authored MCU flash programs, not full original startup or every peripheral state.",
+    "Host-only observer microbenchmark has no speed threshold and does not establish whole-emulator real-time performance.",
+    "Complete Desktop/Keyboard behavior, MIDI/audio, storage/update/recovery remain open in coverage.txt."
+  ]
+}

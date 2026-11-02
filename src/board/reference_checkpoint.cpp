@@ -23,6 +23,7 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace blofeld::reference {
 class Board::Busy {
@@ -208,13 +209,23 @@ void Board::poll_usb(UsbipRuntime &runtime) {
 }
 
 Status Board::status() const {
+  return observe_status(true);
+}
+
+Status Board::runtime_status() const {
+  return observe_status(false);
+}
+
+Status Board::observe_status(const bool include_cold_nvm) const {
   require_idle();
   const bool known = !native_->mcu.system_reset_active();
   return {.mcu = known ? native_->mcu.cpu().state() : CpuState{},
           .dsp = native_->dsp.cpu().registers(),
           .mcu_state_known = known,
           .mcu_reset = native_->mcu.system_reset_state(),
-          .cold_nvm = encode_flash_image(native_->mcu.bus().power_off_flash_image()),
+          .cold_nvm = include_cold_nvm
+                          ? encode_flash_image(native_->mcu.bus().power_off_flash_image())
+                          : std::vector<std::uint8_t>{},
           .common_ticks = ticks(),
           .mcu_cycles = native_->mcu.run_clock().bus_cycles(),
           .mcu_ticks = native_->mcu.run_clock().elapsed_ticks(),

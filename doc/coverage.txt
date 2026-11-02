@@ -129,6 +129,9 @@ trusted in-process snapshots support diagnosis. A live file store cannot be
 rewound by a RAM-only snapshot. Complete portable whole-device save/restore and
 all persistence/failure scenarios remain unqualified. See reference-board.txt,
 mcu-flash-persistence.txt, nand-write-store.txt and device-identity.txt.
+Lightweight Board runtime observation omits cold-NVM serialization and preserves
+paired authored POR/flash/WAI execution, complete state, trace and live files under
+both sanitizers. See reference-runtime-status-reference.json; full status remains.
 
 7. Independent expectations and reconstruction — partial
 Tests use literal ISA/peripheral expectations, primary documents and actual

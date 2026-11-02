@@ -1634,6 +1634,11 @@ if(BUILD_TESTING)
   add_executable(blofeld-writeback-test test/dsp_writeback_test.cpp test/dsp_writeback_parallel.cpp test/dsp_writeback_clock.cpp)
   target_link_libraries(blofeld-writeback-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_move_writeback COMMAND blofeld-writeback-test)
+  add_executable(blofeld-reference-runtime-status-test test/reference_runtime_status_test.cpp)
+  target_link_libraries(blofeld-reference-runtime-status-test PRIVATE blofeld_reference_board)
+  add_test(NAME reference_runtime_status COMMAND blofeld-reference-runtime-status-test
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-runtime-status")
+  set_tests_properties(reference_runtime_status PROPERTIES TIMEOUT 120)
   add_executable(blofeld-reference-checkpoint-test test/reference_checkpoint.cpp)
   target_link_libraries(blofeld-reference-checkpoint-test PRIVATE blofeld_reference_board)
   add_test(NAME reference_checkpoint COMMAND blofeld-reference-checkpoint-test
@@ -3278,6 +3283,7 @@ add_custom_target(quality
     blofeld-pcm-transport-test
     blofeld-bank-test
     blofeld-repeat-test
+    blofeld-reference-runtime-status-test
     blofeld-reference-access-test
     blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test blofeld-reference-cycle-test
     blofeld-native-budget-test

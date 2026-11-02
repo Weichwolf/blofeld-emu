@@ -322,6 +322,9 @@ public:
   void advance();
   [[nodiscard]] bool finished() const;
   [[nodiscard]] Status status() const;
+  // Read-only live observation without encoding a cold flash image; cold_nvm is empty.
+  // Release retained PCM history before advancing to avoid forcing copy-on-write.
+  [[nodiscard]] Status runtime_status() const;
   [[nodiscard]] std::optional<NandPeerDetailed> nand_status() const;
   [[nodiscard]] std::optional<NandImage> nand_image() const;
   [[nodiscard]] MidiInputWindow midi_window() const;
@@ -402,6 +405,7 @@ private:
 
   void require_idle() const;
   void require_healthy() const;
+  [[nodiscard]] Status observe_status(bool include_cold_nvm) const;
   void attach(Owners &owners);
   void prepare_dsp();
   void prepare_lcd();
