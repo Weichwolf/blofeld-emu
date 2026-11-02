@@ -4296,3 +4296,11 @@ MCU POR/flash writes, independent NAND power, writer failures and literal displa
 pixels qualify under ASan/UBSan and separate TSan. Evidence and source hashes:
 board-host-reference.json. Combined original-firmware MIDI/audio/LCD operation,
 both final profiles, preset saving and update/recovery remain pending.
+
+CPU callback integrity (requirements1/3/6): host-only monotonic owner/revision
+stamps replace repeated SLEIGH register snapshots; all nine clock/wait/fault
+fields and full semantic snapshot comparisons remain.44 mutation refusals and
+four read-only lanes per sanitizer,16 native runtime groups per profile and11
+connected Board groups qualify. Explicit query-only benchmark/source/evidence:
+mcu-integrity.txt and mcu-integrity-reference.json. Whole-emulator real-time
+throughput and the next original NAND/GPIO handoff remain unqualified.

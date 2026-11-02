@@ -33,11 +33,11 @@ void McuDspRuntime::check_peripheral_contract() const {
 
 std::optional<std::uint64_t> McuDspRuntime::query_peripheral() const {
   if (!peripheral_events_.identity) { return std::nullopt; }
-  const auto before = detail::mcu_boundary(mcu_);
+  const auto before = detail::mcu_integrity(mcu_);
   const auto registers = dsp_.cpu().registers();
   const auto elapsed = dsp_.clock().elapsed_ticks();
   const auto result = peripheral_events_.next_ticks();
-  if (detail::mcu_boundary(mcu_) != before || dsp_.cpu().registers() != registers ||
+  if (detail::mcu_integrity(mcu_) != before || dsp_.cpu().registers() != registers ||
       dsp_.clock().elapsed_ticks() != elapsed) {
     throw Fault("MCU/DSP peripheral query changed CPU state or time");
   }
@@ -95,11 +95,11 @@ void McuDspRuntime::finish_peripheral(const bool native_through, const bool even
 
 void McuDspRuntime::observe_peripheral(const std::uint64_t ticks) {
   count_input_event();
-  const auto before = detail::mcu_boundary(mcu_);
+  const auto before = detail::mcu_integrity(mcu_);
   const auto registers = dsp_.cpu().registers();
   const auto elapsed = dsp_.clock().elapsed_ticks();
   peripheral_events_.observe(ticks);
-  if (detail::mcu_boundary(mcu_) != before || dsp_.cpu().registers() != registers ||
+  if (detail::mcu_integrity(mcu_) != before || dsp_.cpu().registers() != registers ||
       dsp_.clock().elapsed_ticks() != elapsed) {
     throw Fault("MCU/DSP peripheral observation changed CPU state or time");
   }

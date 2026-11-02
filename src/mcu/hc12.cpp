@@ -19,10 +19,12 @@
 #include "types.h"
 #include "xml.hh"
 
+#include <atomic>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -36,6 +38,19 @@
 namespace blofeld {
 
 namespace {
+std::uint64_t inspection_identity() {
+  static std::atomic<std::uint64_t> next{0};
+  auto current = next.load(std::memory_order_relaxed);
+  for (;;) {
+    if (current == std::numeric_limits<std::uint64_t>::max()) {
+      throw Fault("HC12 inspection identity exhausted");
+    }
+    if (next.compare_exchange_weak(current, current + 1, std::memory_order_relaxed)) {
+      return current + 1;
+    }
+  }
+}
+
 constexpr unsigned first_maskable_vector = 0xff00;
 constexpr unsigned last_maskable_vector = 0xfff2;
 
@@ -494,6 +509,14 @@ public:
     bus.write_memory({.address = stack, .value = value});
   }
 
+  void mark_mutation() {
+    if (inspection.revision == std::numeric_limits<std::uint64_t>::max()) {
+      throw Fault("HC12 inspection revision exhausted; create a fresh CPU");
+    }
+    ++inspection.revision;
+  }
+
+  CpuInspectionStamp inspection{.owner = inspection_identity()};
   std::uint64_t decoded_revision = 0;
   bool defer_irq = false;
   bool active = false;
@@ -526,6 +549,7 @@ void Hc12::reset(const Hc12ResetSource source) {
   }
   const auto vector = source == Hc12ResetSource::cop ? hc12::cop_reset_vector : hc12::reset_vector;
   const ExecutionGuard guard(impl_->active);
+  impl_->mark_mutation();
   impl_->checkpointable = false;
   impl_->executor->cancel_wait();
   impl_->defer_irq = false;
@@ -542,6 +566,7 @@ void Hc12::reset(const Hc12ResetSource source) {
 
 void Hc12::set_state(const CpuState &state) {
   const ExecutionGuard guard(impl_->active);
+  impl_->mark_mutation();
   impl_->checkpointable = false;
   impl_->apply_state(state);
   impl_->checkpointable = true;
@@ -556,6 +581,10 @@ CpuState Hc12::state() const {
           .ccr = static_cast<std::uint8_t>(impl_->memory.getValue(&impl_->layout.ccr))};
 }
 
+CpuInspectionStamp Hc12::inspection_stamp() const noexcept {
+  return impl_->inspection;
+}
+
 bool Hc12::waiting() const {
   return impl_->executor->waiting();
 }
@@ -568,11 +597,13 @@ void Hc12::begin_wait_clock() {
   if (impl_->active || !impl_->checkpointable || impl_->wait_clock_failed || !waiting()) {
     throw Fault("HC12 wait clocks require a healthy completed WAI boundary");
   }
+  impl_->mark_mutation();
   impl_->active = true;
   impl_->checkpointable = false;
 }
 
 void Hc12::end_wait_clock(const bool healthy) {
+  impl_->mark_mutation();
   impl_->active = false;
   impl_->checkpointable = healthy;
   impl_->wait_clock_failed = !healthy;
@@ -603,6 +634,7 @@ Hc12Checkpoint Hc12::checkpoint() const {
 
 void Hc12::restore_checkpoint(const Hc12Checkpoint &checkpoint) {
   const ExecutionGuard guard(impl_->active);
+  impl_->mark_mutation();
   impl_->checkpointable = false;
   impl_->refresh_decoder(true);
   impl_->registers->setChunk(
@@ -685,6 +717,7 @@ CpuStep Hc12::step() {
     throw Fault("HC12 incomplete execution at " + hex(state().pc) +
                 " requires coordinated recovery before stepping");
   }
+  impl_->mark_mutation();
   impl_->checkpointable = false;
   try {
     const auto before = state();

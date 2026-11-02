@@ -4437,3 +4437,19 @@ if(BUILD_TESTING)
   add_dependencies(quality blofeld-nand-write-store-test blofeld-nand-durable-peer-test
     blofeld-reference-nand-store-test)
 endif()
+
+# Host-only mutation stamps protect the native runtime's read-only callback contract.
+if(BUILD_TESTING)
+  add_executable(blofeld-mcu-integrity-test test/mcu_integrity_test.cpp)
+  target_link_libraries(blofeld-mcu-integrity-test PRIVATE blofeld_mcu_dsp_runtime)
+  add_test(NAME mcu_integrity COMMAND blofeld-mcu-integrity-test)
+  set_tests_properties(mcu_integrity PROPERTIES TIMEOUT 180)
+  add_dependencies(quality blofeld-mcu-integrity-test)
+endif()
+
+# Explicit developer measurement; never part of routine CTest execution.
+if(BUILD_TESTING)
+  add_executable(blofeld-mcu-boundary-benchmark EXCLUDE_FROM_ALL test/mcu_boundary_benchmark.cpp)
+  target_link_libraries(blofeld-mcu-boundary-benchmark PRIVATE blofeld_mcu_dsp_runtime)
+  add_dependencies(quality blofeld-mcu-boundary-benchmark)
+endif()

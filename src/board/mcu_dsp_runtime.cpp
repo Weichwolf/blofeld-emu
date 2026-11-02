@@ -233,11 +233,11 @@ std::uint64_t McuDspRuntime::deadline() const {
 
 std::optional<std::uint64_t> McuDspRuntime::query_external() const {
   if (!external_.identity) { return std::nullopt; }
-  const auto before = detail::mcu_boundary(mcu_);
+  const auto before = detail::mcu_integrity(mcu_);
   const auto registers = dsp_.cpu().registers();
   const auto elapsed = dsp_.clock().elapsed_ticks();
   const auto result = external_.next_ticks();
-  if (detail::mcu_boundary(mcu_) != before || dsp_.cpu().registers() != registers ||
+  if (detail::mcu_integrity(mcu_) != before || dsp_.cpu().registers() != registers ||
       dsp_.clock().elapsed_ticks() != elapsed) {
     throw Fault("MCU/DSP event query changed CPU state or time");
   }
@@ -265,11 +265,11 @@ std::optional<std::uint64_t> McuDspRuntime::next_external() {
 
 void McuDspRuntime::observe_external(const std::uint64_t ticks) {
   count_input_event();
-  const auto before = detail::mcu_boundary(mcu_);
+  const auto before = detail::mcu_integrity(mcu_);
   const auto registers = dsp_.cpu().registers();
   const auto elapsed = dsp_.clock().elapsed_ticks();
   external_.observe(ticks);
-  if (detail::mcu_boundary(mcu_) != before || dsp_.cpu().registers() != registers ||
+  if (detail::mcu_integrity(mcu_) != before || dsp_.cpu().registers() != registers ||
       dsp_.clock().elapsed_ticks() != elapsed) {
     throw Fault("MCU/DSP external observation changed CPU state or time");
   }
@@ -290,11 +290,11 @@ void McuDspRuntime::advance_native(const std::uint64_t ticks,
   if (!inputs || ++period_cycles_ > inputs_.maximum_cycles_per_period) {
     throw Fault("MCU/DSP runtime lacks native cycle inputs or exceeded its period budget");
   }
-  const auto before = detail::mcu_boundary(mcu_);
+  const auto before = detail::mcu_integrity(mcu_);
   const auto registers = dsp_.cpu().registers();
   auto request = inputs();
   timeline_->validate_boundary();
-  if (detail::mcu_boundary(mcu_) != before || dsp_.cpu().registers() != registers) {
+  if (detail::mcu_integrity(mcu_) != before || dsp_.cpu().registers() != registers) {
     throw Fault("MCU/DSP cycle input provider changed CPU state or time");
   }
   const auto last = dsp_.bus().last_dma_cycle();
@@ -315,7 +315,7 @@ void McuDspRuntime::advance_native(const std::uint64_t ticks,
               .cycle = request.cycle,
               .result = *result});
     timeline_->validate_boundary();
-    if (detail::mcu_boundary(mcu_) != before || dsp_.cpu().registers() != after) {
+    if (detail::mcu_integrity(mcu_) != before || dsp_.cpu().registers() != after) {
       throw Fault("MCU/DSP cycle observer changed CPU state or time");
     }
   }
@@ -453,12 +453,12 @@ void McuDspRuntime::observe_write(const BusEvent &event,
       state_.shared_address != event.address || !observe) {
     throw Fault("MCU/DSP observation must match the consumed shared-write period");
   }
-  const auto before = detail::mcu_boundary(mcu_);
+  const auto before = detail::mcu_integrity(mcu_);
   {
     const SignalObservation signals(observing_signals_);
     observe();
   }
-  if (faulted() || detail::mcu_boundary(mcu_) != before) {
+  if (faulted() || detail::mcu_integrity(mcu_) != before) {
     throw Fault("MCU/DSP signal observation changed MCU ownership or faulted its runtime");
   }
   consumed();

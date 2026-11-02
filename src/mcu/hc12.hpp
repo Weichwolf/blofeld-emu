@@ -23,6 +23,13 @@ struct CpuState {
   std::uint8_t ccr = 0;
 };
 
+// Host integrity metadata, never guest data, time or checkpoint state.
+struct CpuInspectionStamp {
+  std::uint64_t owner = 0;
+  std::uint64_t revision = 0;
+  bool operator==(const CpuInspectionStamp &) const = default;
+};
+
 struct CpuStep {
   bool instruction_executed = true;
   std::optional<std::uint16_t> interrupt_vector = std::nullopt;
@@ -57,6 +64,7 @@ public:
   // Debug register replacement cancels WAI and interrupt deferral.
   void set_state(const CpuState &state);
   [[nodiscard]] CpuState state() const;
+  [[nodiscard]] CpuInspectionStamp inspection_stamp() const noexcept;
   [[nodiscard]] bool waiting() const;
   [[nodiscard]] std::string disassemble() const;
   [[nodiscard]] std::optional<InterruptRequest> pending_interrupt() const;
