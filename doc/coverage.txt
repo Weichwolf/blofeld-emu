@@ -87,6 +87,13 @@ pinned core additionally qualifies non-shift flag refresh and SC exponent16;
 SC transition timing and original full-device runtime remain separate. See
 dsp-norm-native.txt and dsp-norm-native-reference.json.
 
+Accumulator transfers now retain all4896 original independent vectors and three
+directed groups on the native owner. Both sanitizer profiles pass actual Mode5
+reset/literal instruction execution with unchanged arithmetic and data/state
+expectations;39 authored encodings match the pinned official assembler.
+See dsp-transfer-native.txt and dsp-transfer-native-reference.json. This does
+not establish physical timing or complete original instrument operation.
+
 4. Complete update/recovery — partial
 Native flash/NAND command, persistence, interrupted-operation and loader tests
 provide component evidence. Full connected valid/damaged update, every power-loss

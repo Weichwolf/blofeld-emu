@@ -1,0 +1,20 @@
+Independent accumulator-transfer regression
+
+  cmake --build build/strict --target blofeld-dsp-transfer-test --parallel 1
+  ctest --test-dir build/strict -R '^dsp_transfers$' --output-on-failure
+Repeat with build/thread for TSan; strict uses ASan/UBSan.
+
+All4896 original value/scaling/source/S-L/form vectors remain. The arithmetic
+oracle, matrix inputs, form labels and every data/state assertion retain their
+tokens. The shared legacy fixture is byte-identical. Literal programs execute
+through actual Mode5 reset and the untimed independent owner; the optional
+pinned official assembler separately confirms34 matrix and5 directed encodings.
+No authoring assembler or foreign DSP is linked at runtime.
+
+The three directed groups retain REP scaled counts and one body retirement,
+pre-ALU parallel-source sampling, unselected growth and explicit SR replacement.
+Both sanitizer profiles pass with eight unchanged qualified native archives,
+strict compiler/format/tidy and hardened ELFs. Exact pins/results:
+dsp-transfer-native-reference.json. This is component evidence; complete boot,
+physical pipeline timing, both profiles and normal instrument operation remain
+separate outstanding requirements.

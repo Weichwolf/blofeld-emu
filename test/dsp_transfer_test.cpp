@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp_norm_fixture.hpp"
-#include "dsp_transfer_fixture.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
+#include "dsp_norm_expectations.hpp"
 
 #include <algorithm>
 #include <array>
@@ -17,6 +18,54 @@
 
 namespace blofeld::test {
 namespace {
+namespace native = dma_test;
+using Program = native::NativeProgram;
+constexpr unsigned transfer_address = 0x100, transfer_second_address = 0x200;
+constexpr unsigned move_sr = 0x05f439;
+// FM13-118/131/REP: named seed and directed-program instruction words.
+constexpr unsigned move_m0 = 0x05f420;
+constexpr unsigned move_m1 = 0x05f421;
+constexpr unsigned move_m4 = 0x05f424;
+constexpr unsigned move_r0 = 0x60f400;
+constexpr unsigned move_r4 = 0x64f400;
+constexpr unsigned move_x0 = 0x44f400;
+constexpr unsigned move_y0 = 0x46f400;
+constexpr unsigned move_x1 = 0x45f400;
+constexpr unsigned move_y1 = 0x47f400;
+constexpr unsigned store_x0 = 0x446000;
+constexpr unsigned store_y0 = 0x4e6400;
+constexpr unsigned repeat_a = 0x06ce20;
+constexpr unsigned add_with_old_a = 0x21c640;
+constexpr unsigned move_a_to_x0 = 0x21c400;
+constexpr unsigned move_a_to_sr = 0x04ceb9;
+
+// DSP56300FM13-118/131: literal long-immediate data/control fields.
+constexpr std::array accumulator_seeds{
+    0x50f400U, 0x54f400U, 0x52f400U, 0x51f400U, 0x55f400U, 0x53f400U};
+
+void immediate(Program &program, const unsigned opcode, const unsigned value) {
+  program.word(opcode);
+  program.word(value);
+}
+
+void set_accumulator(Program &program, const bool accumulator_b, const std::uint64_t value) {
+  const unsigned first = accumulator_b ? 3U : 0U;
+  immediate(program, accumulator_seeds[first], static_cast<unsigned>(value & word_mask));
+  immediate(program,
+            accumulator_seeds[first + 1],
+            static_cast<unsigned>((value >> word_bits) & word_mask));
+  immediate(program, accumulator_seeds[first + 2], static_cast<unsigned>(value >> data_bits));
+}
+
+void run_to(OwnDspMachine &machine, const unsigned pc) {
+  unsigned count = 0;
+  while (machine.cpu().registers().pc != pc) {
+    constexpr unsigned instruction_limit = 100;
+    require(++count <= instruction_limit, "Native transfer diagnostic exceeded its setup limit");
+    native::step_native(machine);
+  }
+}
+
 constexpr unsigned seed_x = 0x123456;
 constexpr unsigned seed_y = 0x654321;
 constexpr unsigned original_flags = carry | overflow | zero | negative | unnormalized | extension;
@@ -113,51 +162,70 @@ std::string instruction(const Input input) {
   }
 }
 
-void emit_instruction(DspProgram &program, const Input input) {
-  // FM 13-120, 13-124 and 13-129. The helper assembler silently drops
-  // a second XR/YR register move, so encode these complete parallel words.
-  constexpr unsigned class_two_x = 0x081800;
-  constexpr unsigned class_one_x = 0x109800;
-  constexpr unsigned class_one_y = 0x11dc00;
-  constexpr unsigned dual_ab = 0xbb1800;
-  constexpr unsigned dual_ba = 0xbe1800;
-  constexpr unsigned class_two_b = 0x010000;
-  constexpr unsigned class_one_x_b = 0x020000;
-  constexpr unsigned class_one_y_b = 0x080000;
-  if (input.form == Form::replace_source) {
-    program.word(class_two_x | (input.source_b ? class_two_b : 0));
-  } else if (input.form == Form::load_x) {
-    program.word(class_one_x | (input.source_b ? class_one_x_b : 0));
-  } else if (input.form == Form::load_y) {
-    program.word(class_one_y | (input.source_b ? class_one_y_b : 0));
-  } else if (input.form == Form::dual_store) {
-    program.word(input.source_b ? dual_ba : dual_ab);
-  } else {
-    program.emit(instruction(input));
-  }
+void emit_instruction(Program &program, const Input input) {
+  // FM13-118..131/13-26, independently cross-checked with assembler6.3.28.
+  // This table follows Form order; the assembler is never a runtime dependency.
+  constexpr std::array opcodes{std::array{0x21c400U,
+                                          0x21c700U,
+                                          0x565800U,
+                                          0x5e5c00U,
+                                          0x485800U,
+                                          0x04cea1U,
+                                          0x07588eU,
+                                          0x08ce3cU,
+                                          0x218400U,
+                                          0x210400U,
+                                          0x214400U,
+                                          0x405800U,
+                                          0x081800U,
+                                          0x109800U,
+                                          0x11dc00U,
+                                          0xbb1800U,
+                                          0x0bce60U},
+                               std::array{0x21e400U,
+                                          0x21e700U,
+                                          0x575800U,
+                                          0x5f5c00U,
+                                          0x495800U,
+                                          0x04cfa1U,
+                                          0x07588fU,
+                                          0x08cf3cU,
+                                          0x21a400U,
+                                          0x212400U,
+                                          0x216400U,
+                                          0x415800U,
+                                          0x091800U,
+                                          0x129800U,
+                                          0x19dc00U,
+                                          0xbe1800U,
+                                          0x0bcf60U}};
+  program.word(opcodes[input.source_b ? 1U : 0U].at(static_cast<unsigned>(input.form)));
 }
 
-unsigned initialize(DspProgram &program, const Input input) {
-  program.immediate("m0", word_mask);
-  program.immediate("m1", word_mask);
-  program.immediate("m4", word_mask);
-  program.immediate("r0", transfer_address);
-  program.immediate("r4", transfer_second_address);
-  program.immediate("x0", seed_x);
-  program.immediate("y0", seed_y);
-  program.immediate("x1", 0);
-  program.immediate("y1", 0);
-  program.emit("move x0,x:(r0)");
-  program.emit("move y0,y:(r4)");
-  set_accumulator(program, input.source_b ? "b" : "a", input.value);
-  set_accumulator(program, input.source_b ? "a" : "b", 0);
-  program.immediate("sr", input.status);
+unsigned initialize(Program &program, const Input input) {
+  immediate(program, move_m0, word_mask);
+  immediate(program, move_m1, word_mask);
+  immediate(program, move_m4, word_mask);
+  immediate(program, move_r0, transfer_address);
+  immediate(program, move_r4, transfer_second_address);
+  immediate(program, move_x0, seed_x);
+  immediate(program, move_y0, seed_y);
+  immediate(program, move_x1, 0);
+  immediate(program, move_y1, 0);
+  program.word(store_x0);
+  program.word(store_y0);
+  set_accumulator(program, input.source_b, input.value);
+  set_accumulator(program, !input.source_b, 0);
+  immediate(program, move_sr, input.status);
   const auto pc = program.pc();
   emit_instruction(program, input);
   return pc;
 }
 
-void check_data(DspBus &bus, const DspState &state, const Input input, const BusResult result) {
+void check_data(DspBus &bus,
+                const dsp56300::Registers &state,
+                const Input input,
+                const BusResult result) {
   const auto x = static_cast<unsigned>(state.x & word_mask);
   const auto y0 = static_cast<unsigned>(state.y & word_mask);
   const auto y1 = static_cast<unsigned>(state.y >> word_bits);
@@ -211,7 +279,10 @@ bool raw_form(const Form form) {
          form == Form::raw_long;
 }
 
-void check(DspBus &bus, const DspState &before, const DspState &after, const Input input) {
+void check(DspBus &bus,
+           const dsp56300::Registers &before,
+           const dsp56300::Registers &after,
+           const Input input) {
   auto result = expected(input);
   if (raw_form(input.form)) { result.status = input.status; }
   if (input.form == Form::bit_test) {
@@ -259,17 +330,19 @@ void check(DspBus &bus, const DspState &before, const DspState &after, const Inp
   check_data(bus, after, input, result);
 }
 
-void run_batch(DspBus &bus, DspCore &cpu, const std::span<const Input> batch) {
-  DspProgram program;
+void run_batch(OwnDspMachine &machine, const std::span<const Input> batch) {
+  Program program;
   std::vector<unsigned> pcs;
   for (const auto input : batch) { pcs.push_back(initialize(program, input)); }
-  program.install(bus);
-  cpu.reset_spi_boot();
+  native::reset_native(machine, program);
   for (std::size_t index = 0; index < batch.size(); ++index) {
-    run_to(cpu, pcs[index]);
-    const auto before = cpu.state();
-    cpu.step();
-    check(bus, before, cpu.state(), batch[index]);
+    run_to(machine, pcs[index]);
+    const auto before = machine.cpu().registers();
+    const auto retired = machine.cpu().progress().instructions;
+    native::step_native(machine);
+    check(machine.bus(), before, machine.cpu().registers(), batch[index]);
+    require(machine.cpu().progress().instructions == retired + 1,
+            "Each literal transfer retires exactly once through the native owner");
   }
 }
 
@@ -304,80 +377,78 @@ void test_matrix() {
   }
   constexpr unsigned expected_cases = 4896;
   require(inputs.size() == expected_cases, "Transfer matrix must cover each declared combination");
-  DspBus bus;
-  DspCore cpu(bus);
+  OwnDspMachine machine(native::native_clocks);
   constexpr std::size_t batch_size = 32;
   for (std::size_t offset = 0; offset < inputs.size(); offset += batch_size) {
-    run_batch(
-        bus, cpu, std::span(inputs).subspan(offset, std::min(batch_size, inputs.size() - offset)));
+    run_batch(machine,
+              std::span(inputs).subspan(offset, std::min(batch_size, inputs.size() - offset)));
   }
   std::cout << inputs.size() << " independent accumulator-transfer vectors passed\n";
 }
 
 void test_repeat_count_transfer() {
-  DspBus bus;
-  DspCore cpu(bus);
+  OwnDspMachine machine(native::native_clocks);
   for (const unsigned scaling : {0U, scale_down, scale_up}) {
-    DspProgram program;
-    set_accumulator(program, "a", half);
-    program.immediate("sr", masked_status | scaling);
+    Program program;
+    set_accumulator(program, false, half);
+    immediate(program, move_sr, masked_status | scaling);
     const auto prefix = program.pc();
-    program.emit("rep a");
+    program.word(repeat_a);
     const auto body = program.pc();
-    program.emit("nop");
-    program.install(bus);
-    cpu.reset_spi_boot();
-    run_to(cpu, prefix);
+    program.word(0x000000);
+    native::reset_native(machine, program);
+    run_to(machine, prefix);
     const auto wanted = expected({.value = half, .status = masked_status | scaling});
-    cpu.step();
-    require(cpu.state().pc == body && cpu.state().lc == wanted.high &&
-                cpu.state().sr == wanted.status && cpu.state().a == half,
+    native::step_native(machine);
+    require(machine.cpu().registers().pc == body && machine.cpu().registers().lc == wanted.high &&
+                machine.cpu().registers().sr == wanted.status &&
+                machine.cpu().registers().a == half,
             "REP accumulator count uses the standard pre-scaling S/L transfer behavior");
-    cpu.step();
-    require(cpu.state().lc == wanted.high - 1 && cpu.state().pc == body &&
-                cpu.state().sr == wanted.status,
+    native::step_native(machine);
+    require(machine.cpu().registers().lc == wanted.high - 1 &&
+                machine.cpu().registers().pc == body &&
+                machine.cpu().registers().sr == wanted.status,
             "REP retires one native body instruction after the scaled count transfer");
   }
 }
 
 void test_source_timing() {
-  DspProgram program;
-  set_accumulator(program, "a", half);
-  set_accumulator(program, "b", 0);
-  program.immediate("x0", half >> word_bits);
-  program.immediate("sr", masked_status);
+  Program program;
+  set_accumulator(program, false, half);
+  set_accumulator(program, true, 0);
+  immediate(program, move_x0, half >> word_bits);
+  immediate(program, move_sr, masked_status);
   const auto add = program.pc();
-  program.emit("add x0,a a,y0");
-  DspBus bus;
-  program.install(bus);
-  DspCore cpu(bus);
-  run_to(cpu, add);
-  cpu.step();
-  require(cpu.state().a == half * 2 && cpu.state().y == (half >> word_bits) &&
-              cpu.state().sr == (masked_status | extension | sticky),
+  program.word(add_with_old_a);
+  OwnDspMachine machine(native::native_clocks);
+  native::reset_native(machine, program);
+  run_to(machine, add);
+  native::step_native(machine);
+  require(machine.cpu().registers().a == half * 2 &&
+              machine.cpu().registers().y == (half >> word_bits) &&
+              machine.cpu().registers().sr == (masked_status | extension | sticky),
           "Parallel transfer reads pre-ALU accumulator and growth before ADD overwrites it");
 }
 
 void test_unselected_growth_and_sr_write() {
-  DspProgram program;
-  set_accumulator(program, "a", 0);
-  set_accumulator(program, "b", half);
-  program.immediate("sr", masked_status);
+  Program program;
+  set_accumulator(program, false, 0);
+  set_accumulator(program, true, half);
+  immediate(program, move_sr, masked_status);
   const auto transfer = program.pc();
-  program.emit("move a,x0");
-  set_accumulator(program, "a", half);
+  program.word(move_a_to_x0);
+  set_accumulator(program, false, half);
   // Scaled result is itself a legal SR value, including explicitly cleared S.
   constexpr unsigned replacement = 0x400000;
-  program.emit("move a,sr");
-  DspBus bus;
-  program.install(bus);
-  DspCore cpu(bus);
-  run_to(cpu, transfer);
-  cpu.step();
-  require(cpu.state().sr == masked_status && cpu.state().x == 0,
+  program.word(move_a_to_sr);
+  OwnDspMachine machine(native::native_clocks);
+  native::reset_native(machine, program);
+  run_to(machine, transfer);
+  native::step_native(machine);
+  require(machine.cpu().registers().sr == masked_status && machine.cpu().registers().x == 0,
           "Unselected accumulator growth does not set S on another accumulator's transfer");
-  for (unsigned count = 0; count < 4; ++count) { cpu.step(); }
-  require(cpu.state().sr == replacement,
+  for (unsigned count = 0; count < 4; ++count) { native::step_native(machine); }
+  require(machine.cpu().registers().sr == replacement,
           "Explicit MOVEC to SR replaces computed transfer flags with the moved word");
 }
 }
