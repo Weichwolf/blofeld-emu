@@ -2220,6 +2220,15 @@ Persistent storage               partial  MCU NVM files preserve mutations,
                                           frequencies with exact ceiling conversion,
                                           counter overflow refusal and copied pending
                                           work checks (nand-read.txt).
+                                          NandWriteStore adds exclusive file ownership
+                                          to that same timed cell controller. Native
+                                          GPIO program/erase/inhibit/status/readback,
+                                          file publication cuts and cold snapshot
+                                          regressions pass under both sanitizer
+                                          profiles (nand-write-store.txt). Live peer
+                                          RAM rewind is refused; value snapshots
+                                          remain supported. This component evidence
+                                          does not establish original-firmware saves.
                                           Runtime board adoption, factory data,
                                           native power-cut/update/recovery and
                                           full instrument acceptance stay open.

@@ -3,6 +3,7 @@
 
 #include "board/gpio_pads.hpp"
 #include "board/nand_bus_decode.hpp"
+#include "board/nand_peer_medium.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_gpio.hpp"
@@ -17,6 +18,7 @@
 #include "storage/nand_read_setup.hpp"
 #include "storage/nand_read_timing.hpp"
 #include "storage/nand_write_medium.hpp"
+#include "storage/nand_write_store.hpp"
 #include "storage/nand_write_timing.hpp"
 
 #include <cstdint>
@@ -47,7 +49,7 @@ std::uint64_t power_deadline(const std::uint64_t timebase) {
 }
 
 struct PeerState {
-  PeerState(NandWriteMedium clock, const std::uint64_t timebase, const NandBusContract contract)
+  PeerState(NandPeerMedium clock, const std::uint64_t timebase, const NandBusContract contract)
       : device(std::move(clock)),
         decoder(contract),
         write(timebase),
@@ -58,7 +60,7 @@ struct PeerState {
 
   bool power_ready = false;
   bool faulted = false;
-  NandWriteMedium device;
+  NandPeerMedium device;
   NandBusDecode decoder;
   NandWriteTiming write;
   NandReadSetup setup;
@@ -75,12 +77,10 @@ struct PeerState {
 }
 
 struct NandPeer::Impl {
-  Impl(OwnDspMachine &machine, Nand device, NandCellProfile profile, const NandBusContract contract)
+  Impl(OwnDspMachine &machine, NandPeerMedium medium, const NandBusContract contract)
       : machine_(machine),
         state_(std::make_unique<PeerState>(
-            NandWriteMedium(std::move(device), machine.clock().timebase_hz(), std::move(profile)),
-            machine.clock().timebase_hz(),
-            contract)) {
+            std::move(medium), machine.clock().timebase_hz(), contract)) {
     std::cerr << "NAND_BOARD_MODEL CE=held-selected power=100us-reference "
                  "part=explicit-device-contract GPIO=logical sample=period-completion "
                  "board-qualified=0 contract="
@@ -206,6 +206,9 @@ struct NandPeer::Impl {
   }
 
   void after(const std::uint64_t ticks) {
+    healthy();
+    const auto page = state_->device.device().page();
+    const auto column = state_->device.device().column();
     try {
       advance(ticks);
       observe(ticks);
@@ -214,19 +217,22 @@ struct NandPeer::Impl {
       state_->faulted = true;
       throw Fault("Joined NAND pins at X:0xffffbd/Y:0xfffff5 pc=" + hex(state_->context.pc, 6) +
                   " omr=" + hex(state_->context.omr, 6) + " ticks=" + std::to_string(ticks) +
-                  " page=" + hex(state_->device.device().page(), 6) +
-                  " column=" + hex(state_->device.device().column(), 3) + ": " + error.what());
+                  " page-before=" + hex(page, 6) + " column-before=" + hex(column, 3) + ": " +
+                  error.what());
     }
   }
 
   [[noreturn]] void fail(const std::string &reason) const {
     throw Fault("NAND output peer operation=event at=X:0xffffbd/Y:0xfffff5 last-native-pc=" +
                 hex(state_->context.pc, 6) + " omr=" + hex(state_->context.omr, 6) +
-                " ticks=" + std::to_string(state_->device.ticks()) + ": " + reason);
+                " native-ticks=" + std::to_string(machine_.clock().elapsed_ticks()) + ": " +
+                reason);
   }
 
   void healthy() const {
-    if (state_->faulted) { fail("quarantined after incomplete output event"); }
+    if (state_->faulted || state_->device.faulted()) {
+      fail("quarantined after incomplete NAND operation or persistence failure");
+    }
   }
 
   void advance(const std::uint64_t ticks) {
@@ -392,7 +398,20 @@ NandPeer::NandPeer(OwnDspMachine &machine,
                    Nand device,
                    NandCellProfile profile,
                    const NandBusContract contract)
-    : impl_(std::make_unique<Impl>(machine, std::move(device), std::move(profile), contract)) {
+    : impl_(std::make_unique<Impl>(machine,
+                                   NandPeerMedium(NandWriteMedium(std::move(device),
+                                                                  machine.clock().timebase_hz(),
+                                                                  std::move(profile))),
+                                   contract)) {
+  impl_->bind(lifetime_);
+  impl_->publish();
+}
+
+NandPeer::NandPeer(OwnDspMachine &machine,
+                   std::unique_ptr<NandWriteStore> store,
+                   const NandBusContract contract)
+    : impl_(std::make_unique<Impl>(
+          machine, NandPeerMedium(std::move(store), machine.clock().timebase_hz()), contract)) {
   impl_->bind(lifetime_);
   impl_->publish();
 }
@@ -452,7 +471,11 @@ Nand NandPeer::protocol_copy() const {
 }
 
 bool NandPeer::faulted() const {
-  return impl_->state_->faulted;
+  return impl_->state_->faulted || impl_->state_->device.faulted();
+}
+
+bool NandPeer::durable() const {
+  return impl_->state_->device.durable();
 }
 
 NandPeerSnapshot NandPeer::checkpoint() const {
@@ -466,6 +489,7 @@ NandPeerSnapshot NandPeer::checkpoint() const {
 }
 
 void NandPeer::restore(const NandPeerSnapshot &snapshot) {
+  if (durable()) { throw Fault("A live NAND store cannot be restored from RAM"); }
   if (!snapshot.storage_ || snapshot.storage_->owner != this ||
       snapshot.storage_->lifetime.lock() != lifetime_ ||
       snapshot.storage_->identity != impl_->identity_) {

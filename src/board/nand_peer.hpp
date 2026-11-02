@@ -15,6 +15,7 @@
 
 namespace blofeld {
 class OwnDspMachine;
+class NandWriteStore;
 }
 
 namespace blofeld {
@@ -76,6 +77,9 @@ public:
            blofeld::Nand device,
            NandCellProfile profile,
            NandBusContract contract);
+  NandPeer(blofeld::OwnDspMachine &machine,
+           std::unique_ptr<NandWriteStore> store,
+           NandBusContract contract);
   NandPeer(const NandPeerSnapshot &snapshot, blofeld::OwnDspMachine &target);
   ~NandPeer();
   NandPeer(const NandPeer &) = delete;
@@ -90,6 +94,7 @@ public:
   // Stage payload only, before native/calendar restore. No bus write or callback.
   void restore(const NandPeerSnapshot &snapshot);
   [[nodiscard]] bool faulted() const;
+  [[nodiscard]] bool durable() const;
 
 private:
   struct Impl;

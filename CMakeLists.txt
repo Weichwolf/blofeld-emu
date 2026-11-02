@@ -200,10 +200,15 @@ target_link_libraries(blofeld_nand_read_setup PUBLIC blofeld_nand)
 add_library(blofeld_nand_store src/storage/nand_file.cpp src/storage/nand_store.cpp)
 target_include_directories(blofeld_nand_store PUBLIC src)
 target_link_libraries(blofeld_nand_store PUBLIC blofeld_nand PRIVATE blofeld_private_files)
-add_library(blofeld_nand_peer src/board/nand_peer.cpp src/board/nand_bus_decode.cpp)
+add_library(blofeld_nand_write_store src/storage/nand_write_store.cpp)
+target_include_directories(blofeld_nand_write_store PUBLIC src)
+target_link_libraries(blofeld_nand_write_store PUBLIC blofeld_nand_write_medium blofeld_nand_store
+  PRIVATE blofeld_private_files)
+add_library(blofeld_nand_peer src/board/nand_peer.cpp src/board/nand_peer_medium.cpp
+  src/board/nand_bus_decode.cpp)
 target_include_directories(blofeld_nand_peer PUBLIC src)
 target_link_libraries(blofeld_nand_peer PUBLIC blofeld_own_dsp_io
-  blofeld_nand_write_medium blofeld_nand_read_timing blofeld_nand_write_timing
+  blofeld_nand_write_medium blofeld_nand_write_store blofeld_nand_read_timing blofeld_nand_write_timing
   blofeld_nand_read_setup blofeld_dsp_peripheral_calendar)
 add_library(blofeld_mcu src/mcu/mcu_bus.cpp src/mcu/mcu_bus_clone.cpp src/mcu/mcu_bus_usb.cpp src/mcu/mcu_code_cache.cpp src/mcu/mcu_memory.cpp src/mcu/mcu_gpio.cpp
   src/mcu/mcu_flash_config.cpp src/mcu/mcu_flash.cpp src/mcu/mcu_flash_clock.cpp
@@ -4403,4 +4408,18 @@ if(BUILD_TESTING)
   add_test(NAME mcu_dsp_shared_word COMMAND blofeld-mcu-dsp-shared-word-test)
   set_tests_properties(mcu_dsp_shared_word PROPERTIES TIMEOUT 60)
   add_dependencies(quality blofeld-mcu-dsp-shared-word-test)
+endif()
+
+# Durable ownership of the existing timed NAND model and actual native pin path.
+if(BUILD_TESTING)
+  add_executable(blofeld-nand-write-store-test test/nand_write_store_test.cpp)
+  target_link_libraries(blofeld-nand-write-store-test PRIVATE blofeld_nand_write_store)
+  add_test(NAME nand_write_store COMMAND blofeld-nand-write-store-test)
+  set_tests_properties(nand_write_store PROPERTIES TIMEOUT 30)
+  add_executable(blofeld-nand-durable-peer-test test/nand_durable_peer_test.cpp
+    test/nand_durable_peer_native.cpp)
+  target_link_libraries(blofeld-nand-durable-peer-test PRIVATE blofeld_nand_native_fixture)
+  add_test(NAME nand_durable_peer COMMAND blofeld-nand-durable-peer-test)
+  set_tests_properties(nand_durable_peer PROPERTIES TIMEOUT 120)
+  add_dependencies(quality blofeld-nand-write-store-test blofeld-nand-durable-peer-test)
 endif()

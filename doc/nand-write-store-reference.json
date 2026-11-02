@@ -1,0 +1,44 @@
+{
+  "format": 1,
+  "scope": "Exclusive file ownership of timed NAND and direct independent-core pin integration; authored programs only",
+  "profiles": [
+    "ASan/UBSan",
+    "TSan"
+  ],
+  "cell_deadlines_us": {
+    "program": 500,
+    "erase": 3000
+  },
+  "native_endpoints_per_profile": 10,
+  "native_publication_failure_controls_per_profile": 2,
+  "file_failure_cuts_per_profile": 10,
+  "compiler_format_tidy": "zero findings in the coherent affected closure",
+  "source_sha256": {
+    "src/storage/nand_write_store.cpp": "d57adf77e1efdac73e98cbe8c1802ec4a5c63e63a357301c6ae08c79f941127f",
+    "src/storage/nand_write_store.hpp": "9f48c8b126717c265f7e365cff40ec9e16720c8d3d87e39459ed2502ad5332c7",
+    "src/board/nand_peer.cpp": "b623738a0fd1e424854e46b8bafd448cdfcc8325fcdbf6f7b84cf4a3fdf244e1",
+    "src/board/nand_peer.hpp": "29c131749b36a2c1230b0b12023838f787401307de808b604759f55c81a3704c",
+    "src/board/nand_peer_medium.cpp": "82b0c089dee99491796b50dda8fd196a47b8ef9eda95c7af06645b0bf925d5d3",
+    "src/board/nand_peer_medium.hpp": "ee3e43bd60472e2cf285e6f7a4c907bcc0c51ce9b92d3b2f147678f07a482065",
+    "test/nand_write_store_test.cpp": "1ea300272135baae8c3faa3e3215aa21c9330936ac4812b8fdc0449236172b41",
+    "test/nand_durable_peer_test.cpp": "d3bca421d9af76f2d23d8445cde23c49864c9c7fd3f4839e0ecfa0678667d41b",
+    "test/nand_durable_peer_native.cpp": "667ca46ee1cf58dc3c25461791d27f433893c605e5a1ada9d656049002c95c5a",
+    "test/nand_durable_native_tests.hpp": "16b66e6767d12f840bbab28bd3b36032a0934b78df94a1fe62b6b8fc174978a1"
+  },
+  "evidence_sha256": {
+    "compiler": "21bfd63eb557171d82b26161edf520dac1473029aa370de8fe939612e1e7d2f7",
+    "native_qualification": "19f178da8f01b6f5e962faa721de5e9faba9b43a9f33fd5ab83258522df40970",
+    "frozen_source_and_executables": "9e5e80ceb2c648d119eb5d934cc7d096586896acd1c7bac68bd4a6db8dae711a"
+  },
+  "component_native_receipts": {
+    "doc/local/durable-nand-integration/strict-nand_write_store-r3/scope.json": "1fcd2accc70392a8a12b54ff2db19da27c03fd1dab2ff603fcaee93e5b5ef51b",
+    "doc/local/durable-nand-integration/strict-nand_durable_peer-r7/scope.json": "48512bc540ae29ca8e131e8efe678be3bb45454f9b97c7b33ee99f844ecb68d8",
+    "doc/local/durable-nand-integration/thread-nand_write_store-r7/scope.json": "7fcf8c5c3646b6d5840fa2792376a44418dc76e4b93eeb2992e420d22eaba661",
+    "doc/local/durable-nand-integration/thread-nand_durable_peer-r7/scope.json": "8df27229e9354317cc63a06cc8d575f0cc1e22426d1274c5177c8026a32d9d9e"
+  },
+  "regular_board_live_pair_original_firmware_qualified": false,
+  "original_firmware_executed_by_these_component_controls": false,
+  "full_instrument": false,
+  "physical_traffic": false,
+  "fuzz": false
+}
