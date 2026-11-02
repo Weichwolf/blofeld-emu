@@ -76,3 +76,12 @@ boot, physical DIN/USB wiring, allocated notes/voice/audio, calibrated timing or
 live RawMIDI validation. Reserved boot Y:002000 and allocator Y:ffffff frontiers,
 original update/recovery and hardware comparisons remain open. No fuzzing or
 physical traffic runs as part of these deterministic checks.
+
+A separate frozen original-reset reference control selects the official Init
+preset through mutable virtual A001 storage, preserving all firmware/boot bytes.
+Independent official SMF data matches all 383 parameters in all 16 Parts before
+and after normalization. Six normal NoteOn/Off bytes yield 54 native Timer0
+IRQ/RTI pairs, but no positive voice entry or nonzero PCM before the declared
+12000000-unit bound. Both functional suffixes agree and the diagnostic decoder
+control reproduces. This is not ordinary standalone or played-note acceptance;
+see own-dsp-nand-reference.json for image and local audit hashes.

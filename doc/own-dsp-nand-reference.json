@@ -445,6 +445,44 @@
       "input_driver_holds_last_observed_level_across_reset": true,
       "played_instrument_audio_proven": false,
       "full_instrument_complete": false
+    },
+    "connected_original_init_control": {
+      "scope": "Same frozen original reset/NAND/runtime/MIDI executable and clocks; only mutable A001 state contains the official Init preset; not ordinary standalone Board qualification",
+      "local_input_manifest": "doc/local/original-midi-init/input.json",
+      "local_input_manifest_sha256": "495c1307ea8169060ac099de77295d77321ec7df1fedb6cfafaa27265b568a4d",
+      "virtual_nand_image_sha256": "2eabcf7fdfc5740b30f5d7c43e537b9ff7b258204195d573183b237243e027dc",
+      "official_init_payload_sha256": "d6198c058e7f7c80b061f50ab76eec90396ff9b8b9e891c823abd9efd0f39e32",
+      "firmware_and_all_107_boot_records_unchanged": true,
+      "other_nand_records_and_block_flags_unchanged": true,
+      "local_audit": "doc/local/original-midi-init/observed/audit.json",
+      "local_audit_sha256": "80df8193b7251ed27ba87831885ff0ad00957f39f29a4fe7c35f8206d0d7cf9d",
+      "local_sound_ram_audit": "doc/local/original-midi-init/observed/sound-audit.json",
+      "local_sound_ram_audit_sha256": "1128bb3a3ec993f094fa768579a92750aea3b9e875b441833cb68c22c4095500",
+      "independent_official_ram_comparison": {
+        "parts": 16,
+        "parameters_each": 383,
+        "before_after_snapshots": 32,
+        "measured_words": 12256,
+        "all_match": true
+      },
+      "arp_mode": 0,
+      "fx1_type": 0,
+      "fx2_type": 0,
+      "identical_functional_suffixes": 2,
+      "diagnostic_decoder_control_reproduced": true,
+      "normal_midi_bytes_received": 6,
+      "native_timer0_irq_rti_pairs": 54,
+      "native_positive_voice_entries": 0,
+      "actual_dma_words": 7058,
+      "silent_stereo_frames": 1763,
+      "frame_rate_hz": 44100,
+      "termination": "Declared 12000000-unit analysis budget; no new hardware refusal in either functional suffix",
+      "same_scope_audio_established": false,
+      "complete_regular_runtime_qualified": false,
+      "whole_goal_complete": false,
+      "firmware_patched": false,
+      "fuzzing": false,
+      "physical_traffic": false
     }
   }
 }

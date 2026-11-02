@@ -4163,6 +4163,15 @@ The original factory preset uses an arpeggiator and Clocked Delay; no positive
 voice allocation occurs in this short gate. 1679 stereo frames remain silent.
 The Delay's first Y:016000 read is still unmodeled; no firmware repair is used.
 This frozen reference evidence does not qualify regular standalone MIDI/audio.
+A controlled mutable-bank input replaces A001 with the official Init preset;
+the firmware, boot records and remaining NAND state stay unchanged. Independent
+official SMF comparison verifies 383 parameters in all 16 Parts before and after
+normalization (32 snapshots / 12256 words). With arpeggiator and both effects off,
+both original suffixes reach the 12000000-unit bound without a new hardware
+refusal. Six normal MIDI bytes / 54 native IRQ/RTI pairs still produce no positive
+voice allocation; 1763 stereo frames remain silent. This excludes Clocked Delay
+as the only obstacle to a sounding note in this frozen scope, not in every preset
+or the ordinary Board. See own-dsp-nand-reference.json for pinned local audits.
 
 Coincident independent DSP inputs (requirements 2/3/6): the regular Board now
 applies a bounded set of independent inputs at one actual deadline, on the
