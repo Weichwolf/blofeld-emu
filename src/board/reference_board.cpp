@@ -2,11 +2,13 @@
 #include "board/reference_board.hpp"
 
 #include "audio/pcm_recording.hpp"
+#include "board/mcu_dsp_gpio_peer.hpp"
 #include "board/reference_context.hpp"
 #include "common/bus.hpp"
 #include "mcu/hc12.hpp"
 #include "mcu/hc12_cycles.hpp"
 #include "mcu/mcu_bus.hpp"
+#include "mcu/mcu_gpio.hpp"
 #include "midi/midi_serial.hpp"
 #include "midi/midi_timed.hpp"
 #include "storage/flash_file.hpp"
@@ -52,6 +54,7 @@ Board::Board(const Config &config, const Execution &execution)
       identity_(std::make_shared<const Identity>()),
       native_(std::make_unique<Owners>(config_, execution_)) {
   validate_midi(config_);
+  validate_gpio_peer(config_);
   validate_u0_release();
   const auto common = common_hz();
   const auto local = native_->mcu.run_clock().timebase_hz();
@@ -91,6 +94,10 @@ Board::Board(const Config &config, const Execution &execution)
   }
   for (const auto &entry : config.initial) { apply(entry); }
   connect_runtime();
+  if (config_.gpio_peer) {
+    native_->gpio_peer =
+        std::make_unique<McuDspGpioPeer>(native_->mcu, native_->dsp, *config_.gpio_peer);
+  }
   update_wiring();
   attach(*native_);
 }
@@ -130,7 +137,14 @@ std::uint64_t Board::ticks() const {
 
 void Board::apply(const Input &input) {
   switch (input.kind) {
-    case InputKind::drive: native_->mcu.bus().set_pin_drive(input.port, input.drive); break;
+    case InputKind::drive:
+      if (config_.gpio_peer && input.port == McuPort::e) {
+        constexpr std::uint8_t other_e_pins = 0xfe;
+        native_->mcu.bus().update_pin_drive(input.port, other_e_pins, input.drive);
+      } else {
+        native_->mcu.bus().set_pin_drive(input.port, input.drive);
+      }
+      break;
     case InputKind::phy_window: native_->mcu.bus().observe_phy({.edges = input.value}); break;
     case InputKind::usb_decoder:
       native_->mcu.bus().observe_usb_decoder(
@@ -191,9 +205,10 @@ void Board::on_cycle(const Hc12BusCycle cycle) {
   observe_midi(cycle.context);
   check_signals();
   constexpr unsigned port_b = 1;
-  const bool shared = (cycle.kind == 'w' || cycle.kind == 'W') && cycle.address &&
-                      ((*cycle.address <= port_b && port_b - *cycle.address < cycle.size) ||
-                       u0_release_write(*cycle.address, cycle.size));
+  const bool shared =
+      (cycle.kind == 'w' || cycle.kind == 'W') && cycle.address &&
+      ((*cycle.address <= port_b && port_b - *cycle.address < cycle.size) ||
+       u0_release_write(*cycle.address, cycle.size) || gpio_peer_write(*cycle.address, cycle.size));
   native_->runtime->begin_cycle(cycle, shared, runtime_inputs(), runtime_observer());
   update_wiring();
 }

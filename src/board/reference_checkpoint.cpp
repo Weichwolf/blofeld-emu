@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "board/mcu_dsp_gpio_peer.hpp"
 #include "board/mcu_dsp_runtime.hpp"
 #include "board/nand_peer.hpp"
 #include "board/reference_board.hpp"
@@ -154,6 +155,10 @@ void Board::restore(const Checkpoint &checkpoint) {
                                                          replacement->dsp,
                                                          runtime_events(),
                                                          nand_events(*replacement));
+  if (config_.gpio_peer) {
+    replacement->gpio_peer =
+        std::make_unique<McuDspGpioPeer>(replacement->mcu, replacement->dsp, *config_.gpio_peer);
+  }
   attach(*replacement);
   static_assert(std::is_nothrow_copy_assignable_v<Control>);
   native_.swap(replacement);

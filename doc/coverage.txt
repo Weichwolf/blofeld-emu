@@ -4135,3 +4135,13 @@ matrix also passes on the frozen reference frontend with the proper production
 Bus reset model, without the temporary Timer2 override. Full original connected
 continuation is pending. See dsp-dma-controller-read.txt; component results do
 not establish complete instrument/MIDI/audio/storage/update acceptance.
+
+Functional MCU/DSP GPIO peer (requirements 2/3/6): the regular Board can connect
+Q[7:0]/C[7:0], J0/IRQA and PE9/PE0-XIRQ using actual chip drivers. Tests cover
+512 byte transfers, partial reads, unknown/conflicting pads, native IRQ masks,
+reset/restore/lifetime and authored MCU/DSP request/reply with 24 restored
+suffixes. An actual same-tick pad read sees old/new data under the two declared
+write orders. Five affected groups pass per ASan/UBSan and separate TSan;
+unchanged ELF evidence is reused. Topology/pulls remain explicit hypotheses;
+original-firmware normal instrument, MIDI/audio and storage/update acceptance
+remain open. See reference-board.txt and mcu_dsp_gpio_peer/gpio_peer_board tests.

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "audio/serial_pcm.hpp"
+#include "board/mcu_dsp_gpio_peer.hpp"
 #include "board/mcu_dsp_runtime.hpp"
 #include "board/reference_board.hpp"
 #include "common/bus.hpp"
@@ -428,6 +429,21 @@ NandConnection nand_connection(std::istringstream &line) {
   return {.image = load_nand_image(path), .continuation = continuation};
 }
 
+McuDspGpioWiring gpio_peer(std::istringstream &line) {
+  if (token(line) != "direct") { throw Fault("GPIO peer requires the declared direct topology"); }
+  const auto pull_down = byte(line);
+  const auto notification = token(line);
+  auto pull = GpioPeerPull::none;
+  if (notification == "up") {
+    pull = GpioPeerPull::up;
+  } else if (notification == "down") {
+    pull = GpioPeerPull::down;
+  } else if (notification != "none") {
+    throw Fault("GPIO notification pull must be none, up or down");
+  }
+  return {.data_pull_down = pull_down, .notification_pull = pull};
+}
+
 bool timing_setting(Config &config, const std::string_view key, std::istringstream &line) {
   if (key == "clock") {
     clocks(config, line);
@@ -441,6 +457,8 @@ bool timing_setting(Config &config, const std::string_view key, std::istringstre
     power_on(config, line);
   } else if (key == "dsp-input-write-order") {
     input_write_order(config, line);
+  } else if (key == "gpio-peer") {
+    config.gpio_peer = gpio_peer(line);
   } else if (key == "nand-image") {
     config.nand = nand_connection(line);
   } else {
@@ -599,6 +617,7 @@ Config parse(const std::string &text) {
     throw Fault("Reference-board checkpoint exceeds the operation budget");
   }
   validate_returns(parser.result);
+  validate_gpio_peer(parser.result);
   validate_midi(parser.result);
   return parser.result;
 }

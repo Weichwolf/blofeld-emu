@@ -4,6 +4,7 @@
 #include "audio/pcm_recording.hpp"
 #include "audio/pcm_sink.hpp"
 #include "audio/serial_pcm.hpp"
+#include "board/mcu_dsp_gpio_peer.hpp"
 #include "board/mcu_dsp_runtime.hpp"
 #include "board/nand_peer.hpp"
 #include "board/reference_square_clock.hpp"
@@ -149,6 +150,7 @@ struct Config {
   DspDmaGrant dma_grant = DspDmaGrant::unknown;
   std::optional<PowerOnTiming> power_on;
   std::optional<NandConnection> nand;
+  std::optional<McuDspGpioWiring> gpio_peer;
   bool mcu_u0_release = false;
   std::uint64_t release_ticks = 0;
   std::uint64_t operations = 0;
@@ -178,6 +180,7 @@ struct Config {
 
 [[nodiscard]] DspRunClockInputs dsp_clock_inputs(const Config &config);
 void validate_returns(const Config &config);
+void validate_gpio_peer(const Config &config);
 void validate_midi(const Config &config);
 void validate_dsp_midi(const Config &config);
 
@@ -308,6 +311,7 @@ private:
     McuMachine mcu;
     OwnDspMachine dsp;
     std::unique_ptr<NandPeer> nand;
+    std::unique_ptr<McuDspGpioPeer> gpio_peer;
     std::unique_ptr<McuDspRuntime> runtime;
   };
   class Busy;
@@ -368,6 +372,7 @@ private:
   void transition(SpiInputs pins);
   void update_loopback();
   void update_wiring();
+  [[nodiscard]] bool gpio_peer_write(unsigned address, unsigned size = 1) const;
   void validate_u0_release() const;
   void validate_initial_schedule() const;
   void update_u0_drive();

@@ -91,7 +91,8 @@ void Board::on_write(const BusEvent &event) {
                       << " mcu-pc=" << hex(control_.context.pc) << '\n';
   }
   constexpr unsigned port_b = 1;
-  if (event.address != port_b && !u0_release_write(event.address)) {
+  if (event.address != port_b && !u0_release_write(event.address) &&
+      !gpio_peer_write(event.address)) {
     check_signals();
     return;
   }
@@ -100,7 +101,7 @@ void Board::on_write(const BusEvent &event) {
       [&] {
         if (event.address == port_b) {
           observe_spi_write(event);
-        } else {
+        } else if (u0_release_write(event.address)) {
           observe_u0_release();
         }
       },

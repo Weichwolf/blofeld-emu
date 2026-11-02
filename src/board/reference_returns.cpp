@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "board/mcu_dsp_gpio_peer.hpp"
 #include "board/reference_board.hpp"
 #include "board/reference_context.hpp"
 #include "common/bus.hpp"
@@ -102,5 +103,6 @@ void Board::update_wiring() {
     update_return(config_.miso, outputs.miso, control_.miso_observed, "miso");
   }
   update_loopback();
+  if (native_->gpio_peer) { native_->gpio_peer->synchronize(); }
 }
 }

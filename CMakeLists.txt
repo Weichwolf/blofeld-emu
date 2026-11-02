@@ -303,7 +303,8 @@ add_library(blofeld_host_midi_port src/midi/host_midi_port.cpp
   src/midi/sequence_encode.cpp src/midi/sequence_decode.cpp src/midi/sequence_pool.cpp)
 target_include_directories(blofeld_host_midi_port PUBLIC src)
 target_link_libraries(blofeld_host_midi_port PUBLIC blofeld_quality)
-add_library(blofeld_reference_board src/board/reference_config.cpp src/board/reference_square_clock.cpp src/board/reference_audio_clock.cpp
+add_library(blofeld_reference_board src/board/mcu_dsp_gpio_peer.cpp src/board/reference_gpio_peer.cpp
+  src/board/reference_config.cpp src/board/reference_square_clock.cpp src/board/reference_audio_clock.cpp
   src/board/reference_board.cpp src/board/reference_pipeline.cpp src/board/reference_wiring.cpp src/board/reference_returns.cpp src/board/reference_checkpoint.cpp
   src/board/reference_reset_source.cpp
   src/board/reference_dsp_inputs.cpp src/board/reference_dsp_clocks.cpp src/board/reference_pcm.cpp src/board/reference_audio.cpp
@@ -4346,4 +4347,17 @@ endif()
 
 if(BUILD_TESTING)
   add_dependencies(quality blofeld-nand-wide-timebase-test)
+endif()
+
+if(BUILD_TESTING)
+  add_executable(blofeld-mcu-dsp-gpio-peer-test test/mcu_dsp_gpio_peer_test.cpp)
+  target_link_libraries(blofeld-mcu-dsp-gpio-peer-test PRIVATE blofeld_reference_board)
+  add_test(NAME mcu_dsp_gpio_peer COMMAND blofeld-mcu-dsp-gpio-peer-test)
+  set_tests_properties(mcu_dsp_gpio_peer PROPERTIES TIMEOUT 30)
+  add_executable(blofeld-gpio-peer-board-test test/gpio_peer_board_test.cpp)
+  target_link_libraries(blofeld-gpio-peer-board-test PRIVATE blofeld_reference_board)
+  add_test(NAME gpio_peer_board COMMAND blofeld-gpio-peer-board-test
+    "${CMAKE_CURRENT_BINARY_DIR}/gpio-peer-board-test")
+  set_tests_properties(gpio_peer_board PROPERTIES TIMEOUT 30)
+  add_dependencies(quality blofeld-mcu-dsp-gpio-peer-test blofeld-gpio-peer-board-test)
 endif()
