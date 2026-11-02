@@ -39,7 +39,13 @@
     "doc/local/durable-cli-midi-audio/r4/observed/direction-release-audit.json": "0db4b31096e9192d0e1713e9138071bf0dadc0712cf3c1ec20c47942d78220b3",
     "doc/local/durable-cli-midi-audio/r4/observed/handoff-watch-r2.json": "858e82dda3dcee6795d32ea12c4fd8e0be80507c56d0aec8cd498882efd5a794",
     "doc/local/durable-cli-midi-audio/r4/read-only-progress/PCM-witness-audit.json": "4d973800aad97b0a8ddb1f1eaaad694437e7da21241bc9af2b50fafdd98c0eef",
-    "doc/local/durable-cli-midi-audio/r4/read-only-progress/snapshot.json": "6aa3149a214ef9965cefe61b06821470ee882a7fe0efe7af19a36d41088e216d"
+    "doc/local/durable-cli-midi-audio/r4/read-only-progress/snapshot.json": "6aa3149a214ef9965cefe61b06821470ee882a7fe0efe7af19a36d41088e216d",
+    "doc/local/durable-cli-midi-audio/r4/observed/run.json": "970631dd2f480fd81cdddabb2dec09d75a6433a43f680b8b68f101fcca7424ea",
+    "doc/local/durable-cli-midi-audio/r4/observed/audit.json": "87db9bcb81f74fbff51cc5b4a21f4745cf4461d3ed29c1c0f6cdb356c94747d4",
+    "doc/local/durable-cli-midi-audio/r4/observed/terminal-frontier-audit.json": "e01a7e8004fe9aa4ba9caca4bd13f99221cb34e71fe572fa6addd4cb93dd1b3f",
+    "doc/local/durable-cli-midi-audio/r4/observed/FFT-audit.json": "373c85a9ce9152de4be89f5c69260a0e35ee7ab5e9b17a3f503e72474891ca2a",
+    "doc/local/durable-cli-midi-audio/r4/observed/final-PCM-witness-audit.json": "2571e0ba58d12f628e73b071338b9baff43924c3f076ee347f4a56acfd0ceafd",
+    "doc/local/durable-cli-midi-audio/r4/observed/LCD-visual-review.json": "c8503965e6dfff0b18fd5b541263a658756f96304ba9b6bbfd62908f3a462a1f"
   },
   "discarded_compiler_generation": "Prior read-handoff lane r1 had a stale decoder object and was rejected before native admission; its r2 qualified. The separate current host-owner canonical r1 is qualified.",
   "preceding_original_case": {
@@ -98,7 +104,7 @@
   },
   "original_ownership_continuation": {
     "source_commit": "b70da2eb5b617a8e668ea00cf51667e747c30ee2",
-    "run_status_at_observation": "live; final audio/display/storage audit pending",
+    "run_status_at_observation": "Naturally completed bounded ordinary CLI case; audio and native LCD/store formats independently audited",
     "prior_NAND_bytes_with_identical_values_and_ticks": 84024,
     "other_prior_NAND_observations_identical_after_explicit_phase_alignment": 337216,
     "replaced_previous_phase_observations": 7,
@@ -113,8 +119,33 @@
     "read_only_PCM_frames_observed": 3602,
     "MIDI_wire_frames_observed": 4,
     "fixed_stereo_frame_and_tick_witnesses_matched": 2,
-    "final_WAV_qualified": false,
+    "final_WAV_qualified": true,
     "healthy_identity_and_LCD_qualified": false,
-    "complete_instrument": false
+    "complete_instrument": false,
+    "terminal": {
+      "native_exit": 0,
+      "MCU_operations": 4800000,
+      "MCU_instructions": 4799428,
+      "DSP_instructions": 7297043,
+      "DSP_periods": 37792290,
+      "DSP_virtual_time_ms": 418.04538199011085,
+      "PCM_frames": 6792,
+      "nonzero_PCM_frames": 6191,
+      "peak_24bit": 357263,
+      "WAV_sha256": "535e851281e4016a7d3ad32b0e630efc31677bc62776b1d8f202f91c8f2fb6cd",
+      "WAV_bytes": 54404,
+      "frame_rate_hz": 44100,
+      "descriptive_FFT_peak_hz": 261.67306644894666,
+      "physical_pitch_qualified": false,
+      "MCU_and_NAND_stores_byte_identical": true,
+      "independent_store_CRCs_valid": true,
+      "persistent_factory_identity_field_retained": true,
+      "native_LCD_lit_pixels": 681,
+      "native_pixel_pair_validated": true,
+      "native_boot_caption_visually_observed": true,
+      "normal_instrument_UI_qualified": false,
+      "final_WAV_matches_passive_native_frames": true,
+      "full_boot": false
+    }
   }
 }

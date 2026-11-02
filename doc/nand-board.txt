@@ -212,9 +212,18 @@ DSP periods. Both retain independently checked 15/30 ns output bounds and the
 selected page/Ready. This is functional bus-selection evidence, with physical
 CE wiring unverified.
 
-A read-only inspection observes 3602 complete PCM frames and four MIDI wire
-frames. Two fixed stereo frames/ticks match the previous run exactly. The
-observer disables inferior calls, writes and breakpoints, then detaches; its
-pause is excluded from throughput claims. Final WAV, display/storage audit,
-healthy identity and full boot remain pending. Detailed analysis and recordings
-stay local; nand-read-handoff-reference.json pins the scoped evidence.
+The ordinary case completes its 4.8M-operation budget without a native fault:
+6792 stereo PCM frames at 44.1kHz, 6191 nonzero frames, four MIDI wire bytes and
+an exported WAV. Independent RIFF/24-bit alignment checks and three passive
+native-frame witnesses match the file exactly. FFT reports a descriptive peak
+near 261.67Hz; this is not physical pitch qualification. Both CRC-valid stores
+stay byte-identical, including factory identity and cell/history maps. Native
+LCD bitmap/text pixels agree; the boot caption is visible, with 681 lit pixels.
+
+The earlier passive inspection disables inferior calls, writes and breakpoints,
+then detaches; its pause is excluded from throughput claims. The final interval
+reaches about 418ms of DSP virtual time. Budget completion and a boot caption do
+not establish the normal instrument UI, healthy firmware identity exchange or
+complete startup. Those and full function/storage/update/recovery acceptance
+remain open. Detailed analysis and recordings stay local;
+nand-read-handoff-reference.json pins the scoped evidence.
