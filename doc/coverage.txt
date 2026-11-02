@@ -36,6 +36,11 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           Generated-clock ESAI tests likewise use
                                           native reset/F1/F2, both tie orders and
                                           actual status/refill side effects.
+                                          Continuous original serial scopes now
+                                          use the independent core: all256 bytes,
+                                          2304 IRQ/RTI pairs, pitch and joint
+                                          checkpoint/input-fault continuations
+                                          (dsp-clocked-wire.txt).
                                           Bank/DMA tests retain genuine pending
                                           access tickets and held-word replay.
                                           Inactive DMA callback storage avoids heap

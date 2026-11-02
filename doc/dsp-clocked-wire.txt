@@ -6,15 +6,17 @@ enabled in pitch/checkpoint scopes. All 127 ordered original record identities
 and the official archive are verified using dsp-voice-reference.json. No
 manufacturer program words or data are embedded in these tests.
 
-An own caller supplies OMR=600085, ordinary SR, linear modifiers, declared low
-data/guards, PINIT low observed before an actual reset, and the original input
-configuration call. The idle loop either runs NOP/JMP or repeatedly calls the
-genuine parser. Only the explicit external TIO observations enter during the
-run; no host ISR invocation, ring injection, timer advancement, register repair
-or callback result supplies the execution. Native CPU steps own the timer clock.
+An authored caller supplies OMR=600085, ordinary SR, linear modifiers, declared
+low data/guards, observed PINIT low and mode 5 hardware reset/recovery,
+followed by the original input configuration call. The idle loop either runs
+NOP/JMP or repeatedly calls the genuine parser. Only the explicit external TIO
+observations enter during the run; no host ISR invocation, ring injection,
+timer advancement, register repair or callback result supplies the execution.
+The independent DSP core executes the instructions; its native timeline owns
+every timer/DMA reference cycle. No foreign executor or assembler is linked.
 
 The declared reference is EXTAL=12 MHz, a 540 MHz integer timebase, default reset
-PCTL and native_vector_estimates plus reference_prepare_boundary admission.
+PCTL and explicit one_effect_per_cycle_program_priority_with_interrupts ordering.
 Each artificial serial bit lasts 3249 CLK/2 edges; frames include an extra idle
 bit. Raw/synchronized levels arrive under external_before_dsp tie ordering.
 Observations retain the scheduler's last completed clock prefix. This does
@@ -24,7 +26,7 @@ phases or IRQ latency. Do not fit an oscillator to the firmware's timer constant
 bytes sends the fixed sequence 0..255. Every frame checks all 64 real ring cells,
 the original cursor and adjacent guards across four complete ring wraps. All
 2304 original vector entries create real frames and all 2304 RTIs remove them.
-The existing bounded instruction/event budgets are applied per frame.
+The existing bounded native-cycle/event budgets are applied per frame.
 
 pitch sends 12 fixed bytes with running status and an interleaved clock, checking
 108 actual vector/RTI pairs, genuine nested callback frames and five independent
@@ -35,13 +37,14 @@ checkpoint saves inside the genuine third data-bit ISR of a partly received
 MSB, after the original parser has consumed its saved LSB. Coordinated native
 owner/schedule/input-cursor restoration checks two identical continuations, a
 changed unobserved input bit, an unknown raw input failure and exact recovery.
-Comparisons include full native debug CPU state, reference counts, loaded
+Comparisons include full native registers/progress, reference counts, loaded
 program/low data records, ring/parser/guard observations and readable timer
 registers/PCTL. The write-only timer load register is never read. Independent
 MIDI expectations supplement replay; the changed branch must change the
 original callback result. At P:002ce4 the unknown DI read must expose X:ffff8f,
-the native PC/OMR and failure context, leave its nominal duration uncharged and
-retain the incomplete message. Faulted capture rejects until coordinated restore.
+the native PC/OMR and failure context. The one attempted reference cycle remains
+charged; no instruction retires and the incomplete message is retained. Faulted
+capture rejects until coordinated restore.
 
 These are component experiments with supplied caller state. Connected startup
 evidence and its current frontier are tracked in own-dsp-nand-reference.json.
@@ -50,7 +53,14 @@ audio, update/recovery and Desktop/Keyboard hardware equivalence remain open.
 The separate dsp-host-midi.txt path now supplies host file/device byte queues to
 this component receiver through the headless scheduler. The legacy timing remains
 an explicit unqualified reference period; normal MIDI baud is not inferred from it.
-No fuzzing or physical input occurs.
+The byte/pitch/checkpoint oracles and 240s/110s subprocess limits are unchanged.
+The observer selects each deadline once per loop and retains input-before-DSP
+ties and every native cycle. Pre-instruction register snapshots are retained;
+full per-cycle failure snapshots remain active for the unknown-input case.
+Normal cycles no longer copy unused pending effects, registers or counters. Evidence hashes:
+dsp-clocked-wire-native-reference.json. The measured TSan byte case had only
+about 0.1 s margin; timing stability under host load remains unqualified. No
+fuzzing or physical input occurs.
 
   cmake --build --preset strict --target blofeld-original-dsp-clocked-wire-test
   ctest --test-dir build/strict -R '^original_dsp_clocked_wire_' --output-on-failure

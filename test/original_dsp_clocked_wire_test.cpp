@@ -1,11 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_io.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp/own_dsp_timeline.hpp"
+#include "dsp56300/core.hpp"
+#include "dsp_rom_program.hpp"
+#include "esai_fixture.hpp"
 #include "firmware/firmware.hpp"
 
 #include <array>
@@ -14,6 +19,7 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <ostream>
 #include <span>
@@ -22,7 +28,8 @@
 #include <vector>
 
 namespace {
-using blofeld::test::require;
+using blofeld::test::DspRomRegister;
+using blofeld::test::esai::require;
 using enum blofeld::DspSpace;
 constexpr unsigned producer_program = 0x2cd9;
 constexpr unsigned vector = 0x54;
@@ -67,21 +74,43 @@ constexpr unsigned midi_channel = 0x744;
 constexpr unsigned midi_clock = 0x750;
 constexpr unsigned mode_flags = 6;
 constexpr unsigned consumer = 0x3c;
+constexpr unsigned word_bits = 24;
+// FM JSR (R6), high-X MOVEP #imm, and NOP: authored caller only.
+constexpr unsigned call_r6 = 0x0be680;
+constexpr unsigned priority_immediate = 0x08f4be;
+constexpr auto timing =
+    blofeld::OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts;
+using NativeState = std::pair<dsp56300::Registers, dsp56300::Progress>;
 
-blofeld::DspRunContract contract() {
-  return {.clock = {.extal_hz = extal,
-                    .timebase_hz = timebase,
-                    .switch_timing = blofeld::DspClockSwitch::reference_instruction_boundary},
-          .timing = blofeld::DspRunTiming::native_internal_estimates,
-          .interrupts = blofeld::DspInterruptTiming::native_vector_estimates};
+constexpr blofeld::DspRunClockInputs clocks{.extal_hz = extal,
+                                            .timebase_hz = timebase,
+                                            .switch_timing =
+                                                blofeld::DspClockSwitch::reference_cycle_boundary};
+
+struct AttemptedEffect {
+  unsigned pc;
+  std::uint64_t start_ticks;
+  std::uint64_t completion_ticks;
+  std::uint64_t units;
+  dsp56300::Progress progress;
+};
+
+struct NativeStep {
+  dsp56300::Registers before;
+  unsigned pc;
+  bool interrupt;
+};
+
+NativeState native_state(const blofeld::OwnDspMachine &machine) {
+  return {machine.cpu().registers(), machine.cpu().progress()};
 }
 
-void drive(blofeld::DspMachine &machine, const bool level) {
+void drive(blofeld::OwnDspMachine &machine, const bool level) {
   machine.bus().timers().set_tio_drive(0, level);
   machine.bus().timers().observe_synchronized_tio(0, level);
 }
 
-void load(blofeld::DspMachine &machine, const blofeld::Firmware &firmware) {
+void load(blofeld::OwnDspMachine &machine, const blofeld::Firmware &firmware) {
   unsigned programs = 0;
   for (const auto &record : firmware.dsp) {
     if (record.space == 0) {
@@ -110,11 +139,8 @@ struct Foreground {
   unsigned end;
 };
 
-Foreground setup(blofeld::DspMachine &machine, const bool parse) {
+Foreground setup(blofeld::OwnDspMachine &machine, const bool parse) {
   auto &bus = machine.bus();
-  bus.pll().observe_pinit(false);
-  machine.cpu().reset_spi_boot();
-  drive(machine, true);
   bus.write({.space = x, .address = producer, .value = ring_base});
   bus.write({.space = x, .address = mode_flags, .value = 0});
   bus.write({.space = x, .address = midi_channel, .value = 0});
@@ -128,32 +154,32 @@ Foreground setup(blofeld::DspMachine &machine, const bool parse) {
   }
   bus.write({.space = x, .address = ring_base - 1, .value = sentinel});
   bus.write({.space = x, .address = ring_base + ring_words, .value = sentinel});
-  blofeld::test::DspProgram code;
-  code.immediate("omr", memory_mode);
-  for (unsigned i = 0; i < 3; ++i) { code.emit("nop"); }
-  code.immediate("sr", status);
-  code.immediate("a1", timestamp_seed);
-  for (unsigned i = 0; i < 8; ++i) { code.immediate("m" + std::to_string(i), word_mask); }
-  code.emit("movep #>$200,x:<<$fffffe");
-  code.immediate("r6", producer_program);
-  code.emit("jsr (r6)");
+  blofeld::test::DspRomProgram code;
+  code.immediate(DspRomRegister::omr, memory_mode);
+  for (unsigned i = 0; i < 3; ++i) { code.word(0); }
+  code.immediate(DspRomRegister::sr, status);
+  code.immediate(DspRomRegister::a1, timestamp_seed);
+  for (unsigned i = 0; i < 8; ++i) {
+    code.immediate(static_cast<DspRomRegister>(static_cast<unsigned>(DspRomRegister::m0) + i),
+                   word_mask);
+  }
+  code.word(priority_immediate);
+  code.word(0x200);
+  code.immediate(DspRomRegister::r6, producer_program);
+  code.word(call_r6);
   const auto foreground = code.pc();
   if (parse) {
-    code.immediate("r6", parser);
-    code.emit("jsr (r6)");
+    code.immediate(DspRomRegister::r6, parser);
+    code.word(call_r6);
   }
-  code.emit("nop");
+  code.word(0);
   code.word(absolute_jump);
   code.word(foreground);
   const auto end = code.pc();
-  code.install(bus);
-  for (unsigned steps = 0; machine.cpu().state().pc != foreground; ++steps) {
-    require(steps < 128, "Own caller and original setup return under the real run clock");
-    machine.cpu().step();
-  }
-  require(bus.timers().read(control, data_mask) == capture_control &&
-              bus.timers().read(control - 2) == 1,
-          "Original configuration establishes actual capture mode");
+  blofeld::test::dma_test::NativeProgram program;
+  for (const auto word : code.words()) { program.word(word); }
+  blofeld::test::dma_test::reset_native(machine, program);
+  drive(machine, true);
   return {.begin = foreground, .end = end};
 }
 
@@ -163,12 +189,14 @@ struct Event {
 };
 
 struct Wire {
-  blofeld::DspMachine &machine;
+  blofeld::OwnDspMachine &machine;
   std::vector<Event> events;
   std::size_t cursor = 0;
   std::optional<std::size_t> unknown;
 
-  Wire(blofeld::DspMachine &owner, const std::uint64_t start, const std::span<const unsigned> bytes)
+  Wire(blofeld::OwnDspMachine &owner,
+       const std::uint64_t start,
+       const std::span<const unsigned> bytes)
       : machine(owner) {
     for (unsigned index = 0; index < bytes.size(); ++index) {
       const auto at = start + (static_cast<std::uint64_t>(index) * 11 * bit_ticks);
@@ -181,23 +209,19 @@ struct Wire {
     }
   }
 
-  blofeld::DspExternalEvents source() {
-    return {.next_ticks = [this]() -> std::optional<std::uint64_t> {
-              return cursor < events.size() ? std::optional(events.at(cursor).ticks) : std::nullopt;
-            },
-            .observe =
-                [this](const std::uint64_t ticks) {
-                  const auto index = cursor++;
-                  const auto event = events.at(index);
-                  require(ticks == event.ticks, "Every serial edge has its declared timestamp");
-                  if (unknown && index == *unknown) {
-                    machine.bus().timers().set_tio_drive(0, std::nullopt);
-                  } else {
-                    drive(machine, event.level);
-                  }
-                },
-            .order = blofeld::DspExternalOrder::external_before_dsp,
-            .maximum_events = 128};
+  [[nodiscard]] std::optional<std::uint64_t> next_ticks() const {
+    return cursor < events.size() ? std::optional(events.at(cursor).ticks) : std::nullopt;
+  }
+
+  void observe(const std::uint64_t ticks) {
+    const auto index = cursor++;
+    const auto event = events.at(index);
+    require(ticks == event.ticks, "Every serial edge has its declared timestamp");
+    if (unknown && index == *unknown) {
+      machine.bus().timers().set_tio_drive(0, std::nullopt);
+    } else {
+      drive(machine, event.level);
+    }
   }
 };
 
@@ -210,7 +234,7 @@ struct Counts {
 };
 
 struct Signature {
-  blofeld::DspDebugState cpu;
+  NativeState cpu;
   std::uint64_t ticks;
   std::uint64_t units;
   std::uint64_t steps;
@@ -235,62 +259,71 @@ std::string rejects(const auto &operation) {
 }
 
 Foreground
-prepare(blofeld::DspMachine &machine, const blofeld::Firmware &firmware, const bool parse) {
+prepare(blofeld::OwnDspMachine &machine, const blofeld::Firmware &firmware, const bool parse) {
   load(machine, firmware);
   return setup(machine, parse);
 }
 
 struct Rig {
   const blofeld::Firmware &firmware;
-  blofeld::DspMachine machine;
+  blofeld::OwnDspMachine machine{clocks};
   std::vector<unsigned> input;
   std::vector<unsigned> expected_pitch;
   bool parse;
   Foreground foreground;
-  std::uint64_t start;
-  std::uint64_t end;
+  std::uint64_t start = 0;
+  std::uint64_t end = 0;
   Wire wire;
-  blofeld::DspExternalEvents external;
-  blofeld::DspScheduledRun schedule;
+  std::unique_ptr<blofeld::OwnDspTimeline> schedule;
+  std::optional<dsp56300::Registers> instruction_before;
+  dsp56300::Registers sampled_before;
   Counts counts;
   bool inside = false;
-  std::optional<blofeld::DspScheduledStep> attempted;
+  std::optional<AttemptedEffect> attempted;
 
   Rig(const blofeld::Firmware &image,
       const std::span<const unsigned> bytes,
       const std::span<const unsigned> expected,
       const bool consume)
       : firmware(image),
-        machine(contract()),
         input(bytes.begin(), bytes.end()),
         expected_pitch(expected.begin(), expected.end()),
         parse(consume),
         foreground(prepare(machine, image, consume)),
-        start(machine.run_clock().elapsed_ticks() + bit_ticks),
-        end(start + (input.size() * 11 * bit_ticks)),
-        wire(machine, start, input),
-        external(wire.source()),
-        schedule({.observation = blofeld::DspStepObservation::reference_completion_boundary,
-                  .irq_admission = blofeld::DspIrqAdmission::reference_prepare_boundary},
-                 machine) {}
+        wire(machine, 0, {}) {
+    schedule = std::make_unique<blofeld::OwnDspTimeline>(machine, timing, 0);
+    bool configured = false;
+    for (unsigned cycles = 0; cycles < 2048 && !configured; ++cycles) {
+      const auto retired = cycle(schedule->next_deadline());
+      configured = retired && machine.cpu().registers().pc == foreground.begin;
+    }
+    require(configured && machine.bus().timers().read(control, data_mask) == capture_control &&
+                machine.bus().timers().read(control - 2) == 1,
+            "Actual native caller and unchanged original setup establish capture mode");
+    start = machine.clock().elapsed_ticks() + bit_ticks;
+    end = start + (input.size() * 11 * bit_ticks);
+    // The initial Wire has no events: reception starts only after real configuration.
+    Wire configured_wire(machine, start, input);
+    wire.events = std::move(configured_wire.events);
+  }
 
-  void observe(const blofeld::DspScheduledStep &step) {
-    if (step.plan.interrupt) {
-      require(machine.cpu().state().sp == step.plan.before.cpu.sp + 1 &&
-                  machine.cpu().state().stack_pc == step.plan.before.cpu.pc,
+  void observe(const NativeStep &step) {
+    if (step.interrupt) {
+      const auto cpu = machine.cpu().registers();
+      require(cpu.sp == step.before.sp + 1 && (cpu.stack.at(cpu.sp) >> word_bits) == step.before.pc,
               "Each original JSR vector creates the genuine interrupted foreground frame");
       ++counts.interrupts;
       return;
     }
-    const auto pc = step.plan.before.cpu.pc;
+    const auto pc = step.pc;
     if (pc == capture_return || pc == sample_return || pc == input_return) {
-      require(machine.cpu().state().sp + 1 == step.plan.before.cpu.sp,
+      require(machine.cpu().registers().sp + 1 == step.before.sp,
               "Each actual original RTI removes exactly one native frame");
       ++counts.returns;
     }
     if (pc == callback) {
-      require(parse && step.plan.before.cpu.sp == 2 &&
-                  step.plan.before.cpu.stack_pc == callback_return,
+      require(parse && step.before.sp == 2 &&
+                  (step.before.stack.at(step.before.sp) >> word_bits) == callback_return,
               "The original parser establishes its genuine nested callback frame");
       ++counts.calls;
     }
@@ -305,15 +338,81 @@ struct Rig {
     if (pc == input_handler && counts.interrupts == third_irq) { inside = true; }
   }
 
-  void advance(const std::uint64_t horizon, const unsigned budget = step_budget) {
-    schedule.advance_to(
-        machine,
-        horizon,
-        blofeld::DspScheduleBoundary::through,
-        budget,
-        [this](const blofeld::DspScheduledStep &step) { attempted = step; },
-        {.observe = [this](const blofeld::DspScheduledStep &step) { observe(step); }},
-        external);
+  bool cycle(const std::uint64_t deadline) {
+    if (!instruction_before || wire.unknown) { sampled_before = machine.cpu().registers(); }
+    // Only the unknown-input case consumes this per-cycle failure diagnostic.
+    if (wire.unknown) {
+      const auto pending = machine.cpu().pending_instruction();
+      attempted = AttemptedEffect{.pc = pending ? pending->effect.pc : sampled_before.pc,
+                                  .start_ticks = machine.clock().elapsed_ticks(),
+                                  .completion_ticks = deadline,
+                                  .units = machine.clock().native_cycle_units(),
+                                  .progress = machine.cpu().progress()};
+    }
+    const auto last = machine.bus().last_dma_cycle();
+    const auto result =
+        schedule->advance_one(deadline,
+                              blofeld::OwnDspBoundary::through,
+                              {.cycle = last ? *last + 1 : 0,
+                               .known_requests = 15,
+                               .timing = blofeld::DspDmaTiming::reference_sampled_cycles,
+                               .grant = blofeld::DspDmaGrant::available});
+    if (!result) { throw blofeld::Fault("Actual native cycle missed its owned deadline"); }
+    if (result->instruction_started) {
+      require(!instruction_before, "A new instruction cannot overlap its prior observation");
+      instruction_before = sampled_before;
+    }
+    if (result->native && result->native->fault.kind != dsp56300::FaultKind::none) {
+      const auto &fault = result->native->fault;
+      std::string cause = "Original native clocked-wire fault";
+      const auto &failure = machine.io().failure();
+      if (failure && failure->cause) {
+        try {
+          std::rethrow_exception(failure->cause);
+        } catch (const std::exception &error) { cause = error.what(); }
+      }
+      throw blofeld::Fault("DSP reference step pc=" + blofeld::hex(fault.pc, 6) +
+                           " omr=" + blofeld::hex(machine.cpu().registers().omr, 6) + ": " + cause);
+    }
+    if (!result->native || !result->native->retired) { return false; }
+    const auto outcome = machine.cpu().instruction_outcome();
+    if (!outcome || !instruction_before) {
+      throw blofeld::Fault("Native retirement lost its actual instruction/entry observations");
+    }
+    observe({.before = *instruction_before,
+             .pc = outcome->address,
+             .interrupt = outcome->address == vector || outcome->address == vector + 2});
+    instruction_before.reset();
+    return true;
+  }
+
+  [[nodiscard]] std::uint64_t next_event_ticks() const {
+    const auto native = schedule->next_deadline();
+    const auto external = wire.next_ticks();
+    return external && *external < native ? *external : native;
+  }
+
+  struct CycleBudget {
+    unsigned maximum = step_budget;
+  };
+
+  void advance(const std::uint64_t horizon, const CycleBudget budget = {.maximum = step_budget}) {
+    unsigned cycles = 0;
+    unsigned delivered = 0;
+    while (true) {
+      const auto native = schedule->next_deadline();
+      const auto external = wire.next_ticks();
+      const auto next = external && *external < native ? *external : native;
+      if (next > horizon) { return; }
+      if (external && *external <= native) {
+        require(delivered++ < 128, "Bounded declared external-before-DSP event delivery");
+        wire.observe(*external);
+      } else {
+        require(cycles++ < budget.maximum,
+                "Bounded native reference cycles; no instruction is skipped");
+        static_cast<void>(cycle(native));
+      }
+    }
   }
 
   void ring(const unsigned delivered) {
@@ -338,11 +437,12 @@ struct Rig {
   void seek() {
     for (unsigned steps = 0; !inside; ++steps) {
       require(steps < step_budget, "Original third-byte ISR checkpoint bound exhausted");
-      advance(schedule.next_event_ticks(machine), 1);
+      advance(next_event_ticks(), {.maximum = 1});
     }
     require(counts.interrupts == third_irq && counts.returns + 1 == counts.interrupts &&
-                machine.cpu().state().sp > 0 && machine.cpu().state().pc == input_handler + 1 &&
-                counts.calls == 0 && counts.completions == 0 && wire.cursor < changed_event &&
+                machine.cpu().registers().sp > 0 &&
+                machine.cpu().registers().pc == input_handler + 1 && counts.calls == 0 &&
+                counts.completions == 0 && wire.cursor < changed_event &&
                 machine.bus().read({.space = x, .address = field}) == field_seed &&
                 machine.bus().read({.space = x, .address = producer}) == ring_base + 2 &&
                 machine.bus().read({.space = x, .address = consumer}) == ring_base + 2,
@@ -353,10 +453,10 @@ struct Rig {
     advance(end);
     require(wire.cursor == wire.events.size() && counts.interrupts == input.size() * 9 &&
                 counts.returns == counts.interrupts && counts.calls == expected_pitch.size() &&
-                counts.completions == counts.calls && machine.cpu().state().sp <= 1 &&
+                counts.completions == counts.calls && machine.cpu().registers().sp <= 1 &&
                 !machine.bus().interrupt_request(0),
             "All original serial/IRQ/parser/callback effects finish naturally");
-    const auto pc = machine.cpu().state().pc;
+    const auto pc = machine.cpu().registers().pc;
     require((pc >= foreground.begin && pc < foreground.end) ||
                 (parse && pc >= parser_record && pc < parser_end),
             "Completed continuation remains in the declared own loop/original parser");
@@ -401,11 +501,11 @@ struct Rig {
       values.push_back(machine.bus().timers().read(control - offset));
     }
     values.push_back(machine.bus().pll().read());
-    return {.cpu = machine.cpu().debug_state(),
-            .ticks = machine.run_clock().elapsed_ticks(),
-            .units = machine.run_clock().native_cycle_units(),
-            .steps = schedule.completed_steps(),
-            .delivered = schedule.completed_external_events(),
+    return {.cpu = native_state(machine),
+            .ticks = machine.clock().elapsed_ticks(),
+            .units = machine.clock().native_cycle_units(),
+            .steps = machine.cpu().progress().instructions,
+            .delivered = wire.cursor,
             .values = std::move(values),
             .counts = counts};
   }
@@ -439,13 +539,14 @@ void test_checkpoint(const blofeld::Firmware &firmware, std::ostream &trace) {
   const std::array expected{bend(bytes.at(1), bytes.at(2))};
   Rig rig(firmware, bytes, expected, true);
   rig.seek();
-  const auto owner = rig.machine.checkpoint();
-  const auto schedule = rig.schedule.checkpoint(rig.machine);
+  const auto owner = rig.schedule->checkpoint();
   const auto cursor = rig.wire.cursor;
   const auto counts = rig.counts;
   const auto original_events = rig.wire.events;
   const auto restore = [&] {
-    rig.machine.restore(owner);
+    rig.schedule.reset();
+    rig.schedule = std::make_unique<blofeld::OwnDspTimeline>(rig.machine, owner);
+    rig.instruction_before.reset();
     rig.wire.events = original_events;
     rig.wire.cursor = cursor;
     rig.wire.unknown.reset();
@@ -453,7 +554,6 @@ void test_checkpoint(const blofeld::Firmware &firmware, std::ostream &trace) {
     rig.expected_pitch.at(0) = expected.at(0);
     rig.counts = counts;
     rig.attempted.reset();
-    rig.schedule.restore(schedule, rig.machine);
   };
   restore();
   rig.finish();
@@ -480,20 +580,30 @@ void test_checkpoint(const blofeld::Firmware &firmware, std::ostream &trace) {
   rig.wire.unknown = changed_event;
   const auto error = rejects([&] { rig.finish(); });
   constexpr unsigned fault_pc = 0x2ce4;
-  require(error.contains("DSP reference step pc=0x002ce4 omr=0x600085") &&
-              error.contains("Unknown DSP timer DI read at X:0xffff8f") && rig.schedule.faulted() &&
-              rig.machine.timing_faulted(),
-          "Unknown raw input must fail in the actual original input-register read with context");
+  require(
+      error.contains("DSP reference step pc=0x002ce4 omr=0x600085") &&
+          error.contains("Unknown DSP timer DI read at X:0xffff8f") && rig.schedule->faulted() &&
+          rig.machine.cpu().fault().kind != dsp56300::FaultKind::none && rig.machine.io().failure(),
+      "Unknown raw input must fail in the actual original input-register read with context");
   if (!rig.attempted) { throw blofeld::Fault("Missing original failed instruction preview"); }
-  require(rig.attempted->plan.before.cpu.pc == fault_pc &&
-              rig.machine.run_clock().elapsed_ticks() == rig.attempted->plan.start_ticks &&
-              rig.attempted->completion_ticks > rig.machine.run_clock().elapsed_ticks() &&
-              rig.machine.bus().read({.space = x, .address = field}) == field_seed &&
-              rig.machine.bus().read({.space = x, .address = producer}) == ring_base + 2 &&
-              rig.machine.bus().read({.space = x, .address = consumer}) == ring_base + 2,
-          "Failed original DI read cannot charge its duration or finish the partial MIDI message");
-  static_cast<void>(rejects([&] { static_cast<void>(rig.machine.checkpoint()); }));
-  static_cast<void>(rejects([&] { static_cast<void>(rig.schedule.checkpoint(rig.machine)); }));
+  require(
+      rig.attempted->pc == fault_pc &&
+          rig.machine.clock().elapsed_ticks() == rig.attempted->completion_ticks &&
+          rig.attempted->completion_ticks == rig.attempted->start_ticks + unit_ticks &&
+          rig.machine.clock().native_cycle_units() == rig.attempted->units + 1 &&
+          rig.machine.cpu().progress() == rig.attempted->progress &&
+          rig.machine.bus().read({.space = x, .address = field}) == field_seed &&
+          rig.machine.bus().read({.space = x, .address = producer}) == ring_base + 2 &&
+          rig.machine.bus().read({.space = x, .address = consumer}) == ring_base + 2,
+      "Failed DI sample retains its actual reference cycle without retiring or completing MIDI");
+  static_cast<void>(rejects([&] { static_cast<void>(rig.schedule->checkpoint()); }));
+  const auto diagnostic = rig.machine.checkpoint();
+  blofeld::OwnDspMachine fresh(clocks);
+  fresh.restore(diagnostic);
+  require(native_state(fresh) == native_state(rig.machine) &&
+              fresh.cpu().fault() == rig.machine.cpu().fault() && fresh.io().failure() &&
+              fresh.clock().elapsed_ticks() == rig.machine.clock().elapsed_ticks(),
+          "Diagnostic restore preserves the real failed-cycle prefix, not a healthy continuation");
   trace << "EXPECTED_FAILURE " << error << '\n';
   restore();
   rig.finish();

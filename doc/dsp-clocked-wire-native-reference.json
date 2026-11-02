@@ -1,0 +1,52 @@
+{
+  "scope": "Continuous unmodified original serial producer/vector/parser execution on the independent core; supplied component caller, not full instrument boot",
+  "profiles": [
+    "ASan/UBSan",
+    "TSan"
+  ],
+  "scopes": [
+    "bytes",
+    "pitch",
+    "checkpoint"
+  ],
+  "native_cases": 6,
+  "compiler_format_tidy": "zero project findings",
+  "oracles_unchanged": true,
+  "subprocess_limits_seconds": {
+    "bytes": 240,
+    "pitch": 110,
+    "checkpoint": 110
+  },
+  "byte_stream": {
+    "values": 256,
+    "interrupts": 2304,
+    "returns": 2304,
+    "ring_wraps": 4
+  },
+  "independent_core_revision": "d03de4498e2a3ac108dc7faff5a1a5253815521a",
+  "source_sha256": {
+    "test/original_dsp_clocked_wire_test.cpp": "1115f05fc1db261f38fd2f79389db0b21407e92dfb4fe372478c636ddd887d1a",
+    "test/original_dsp_clocked_wire.py": "db21282f6290fa545f7f17bc5cb4c9d6f2fa0510bd65a242385ad582d5b231bc"
+  },
+  "evidence_sha256": {
+    "doc/local/clocked-wire-register-observation/build.json": "08d46ffbd12751b71caed407356bfd1af9c8719653e2a6d5eb33ed617fb89e01",
+    "doc/local/clocked-wire-register-observation/qualification.json": "b1dcf8bbc4b26e45b8144986d0c7b16e4cfe8726c48367821f2a751083e66d30",
+    "doc/local/clocked-wire-register-observation/canonical-build.json": "6f01c6d1e61c05778094adbdb369209e3a10888d551adc00110019515bead687"
+  },
+  "byte_elapsed_seconds": {
+    "thread": 239.89341600704938,
+    "strict": 208.72746160789393
+  },
+  "timing_stability_under_host_load": "unqualified; measured TSan byte case has only about 0.1 seconds margin",
+  "complete_Desktop_Keyboard": false,
+  "real_time_proven": false,
+  "physical_traffic": false,
+  "fuzz": false,
+  "canonical_identity": {
+    "source": true,
+    "included_headers": true,
+    "compiler_flags": true,
+    "linked_archives_per_profile": 11,
+    "native_evidence_reused_without_duplicate_execution": true
+  }
+}
