@@ -39,6 +39,16 @@ assumptions for compatibility assessment; simulation alone does not prove that
 an image is safe on physical hardware. Component fixtures support full-device
 acceptance and cannot replace it.
 
+Future use case: faster-than-real-time offline rendering for automated native
+Blofeld program design, including accurate acoustic-instrument approximation.
+Run repeatable MIDI performances through original DSP synthesis, compare tone,
+transients, decay and velocity response, then refine candidate programs through
+normal instrument interfaces. Reuse deterministic starting states and export
+programs usable by the physical instrument. Preserve emulated musical time;
+rendering throughput is a host-performance property to measure after functional
+instrument audio works. This later workflow does not replace initial instrument
+acceptance or require development of alternative manufacturer firmware.
+
 Immediate engineering priority: finish migrating the regular standalone/GUI
 execution path, build and retained tests to our independent ~/Git/dsp56300 core,
 then remove the foreign-core dependency and obsolete integration. Research runs
