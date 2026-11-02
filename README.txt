@@ -10,8 +10,9 @@ instrument behavior: original sound, musical timing, MIDI, controls, storage and
 updates. Internal bootstrap, bus/pipeline timing and peripheral mechanisms may
 be simplified when those observable functions remain correct. The complete
 acceptance scope is in doc/objective.txt; evidence and gaps are in doc/coverage.txt.
-This is not yet a booting Blofeld, a playable synthesizer or a verified
-replacement-firmware target.
+Original firmware now produces bounded MIDI-driven DSP audio from actual reset.
+Complete normal startup, a playable standalone device and alternative-firmware
+compatibility are not yet qualified. See doc/README.txt for the documentation map.
 
 Source layout
 Implementation and headers live together under src/. Project include paths are
@@ -30,6 +31,7 @@ relative to that root, for example "dsp/dsp_bus.hpp". The areas are:
   midi/      MIDI serial timing and host transport
   usb/       USB controller host interfaces and USB/IP transport
   display/   LCD controller, parallel interface and image export
+  gui/       GTK viewer for the exported display files
 
 A detail/ directory distinguishes internal headers that share a name with a
 component interface. Test fixtures live under test/; prepared native dependencies

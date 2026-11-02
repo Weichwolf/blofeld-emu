@@ -3153,7 +3153,7 @@ endif()
 
 install(TARGETS blofeld-headless RUNTIME DESTINATION bin)
 install(PROGRAMS tools/blofeld-display DESTINATION bin COMPONENT Display)
-install(FILES gui/__init__.py gui/frame.py gui/watch.py gui/display.py
+install(FILES src/gui/__init__.py src/gui/frame.py src/gui/watch.py src/gui/display.py
   DESTINATION share/blofeld-emu/gui COMPONENT Display)
 install(FILES packaging/org.blofeld_emu.Display.desktop
   DESTINATION share/applications COMPONENT Display)

@@ -6,7 +6,8 @@ from pathlib import Path
 import sys
 
 root = Path(__file__).resolve().parent.parent
-modules = root if (root / "gui/display.py").is_file() else root / "share/blofeld-emu"
+checkout = root / "src"
+modules = checkout if (checkout / "gui/display.py").is_file() else root / "share/blofeld-emu"
 sys.path.insert(0, str(modules))
 
 try:

@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "scope": "Original1.25 actual-reset prefix and four trusted cold-value MIDI suffixes; complete instrument acceptance pending",
+  "source_commit": "45b6ca80a41dc6ad2c9f667f61f089d896b5dda5",
+  "binary_sha256": "c704e1b5da752235d703b9e9a9cb2e49e336103c9d4414b66bc2c451ad964881",
+  "inputs": {
+    "firmware_zip_sha256": "095c760a576dcb04fe3e379bed1b95a0360002295ab42b29e3335a39514f0c72",
+    "initial_MCU_store_sha256": "6745e1e1f1f57d1506a8c3b19e15182c62734ca16030c2e731b5e48ab1b383a2",
+    "initial_NAND_store_sha256": "2eabcf7fdfc5740b30f5d7c43e537b9ff7b258204195d573183b237243e027dc",
+    "virtual_initial_conditions": "Declared NAND cells and factory serial field; not recovered factory NAND"
+  },
+  "private_evidence_sha256": {
+    "context": "ad5c075606127c1e97a3331f5e3ea0ee6057b2e902bd71e5029e974b2597d373",
+    "run": "eb7f14c1404612b6d7ac2ab4b8616ccc6f2b3528a4734169898eef702d6ead85",
+    "audit": "5f702b99499ab38d5cce7cc6953340b45a0c39445857081ff5b5de4ceaea0816",
+    "analysis_contract": "e26e52098188c67d6242157ee8508f05f55c0893c8a4f7b0ff56e34ec09384c7",
+    "method_controls": "c739324a5aff9b15076fea3c55a90707cd7ae848f131ea9d54fa84c6f031d433"
+  },
+  "results": {
+    "clock-only": {
+      "MIDI_wire_bytes": 1,
+      "PCM_frames": 1807,
+      "nonzero_frames": 0,
+      "wave_sha256": "be0c92f512d1b527e60ec457b9ae17d48856f7f8e92528ca7e19516719cf41bd"
+    },
+    "c4-held": {
+      "MIDI_wire_bytes": 4,
+      "PCM_frames": 1807,
+      "nonzero_frames": 1206,
+      "wave_sha256": "f47891107901afac489c1920ac22cecf17b2a63ebe2ef1229c6859d5fa35ccec"
+    },
+    "c4-released": {
+      "MIDI_wire_bytes": 7,
+      "PCM_frames": 1807,
+      "nonzero_frames": 1206,
+      "wave_sha256": "b27caaaddc46836dd5fb042067b5d6d3a5d1ca36de061c6da67595ad33adbf09"
+    },
+    "c5-held": {
+      "MIDI_wire_bytes": 4,
+      "PCM_frames": 1807,
+      "nonzero_frames": 1206,
+      "wave_sha256": "ab5d99bbac41cafc1e7f6738e45c2a4ec451d4a43b0df4bc8c3f786adacb3bc1"
+    }
+  },
+  "causality": {
+    "identical_frames_before_NoteOff_enqueue": 925,
+    "later_samples_change": true,
+    "entire_held_C4_prefix_matches_ordinary_CLI": true,
+    "ordinary_CLI_wave_sha256": "535e851281e4016a7d3ad32b0e630efc31677bc62776b1d8f202f91c8f2fb6cd"
+  },
+  "pitch": {
+    "reference_note": 69,
+    "reference_Hz": 440,
+    "predeclared_absolute_bound_cents": 35,
+    "predeclared_octave_bound_cents": 35,
+    "observed_C4_Hz": 262.9536567624629,
+    "observed_C5_Hz": 526.0555745668477,
+    "octave_ratio": 2.0005638295498427,
+    "octave_error_cents": 0.4879916744787946,
+    "method": "Mean-removed Hann window, system FFTW3;1206 nonzero samples per held note; transient estimate, not hardware tuning qualification"
+  },
+  "limits": [
+    "Trusted cold-value snapshots; no live file store rewind",
+    "Short interval; full envelope release and sustain unqualified",
+    "No bank/program, MIDI output, USB enumeration or normal UI acceptance",
+    "Not a controlled sine/pulse/sawtooth waveform test",
+    "No complete Desktop/Keyboard startup, realtime or physical-device equivalence"
+  ],
+  "sanitizer": "ASan/UBSan; actual exit0; no findings",
+  "fuzz": false,
+  "physical_traffic": false,
+  "DSP_core_revision": "d03de4498e2a3ac108dc7faff5a1a5253815521a"
+}

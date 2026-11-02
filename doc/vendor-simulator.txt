@@ -1,103 +1,30 @@
-Optional local Symphony Studio reference
+Optional local simulator references
 
-The user-provided Symphony Studio 1.1.0 archive is pinned in reference-tools.json.
-It is a local reference, not a production dependency. No installer, vendor code,
-DLL, extracted assets or manufacturer program words belong in this repository.
+Symphony Studio1.1.0, the NXP assembler and TASKING reference tools are pinned in
+reference-tools.json. They are optional offline comparison tools, not production
+or build dependencies. Installers, DLLs, transformed local reference executables,
+manufacturer program words and detailed sessions remain ignored local inputs.
 
-The dedicated 32-bit Wine prefix is:
-  $HOME/.local/share/wineprefixes/blofeld-emu
+Symphony uses the dedicated ordinary-user 32-bit Wine prefix
+$HOME/.local/share/wineprefixes/blofeld-emu. Its console server can create a56371
+model; that identifies a simulated device, not validated Blofeld hardware.
+The installed RSP server has incompatible memory success conventions. Its raw
+E00/echo responses and the bundled debugger's displayed zeros are not qualified
+memory observations. Independently checked local transport corrections and
+native instruction/canary controls are recorded in the private reference archive.
 
-The application is installed at C:\SymphonyStudio. Reproducible installer options
-are /mode silent /prefix C:\SymphonyStudio. Run Wine as the ordinary user with
-WINEDEBUG=-all and WINEDLLOVERRIDES='mscoree,mshtml=;winemenubuilder.exe=d'.
-Do not reuse the separate CodeWarrior or Spectre prefixes. No physical debugger,
-OpenOCD connection, hardware programming or extra system installation is needed
-for the local simulator experiments.
+Both examined Symphony and TASKING models disagree with documented switched-RAM
+behavior. Their successful API returns do not establish reserved-write semantics,
+missing ROM contents or physical memory decoding. Normal/fast simulator modes
+also report different clocks for identical instruction/register results.
+Neither model is a silicon memory-map or timing oracle.
 
-  WINEPREFIX="$HOME/.local/share/wineprefixes/blofeld-emu" WINEDEBUG=-all \
-    wine 'C:\SymphonyStudio\dsp56720-devtools\dist\gdb\gdb56300.exe' --version
+Bounded instruction expectations remain useful where their independent encoding,
+PC/register effects and transport readback are qualified. The NXP assembler
+independently checks the document-derived SPI prefix (dsp-core.txt); that prefix
+is not a recovered hardware ROM. dsp-pipeline-timing.txt and the named instruction
+records state their narrower timing/operand scopes and unresolved cases.
 
-The installed console debugger reports GNU GDB 6.4ps001, target dsp56720.
-The simulator server can load the DSP56300 library and explicitly reports
-'Created 56371 device'. Use its containing directory as the working directory:
-
-  WINEPREFIX="$HOME/.local/share/wineprefixes/blofeld-emu" WINEDEBUG=-all \
-    wine 'C:\SymphonyStudio\dsp56720-devtools\dist\dsp56720\gdbsimapiserver.exe' \
-    -dll libdsp56300simapi -port <unused-port> -loud
-
-The -dll argument takes a library basename, without '.dll'. -h prints usage;
-omitting the required port also prints usage and returns failure. After disconnect,
-verify that the specific local server process has exited; terminate only that
-process if needed, keeping the shared Wine server alive. Use one simulator owner at a
-time under the shared native-process budget. The Eclipse GUI is not qualified.
-
-The installed server has a memory-transport incompatibility: the 56300 callback
-uses Boolean success, while the server's RSP handlers expect zero. Reads return
-E00 and writes echo packets although the underlying operations can succeed.
-The custom GDB frontend still displays zeros and exits successfully. Do not use
-those displayed zeros as memory observations. An unchanged-server control now
-executes an independently encoded immediate MOVE and reports its exact nonzero
-X0 and two-word PC increment, proving that the write actually occurred.
-
-A local copy corrects only the two RSP memory success tests. The installed
-executable and processor DLLs are unchanged. A strict client checks checksums,
-reply sizes, actual OK responses and explicit errors; the server's trailing
-boundary NUL is recorded separately. Program readback, native instruction/PC
-expectations and independent X/Y canaries validate that reference transport.
-The transformed binary, derivation and all program/packet data remain local.
-
-The tested 56371 model is still not qualified as a memory-map oracle. Native
-MOVEC plus three subsequent NOPs and 140 fixed endpoint cases expose 20 RAM
-disagreements with DSP56371UM tables 3-1..3-6. A fresh model with the original
-first-stage OMR operand independently retains writable X:010000 and loses
-previously written Y:000000, contrary to table 3-2. Static checks of the unchanged
-processor library now identify incompatible
-switch-configuration constants and its supplied 56371 memory descriptors. Their
-lookup fallback predicts the retained lost-Y/unchanged-X counterexample. Detailed
-analysis remains local; these observations do not override the chip manual.
-The explicit -fastmode option produces identical native instruction/register
-observations in that fresh counterexample and does not resolve the disagreement.
-
-Initial-map instruction timing is now checked separately. Thirty-eight quiet
-producer/consumer windows run 1047 own instructions with verified code readback,
-PC transitions and expected register/SR values. Selected AGU/accumulator/status-
-MOVE delays match primary expectations. FM3.5.2 resolves the five status-bit
-windows without changing observed counts or the sealed own program hash.
-Separate whole/partial accumulator cases check flags, bus words and status
-timing;16 partial-read windows remain unqualified (dsp-status-pipeline.txt).
-A paired 31-case run has identical PC/register results in both modes but 776 versus
-562 reported clocks. Fast mode is not a timing oracle. Retirement deltas also
-cannot identify memory-access stages; see dsp-pipeline-timing.txt. These bounded
-timing observations do not repair the switched-memory or silicon-qualification gaps.
-
-Initial model OMR=000300 independently agrees with the documented CDP reset
-bits. Initial PC=C00000 and BCR=0 do not qualify a hardware SPI-reset sequence
-or complete derivative initialization. The release note primarily describes
-the DSP56720 platform configuration. The observed reserved-write/ROM results
-cannot establish silicon behavior from this inconsistent model. Our emulator
-therefore retains its reserved Y:002000 and missing-ROM failures; no write-
-discard policy or guessed memory alias follows from these experiments.
-The server log explicitly reports internal-reserved-memory access for Y:002000
-while the debugger still receives a stepped-stop response. Neither that response
-nor a later zero value establishes successful access or harmless silicon writes.
-
-The separately pinned NXP assembler 6.3.28 qualifies the document-derived SPI
-prefix encoding independently of the simulator. It preserves the manual's three
-forced-short BRA forms, producing 55 words; see dsp-core.txt. This does not
-qualify processor memory semantics or turn the prefix into a hardware ROM dump.
-
-Archive/payload inventories, installed-tool hashes, registry backup and exact
-session logs are retained in the local worktree archive. Current static review
-and the archive locator remain under ignored doc/local/dsp-reserved-primary/.
-
-Additional TASKING reference
-The official DSP56371 update archive and CrossView manual are pinned in
-reference-tools.json. A local strict C++23 GDI consumer loads the unchanged
-sim563.dll through its public interface, configures56371 and reads back own
-program words and nonzero X/Y canaries. A native MOVEC plus three NOPs changes
-OMR600389 to389, loses the unchanged low-Y canary and retains upper X RAM that
-should be switched away. This reference therefore also fails the documented
-map contract. Its API success responses do not establish harmless reserved writes.
-The3.6r1p1 and3.5r3p2 release notes list no simulator replacement; they were
-reviewed without installing their patches. DLLs, extracted source, detailed
-observations and the initial consumer import failure remain local-only.
+The current emulator uses the independent DSP core and explicit functional board
+contracts. Historical vendor-tool disagreements are not a reason to stop native
+firmware reconstruction. Complete acceptance remains defined by objective.txt.
