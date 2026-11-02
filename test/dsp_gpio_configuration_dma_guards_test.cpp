@@ -85,11 +85,36 @@ void refusal(const DspMemoryAccess access, const bool unknown_owner = false) {
   ++guards;
 }
 
-void program_contention(const DspAddress gpio) {
+void independent_configuration(const DspAddress configuration,
+                               const DspMemoryOperation operation,
+                               const DspMemoryPhase phase) {
+  DspBus bus;
+  setup(bus);
+  const DspCoreBusUse empty{.accesses = {},
+                            .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy};
+  const auto read = bus.advance_dma(inputs(1), empty);
+  require(read.phase && read.phase->kind == DspDmaPhaseKind::source_read && !read.word,
+          "A real source read precedes the configuration footprint");
+  put(bus, x_address, canary);
+  const std::array footprint{
+      DspMemoryAccess{.target = configuration, .operation = operation, .phase = phase}};
+  const auto write = bus.advance_dma(
+      inputs(2),
+      {.accesses = footprint, .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});
+  require(write.word && write.word->value == payload && !write.core_stall &&
+              bus.read({.space = DspSpace::y, .address = destination}) == payload,
+          "A configuration footprint preserves and commits the actual captured DMA payload");
+  require(!bus.advance_dma(inputs(3), empty).word,
+          "Resource admission cannot create a second DMA transaction");
+}
+
+void program_contention(const DspAddress gpio,
+                        const DspMemoryPhase phase = DspMemoryPhase::execute,
+                        const DspMemoryOperation operation = DspMemoryOperation::write) {
   DspBus bus;
   setup(bus, true);
   const std::array held{DspMemoryAccess{.target = {.space = DspSpace::p, .address = 1}},
-                        DspMemoryAccess{.target = gpio, .operation = DspMemoryOperation::write}};
+                        DspMemoryAccess{.target = gpio, .operation = operation, .phase = phase}};
   const auto waiting = bus.advance_dma(
       inputs(1), {.accesses = held, .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});
   require(
@@ -108,11 +133,13 @@ void program_contention(const DspAddress gpio) {
           "Only the real independent destination phase completes the program-memory transfer");
 }
 
-void program_destination(const DspAddress gpio) {
+void program_destination(const DspAddress gpio,
+                         const DspMemoryPhase phase = DspMemoryPhase::execute,
+                         const DspMemoryOperation operation = DspMemoryOperation::write) {
   DspBus bus;
   setup(bus, false, true);
   const std::array core{DspMemoryAccess{.target = {.space = DspSpace::p, .address = 1}},
-                        DspMemoryAccess{.target = gpio, .operation = DspMemoryOperation::write}};
+                        DspMemoryAccess{.target = gpio, .operation = operation, .phase = phase}};
   const auto use =
       DspCoreBusUse{.accesses = core, .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy};
   const auto read = bus.advance_dma(inputs(1), use);
@@ -133,13 +160,24 @@ int main() {
     for (const auto data : data_ports) {
       for (const unsigned offset : {1U, 2U}) {
         const DspAddress configuration{.space = data.space, .address = data.address + offset};
-        for (const auto phase :
-             {DspMemoryPhase::peripheral_bit, DspMemoryPhase::peripheral_sample}) {
-          for (const auto operation : {DspMemoryOperation::read, DspMemoryOperation::write}) {
-            refusal({.target = configuration, .operation = operation, .phase = phase});
+        for (const auto operation : {DspMemoryOperation::read, DspMemoryOperation::write}) {
+          independent_configuration(configuration, operation, DspMemoryPhase::peripheral_bit);
+          program_contention(configuration, DspMemoryPhase::peripheral_bit, operation);
+          program_destination(configuration, DspMemoryPhase::peripheral_bit, operation);
+          if (operation == DspMemoryOperation::read) {
+            independent_configuration(configuration, operation, DspMemoryPhase::peripheral_sample);
+            program_contention(configuration, DspMemoryPhase::peripheral_sample, operation);
+            program_destination(configuration, DspMemoryPhase::peripheral_sample, operation);
+          } else {
+            refusal({.target = configuration,
+                     .operation = operation,
+                     .phase = DspMemoryPhase::peripheral_sample});
           }
         }
-        refusal({.target = configuration, .operation = DspMemoryOperation::read});
+        independent_configuration(configuration, DspMemoryOperation::read, DspMemoryPhase::execute);
+        program_contention(configuration, DspMemoryPhase::execute, DspMemoryOperation::read);
+        program_destination(configuration, DspMemoryPhase::execute, DspMemoryOperation::read);
+        refusal({.target = configuration, .operation = DspMemoryOperation::read}, true);
         refusal({.target = {.space = configuration.space == DspSpace::x ? DspSpace::y : DspSpace::x,
                             .address = configuration.address},
                  .operation = DspMemoryOperation::write});

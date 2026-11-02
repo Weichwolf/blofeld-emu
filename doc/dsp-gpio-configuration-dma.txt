@@ -7,8 +7,9 @@ Execute writes to direction/control registers C/X:ffffbe/bf, E/Y:ffff9e/9f,
 F/Y:fffff6/f7 and D/X:ffffd6/d7 use distinct register resources beside admitted
 internal-memory and ESAI/DAX DMA. Six classifications are new; Port F retains
 its earlier admission. Typed data-register bases also preserve existing bit
-and data-word rules. Reads, early writes and configuration-bit operations
-remain outside this admission. Other P footprints still arbitrate.
+and data-word rules. This original write-only scope excludes reads and bits;
+see dsp-gpio-configuration-bits-dma.txt for their later admission. Early writes
+remain rejected. Other P footprints still arbitrate.
 
 The resource predicate performs no transaction or clock advance. Native GPIO,
 Port-F BCR, reserved-bit/function, mux and clock validation remain unchanged.

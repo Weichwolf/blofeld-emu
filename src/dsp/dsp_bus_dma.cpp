@@ -62,11 +62,16 @@ bool timer_access(const DspMemoryAccess access) {
 // distinct from admitted DMA data endpoints (APR23sections5.1..5.3). Port F
 // uses the BIU (UM6.2.4); native BCR, mux and clock validation still apply.
 // This predicate supplies neither a GPIO transaction nor physical pad timing.
-bool gpio_configuration_write(const DspMemoryAccess access) {
+bool gpio_configuration_access(const DspMemoryAccess access) {
   constexpr auto direction = static_cast<unsigned>(DspGpioRegister::direction);
   constexpr auto control = static_cast<unsigned>(DspGpioRegister::control);
-  return access.phase == DspMemoryPhase::execute && access.operation == DspMemoryOperation::write &&
-         std::ranges::any_of(gpio_data_registers, [&](const auto port) {
+  const bool bit = access.phase == DspMemoryPhase::peripheral_bit;
+  const bool write =
+      access.phase == DspMemoryPhase::execute && access.operation == DspMemoryOperation::write;
+  const bool read = (access.phase == DspMemoryPhase::peripheral_sample ||
+                     access.phase == DspMemoryPhase::execute) &&
+                    access.operation == DspMemoryOperation::read;
+  return (bit || write || read) && std::ranges::any_of(gpio_data_registers, [&](const auto port) {
            return access.target.space == port.space &&
                   (access.target.address == port.address + direction ||
                    access.target.address == port.address + control);
@@ -144,7 +149,7 @@ std::optional<DspMemoryAccess> core_peripheral(const DspBus &bus, const DspCoreB
   unsigned data_accesses = 0;
   bool early = false;
   bool store = false;
-  bool program_read = false;
+  bool execute_read = false;
   if (std::ranges::any_of(core.accesses, [](const auto access) {
         return access.phase == DspMemoryPhase::peripheral_bit;
       })) {
@@ -170,15 +175,16 @@ std::optional<DspMemoryAccess> core_peripheral(const DspBus &bus, const DspCoreB
       if (store) { throw Fault("Multiple DSP peripheral stores in one execute phase"); }
       store = true;
       peripheral = access;
-    } else if (io && access.operation == DspMemoryOperation::read && program_pair) {
-      program_read = true;
+    } else if (io && access.operation == DspMemoryOperation::read &&
+               (program_pair || gpio_configuration_access(access))) {
+      execute_read = true;
       peripheral = access;
     } else if (!controller_access(access)) {
       static_cast<void>(bus.memory_resource(access));
     }
   }
   const unsigned admitted_data = static_cast<unsigned>(early) + static_cast<unsigned>(store) +
-                                 static_cast<unsigned>(program_read);
+                                 static_cast<unsigned>(execute_read);
   if (peripheral && data_accesses != admitted_data) {
     throw Fault("Unqualified concurrent DSP peripheral/data bus effects at " +
                 describe(peripheral->target));
@@ -230,7 +236,7 @@ void check_access(const DspBus &bus, const DspDmaAddress address, const bool wri
 }
 
 bool detail::independent_dma_peripheral(const DspMemoryAccess access) {
-  return gpio_data_access(access) || timer_access(access) || gpio_configuration_write(access);
+  return gpio_data_access(access) || timer_access(access) || gpio_configuration_access(access);
 }
 
 std::optional<DspDmaWord> DspBus::advance_dma(DspDmaInputs inputs) {

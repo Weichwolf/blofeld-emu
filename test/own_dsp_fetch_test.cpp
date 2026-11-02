@@ -1359,6 +1359,132 @@ void controller_read_matrix() {
           "Every declared controller-read case has both same/fresh-owner continuations");
 }
 
+struct GpioConfigurationBranch {
+  DspPort port;
+  DspSpace space;
+  Word data;
+};
+
+constexpr std::array gpio_branch_ports{
+    GpioConfigurationBranch{.port = DspPort::c, .space = DspSpace::x, .data = 0xffffbd},
+    GpioConfigurationBranch{.port = DspPort::e, .space = DspSpace::y, .data = 0xffff9d},
+    GpioConfigurationBranch{.port = DspPort::f, .space = DspSpace::y, .data = 0xfffff5},
+    GpioConfigurationBranch{.port = DspPort::d, .space = DspSpace::x, .data = 0xffffd5}};
+
+void finish_gpio_configuration_branch(
+    OwnDspMachine &machine, OwnDspFetch &fetch, const bool set, const bool held, const bool word) {
+  const auto before = machine.cpu().registers();
+  const auto instructions = machine.cpu().progress().instructions;
+  const auto cycle = fetch.advance_dma_capture_native(
+      dma_input(dma_sample_cycle, held ? DspDmaGrant::wait : DspDmaGrant::available),
+      OwnDspNativeCycleModel::isolated_effect);
+  require(cycle.captured && cycle.native && !cycle.dma.core_stall &&
+              cycle.native->fault.kind == FaultKind::none && cycle.dma.word.has_value() == !held,
+          "Actual configuration BRCLR and F2 coexist with real held/committed DMA");
+  if (!cycle.native) { throw std::runtime_error("Missing native GPIO configuration bit effect"); }
+  if (!cycle.native->retired) { retire(machine); }
+  fetch.synchronize();
+  auto expected = before;
+  constexpr Word displacement = 8;
+  expected.pc = ram_entry + (word || set ? 2U : displacement);
+  if (word) { expected.x = (expected.x & ~std::uint64_t{word_mask}) | (set ? 2U : 0U); }
+  require(machine.cpu().registers() == expected &&
+              machine.cpu().progress().instructions == instructions + 1 &&
+              machine.bus().read({.space = DspSpace::y, .address = dma_ram_destination}) ==
+                  (held ? dma_canary : dma_payload),
+          "Literal BRCLR target/fallthrough preserves full native registers/CCR and captured DMA");
+  if (held) {
+    const auto released = fetch.advance_dma_pipeline(
+        dma_input(dma_sample_cycle + 1), false, OwnDspNativeCycleModel::unqualified);
+    require(released.dma.word && released.dma.word->value == dma_payload && !released.native &&
+                machine.cpu().registers() == expected,
+            "Releasing DMA commits its old source without reexecuting the configuration branch");
+  }
+}
+
+void gpio_configuration_branch(const GpioConfigurationBranch port,
+                               const Word offset,
+                               const bool set,
+                               const bool held,
+                               const bool word = false) {
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  constexpr Word status = 0x300;
+  constexpr Word selected_bit = 1;
+  constexpr Word bit_mask = 2;
+  const std::array<Word, 4> rom{movec_sr, status, jump_absolute, ram_entry};
+  machine.bus().install_rom({.start = boot_entry, .words = rom});
+  const auto address = port.data + offset;
+  constexpr Word pp_base = 0xffffc0;
+  constexpr Word qq_base = 0xffff80;
+  const bool high = address >= pp_base;
+  // DSP56300FM13-26/27: authored bit1, relative displacement8.
+  constexpr Word pp_opcode = 0x0cc000;
+  constexpr Word qq_opcode = 0x048000;
+  constexpr Word displacement = 8;
+  constexpr Word padding = 16;
+  const Word opcode = (high ? pp_opcode : qq_opcode) |
+                      ((address - (high ? pp_base : qq_base)) << 8U) |
+                      (port.space == DspSpace::y ? 0x40U : 0U) | selected_bit;
+  constexpr Word move_x_absolute_x0 = 0x44f000;
+  machine.bus().write({.address = ram_entry, .value = word ? move_x_absolute_x0 : opcode});
+  machine.bus().write({.address = ram_entry + 1, .value = word ? address : displacement});
+  for (Word index = 2; index < padding; ++index) {
+    machine.bus().write({.address = ram_entry + index, .value = 0});
+  }
+  reset(machine);
+  for (unsigned index = 0; index < 2; ++index) {
+    static_cast<void>(machine.begin_fetch());
+    retire(machine);
+  }
+  constexpr Word bcr = 0xfffffb;
+  constexpr Word pin_bcr = 0x01ffff;
+  machine.bus().write({.space = DspSpace::x, .address = bcr, .value = pin_bcr});
+  machine.bus().gpio(port.port).write(
+      {.reg = offset == 1 ? DspGpioRegister::direction : DspGpioRegister::control,
+       .value = set ? bit_mask : 0U});
+  prepare_controller_dma(machine,
+                         {.address = dma_source0,
+                          .mode = held ? ControllerReadMode::held : ControllerReadMode::committed});
+  std::optional<OwnDspFetchCheckpoint> saved;
+  {
+    OwnDspFetch fetch(machine);
+    read_word(fetch, ram_entry);
+    read_word(fetch, ram_entry + 1);
+    static_cast<void>(fetch.begin());
+    const auto pending = machine.cpu().pending_instruction();
+    require(pending && pending->effect.kind == (word ? EffectKind::read : EffectKind::bit) &&
+                (word || pending->effect.action == dsp56300::BitAction::test) &&
+                pending->effect.address == address,
+            "The actual native BRCLR reaches a configuration-bit test before F2");
+    fetch.issue();
+    saved = fetch.checkpoint();
+    finish_gpio_configuration_branch(machine, fetch, set, held, word);
+  }
+  for (const bool fresh_owner : {false, true}) {
+    OwnDspMachine fresh(cycle_clocks);
+    auto &target = fresh_owner ? fresh : machine;
+    OwnDspFetch fetch(target, saved.value());
+    finish_gpio_configuration_branch(target, fetch, set, held, word);
+  }
+}
+
+void gpio_configuration_branches() {
+  for (const auto port : gpio_branch_ports) {
+    for (const Word offset : {1U, 2U}) {
+      for (const bool set : {false, true}) {
+        for (const bool held : {false, true}) {
+          gpio_configuration_branch(port, offset, set, held);
+          if (port.space == DspSpace::x) {
+            gpio_configuration_branch(port, offset, set, held, true);
+          }
+        }
+      }
+    }
+  }
+}
+
 void dma_fetch_native_program_conflict() {
   constexpr Word movem_x0 = 0x07f084;
   auto cycle_clocks = clocks;
@@ -2069,6 +2195,7 @@ int main() {
     dma_fetch_conflict();
     dma_fetch_native_overlap();
     controller_read_matrix();
+    gpio_configuration_branches();
     dma_fetch_native_program_conflict();
     invalidation();
     cache_fallback();

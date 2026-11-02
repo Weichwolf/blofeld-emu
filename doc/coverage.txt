@@ -3905,6 +3905,13 @@ under ASan/UBSan and separate TSan. See dsp-gpio-configuration-dma.txt.
 Supports requirements2/3/6; no timing or hardware hypothesis changes. Joined
 NAND selection/gating and full original instrument/MIDI/audio remain open.
 
+GPIO configuration reads/bits beside DMA: current dsp56300/OwnDspFetch checks
+32 BRCLR/16 absolute X-read cases with same/fresh-owner continuations; the
+supporting legacy matrix checks 74 bits, 4736 windows, 4096 restored and 2048 fresh
+suffixes. True P contention and native reserved-bit/unknown-input faults remain.
+Seven scoped groups/profile pass ASan/UBSan and separate TSan. See
+dsp-gpio-configuration-bits-dma.txt. Normal Board startup is separate evidence.
+
 NAND standby/read exit: known stable CE-high ignores RE/WE activity while
 retaining selected pulse,cycle,setup and output-release constraints. Established
 selected-read CE exit retains tCSD10ns,including explicit opaque-history bounds.

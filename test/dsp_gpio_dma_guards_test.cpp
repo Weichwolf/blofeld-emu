@@ -59,7 +59,10 @@ void rejection(const DspMemoryAccess access) {
   ++refused;
 }
 
-void sampling(const bit::Port port) {
+void sampling(const bit::Port port,
+              const unsigned offset = 0,
+              const DspMemoryPhase phase = DspMemoryPhase::peripheral_sample,
+              const DspMemoryOperation operation = DspMemoryOperation::read) {
   DspBus bus;
   auto &gpio = bus.gpio(port.port);
   gpio.write({.reg = DspGpioRegister::control, .value = 1});
@@ -71,9 +74,11 @@ void sampling(const bit::Port port) {
   require(captured.phase && !captured.word && captured.phase->kind == DspDmaPhaseKind::source_read,
           "GPIO sample admission starts with a real captured DMA source");
   bus.write({.space = DspSpace::x, .address = dma::ring_start, .value = second});
-  const std::array core{fetch[0],
-                        DspMemoryAccess{.target = {.space = port.space, .address = port.address},
-                                        .phase = DspMemoryPhase::peripheral_sample}};
+  const std::array core{
+      fetch[0],
+      DspMemoryAccess{.target = {.space = port.space, .address = port.address + offset},
+                      .operation = operation,
+                      .phase = phase}};
   const auto completed = bus.advance_dma(banks::inputs({.index = 2}), banks::use(core));
   require(completed.word && completed.word->value == first && !completed.core_stall &&
               bus.read({.space = DspSpace::y, .address = dma::destination}) == first &&
@@ -91,9 +96,7 @@ void footprints() {
   for (const auto port : bit::ports) {
     for (const auto operation : {DspMemoryOperation::read, DspMemoryOperation::write}) {
       for (const unsigned neighbor : {1U, 2U}) {
-        rejection({.target = {.space = port.space, .address = port.address + neighbor},
-                   .operation = operation,
-                   .phase = DspMemoryPhase::peripheral_bit});
+        sampling(port, neighbor, DspMemoryPhase::peripheral_bit, operation);
       }
       rejection({.target = {.space = port.space == DspSpace::x ? DspSpace::y : DspSpace::x,
                             .address = port.address},
@@ -118,7 +121,7 @@ void footprints() {
   }
 }
 
-void native(const bool reserved) {
+void native(const bool reserved, const unsigned offset = 0) {
   DspMachine machine;
   test::DspProgram code;
   code.immediate("sr", bit::status);
@@ -130,7 +133,7 @@ void native(const bool reserved) {
   }
   code.word(0);
   constexpr unsigned reserved_gpio_set = 0x013d37;
-  code.word(reserved ? reserved_gpio_set : bit::opcode({.operation = 1}));
+  code.word(reserved ? reserved_gpio_set + (offset << 8U) : bit::opcode({.operation = 1}));
   for (unsigned index = 0; index < 32; ++index) { code.word(0); }
   code.install(machine.bus());
   machine.bus().pll().observe_pinit(false);
@@ -181,6 +184,8 @@ int main() {
     footprints();
     native(false);
     native(true);
+    native(true, 1);
+    native(true, 2);
     std::cout << "GPIO/DMA guards=" << refused << " native-fault-suffixes=" << native_refused
               << ";captured DMA retained,unknown pins and reserved writes strict\n";
   } catch (const std::exception &error) {

@@ -2,6 +2,7 @@
 #include "dsp/dsp_core.hpp"
 
 #include "common/bus.hpp"
+#include "dsp/detail/dsp_dma_resource.hpp"
 #include "dsp/detail/dsp_native_access.hpp"
 #include "dsp/detail/dsp_program_fetch.hpp"
 #include "dsp/detail/dsp_reference_execution.hpp"
@@ -28,7 +29,6 @@
 #include "dsp/dsp_repeat_fetch.hpp"
 #include "dsp/dsp_sp_move.hpp"
 #include "dsp/dsp_sr_move.hpp"
-#include "dsp/dsp_timers.hpp"
 #include "dsp56kEmu/disasm.h"
 #include "dsp56kEmu/dsp.h"
 #include "dsp56kEmu/memory.h"
@@ -457,11 +457,12 @@ public:
   [[nodiscard]] std::uint64_t
   peripheral_epoch(const std::optional<DspAddress> target = std::nullopt) const {
     const auto epoch = bus.last_dma_cycle();
-    // APR23 section5.2/UM table3-7: only the actual decoded timer word
-    // is independent of every supported DMA endpoint. Other readers stay strict.
-    const bool independent_timer =
-        target && target->space == DspSpace::x && DspTimers::handles(target->address);
-    if (!epoch || (bus.has_active_dma() && !independent_timer)) {
+    // Use the same decoded peripheral resources as DMA/F2 admission. The
+    // owned response still samples real GPIO/timer data at its recorded epoch.
+    const bool independent =
+        target && detail::independent_dma_peripheral(
+                      {.target = *target, .phase = DspMemoryPhase::peripheral_sample});
+    if (!epoch || (bus.has_active_dma() && !independent)) {
       throw Fault("Unqualified peripheral-read cycle/DMA state pc=" + hex(word(cpu.regs().pc), 6));
     }
     return *epoch;
