@@ -408,6 +408,24 @@
     "whole_goal_complete": false,
     "firmware_patched": false,
     "fuzzing": false,
-    "physical_traffic": false
+    "physical_traffic": false,
+    "connected_cold_loading": {
+      "scope": "Frozen connected original MCU/DSP reset, SPI stage and full NAND loader at the functional DSP clock; regular runtime and played notes remain unqualified",
+      "mcu_oscillator_hz": 12000000,
+      "dsp_extal_hz": 11289600,
+      "timebase_hz": 635040000000,
+      "local_audit": "doc/local/original-midi-normal/run-r2/audit.json",
+      "local_audit_sha256": "a70885f368fdab78c659641d4e8a819bbc8a1b570e702727f5b3b3527e915869",
+      "original_nand_bytes_read_and_stored": 56496,
+      "resident_dsp_words_verified": 18287,
+      "nand_rows_and_deadlines_checked": 107,
+      "identical_functional_suffixes": 2,
+      "diagnostic_decoder_control_reproduced": true,
+      "native_timer0_configuration_reached": true,
+      "wire_frames_sent": 0,
+      "decoded_silent_pcm_frames": 1,
+      "remaining_input_driver_work": "Reapply the held synchronized MIDI level after reset before capture clocks; no timer or firmware guard is relaxed",
+      "full_instrument_complete": false
+    }
   }
 }

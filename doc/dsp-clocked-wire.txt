@@ -81,3 +81,13 @@ establish normal reset-to-instrument boot, MIDI parsing/voices/audio, host MIDI,
 all byte values, speed, or a separate TSan result. The ordinary directed test
 scopes above retain their existing declared timing. Next integration must feed
 normal MIDI into connected original execution without modifying guest state.
+
+The same functional DSP clock also reaches genuine cold NAND loading with the
+MCU kept at 12 MHz: all 107 row/read deadlines and 56496 original byte reads/
+stores pass; the loader verifies all 18287 resident DSP words. Both joint
+continuations reach original Timer0 configuration and reproduce the diagnostic
+decoder control. Reception has not started: the private driver must reapply its
+held synchronized idle level after reset before capture clocks. One silent PCM
+frame is observed. This qualifies cold loading at the candidate clock, with no
+timer/firmware guard changes; it does not qualify connected MIDI or played audio.
+own-dsp-nand-reference.json pins this distinct audit and its remaining scope.
