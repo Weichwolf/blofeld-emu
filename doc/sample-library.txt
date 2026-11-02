@@ -129,10 +129,11 @@ All142 declared MIDI headers now pass original native receive/preparation/refill
 and callback checks under the same logical fixture; this is not NAND installation.
 
 No firmware-derived mapping from these distributions to a complete original
-NAND image has been established. Required internal wavetable/ROM data,
-device-specific contents and their actual runtime reads remain unestablished.
-They must not be supplied as guessed zero/erased defaults. The strict original
-boot frontier remains Y:002000 before full NAND loading and sample playback.
-Actual library installation, complete boot, voices/audio and stock-device
-equivalence remain pending. Source-side constraints are requested in:
+NAND image has been established. Contents required by every wavetable/sample
+function and device-specific data remain incomplete; unknown inputs must not
+be supplied as guessed zero/erased values. The bounded ordinary reference
+runtime now reads declared NAND and produces MIDI-driven original DSP PCM
+(coverage.txt); the earlier Y:002000 frontier is superseded. Actual library
+installation/playback, full startup, all voices and complete device equivalence
+remain pending. Source-side constraints are requested in:
   https://github.com/Weichwolf/blofeld-src/issues/4
