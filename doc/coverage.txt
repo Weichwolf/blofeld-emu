@@ -41,6 +41,12 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           2304 IRQ/RTI pairs, pitch and joint
                                           checkpoint/input-fault continuations
                                           (dsp-clocked-wire.txt).
+                                          M0 high-byte/modulo tests now use
+                                          literal instructions and actual reset:
+                                          60 independent cases and120 fresh
+                                          restored suffixes/profile preserve
+                                          complete register/flag expectations
+                                          (dsp-modifier-native.txt).
                                           Bank/DMA tests retain genuine pending
                                           access tickets and held-word replay.
                                           Inactive DMA callback storage avoids heap

@@ -1,0 +1,13 @@
+The dsp_modifier_agu regression uses the independent dsp56300 core, actual
+Mode5 reset, literal setup instructions and joint CPU/bus checkpoints.
+FM4-9 table4-2 expectations are unchanged: M0 retains all24 bits while low16
+selects the modulo buffer. Six low modifiers, five upper bytes and both
+post-update directions cover60 cases and120 fresh restored suffixes/profile.
+Full architectural registers/flags, loaded X0, R0 endpoint, instruction/base-cycle
+counts and unchanged emulated clocks are checked under ASan/UBSan and TSan.
+Compiler/format/tidy and ELF hardening pass; no foreign core/assembler symbols.
+The shared target has identical compiler/link arguments and eight archives after
+registration moves. Legacy Ninja link-dependency cache repair is not claimed;
+qualification used its canonical object rule and exact generated link command.
+Hashes: dsp-modifier-native-reference.json. This component evidence does not
+establish physical AGU stages, all Mn modes or complete instrument operation.

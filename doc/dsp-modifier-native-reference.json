@@ -1,0 +1,64 @@
+{
+  "scope": "M0 raw high-byte retention and low16 modulo endpoint arithmetic on independent core; authored component program, not complete instrument boot",
+  "independent_core_revision": "d03de4498e2a3ac108dc7faff5a1a5253815521a",
+  "cases_per_profile": 60,
+  "fresh_restored_suffixes_per_profile": 120,
+  "low_modifiers": [
+    1,
+    2,
+    5,
+    7,
+    15,
+    255
+  ],
+  "upper_bytes": [
+    0,
+    1,
+    127,
+    128,
+    255
+  ],
+  "directions": [
+    "post-decrement",
+    "post-increment"
+  ],
+  "preserved_expectations": [
+    "R0 buffer endpoint",
+    "X0 loaded word",
+    "all other architectural registers and flags",
+    "one instruction and one estimated base cycle",
+    "unchanged emulated clock",
+    "fresh checkpoint input and output"
+  ],
+  "hardware_reset": "actual Mode5 hold/recovery; literal setup instructions",
+  "profiles": {
+    "strict": {
+      "elapsed_seconds": 0.5329222509171814,
+      "native_ELF_sha256": "54816de31a4f66755e3672cfcb19d3a56e56a8d52bbbe4a07ac1a4e399a55de5",
+      "native_receipt_sha256": "6cf1c800442139061114e4f37a59b7266e0d7f6802ca32d864e8aabf2f9e3e1e"
+    },
+    "thread": {
+      "elapsed_seconds": 1.0970214600674808,
+      "native_ELF_sha256": "11cf62f626f910e0cc8381d8f023da055eb3393adb4f18bbffe5b5c6e260a6fb",
+      "native_receipt_sha256": "eb53496ede928674ec1e5ad669249b3eba3cd3acc505ecc3ffd216c3e2a4b4fe"
+    }
+  },
+  "compiler_format_tidy": "zero project findings",
+  "ELF_PIE_RELRO_NOW_NX": true,
+  "foreign_DSP_symbols": false,
+  "shared_target_compile_link_archives_identical": true,
+  "full_native_target_cache_repair_claimed": false,
+  "source_sha256": {
+    "test/dsp_modifier_agu_test.cpp": "de8a93e057c18a4113cf895ad63fc2ee0fadcdd1a12c93056023d981478420a9",
+    "cmake/OwnDspComponents.cmake": "67d2e312cbea1d7b478bdedb1bc2eae02808393b37ef50030f1a2ad7f4e1d664"
+  },
+  "evidence_sha256": {
+    "doc/local/modifier-agu-migration/build-r3.json": "a4875a45054b1630a696aba7949f5af9969ce2005a6062145fec49fbb6158182",
+    "doc/local/modifier-agu-migration/shared-registration.json": "5fea784307b1e97c3add33304d25aaf1951b37af8cb95c1ad6146bb13d2baf89",
+    "doc/local/modifier-agu-migration/qualification-r2.json": "3492ec54d998d002dce5360e92df4871d5239bc8494b7805f467f36292d1ba2f"
+  },
+  "physical_AGU_stage_timing": false,
+  "complete_Desktop_Keyboard": false,
+  "fuzz": false,
+  "physical_traffic": false
+}

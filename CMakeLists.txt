@@ -3552,10 +3552,6 @@ endif()
 
 # Mn retains raw24 data while documented modulo arithmetic decodes only low16.
 if(BUILD_TESTING)
-  add_executable(blofeld-modifier-agu-test test/dsp_modifier_agu_test.cpp)
-  target_link_libraries(blofeld-modifier-agu-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_modifier_agu COMMAND blofeld-modifier-agu-test)
-  set_tests_properties(dsp_modifier_agu PROPERTIES TIMEOUT 120)
   add_dependencies(quality blofeld-modifier-agu-test)
 endif()
 
