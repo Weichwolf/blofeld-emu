@@ -164,9 +164,13 @@ Table 11-1 permits TIO1 as prescaler source 2, whereas Appendix C marks it
 reserved; no external-source assumption is made. Clock batches aggregate sticky
 flags between observations; they do not replace a CPU/IRQ scheduler.
 
-The original DSP stage still stops on unqualified reserved Y:002000 writes.
-Its actual NAND-ready poll is not reached. The native timer diagnostics and
-isolated original NAND helper checks retain that full-boot frontier, with no
-patched original loader or skipped clear loop.
-Full boot, MIDI/audio, persistent storage, update/recovery and hardware comparison
-remain required by coverage.txt.
+The connected original reference runtime now executes the NAND-ready capture
+and all sixteen Part restores. With the declared erased startup page 0x300 it
+reaches Timer2 enable, then refuses an unknown TLR2 at X:ffff86 (native P:0001a7).
+The firmware has supplied neither TLR2 nor TCPR2. Appendix C-25 leaves both
+reset values unspecified; this is distinct from an unsupported register access.
+A declared concrete initial state is a permissible virtual-device hypothesis,
+not a recovered silicon reset value. The production component currently retains
+unknown load/compare state; connected qualification of a concrete choice remains
+open. See own-dsp-nand-reference.json, startup_page_candidate, for the audited
+boundary. Full instrument/MIDI/audio, storage and update/recovery remain open.

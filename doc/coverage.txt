@@ -4084,3 +4084,15 @@ RAM-only diagnostic records leaves the prior complete guest trace unchanged
 through its page0x300 frontier. Both restored suffixes, MCU censuses and phases
 match. These measured values qualify one Sound across 16 Parts; the other 1023
 presets and normal instrument/MIDI/audio acceptance remain open.
+
+Declared erased startup-page continuation (requirements 2/3/6): the original
+firmware consumes all 528 bytes of virtual page0x300 after the 16 Part restores.
+All 1133 previous page records are preserved; no startup tags or activation
+results are supplied. The cold prefix, 18287 loaded words, repeated suffixes,
+MCU accounting and decoder control match; 9576 runtime NAND reads/stores are
+checked against the declared image. 1432 DMA words yield 356 silent frames.
+The next refusal is unknown Timer2 load at X:ffff86 after native enable
+(P:0001a7); a following page0x1220 request has not completed. The manual leaves
+TLR2/TCPR2 reset values unspecified. Concrete virtual reset state and complete
+instrument behavior remain unqualified. See own-dsp-nand-reference.json and
+dsp-timers.txt; this initial state is not recovered manufacturer metadata.

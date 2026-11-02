@@ -244,5 +244,33 @@
     "whole_goal_complete": false,
     "fuzzing": false,
     "physical_traffic": false
+  },
+  "startup_page_candidate": {
+    "scope": "Declared erased virtual startup page, unchanged original firmware and RAM-only Sound observer; not recovered factory metadata or full instrument acceptance",
+    "initial_image_sha256": "6775c7880527593603ff6904a7a58a4d98afb144ce638987b5c388a105da194c",
+    "previous_image_records_preserved": 1133,
+    "additional_known_erased_page": 768,
+    "additional_known_bytes": 528,
+    "firmware_tags_or_activation_results_supplied": false,
+    "original_resident_words": 18287,
+    "cold_prefix_unchanged": true,
+    "runtime_nand_bytes_read_and_stored": 9576,
+    "startup_page_native_reads_and_stores": 528,
+    "native_part_restores": 16,
+    "native_literal_stores": 6128,
+    "identical_functional_suffixes": 2,
+    "diagnostic_decoder_control_reproduced": true,
+    "actual_dma_words": 1432,
+    "silent_stereo_frames": 356,
+    "sample_rate_hz": 44100,
+    "next_runtime_limit": "Timer2 load is unknown at X:ffff86 after native enable; P:0001a7. Next NAND page0x1220 is requested but has not completed.",
+    "timer_load_compare_reset_specification": "DSP56371UM Appendix C-25: unspecified; concrete virtual initial state not yet qualified",
+    "local_audit": "doc/local/ram-control/startup-page/audit.json",
+    "local_audit_sha256": "9bdd0cb48ee8f7c0467a100a307b8f50ee636f72a27195a6ee354d4d5c98e01e",
+    "original_instrument_audio_proven": false,
+    "durable_storage_qualified": false,
+    "whole_goal_complete": false,
+    "fuzzing": false,
+    "physical_traffic": false
   }
 }
