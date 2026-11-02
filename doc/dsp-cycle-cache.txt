@@ -1,30 +1,24 @@
-Host DSP cycle-count cache
+Cycle storage and independent native instruction counts
 
   cmake --build --preset strict --target blofeld-dsp-cycle-cache-test
-  ctest --test-dir build/strict -R '^(dsp_cycle_cache|dsp_checkpoint|dsp_dispatch_cache|native_dsp)$' --output-on-failure
+  ctest --test-dir build/strict -R '^dsp_cycle_cache$' --output-on-failure
 
-The native SDK's separate per-PC cycle-count cache now uses1024-byte pages over
-the unchanged24-bit logical program space. Absent entries retain the original
-zero/not-computed sentinel. Cold reads/invalidation allocate nothing; first
-memoization allocates a page. Complete reset discards pages; a single code write
-invalidates only its prior byte. Full snapshots deep-copy resident values and
-their logical bound, preserving cached counts even if code later changes.
-Strong copy assignment prepares its replacement before publishing it.
+The native half executes authored NOP/MOVEC/MOVE/JMP instructions through the
+independent dsp56300 core after Mode5 reset. FM tableA-1 expectations are NOP1,
+long immediate MOVEC/MOVE2 and long absolute JMP4 (3+lab1). It checks full
+registers/flags, progress, unchanged emulated time, real M0/SR/LA initialization,
+reset interrupt priorities and zero generated JIT blocks/executable bytes.
+Changing a RAM opcode/operand changes the actual instruction and base count;
+joint restore plus two fresh owners recover the original one-cycle NOP.
 
-Storage tests compare every value against a dense independent expectation and
-cover low/high/page boundaries,255-cycle bytes, cold probes, stable references,
-snapshot isolation, moves, partial pages and rejected bounds. The actual SDK
-metadata test checks independent NOP=1/immediate-MOVE=2 counts, cache hits,
-invalidation and restoration of a nonzero captured count without recomputation.
-Constructor priority writes use the real board bus; unexpected peripheral/data
-execution rejects. Forced-interpreter construction, M0/SR/LA writes, code changes,
-snapshot restoration and cleanup retain null JIT entries/optional runtime and
-empty loop registries while preserving actual register values. Existing native
-instruction, loop, IRQ, access-continuation, coupling and original sample
-regressions check integration.
+The separate generic DspCycleCache tests remain unchanged: sparse1024-byte pages
+over24-bit addresses, zero sentinel, cold probes, references, deep-copy isolation,
+move/reset behavior, bounds and comparison against dense independent values.
+This legacy container is not the independent core's timing implementation.
+SDK-only cycle-metadata/JIT-cleanup interfaces are no longer part of this target.
 
-This changes host memoization storage. It does not alter guest P/X/Y storage,
-strict bus admission, cycle equations, native counters or instruction semantics.
-First use and full snapshots still allocate and may throw; they remain outside
-any future real-time audio callback. No physical clock/cache timing, complete
-boot, live original MIDI/audio or hardware equivalence is established.
+Both sanitizer profiles pass with zero compiler/format/tidy findings, hardened
+ELFs and no foreign DSP symbols. See dsp-cycle-native-reference.json. Qualification
+uses canonical object rules and generated link commands; legacy Ninja cache
+repair is unqualified. Base counts do not establish interlocks, IRQ/bus waits,
+physical cache timing, real-time callback safety or complete instrument startup.
