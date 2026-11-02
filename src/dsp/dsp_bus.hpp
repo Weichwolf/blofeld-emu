@@ -57,7 +57,7 @@ struct DspMemoryResource {
   bool rom = false;
   std::uint32_t word = 0;
   unsigned block_words = 0;
-  // An explicitly decoded write with no writable cell has no storage resource.
+  // An explicitly unselected access has no storage resource.
   bool selected = true;
   bool operator==(const DspMemoryResource &) const = default;
 };
@@ -128,6 +128,16 @@ public:
   [[nodiscard]] DspWriteContract write_contract() const noexcept { return write_contract_; }
 
   [[nodiscard]] std::uint64_t unselected_writes() const noexcept { return unselected_writes_; }
+
+  // Explicit functional virtual-instance word for reserved Y I/O only. No cell
+  // or register is selected; nullopt keeps diagnostic refusal. Not a silicon value.
+  void set_unselected_io_read_word(std::optional<std::uint32_t> word);
+
+  [[nodiscard]] std::optional<std::uint32_t> unselected_io_read_word() const noexcept {
+    return unselected_io_read_word_;
+  }
+
+  [[nodiscard]] std::uint64_t unselected_reads() const noexcept { return unselected_reads_; }
 
   [[nodiscard]] std::optional<bool> access_peripheral_bit(DspBitAccess access);
   [[nodiscard]] static bool handles_peripheral_bit(DspAddress access);
@@ -220,6 +230,7 @@ private:
   [[nodiscard]] Location locate_program(std::uint32_t address, Operation operation) const;
   [[nodiscard]] Location locate_data(DspAddress access, Operation operation) const;
   [[nodiscard]] bool unselected_write(DspAddress access) const;
+  [[nodiscard]] bool unselected_read(DspAddress access) const;
   [[nodiscard]] std::uint32_t read_peripheral(DspAddress access);
   void write_peripheral(DspStore access);
   [[nodiscard]] DspEsai *esai_register(DspAddress access);
@@ -247,6 +258,8 @@ private:
   unsigned switch_delay_ = 0;
   DspWriteContract write_contract_ = DspWriteContract::strict;
   std::uint64_t unselected_writes_ = 0;
+  std::optional<std::uint32_t> unselected_io_read_word_;
+  std::uint64_t unselected_reads_ = 0;
   std::optional<std::uint32_t> once_latch_;
 };
 

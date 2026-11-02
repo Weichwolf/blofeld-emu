@@ -562,12 +562,33 @@
         "no_note_causality_control_executed": false,
         "single_functional_suffix": true,
         "diagnostic_decoder_control_reproduced": true,
-        "canonical_read_model_implemented": false,
+        "canonical_read_model_implemented": true,
         "complete_regular_runtime_qualified": false,
         "firmware_patched": false,
         "host_synthesizer_used": false,
         "whole_goal_complete": false,
-        "sanitizer_scope": "ASan/UBSan; separate TSan and canonical integration pending"
+        "sanitizer_scope": "Frozen original runtime: ASan/UBSan. Canonical decoder/native/Board controls: ASan/UBSan and separate TSan; complete original standalone instrument unqualified.",
+        "canonical_decoder_integration": {
+          "contract": "Explicit optional 24-bit word, functional_decode and reserved Y slots only; normal NAND Board chooses nominal zero",
+          "local_qualification": "doc/local/unselected-y-integration/qualified.json",
+          "local_qualification_sha256": "8ba7080137a11cf8cd3c50095414f68da41cab2622ec0df35c79e2262e5728bb",
+          "local_publication": "doc/local/unselected-y-integration/publication.json",
+          "local_publication_sha256": "2fd5a6cfb94e8e0cd4e174f2cf61cf3f81472ee51ab9ea5cc67b008d1e3b51d2",
+          "profiles": [
+            "ASan/UBSan",
+            "TSan"
+          ],
+          "affected_native_groups": 12,
+          "independently_reserved_Y_slots": 76,
+          "test_words": [
+            0,
+            16777215,
+            10836645
+          ],
+          "native_DMA_offsets_per_word": 25,
+          "joint_checkpoint_cuts": 21,
+          "ordinary_original_PCM_qualified": false
+        }
       }
     }
   }

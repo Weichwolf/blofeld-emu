@@ -43,6 +43,8 @@ void Board::prepare_dsp() {
       throw Fault("NAND Ready owns DSP timer1 input; a second input source is unsupported");
     }
     native_->dsp.bus().set_write_contract(DspWriteContract::functional_decode);
+    // Nominal virtual decoder word, not a measured reserved-bus value.
+    native_->dsp.bus().set_unselected_io_read_word(0);
     native_->dsp.bus().shi().set_reset_contract(ShiResetContract::selected_quiescent_reference);
     constexpr unsigned secondary_clock = 2;
     const auto configuration =

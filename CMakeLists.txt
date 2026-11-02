@@ -3184,6 +3184,7 @@ add_custom_target(quality
     blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test blofeld-dsp-unclocked-test
     blofeld-dsp-observed-test blofeld-dsp-timer-sample-test blofeld-dsp-write-decoder-test
     blofeld-dsp-reserved-write-decoder-test
+    blofeld-reserved-read-decoder-test
     blofeld-dsp-independent-io-fetch-test
     blofeld-dsp-ram-rmw-test
     blofeld-dsp-gpio-write-decoder-test

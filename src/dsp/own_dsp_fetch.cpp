@@ -257,6 +257,10 @@ OwnDspFetch::native_overlap(const DspProgramFetchView &state,
                             const dsp56300::PendingInstruction &pending) const {
   const auto access = OwnDspMachine::dma_native_footprint(pending);
   if (dma_controller_read(pending)) { return access; }
+  if (access && pending.effect.kind == dsp56300::EffectKind::read &&
+      machine_.bus_.unselected_read(access->target)) {
+    return access;
+  }
   if (access && detail::independent_dma_peripheral(*access)) { return access; }
   if (access && access->operation == DspMemoryOperation::write &&
       machine_.bus_.unselected_write(access->target)) {

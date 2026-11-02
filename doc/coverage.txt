@@ -4177,10 +4177,15 @@ bytes / 63 native IRQ/RTI pairs reach the 12M-unit bound: 1763 captured PCM fram
 at 44100 Hz include 595 nonzero frames after the note. Both actual DMA streams are
 identical; the complete serial word sequence matches them with one-word offset.
 This proves nonzero original DSP output in that frozen functional scope. Correct
-stereo frame polarity, a no-note causal control, canonical standalone integration,
+stereo frame polarity, a no-note causal control, ordinary standalone audio,
 longer/polyphonic behavior and full Desktop/Keyboard acceptance are pending.
-The chosen reserved-read word is not a silicon measurement. Independent authored
-decoder/native controls and ASan/UBSan pass; a separate TSan scope is pending.
+The chosen reserved-read word is not a silicon measurement. The canonical Bus,
+Fetch and NAND Board now support an explicit optional reserved-Y word (nominal
+zero on that Board); strict/default, unknown-register and bit-operation guards
+remain. Independent tests cover all 76 slots, three words, native AGU wrap,
+75 real DMA schedules and 21 fresh-owner checkpoint cuts. All 12 affected
+native groups pass under ASan/UBSan and separate TSan. These component/Board
+controls do not extend the frozen original run's instrument acceptance scope.
 See dsp-notes.txt and own-dsp-nand-reference.json for exact local evidence pins.
 
 Coincident independent DSP inputs (requirements 2/3/6): the regular Board now

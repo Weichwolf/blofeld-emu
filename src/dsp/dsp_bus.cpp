@@ -119,6 +119,7 @@ DspBus::DspBus() {
 
 void DspBus::reset() {
   unselected_writes_ = 0;
+  unselected_reads_ = 0;
   memory_mode_ = 0;
   requested_memory_mode_ = 0;
   switch_delay_ = 0;
@@ -167,6 +168,9 @@ std::optional<bool> DspBus::access_peripheral_bit(const DspBitAccess access) {
   if (access.address > word_mask || access.bit >= word_bits ||
       static_cast<unsigned>(access.operation) > static_cast<unsigned>(DspBitOperation::change)) {
     throw Fault("Invalid DSP bit access at " + address_text(target));
+  }
+  if (unselected_read(target)) {
+    throw Fault("Unsupported DSP unselected peripheral bit access at " + address_text(target));
   }
   if (!handles_peripheral_bit(target)) { return std::nullopt; }
   const auto mask = 1U << access.bit;
@@ -343,6 +347,10 @@ DspMemoryResource DspBus::memory_resource(const DspMemoryAccess access) const {
   const auto operation =
       access.operation == DspMemoryOperation::read ? Operation::read : Operation::write;
   const auto selection = dsp_io_selection(target);
+  if (operation == Operation::read && access.phase != DspMemoryPhase::peripheral_bit &&
+      unselected_read(target)) {
+    return {.bank = target.space, .word = target.address, .selected = false};
+  }
   if (operation == Operation::write && unselected_write(target)) {
     return {.bank = target.space, .word = target.address, .selected = false};
   }
@@ -426,6 +434,14 @@ DspBus::Location DspBus::locate_data(const DspAddress access, const Operation op
 }
 
 std::uint32_t DspBus::read(const DspAddress access) {
+  const auto unselected_word = unselected_io_read_word_;
+  if (unselected_word && unselected_read(access)) {
+    if (unselected_reads_ == std::numeric_limits<std::uint64_t>::max()) {
+      throw Fault("DSP unselected-read observation count exhausted at " + address_text(access));
+    }
+    ++unselected_reads_;
+    return *unselected_word;
+  }
   if (dsp_io_selection(access) != DspIoSelection::outside) { return read_peripheral(access); }
   const auto location = locate(access);
   const auto &memory = (location.rom ? rom_ : ram_).at(location.bank);
@@ -442,6 +458,16 @@ void DspBus::set_write_contract(const DspWriteContract contract) {
     throw Fault("Invalid DSP memory write contract");
   }
   write_contract_ = contract;
+}
+
+void DspBus::set_unselected_io_read_word(const std::optional<std::uint32_t> word) {
+  if (word && *word > word_mask) { throw Fault("Invalid DSP unselected I/O read word"); }
+  unselected_io_read_word_ = word;
+}
+
+bool DspBus::unselected_read(const DspAddress access) const {
+  return write_contract_ == DspWriteContract::functional_decode && unselected_io_read_word_ &&
+         access.space == DspSpace::y && dsp_io_selection(access) == DspIoSelection::reserved;
 }
 
 bool DspBus::unselected_write(const DspAddress access) const {
