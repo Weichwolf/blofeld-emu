@@ -482,7 +482,26 @@
       "whole_goal_complete": false,
       "firmware_patched": false,
       "fuzzing": false,
-      "physical_traffic": false
+      "physical_traffic": false,
+      "clock_before_note_control": {
+        "scope": "Same frozen unchanged firmware and virtual Init state; normal F8 precedes NoteOn; one functional suffix and independent diagnostic-decoder control",
+        "local_audit": "doc/local/original-midi-clock/observed/audit.json",
+        "local_audit_sha256": "b2392ee1faa5b52af4fac80ad85c1189132c213b416077a0c7736d0ba6292008",
+        "binary_sha256": "38f02487744323e72853d89a6661683c09ec879f865b0470f722cb00c7bae778",
+        "same_cold_prefix_bytes": 120951041,
+        "same_cold_prefix_sha256": "aab53050c98a22c52e39e77474bf3d1d29194f902086b21e1f25c0e2dc7707a7",
+        "normal_midi_bytes_received": 7,
+        "native_timer0_irq_rti_pairs": 63,
+        "original_part_clock_service_entries": 1,
+        "cached_and_program_arp_modes_equal_before_note": true,
+        "native_positive_voice_entries": 0,
+        "native_held_note_appends": 0,
+        "silent_stereo_frames": 1763,
+        "functional_suffixes_observed": 1,
+        "repeated_suffix_qualification": false,
+        "note_audio_established": false,
+        "complete_regular_runtime_qualified": false
+      }
     }
   }
 }
