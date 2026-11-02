@@ -1,0 +1,47 @@
+{
+  "scope": "Generic sparse host container plus independent native 24-bit program fetch, mutation and joint restore; authored component programs",
+  "groups": [
+    "unchanged sparse host-container bounds/pointers/reset",
+    "highest program word indirect JMP with full native register/flag/progress expectations",
+    "cross-page immediate/opcode mutation and restored same/fresh-owner suffixes"
+  ],
+  "independent_core_revision": "d03de4498e2a3ac108dc7faff5a1a5253815521a",
+  "fresh_restored_suffixes_per_profile": 2,
+  "hardware_reset": "Actual Mode5 hold/recovery; literal setup instructions",
+  "profiles": {
+    "strict": {
+      "elapsed_seconds": 0.040154254995286465,
+      "native_ELF_sha256": "ba04ec2ca3f972aba8b32c4f16997dfdc29c3182609a4ce9295f755a8d068f71",
+      "native_exit": 0,
+      "actual_argv_verified": true,
+      "native_log_sha256": "8655a90008eb16959f70a9e6d310f7cbd01e51f9ddc8f8b95569ef687f27ebfc"
+    },
+    "thread": {
+      "elapsed_seconds": 0.06085985410027206,
+      "native_ELF_sha256": "464bb8f77aa8207ddac5d30f24dbaf0b747b25474bfa9d97ca21ca1d6f678b32",
+      "native_exit": 0,
+      "actual_argv_verified": true,
+      "native_log_sha256": "8655a90008eb16959f70a9e6d310f7cbd01e51f9ddc8f8b95569ef687f27ebfc"
+    }
+  },
+  "compiler_format_tidy": "zero project findings",
+  "ELF_PIE_RELRO_NOW_NX": true,
+  "foreign_DSP_symbols": false,
+  "build_scope": "canonical Ninja object rules and exact generated CMake link argv; eight independent archives/profile",
+  "full_native_target_cache_repair_claimed": false,
+  "source_sha256": {
+    "test/dsp_dispatch_cache_test.cpp": "54721ced43e28b826b9525b3f87bc7f42c96cf4c8130c3bd81c69b89b17f2189",
+    "cmake/OwnDspComponents.cmake": "e85e0da6a85fef320f8f3883940a45f38b446a521d2004d99f55be2b8ac46a34",
+    "src/dsp/dsp_dispatch_cache.hpp": "0fbed705f05b825cb18595d5a156b7aa403108eb0015001f3b0819f94e7ae8d2",
+    "test/dma_native_fixture.cpp": "f0dd16e0aad9e5e37fca04b6c44c5836fa874500b88e10fae5d63646c08048c0",
+    "test/dma_native_fixture.hpp": "02e52d55cb207494d8851765cc5cd98eacc44e6c3283985d32113633fe63c739"
+  },
+  "evidence_sha256": {
+    "doc/local/dispatch-cache-migration/build.json": "8dea47df0adf6f16988afb60bd258172ae9a3b11923979028f328312ad37251a",
+    "doc/local/dispatch-cache-migration/qualification.json": "cd36aa23c5f36e782f73ff4d7c2b972a1783e634fe8dbe4ba84682f0f88e0060"
+  },
+  "physical_instruction_cache_timing": false,
+  "complete_Desktop_Keyboard": false,
+  "fuzz": false,
+  "physical_traffic": false
+}

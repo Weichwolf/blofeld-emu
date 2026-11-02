@@ -1,25 +1,21 @@
-Host DSP dispatch cache
+Dispatch storage and independent DSP program boundaries
 
-The native interpreter retains its complete 24-bit program-address space. Its
-three-member-function dispatch entries now occupy demand-allocated 1024-word
-pages instead of one dense 16M-entry vector. Cold code invalidation allocates
-nothing; clearing or restoring the interpreter discards all resident pages.
-Entry references remain stable while other pages are created.
+dsp_dispatch_cache executes literal authored programs through the independent
+dsp56300 core after actual Mode5 reset. It checks JMP(R0) at P:ffffff without
+an extension read, full register/flag/progress preservation and its three base
+cycles. A MOVE immediate crosses P:3ff/400; changed operands and destinations
+take effect, and joint restore recovers the original program. Two fresh owners
+replay the restored suffix with identical CPU, fault, progress and clock state.
 
-This is host decoder storage, independent of guest P/X/Y memory and physical
-instruction caches. Strict bus checks, missing-ROM faults, REP latching,
-instruction/cycle counters and architectural checkpoints retain their existing
-contracts. Cycle-count memoization has separate copyable pages
-(dsp-cycle-cache.txt).
+The separate generic DspDispatchCache container checks remain unchanged: sparse
+1024-word pages, cold probes, stable pointers, partial pages, bounds and reset.
+That legacy host container is not the independent core's decoder implementation
+and these tests do not establish physical instruction-cache behavior.
 
-  ctest --test-dir build/strict -R '^(native_dsp|dsp_dispatch_cache|dsp_checkpoint)$' --output-on-failure
+  cmake --build --preset strict --target blofeld-dsp-dispatch-cache-test
+  ctest --test-dir build/strict -R '^dsp_dispatch_cache$' --output-on-failure
 
-Own instruction tests execute P:ffffff, cross a page boundary with an immediate
-operand, replace operands/opcodes and replay a coordinated checkpoint. Host
-storage tests cover cold probes, all 24 address bits, stable member pointers,
-partial pages, rejected bounds and reset. Manufacturer program bytes are absent.
-
-First use can allocate and throw. This does not qualify DSP execution for a
-real-time audio callback or establish physical cache/pipeline timing, complete
-firmware boot or hardware equivalence. Native dependency licenses and separate
-sanitizer instrumentation remain required.
+ASan/UBSan and TSan pass with zero compiler/format/tidy findings, hardened ELFs
+and no foreign DSP/assembler symbols. Evidence: dsp-dispatch-native-reference.json.
+Canonical object rules and generated link commands were used; legacy Ninja
+link-dependency cache repair, real-time execution and complete boot are unqualified.

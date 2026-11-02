@@ -2400,9 +2400,6 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-gpio-global-wait.report")
   set_tests_properties(original_gpio_global_wait PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
-  add_executable(blofeld-dsp-dispatch-cache-test test/dsp_dispatch_cache_test.cpp)
-  target_link_libraries(blofeld-dsp-dispatch-cache-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_dispatch_cache COMMAND blofeld-dsp-dispatch-cache-test)
   add_executable(blofeld-dsp-cycle-cache-test test/dsp_cycle_cache_test.cpp
     test/dsp_cycle_cache_native.cpp)
   target_link_libraries(blofeld-dsp-cycle-cache-test PRIVATE blofeld_dsp blofeld_dsp_native)

@@ -1,23 +1,30 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "dma_native_fixture.hpp"
+#include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dispatch_cache.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp56kEmu/assembler.h"
-#include "dsp_norm_fixture.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
+#include "esai_fixture.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <iostream>
 #include <stdexcept>
-#include <vector>
+#include <tuple>
 
 namespace {
-using blofeld::test::require;
+using blofeld::test::esai::require;
+namespace native = blofeld::test::dma_test;
 constexpr unsigned boot = 0xff0000;
 constexpr unsigned word_mask = 0xffffff;
 constexpr unsigned branch_target = 0x100;
 constexpr unsigned boundary = 0x3ff;
 constexpr unsigned absolute_jump = 0x0af080;
+// FM13 JMP (Rn), MOVE #imm,R0 and MOVE #imm,X0/X1; literal authored instructions.
+constexpr unsigned indirect_jump = 0x0ae080, immediate_r0 = 0x60f400;
+constexpr unsigned immediate_x0 = 0x44f400, immediate_x1 = 0x45f400;
 constexpr unsigned first_value = 0x123456;
 constexpr unsigned second_value = 0x234567;
 constexpr unsigned word_bits = 24;
@@ -91,73 +98,85 @@ void sparse_storage() {
           "An empty reset releases both directory and resident entries");
 }
 
-std::vector<std::uint32_t> assemble(const char *instruction) {
-  const dsp56k::Assembler assembler;
-  const auto encoded = assembler.assemble(instruction);
-  require(encoded.success(), "Own decoder-boundary diagnostic assembles");
-  std::vector<std::uint32_t> words;
-  words.reserve(encoded.wordCount);
-  for (unsigned i = 0; i < encoded.wordCount; ++i) { words.push_back(encoded.word[i]); }
-  return words;
+auto observe(const blofeld::OwnDspMachine &machine) {
+  return std::tuple{machine.cpu().registers(),
+                    machine.cpu().progress(),
+                    machine.cpu().fault(),
+                    machine.cpu().processing_state(),
+                    machine.clock().elapsed_ticks()};
 }
 
 void last_program_address() {
-  blofeld::DspMachine machine;
+  blofeld::OwnDspMachine machine(native::native_clocks);
   auto &bus = machine.bus();
-  blofeld::test::DspProgram start;
-  start.immediate("r0", branch_target);
+  native::NativeProgram start;
+  start.word(immediate_r0);
+  start.word(branch_target);
   start.word(absolute_jump);
   start.word(word_mask);
-  start.install(bus);
-  const auto indirect = assemble("jmp (r0)");
-  require(indirect.size() == 1, "Last-address jump uses no invented extension word");
+  native::reset_native(machine, start);
+  const std::array indirect{indirect_jump};
   bus.install_rom({.start = word_mask, .words = indirect});
-  machine.cpu().step();
-  machine.cpu().step();
-  require(machine.cpu().state().pc == word_mask,
+  native::step_native(machine);
+  native::step_native(machine);
+  require(machine.cpu().registers().pc == word_mask,
           "The native interpreter reaches the last actual 24-bit P address");
-  machine.cpu().step();
-  require(machine.cpu().state().pc == branch_target && machine.cpu().state().r[0] == branch_target,
+  const auto before = observe(machine);
+  auto expected = before;
+  std::get<0>(expected).pc = branch_target;
+  ++std::get<1>(expected).instructions;
+  constexpr unsigned indirect_jump_units = 3; // FM13 JMP EA.
+  std::get<1>(expected).estimated_cycles += indirect_jump_units;
+  native::step_native(machine);
+  require(observe(machine) == expected && machine.cpu().registers().r[0] == branch_target,
           "The highest decoder page executes its real indirect jump");
 }
 
 void boundary_mutation_and_restore() {
-  blofeld::DspMachine machine;
+  blofeld::OwnDspMachine machine(native::native_clocks);
   auto &bus = machine.bus();
-  blofeld::test::DspProgram start;
+  native::NativeProgram start;
   start.word(absolute_jump);
   start.word(boundary);
-  start.install(bus);
-  const auto move = assemble("move #>$123456,x0");
-  require(move.size() == 2, "Own immediate crosses an actual decoder page boundary");
-  bus.write({.address = boundary, .value = move[0]});
-  bus.write({.address = boundary + 1, .value = move[1]});
+  native::reset_native(machine, start);
+  bus.write({.address = boundary, .value = immediate_x0});
+  bus.write({.address = boundary + 1, .value = first_value});
   bus.write({.address = boundary + 2, .value = absolute_jump});
   bus.write({.address = boundary + 3, .value = boundary});
-  machine.cpu().step();
-  machine.cpu().step();
-  const auto before = machine.cpu().debug_state();
+  native::step_native(machine);
+  native::step_native(machine);
+  const auto before = observe(machine);
   const auto saved = machine.checkpoint();
-  require((before.cpu.x & word_mask) == first_value && before.cpu.pc == boundary + 2,
+  require(std::get<0>(before).x == first_value && std::get<0>(before).pc == boundary + 2,
           "The initial cross-page operand executes with independent register expectations");
   bus.write({.address = boundary + 1, .value = second_value});
-  machine.cpu().step();
-  machine.cpu().step();
-  require((machine.cpu().state().x & word_mask) == second_value,
+  native::step_native(machine);
+  native::step_native(machine);
+  require(machine.cpu().registers().x == second_value,
           "A changed extension across pages cannot reuse a stale operand");
-  const auto replacement = assemble("move #>$234567,x1");
-  bus.write({.address = boundary, .value = replacement[0]});
-  machine.cpu().step();
-  machine.cpu().step();
-  require(machine.cpu().state().x == (std::uint64_t{second_value} << word_bits) + second_value,
+  bus.write({.address = boundary, .value = immediate_x1});
+  native::step_native(machine);
+  native::step_native(machine);
+  require(machine.cpu().registers().x == (std::uint64_t{second_value} << word_bits) + second_value,
           "A changed decoded destination retains the earlier X0 and updates only X1");
   machine.restore(saved);
-  require(machine.cpu().debug_state() == before,
+  require(observe(machine) == before,
           "Host cache replacement does not alter restored architectural/debug state");
-  machine.cpu().step();
-  machine.cpu().step();
-  require(machine.cpu().state().x == first_value,
+  native::step_native(machine);
+  native::step_native(machine);
+  require(machine.cpu().registers().x == first_value,
           "Trusted restore rebuilds dispatch from the restored program and extension");
+  const auto suffix = observe(machine);
+  for (unsigned replay = 0; replay < 2; ++replay) {
+    blofeld::OwnDspMachine branch(native::native_clocks);
+    branch.restore(saved);
+    require(observe(branch) == before, "Fresh owners retain the complete native source state");
+    native::step_native(branch);
+    native::step_native(branch);
+    require(
+        observe(branch) == suffix,
+        "Both fresh suffixes fetch restored words with identical registers, flags and progress");
+  }
 }
 }
 

@@ -17,7 +17,7 @@ startup and every documented instrument function on both profiles remain open.
 See nand-board.txt, nand-read-handoff-reference.json and coverage.txt.
 
 Instruction/fetch/DMA/IRQ/checkpoint tests are supporting component evidence.
-Recent specific scopes include dsp-clocked-wire.txt, dsp-modifier-native.txt,
+Recent specific scopes include dsp-dispatch-cache.txt, dsp-clocked-wire.txt, dsp-modifier-native.txt,
 dsp-dma-callback.txt and dsp-interrupt-owner.txt. Each reference manifest states
 its source/input identity and limitations; replay alone is not full acceptance.
 
