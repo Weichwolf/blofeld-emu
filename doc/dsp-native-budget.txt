@@ -1,0 +1,38 @@
+Native instruction budgets
+
+  cmake --build --preset strict --target blofeld-native-budget-test blofeld-native-budget-events-test
+  ctest --test-dir build/strict -R '^dsp_native_cycle_budget(_events)?$' --output-on-failure
+Repeat with thread for TSan. Exact qualification scope: dsp-native-budget-reference.json.
+
+OwnDspAutomaticTiming::native_cycle_budget is an explicit C++ scheduling choice.
+The text-config CLI still selects reference-effects; normal device profiles are
+not implicitly switched. Instruction semantics and original firmware remain unchanged.
+
+Each admitted period advances DMA/F2 and at most the first external CPU effect.
+Consecutive CPU-only address/MOVE/ALU/unit/PCU publications share that period.
+The actual retirement ticket waits until the core's computed native base budget
+has elapsed. A conflicting DMA destination holds native work; an independent
+DMA transfer does not. Timers and actual elapsed clocks continue during waits.
+No early retirement, skipped instruction, substituted bus result or clock scaling
+is used. After genuine retirement the synchronized frontend may issue its next
+F1. REP and vector latches retain their native ownership and actual read rules.
+
+Joint snapshots retain paid periods and pending retirement. Mixed manual/reference
+timing refuses during an active budget. Reset discards the old continuation.
+Required unknown data keeps its original address/PC fault; interrupt acknowledgement
+still follows both real vector reads, including a refused second word.
+
+Authored actual-reset cases check sequential NOP1, REP setup5,23 repeated NOPs23,
+native GPIO transitions, operand failures, padding/restore and timing refusals.
+DMA cases compare independent Y RAM with a conflicting P-bank destination,
+actual sampled data, a held destination and both restored suffixes. IRQ cases
+assert during a two-period MOVE, then verify genuine vector reads, acknowledgement,
+fast return and missing-word refusal. Reset during padding restarts the real ROM.
+Both sanitizer profiles also pass affected fetch, timeline and ownership regressions.
+
+Limits: base units exclude physical pipeline, arithmetic/AGU interlocks, IRQ-entry
+overhead and bus waits. A CPU-only AGU prefix before a later operand can add a
+conservative period in this model. Initial F1/F2 filling and normal instruction
+phase placement are not calibrated; steady-cadence fixtures explicitly prefill
+known words. Correct original overlay transfer, full startup, normal MIDI/audio
+and both complete instrument profiles remain unproven by these component tests.

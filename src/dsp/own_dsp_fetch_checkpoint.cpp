@@ -18,6 +18,8 @@ struct OwnDspFetchCheckpoint::Storage {
   std::optional<DspFetchedInstruction> admitted;
   std::optional<DspFetchedInstruction> repeated;
   std::uint64_t instructions;
+  std::uint64_t native_cycles;
+  bool budget_active;
   std::optional<std::uint32_t> interrupt_vector;
   bool in_flight;
   bool native_fetch;
@@ -46,6 +48,8 @@ OwnDspFetchCheckpoint OwnDspFetch::checkpoint() const {
                                      .admitted = admitted_,
                                      .repeated = repeated_,
                                      .instructions = instructions_,
+                                     .native_cycles = native_cycles_,
+                                     .budget_active = budget_active_,
                                      .interrupt_vector = interrupt_vector_,
                                      .in_flight = in_flight_,
                                      .native_fetch = native_fetch_,
@@ -59,6 +63,8 @@ OwnDspFetch::OwnDspFetch(OwnDspMachine &machine, const OwnDspFetchCheckpoint &ch
       admitted_(saved_state(checkpoint).admitted),
       repeated_(saved_state(checkpoint).repeated),
       instructions_(saved_state(checkpoint).instructions),
+      native_cycles_(saved_state(checkpoint).native_cycles),
+      budget_active_(saved_state(checkpoint).budget_active),
       interrupt_vector_(saved_state(checkpoint).interrupt_vector),
       in_flight_(saved_state(checkpoint).in_flight),
       native_fetch_(saved_state(checkpoint).native_fetch),

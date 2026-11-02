@@ -35,6 +35,13 @@ remain unqualified. Legacy test migration/dependency removal and subsequent
 OwnDsp naming cleanup remain open. See own-dsp-integration.txt, runtime.txt and
 nand-read-handoff-reference.json.
 
+The explicit native_cycle_budget C++ timeline now groups CPU-only publications
+and holds genuine retirement for computed base periods. Both sanitizer profiles
+pass authored REP/NOP/GPIO, actual DMA wait/restore, vector-read/IRQ/reset and
+affected fetch/timeline regressions. Physical interlocks, corrected original
+overlay transfer and normal-profile integration remain open. See
+dsp-native-budget.txt and dsp-native-budget-reference.json.
+
 The successful bounded ordinary case executes 4.8M MCU operations from actual
 reset and reaches about 418ms of DSP virtual time. It exports 6792 stereo PCM
 frames at 44.1kHz, with 6191 nonzero frames and four received MIDI wire bytes.

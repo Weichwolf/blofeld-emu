@@ -36,7 +36,8 @@ add_library(blofeld_dsp_control_decode src/dsp/dsp_control_move.cpp src/dsp/dsp_
 target_include_directories(blofeld_dsp_control_decode PUBLIC src)
 target_link_libraries(blofeld_dsp_control_decode PUBLIC blofeld_firmware dsp56300::core)
 add_library(blofeld_own_dsp_fetch STATIC EXCLUDE_FROM_ALL src/dsp/own_dsp_fetch.cpp
-  src/dsp/own_dsp_fetch_checkpoint.cpp src/dsp/own_dsp_timeline.cpp src/dsp/own_dsp_timeline_checkpoint.cpp
+  src/dsp/own_dsp_fetch_checkpoint.cpp src/dsp/dsp_native_budget.cpp
+  src/dsp/own_dsp_timeline.cpp src/dsp/own_dsp_timeline_checkpoint.cpp
   src/dsp/dsp_program_fetch.cpp src/dsp/dsp_fetch_context.cpp src/dsp/dsp_loop_fetch.cpp
   src/dsp/dsp_loop_source.cpp)
 target_include_directories(blofeld_own_dsp_fetch PUBLIC src)
@@ -54,6 +55,12 @@ if(NOT BLOFELD_OWN_DSP_ONLY)
   endif()
 endif()
 if(BUILD_TESTING)
+  add_executable(blofeld-native-budget-test test/dsp_native_budget_test.cpp)
+  target_link_libraries(blofeld-native-budget-test PRIVATE blofeld_own_dsp_fetch)
+  add_test(NAME dsp_native_cycle_budget COMMAND blofeld-native-budget-test)
+  add_executable(blofeld-native-budget-events-test test/dsp_native_budget_events_test.cpp)
+  target_link_libraries(blofeld-native-budget-events-test PRIVATE blofeld_own_dsp_fetch blofeld_dma_fixture)
+  add_test(NAME dsp_native_cycle_budget_events COMMAND blofeld-native-budget-events-test)
   add_executable(blofeld-dsp-shifted-subtract-test test/dsp_shifted_subtract_test.cpp)
   target_link_libraries(blofeld-dsp-shifted-subtract-test PRIVATE blofeld_dma_fixture)
   add_test(NAME dsp_subl COMMAND blofeld-dsp-shifted-subtract-test --left)

@@ -113,12 +113,14 @@ DspProgramFetchView OwnDspFetch::view() const {
 
 void OwnDspFetch::issue() {
   check_owner();
+  check_reference_timing();
   check_sample_context();
   fetch_.issue();
 }
 
 void OwnDspFetch::capture() {
   check_owner();
+  check_reference_timing();
   check_sample_context();
   fetch_.capture(machine_.bus_);
 }
@@ -149,24 +151,40 @@ OwnDspFetchCycleResult OwnDspFetch::advance_dma_pipeline(const DspDmaInputs inpu
 OwnDspFetchCycleResult OwnDspFetch::advance_dma_automatic(const DspDmaInputs inputs,
                                                           const OwnDspAutomaticTiming timing) {
   check_owner();
+  const bool native_budget = timing == OwnDspAutomaticTiming::native_cycle_budget;
   if (timing != OwnDspAutomaticTiming::one_effect_per_cycle &&
       timing != OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority &&
       timing != OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts &&
-      timing != OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts) {
+      timing != OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts &&
+      !native_budget) {
     throw Fault("Own DSP automatic execution requires an explicit timing hypothesis pc=" +
+                hex(machine_.cpu_.registers().pc, 6));
+  }
+  if (in_flight_ && native_budget != budget_active_) {
+    throw Fault("DSP automatic timing cannot change during an active instruction pc=" +
                 hex(machine_.cpu_.registers().pc, 6));
   }
   const bool started = begin_automatic(
       timing == OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts ||
-      timing == OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts);
+      timing == OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts ||
+      native_budget);
+  if (started && native_budget) {
+    budget_active_ = true;
+    native_cycles_ = 0;
+  }
   const NativeSample sample{.regs = machine_.cpu_.registers(),
                             .pending = machine_.cpu_.pending_instruction()};
   const bool stale_context = in_flight_ && fetch_.view().omr != sample.regs.omr;
   const bool hold_fetch = hold_program_fetch(timing, sample.pending) || stale_context ||
                           repeated_ || native_latch_ || interrupt_vector_;
-  auto result = capture_cycle(inputs, in_flight_, false, true, hold_fetch, sample);
+  auto result = capture_cycle(inputs, in_flight_, false, true, hold_fetch, sample, native_budget);
   result.instruction_started = started;
-  if (result.native && result.native->retired) { synchronize(); }
+  if (result.native && result.native->retired) {
+    synchronize();
+    budget_active_ = false;
+    native_cycles_ = 0;
+    if (native_budget) { issue_after_retirement(result); }
+  }
   return result;
 }
 
@@ -175,7 +193,8 @@ bool OwnDspFetch::hold_program_fetch(
     const std::optional<dsp56300::PendingInstruction> &pending) const {
   if (pending && pending->effect.kind == dsp56300::EffectKind::read &&
       pending->effect.space == dsp56300::Space::program &&
-      timing == OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts) {
+      (timing == OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts ||
+       timing == OwnDspAutomaticTiming::native_cycle_budget)) {
     return fetch_.view().pending_address.has_value();
   }
   if (!pending || pending->effect.kind != dsp56300::EffectKind::write ||
@@ -194,7 +213,8 @@ bool OwnDspFetch::hold_program_fetch(
   }
   return (timing == OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority ||
           timing == OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts ||
-          timing == OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts) &&
+          timing == OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts ||
+          timing == OwnDspAutomaticTiming::native_cycle_budget) &&
          state.pending_address.has_value();
 }
 
@@ -350,8 +370,10 @@ OwnDspFetchCycleResult OwnDspFetch::capture_cycle(const DspDmaInputs inputs,
                                                   const bool require_capture,
                                                   const bool issue_next,
                                                   const bool hold_fetch,
-                                                  const NativeSample &sample) {
+                                                  const NativeSample &sample,
+                                                  const bool native_budget) {
   check_owner();
+  if (!native_budget) { check_reference_timing(); }
   const auto &regs = sample.regs;
   const auto &pending = sample.pending;
   check_sample_context(regs, pending.has_value(), hold_fetch);
@@ -394,10 +416,7 @@ OwnDspFetchCycleResult OwnDspFetch::capture_cycle(const DspDmaInputs inputs,
         fetch_.capture(machine_.bus_);
         result.captured = true;
       }
-      if (admit_native) {
-        result.native_pc = pending->effect.pc;
-        result.native = machine_.interrupts_.advance(pending->ticket);
-      }
+      if (admit_native) { advance_native(result, *pending, native_budget); }
     }
     observe_native_and_issue(result, issue_next);
     machine_.clock_.finish_dma_cycle(machine_.bus_, inputs.cycle, switch_was_pending);

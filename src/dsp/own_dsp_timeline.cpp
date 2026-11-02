@@ -31,7 +31,8 @@ OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine,
       (timing_ != OwnDspAutomaticTiming::one_effect_per_cycle &&
        timing_ != OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority &&
        timing_ != OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts &&
-       timing_ != OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts) ||
+       timing_ != OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts &&
+       timing_ != OwnDspAutomaticTiming::native_cycle_budget) ||
       expected_ticks_ > std::numeric_limits<std::uint64_t>::max() - epoch_ticks_) {
     throw Fault("Own DSP timeline requires reference-cycle clock switching, qualified timing and "
                 "representable epoch");

@@ -18,7 +18,8 @@ enum class OwnDspAutomaticTiming : std::uint8_t {
   one_effect_per_cycle,
   one_effect_per_cycle_program_write_priority,
   one_effect_per_cycle_write_priority_with_interrupts,
-  one_effect_per_cycle_program_priority_with_interrupts
+  one_effect_per_cycle_program_priority_with_interrupts,
+  native_cycle_budget
 };
 
 struct OwnDspFetchCycleResult {
@@ -67,7 +68,7 @@ public:
   // Native placement and the isolated-effect hypothesis remain caller-owned.
   [[nodiscard]] OwnDspFetchCycleResult
   advance_dma_pipeline(DspDmaInputs inputs, bool admit_native, OwnDspNativeCycleModel model);
-  // Explicit experimental effect-per-cycle ordering; no calibrated pipeline timing.
+  // Explicit experimental timing; native_cycle_budget groups CPU-only publications.
   [[nodiscard]] OwnDspFetchCycleResult advance_dma_automatic(DspDmaInputs inputs,
                                                              OwnDspAutomaticTiming timing);
   // Admission uses the actual owned foreground F2 words. Vector reads remain
@@ -98,6 +99,12 @@ private:
   native_overlap(const DspProgramFetchView &state,
                  const dsp56300::PendingInstruction &pending) const;
   void observe_native_and_issue(OwnDspFetchCycleResult &result, bool requested);
+  void advance_native_budget(OwnDspFetchCycleResult &result, dsp56300::PendingInstruction pending);
+  void advance_native(OwnDspFetchCycleResult &result,
+                      const dsp56300::PendingInstruction &pending,
+                      bool native_budget);
+  void issue_after_retirement(OwnDspFetchCycleResult &result);
+  void check_reference_timing() const;
   [[nodiscard]] OwnDspFetchCycleResult capture_cycle(DspDmaInputs inputs,
                                                      bool admit_native,
                                                      bool require_capture,
@@ -108,7 +115,8 @@ private:
                                                      bool require_capture,
                                                      bool issue_next,
                                                      bool hold_fetch,
-                                                     const NativeSample &sample);
+                                                     const NativeSample &sample,
+                                                     bool native_budget = false);
   [[nodiscard]] dsp56300::InstructionProgress admit(const DspFetchedInstruction &captured);
   [[nodiscard]] dsp56300::InstructionProgress begin_native();
   void finish_interrupt_vector();
@@ -118,6 +126,8 @@ private:
   std::optional<DspFetchedInstruction> admitted_;
   std::optional<DspFetchedInstruction> repeated_;
   std::uint64_t instructions_ = 0;
+  std::uint64_t native_cycles_ = 0;
+  bool budget_active_ = false;
   std::optional<std::uint32_t> interrupt_vector_;
   bool in_flight_ = false;
   bool native_fetch_ = false;

@@ -13,6 +13,7 @@ Running and viewing
   midi-output.txt             Native serial output capture and scoped evidence
   host-audio.txt              Session audio negotiation and transport
   own-dsp-integration.txt     Current independent-core composition
+  dsp-native-budget.txt      Native instruction periods, ownership and timing limits
 
 References
   dependencies.json          Pinned source dependencies

@@ -1,0 +1,123 @@
+{
+  "scope": "Explicit C++ native-cycle-budget timing; authored hardware and affected fetch/timeline tests only",
+  "core_revision": "9563020c1fb06daec0d81fa96fde52bd3c8dc01e",
+  "profiles": {
+    "strict": {
+      "native_runs": {
+        "blofeld-native-budget-test": {
+          "binary_sha256": "f2871aef4e3c5effaf7a6b01de82eec9c69c260066c1cb91d373b40c4c936254",
+          "elapsed_seconds": 0.07409435301087797,
+          "actual_exit": 0
+        },
+        "blofeld-native-budget-events-test": {
+          "binary_sha256": "d9c02e831c7d2252d6d0cd327b0a380eee09fb5ebeea3c5b6791dd31b84f9bfe",
+          "elapsed_seconds": 0.05606102920137346,
+          "actual_exit": 0
+        },
+        "blofeld-own-dsp-fetch-test": {
+          "binary_sha256": "8052817be9b0723ca3955b30d87963513c855555dc5e439924656a0343c51f01",
+          "elapsed_seconds": 1.7017412048298866,
+          "actual_exit": 0
+        },
+        "blofeld-fetch-run-test": {
+          "binary_sha256": "fc4b80373d4fe7f055f39a031db76ec55d5de0c25c51d7ede593cc2eb66b84bf",
+          "elapsed_seconds": 0.10038250801153481,
+          "actual_exit": 0
+        },
+        "blofeld-timeline-ownership-test": {
+          "binary_sha256": "1ad2f812663f649799714a7d680735d644ca0f6f224f53b2b64b414a4e0d1a50",
+          "elapsed_seconds": 0.06646266300231218,
+          "actual_exit": 0
+        }
+      },
+      "native_case_count": 5,
+      "compiler_format_tidy_sanitizer_findings": 0,
+      "actual_exec_argv_and_reaps_verified": true,
+      "core_compile_contexts_identical": 74,
+      "unchanged_initial_scope_reused": true
+    },
+    "thread": {
+      "native_runs": {
+        "blofeld-native-budget-test": {
+          "binary_sha256": "02f29adcb824b4baa1b79049986ebb5f1009802e0a8acf7be22af550b61bc607",
+          "elapsed_seconds": 0.07846123515628278,
+          "actual_exit": 0
+        },
+        "blofeld-native-budget-events-test": {
+          "binary_sha256": "195cb64ea5c8a3fabe4e2613074d15047dd9eaa1cbd1ee8f4257fefc9a7965ab",
+          "elapsed_seconds": 0.07458765711635351,
+          "actual_exit": 0
+        },
+        "blofeld-own-dsp-fetch-test": {
+          "binary_sha256": "0212133028d1846b2c41959cec19cc5a2ca61762f8038542e9edd1306ee5c463",
+          "elapsed_seconds": 5.012385140871629,
+          "actual_exit": 0
+        },
+        "blofeld-fetch-run-test": {
+          "binary_sha256": "d0590619135e7dcbe99a8c9b0b5e0e3d3e0d27ab328a948f87866886b2135724",
+          "elapsed_seconds": 0.1625862519722432,
+          "actual_exit": 0
+        },
+        "blofeld-timeline-ownership-test": {
+          "binary_sha256": "91997ad4f1ee8bd5d2e07b7c6f12d8667247fa2c144eca9926e8f271173c7b41",
+          "elapsed_seconds": 0.11392251891084015,
+          "actual_exit": 0
+        }
+      },
+      "native_case_count": 5,
+      "compiler_format_tidy_sanitizer_findings": 0,
+      "actual_exec_argv_and_reaps_verified": true,
+      "core_compile_contexts_identical": 74,
+      "unchanged_initial_scope_reused": true
+    }
+  },
+  "fuzz": false,
+  "original_boot_qualified": false,
+  "normal_profiles_qualified": false,
+  "physical_pipeline_timing_qualified": false,
+  "GPIO_interval_periods": 30,
+  "independent_base_periods": {
+    "NOP": 1,
+    "REP_immediate": 5,
+    "REP23_NOP_body": 23
+  },
+  "DMA_REP_total_periods": {
+    "independent_Y_destination": 5,
+    "conflicting_P_destination_with_wait": 7
+  },
+  "comment_only_change": {
+    "kind": "One comment line only, no line-count or C++ token changes",
+    "path": "src/dsp/own_dsp_fetch.hpp",
+    "qualified_sha256": "f3230e19d69221ae8e69fb7542bb7735dd268093fe6c23a516284c66ee9ef14f",
+    "published_sha256": "84ccf9bd2b4014b3579170888fba71214bb194c0f2ca372a9594434912b70d75",
+    "old_line": "  // Explicit experimental effect-per-cycle ordering; no calibrated pipeline timing.\n",
+    "new_line": "  // Explicit experimental timing; native_cycle_budget groups CPU-only publications.\n"
+  },
+  "evidence_sha256": {
+    "doc/local/native-budget-r1/build.json": "d9aab7797453fbb79e30651394749a81772b627174b31bcd29cb36868b7c1ba7",
+    "doc/local/native-budget-r1/events-build.json": "906b29278b311d4ef3a2fa6d77a21c4aa0ecdab322164dbdc4ed6fc04253d89c",
+    "doc/local/native-budget-r1/first-qualified-scope/build.json": "d9aab7797453fbb79e30651394749a81772b627174b31bcd29cb36868b7c1ba7",
+    "doc/local/native-budget-r1/comment-only-change.json": "0654353abeeb057e18ac1d345f0eb035cc9ed5b57c49c9623fd280dad0bac8c5",
+    "doc/local/native-budget-r1/qualification-strict.json": "2586b453efc1e64f60c3512df71da0cb4c898ec87c50357cc965a84e2e68fe5e",
+    "doc/local/native-budget-r1/events-qualification-strict.json": "528660708158f0273ae41e65a6f7c0d5bde43409da8cb1afbb86710ac5ce0334",
+    "doc/local/native-budget-r1/qualification-thread.json": "8ed8bacd6592ff0071f0cd20662ece5341953ea3bb114fffee4f4d5361874148",
+    "doc/local/native-budget-r1/events-qualification-thread.json": "de494694b287968ebc8bcc301a441c6d2711fdb228b98bdf13ecdaf6bab8c0e9"
+  },
+  "source_sha256": {
+    "src/dsp/own_dsp_fetch.cpp": "a3c9b7a96172334cd884601406e6d4fa6d2cdd41e115823491f2d9574b43f073",
+    "src/dsp/own_dsp_fetch.hpp": "84ccf9bd2b4014b3579170888fba71214bb194c0f2ca372a9594434912b70d75",
+    "src/dsp/own_dsp_fetch_checkpoint.cpp": "8756feb9bf789c9d9526d8d6b88e7930a754e4c4cd8f46ab699e32d61bc112d8",
+    "src/dsp/own_dsp_timeline.cpp": "65c5e84b71948ad2b0d4f03bd079aa04ed914ac956568d8f5f9e0844f799f172",
+    "src/dsp/dsp_native_budget.cpp": "07436217662c9af9a5ee06563d0b20ff68c71847b785d4ef4046e0fd1531a415",
+    "test/dsp_native_budget_test.cpp": "4c597e5e5d5bfef91b3df069579354527e3aa35438f0642f3ada79916aa73210",
+    "test/dsp_native_budget_events_test.cpp": "dc53937ad06179290da9ceff8f61d55f719a49a12cc65c6c800645ecb4c2a3d7",
+    "cmake/OwnDsp.cmake": "783603520155ac08851824d16c810e94875e57269885832252bf14192548651e",
+    "doc/dependencies.json": "2363466bbb461a16cdc0d63260658d0312d48996e7efaa80bb3fa69739a2bd22"
+  },
+  "limitations": [
+    "C++ scheduling choice only; reference-effects CLI/profile selection remains unchanged",
+    "One external CPU effect per admitted period; pure AGU prefix can add a conservative period",
+    "Base instruction units exclude physical pipeline/AGU/arithmetic interlocks and IRQ entry overhead",
+    "No original corrected overlay, full startup, normal MIDI/audio, update/recovery or complete Desktop/Keyboard claim"
+  ]
+}

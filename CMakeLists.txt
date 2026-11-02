@@ -3280,6 +3280,8 @@ add_custom_target(quality
     blofeld-repeat-test
     blofeld-reference-access-test
     blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test blofeld-reference-cycle-test
+    blofeld-native-budget-test
+    blofeld-native-budget-events-test
     blofeld-loop-fetch-test blofeld-loop-program-fetch-test blofeld-loop-native-fetch-test
     blofeld-loop-identity-thread-test blofeld-pipeline-occurrence-test blofeld-loop-port-test
     blofeld-auto-loop-test blofeld-auto-loop-source-test blofeld-auto-loop-transfer-source-test
