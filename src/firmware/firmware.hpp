@@ -18,6 +18,8 @@ struct Firmware {
   std::vector<std::uint8_t> mcu;
   std::vector<DspRecord> dsp;
   std::vector<std::vector<std::uint8_t>> update_blocks;
+  // Main NAND source includes its trailer and complete actual transport words.
+  std::vector<std::uint8_t> runtime_nand;
   std::size_t sysex_packets = 0;
   static Firmware load(const std::filesystem::path &path);
   static Firmware parse(const std::vector<std::uint8_t> &bytes);

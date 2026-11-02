@@ -17,6 +17,7 @@ Running and viewing
 References
   dependencies.json          Pinned source dependencies
   downloads.json             Official local-input download identities
+  firmware-nand.txt          Complete cold NAND payloads and explicit state policies
   hardware/sources.json      Primary hardware documentation
   *-reference.json           Scoped test inputs/results, with source identities
 

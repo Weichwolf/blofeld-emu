@@ -95,7 +95,7 @@ std::vector<Block> blocks(const std::vector<Bytes> &messages) {
   return result;
 }
 
-Bytes decode(const Block &block) {
+Bytes unpack(const Block &block) {
   if (block.packed.size() % 8 != 0 ||
       block.packed.size() / 8 * 7 != ((static_cast<std::size_t>(block.length) + 6) / 7) * 7) {
     throw Fault("Firmware block does not match its declared length");
@@ -109,11 +109,21 @@ Bytes decode(const Block &block) {
                                                  (((flags >> (6U - index)) & 1U) << 7U)));
     }
   }
-  little.resize(block.length);
-  for (std::size_t offset = 0; offset < little.size(); offset += 3) {
-    std::swap(little[offset], little[offset + 2]);
-  }
   return little;
+}
+
+void reverse_words(Bytes &bytes) {
+  if (bytes.size() % 3 != 0) { throw Fault("Incomplete firmware transport word"); }
+  for (std::size_t offset = 0; offset < bytes.size(); offset += 3) {
+    std::swap(bytes[offset], bytes[offset + 2]);
+  }
+}
+
+Bytes decode(const Block &block) {
+  auto bytes = unpack(block);
+  bytes.resize(block.length);
+  reverse_words(bytes);
+  return bytes;
 }
 
 void verify24(const std::span<const std::uint8_t> data) {
@@ -151,7 +161,7 @@ void verify_dsp_tail(Reader &dsp) {
   if (helper_end(tail) != tail.size()) { throw Fault("Trailing data after firmware error helper"); }
 }
 
-void extract_runtime(Firmware &firmware) {
+std::size_t extract_runtime(Firmware &firmware) {
   if (firmware.update_blocks.size() != 6) { throw Fault("Expected six firmware update blocks"); }
   const auto main = std::span(firmware.update_blocks[4]);
   const auto host_begin = helper_end(main);
@@ -173,7 +183,7 @@ void extract_runtime(Firmware &firmware) {
       bytes += 3;
       verify24(main.subspan(dsp_begin, bytes));
       verify_dsp_tail(dsp);
-      return;
+      return dsp_begin;
     }
     if (space > 2 || count == 0 || address > dsp_word_mask || count > 0x1000000U - address) {
       throw Fault("Invalid DSP memory record");
@@ -247,7 +257,15 @@ Firmware Firmware::parse_midi(const Bytes &midi) {
   if (helper_end(secondary.subspan(pages_checksum_end)) != secondary.size() - pages_checksum_end) {
     throw Fault("Trailing secondary error helper data");
   }
-  extract_runtime(result);
+  const auto nand_begin = extract_runtime(result);
+  auto transport = unpack(parts[4]);
+  // The word-oriented main transfer can supply real padding after its declared
+  // container. Preserve complete words rather than inventing their values.
+  transport.resize((transport.size() / 3) * 3);
+  reverse_words(transport);
+  if (nand_begin > transport.size()) { throw Fault("Runtime NAND source exceeds transport"); }
+  const auto nand = std::span(transport).subspan(nand_begin);
+  result.runtime_nand.assign(nand.begin(), nand.end());
   return result;
 }
 

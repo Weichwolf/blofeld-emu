@@ -18,6 +18,12 @@ The update also contains sixteen verified secondary pages for MCU RAM overlays.
 An installed virtual image must include these pages; the earlier bounded audio
 cases declared them erased and do not establish a complete installed image.
 See secondary-pages-reference.json and firmware-layout.txt.
+The native cold-image constructor now retains the complete runtime transport
+source and all sixteen overlays. Both sanitizer configurations match the
+independent123-page source-only image byte-for-byte and pass authored policy/
+rejection cases plus existing parser/CLI regressions. Automatic normal-profile
+creation, complete installed contents and connected boot remain separate open
+requirements. See firmware-nand.txt and firmware-nand-reference.json.
 
 2. Connected CPU/DSP/device implementation — partial
 The regular Board/headless runtime uses the independent dsp56300 core pinned in

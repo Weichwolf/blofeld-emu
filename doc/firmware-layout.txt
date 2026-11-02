@@ -29,6 +29,10 @@ other pages supply instrument views/functions. See secondary-pages-reference.jso
 A virtual image initialized only from DSP records can therefore produce audio
 while still lacking code/data needed for the normal display. Declared erased
 secondary pages are not a complete installed 1.25 state.
+The native cold-image constructor now includes both payloads. Its parser retains
+the complete actual runtime transport words, including original padding beyond
+the declared container. See firmware-nand.txt for policies, byte-exact evidence
+and the remaining normal-profile creation integration.
 
 Static inspection also identifies a 94-word (282-byte) DSP first stage embedded
 in the MCU image. Its transfer header specifies P:0x6a and matches the documented

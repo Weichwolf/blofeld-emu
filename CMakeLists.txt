@@ -181,6 +181,9 @@ add_library(blofeld_nand src/storage/nand.cpp src/storage/nand_write.cpp src/sto
   src/storage/nand_image.cpp src/storage/nand_image_codec.cpp src/storage/nand_identification.cpp)
 target_include_directories(blofeld_nand PUBLIC src)
 target_link_libraries(blofeld_nand PUBLIC blofeld_firmware PRIVATE ZLIB::ZLIB)
+add_library(blofeld_firmware_nand src/storage/firmware_nand_image.cpp)
+target_include_directories(blofeld_firmware_nand PUBLIC src)
+target_link_libraries(blofeld_firmware_nand PUBLIC blofeld_firmware blofeld_nand)
 add_library(blofeld_nand_operation_clock src/storage/nand_operation_clock.cpp)
 target_include_directories(blofeld_nand_operation_clock PUBLIC src)
 target_link_libraries(blofeld_nand_operation_clock PUBLIC blofeld_nand)
@@ -1847,6 +1850,16 @@ if(BUILD_TESTING)
     --native sndfile=$<TARGET_FILE:sndfile>
     --native blofeld_pulse=$<TARGET_FILE:blofeld_pulse>
     --native blofeld_pulse_common=$<TARGET_FILE:blofeld_pulse_common>)
+  add_executable(blofeld-firmware-nand-test test/firmware_nand_image_test.cpp)
+  target_link_libraries(blofeld-firmware-nand-test PRIVATE blofeld_firmware_nand blofeld_nand_store)
+  add_test(NAME firmware_nand_image COMMAND blofeld-firmware-nand-test)
+  set_tests_properties(firmware_nand_image PROPERTIES TIMEOUT 120)
+  add_test(NAME firmware_nand_reference COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/firmware_nand_reference.py"
+    $<TARGET_FILE:blofeld-firmware-nand-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/firmware-nand-reference.bfnand")
+  set_tests_properties(firmware_nand_reference PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60)
   add_executable(blofeld-midi-serial-test test/midi_serial_test.cpp)
   target_link_libraries(blofeld-midi-serial-test PRIVATE blofeld_midi_serial)
   add_test(NAME midi_serial COMMAND blofeld-midi-serial-test)
@@ -3340,6 +3353,7 @@ add_custom_target(quality
     blofeld-original-cycle-application-test
     blofeld-original-run-clock-test
     blofeld-original-owned-clock-test
+    blofeld-firmware-nand-test
     blofeld-midi-serial-test blofeld-midi-serial-receiver-test
     blofeld-mcu-midi-output-test blofeld-reference-midi-output-test
     blofeld-mcu-midi-test blofeld-clocked-midi-test

@@ -1,0 +1,43 @@
+Initial firmware NAND image
+
+initial_firmware_nand_image() constructs a new cold NandImage from the user's
+parsed six-block update. It includes both the complete main runtime source at
+page0 and all sixteen528-byte secondary MCU overlay pages at page0x380.
+The source is checked against the parsed MCU/DSP objects and object checksums.
+Firmware.runtime_nand preserves complete actual24-bit transport words beyond
+the declared main block; update_blocks retains its existing declared lengths.
+For original1.25 the runtime source is56238 bytes:56022 record-stream bytes,
+210 trailer/helper bytes and6 actual transport-padding bytes. Padding values
+are retained from the input packets, never guessed.
+
+The caller must select an unwritten-state policy. Unknown creates only source
+pages and leaves other cells, blocks and source-page program history unknown.
+Erased virtual device explicitly supplies knownFF cells and good unprotected
+blocks throughout the virtual geometry; unused pages have zero program counts.
+Source-page program history remains unknown under either policy. This is an
+initial-state declaration, not a recovered factory image or updater execution.
+The constructor never overwrites an existing file, live owner or checkpoint.
+The regular explicit-config CLI still requires its supplied persistent image;
+automatic normal-profile device creation is a separate integration requirement.
+
+Evidence
+firmware-nand-reference.json pins the input and independently decoded whole
+source-only image. Its123 pages contain64686 known bytes, including all8448
+secondary bytes. The native result matches every encoded byte and the CRC.
+Authored literals independently check runtime fields/data/checksum, trailer and
+transport bytes, every secondary page's edges/interior, unknown neighbors,
+explicit erased geometry/history, source immutability and fixed invalid inputs.
+Both sanitizer configurations pass these tests and the existing11 parser/CLI
+methods. Compiler warnings, formatting and clang-tidy have zero findings.
+
+Reproduce with local official inputs:
+  cmake --build --preset strict --target blofeld-firmware-nand-test blofeld-headless
+  ctest --preset strict -R '^firmware_nand_(image|reference)$' --output-on-failure
+  BLOFELD_TEST_BINARY="$PWD/build/strict/blofeld-headless" python3 -m unittest discover -s test -p test_native.py
+Use the separate thread preset for TSan. The reference test skips explicitly
+when the private archive is absent. These commands run fixed cases, not fuzzing.
+Scope these checks to changes affecting the constructor/parser.
+
+The image does not establish complete boot, instrument operation, installed
+samples/wavetables/licensing, physical NAND provenance or update/recovery safety.
+The connected startup with the corrected overlay source has separate evidence.
