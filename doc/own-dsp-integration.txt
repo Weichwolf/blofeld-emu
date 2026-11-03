@@ -25,3 +25,17 @@ The runtime already excludes the foreign DSP executor. Remaining legacy test
 migration/dependency removal is separate work. Replace transitional OwnDsp names
 only after that removal, consistently across implementation/build/docs. There is
 no intended permanent alternate backend or backend-selection interface.
+
+The VSL test now runs directly through the independent CPU and board bus, using
+authored literal instructions without the former runtime assembler. Its9,216
+value/scaling/status/source/insertion/address vectors retain the independent
+memory oracle and now compare the complete architectural registers and stack.
+REP/modulo and contextual bus/encoding refusals remain covered. PFLUSH now
+executes rather than satisfying the obsolete unimplemented-instruction guard.
+Both sanitizer profiles pass; see dsp-vsl-reference.json. Other legacy fixtures
+still require migration or explicit retirement of their obsolete contracts.
+
+  cmake --build --preset strict --target blofeld-dsp-vsl-test
+  ctest --preset strict -R '^dsp_vsl$' --output-on-failure
+  cmake --build --preset thread --target blofeld-dsp-vsl-test
+  ctest --preset thread -R '^dsp_vsl$' --output-on-failure

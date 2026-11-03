@@ -34,6 +34,11 @@ live MCU/NAND stores. Both complete device profiles and normal standalone startu
 remain unqualified. Legacy test migration/dependency removal and subsequent
 OwnDsp naming cleanup remain open. See own-dsp-integration.txt, runtime.txt and
 nand-read-handoff-reference.json.
+The VSL component test now excludes the former interpreter/assembler and passes
+its 9,216 independent numeric/address cases, native REP/modulo and contextual
+refusals under both sanitizer profiles. This preserves useful legacy coverage;
+it does not establish full startup or instrument acceptance. See
+dsp-vsl-reference.json.
 
 The explicit native_cycle_budget timeline now groups CPU-only publications
 and holds genuine retirement for computed base periods. Both sanitizer profiles
