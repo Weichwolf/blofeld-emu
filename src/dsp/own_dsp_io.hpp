@@ -45,6 +45,15 @@ public:
 
   explicit OwnDspIo(DspBus &bus) noexcept : bus_(bus) {}
 
+  [[nodiscard]] std::optional<dsp56300::Word>
+  inspect_program(const dsp56300::Word address) const noexcept override {
+    return bus_.inspect_known_program(address);
+  }
+
+  [[nodiscard]] std::uint64_t program_revision() const noexcept override {
+    return bus_.program_revision();
+  }
+
   [[nodiscard]] const std::optional<Failure> &failure() const noexcept { return failure_; }
 
   void clear_failure() noexcept { failure_.reset(); }

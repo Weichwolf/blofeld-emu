@@ -1,0 +1,45 @@
+Native DSP code view on the board bus
+
+The independent DSP dependency is pinned to 7d87f922af058da50b7652bf0c6808e40adcb22f.
+Its normal Core(Io&) constructor selects native execution on supported hosts.
+OwnDspIo supplies the bus's pure known-code view and program revision. Unknown,
+unmapped, unqualified or switching code remains absent from inspection; actual
+execution still performs the strict mapped read and reports its real failure.
+The compiler never uses the zero-substituting diagnostic peek_program method.
+
+Code generation changes on initialized/changed P stores, installed P ROM, reset,
+and both request and commit of an OMR memory transition. Identical known P stores
+and independent data writes leave the bus revision unchanged. Core guest P writes
+may still invalidate conservatively. The modeled X-to-P relocated
+storage is writable as X before remapping and becomes P after the actual switch;
+inspection never bypasses the three-cycle transition guard. All four MSW values
+are covered. The unresolved Y-to-P relocation remains an actual access failure.
+
+The authored default-Core consumer test performs 32 native NOPs and one real
+short-JMP helper, then checks data-only cache reuse, code invalidation and exact
+unknown-code failure context. A native load/store pair reads real RAM and writes
+BCR, enabling the actual Port-F gate. A later BCR read rejects unknown BIU status
+with its real cause and exact io_read/X/$fffffb/PC=$4 fault. Native ALU/helper
+counters do not count the synchronous C++ memory/Io callbacks: zero ALU helpers
+is not callback-free RAM or a performance result.
+
+The current public-Core consumer passes ASan/UBSan. The unchanged pure code-view
+fixture's earlier ASan/UBSan pass is reused with byte-identical test source,
+provider archive and complete source/header closure; no redundant native run was
+made. Both new test sources compile with strict warnings and clang-tidy zero
+findings. The regular standalone Release configuration accepts the new pin with
+BUILD_TESTING=OFF and no legacy DSP. Results and identity hashes are recorded in
+dsp-native-bus-reference.json. Configuration is not an executed firmware run.
+
+Reproduce the selected component gates without the remaining legacy harness:
+
+  cmake -S . -B build/native-bus -G Ninja -DCMAKE_C_COMPILER=clang-19 -DCMAKE_CXX_COMPILER=clang++-19 -DCMAKE_BUILD_TYPE=Debug -DBLOFELD_SANITIZER=address-undefined -DBLOFELD_OWN_DSP_ONLY=ON
+  cmake --build build/native-bus --target blofeld-dsp-program-view-test blofeld-dsp-native-bus-test
+  ctest --test-dir build/native-bus --output-on-failure -j1 -R '^(dsp_program_view|dsp_native_bus)$'
+
+These tests contain authored instruction words and no manufacturer programs.
+They qualify the code-view/consumer boundary, not reset, MCU coupling or a whole
+instrument. McuDspRuntime still uses captured effects. Connected native execution
+requires finite cycle horizons and synchronization before observable I/O, with
+real clocks, IRQ/DMA and event ordering. The earlier original-firmware PCM and
+performance records retain their original binary/source identity and scope.

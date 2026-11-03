@@ -118,6 +118,7 @@ DspBus::DspBus() {
 }
 
 void DspBus::reset() {
+  note_program_change();
   unselected_writes_ = 0;
   unselected_reads_ = 0;
   memory_mode_ = 0;
@@ -489,6 +490,13 @@ bool DspBus::unselected_write(const DspAddress access) const {
          (access.address < data_rom_end || access.address >= upper_end);
 }
 
+void DspBus::note_program_change() {
+  if (program_revision_ == std::numeric_limits<std::uint64_t>::max()) {
+    throw Fault("DSP program revision exhausted");
+  }
+  ++program_revision_;
+}
+
 void DspBus::write(const DspStore access) {
   const DspAddress target{.space = access.space, .address = access.address};
   if (access.value > word_mask) {
@@ -509,6 +517,10 @@ void DspBus::write(const DspStore access) {
   const auto location = locate(target, Operation::write);
   if (location.rom) { throw Fault("Protected DSP ROM write at " + address_text(target)); }
   auto &memory = ram_.at(location.bank);
+  if (access.space == DspSpace::p &&
+      (memory.known.at(location.offset) == 0 || memory.words.at(location.offset) != access.value)) {
+    note_program_change();
+  }
   memory.words.at(location.offset) = access.value;
   memory.known.at(location.offset) = 1;
   if (access.space == DspSpace::p) { changes_.addresses.push_back(access.address); }
@@ -519,6 +531,13 @@ std::optional<std::uint32_t> DspBus::sample_program(const std::uint32_t address)
   const auto &memory = (location.rom ? rom_ : ram_).at(location.bank);
   if (memory.known.at(location.offset) == 0) { return std::nullopt; }
   return memory.words.at(location.offset);
+}
+
+std::optional<std::uint32_t>
+DspBus::inspect_known_program(const std::uint32_t address) const noexcept {
+  try {
+    return sample_program(address);
+  } catch (...) { return std::nullopt; }
 }
 
 std::uint32_t DspBus::peek_program(const std::uint32_t address) const {
@@ -552,6 +571,7 @@ void DspBus::install_rom(const DspRom image) {
   for (const auto value : image.words) {
     if (value > word_mask) { throw Fault("DSP ROM input word exceeds 24 bits"); }
   }
+  if (image.space == DspSpace::p && !image.words.empty()) { note_program_change(); }
   for (std::size_t index_word = 0; index_word < image.words.size(); ++index_word) {
     const auto offset = image.start - base + index_word;
     memory.words.at(offset) = image.words[index_word];
@@ -565,6 +585,9 @@ void DspBus::observe_omr(const std::uint32_t value) {
   const unsigned requested = (value & ms) == 0 ? 0 : 1 + ((value >> msw_shift) & msw_mask);
   if (requested == requested_memory_mode_) { return; }
   if (switch_delay_ != 0) { throw Fault("Unverified overlapping DSP memory-switch requests"); }
+  // Invalidate before the transition too: a compiled old window must not bypass
+  // the actual bus's switching-address refusal while the new map is pending.
+  note_program_change();
   requested_memory_mode_ = requested;
   switch_delay_ = switch_cycles;
 }
@@ -596,6 +619,7 @@ void DspBus::advance_memory_switch(const unsigned cycles) {
   if (cycles < switch_delay_) {
     switch_delay_ -= cycles;
   } else {
+    note_program_change();
     switch_delay_ = 0;
     memory_mode_ = requested_memory_mode_;
     changes_.all = true;

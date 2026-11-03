@@ -1,0 +1,57 @@
+{
+  "scope": "Known P code view and real board-bus/default-Core coupling; not connected firmware or instrument qualification",
+  "core_revision": "7d87f922af058da50b7652bf0c6808e40adcb22f",
+  "profile": "ASan/UBSan, LLVM19, strict compiler/linker flags, clang-format and clang-tidy zero findings",
+  "native_consumer": {
+    "actual_exit": 0,
+    "reaped": true,
+    "elf_sha256": "70539a7ac71b853bee88bc3dd14ab1a7980cdb41a6e68602d897949c031a3085",
+    "native_nops": 32,
+    "short_jmp_alu_helpers": 1,
+    "ram_load_bcr_store_native_alu": 2,
+    "ram_load_bcr_store_alu_helpers": 0,
+    "real_Cpp_Io_callbacks": true,
+    "cache_data_reuse": true,
+    "code_invalidation": true,
+    "unknown_program_refusal_context": true,
+    "actual_PortF_gate_change": true,
+    "unknown_BIU_exact_refusal": true
+  },
+  "pure_view_evidence": {
+    "reused": true,
+    "prior_elf_sha256": "3711b19bbe49fea4c6927c36e70c13c311ebf3c1f250ab68b9b570cd7fc6f11c",
+    "actual_exit": 0,
+    "reaped": true,
+    "provider_archive_sha256": "7496da3a5f4bf92369a50179c82c37577f950660c3b3b0f2924f58ca1cbfe666",
+    "identity": "Complete provider source/header closure and pure fixture source identical. New pure test ELF contains no Core definitions; no duplicate native run."
+  },
+  "source_sha256": {
+    "src/dsp/dsp_bus.cpp": "85e9010305fea688f44ce7c80c5b709c777bfbca17f5a2f55b58126f913b7ec8",
+    "src/dsp/dsp_bus.hpp": "b998d01098f4bc86b6eaeae51011e4b9fe7713aa6ff8ac2a0180d7549a78188b",
+    "src/dsp/own_dsp_io.hpp": "044da3b2273a538224f2cd00fbd10cadb9e07927ec5cd045828c5c8c4f607ad5",
+    "src/dsp/own_dsp_io.cpp": "406f52f32393c8b393d99cc8928adc6ad05297452375f267ee9f58b25b20665d",
+    "test/dsp_program_view_test.cpp": "e69970f47ee7964729d44f1fd2abd8d770139b9e01768a3ce8ebaba05ac6f45f",
+    "test/dsp_native_bus_test.cpp": "5908b78fb76222d970df3c182a5101e8bc9536e6a941c2050bb3442facf1f3f9",
+    "cmake/OwnDsp.cmake": "7a941359b7bcb7af348160e6a036dcecfc5fa5c142cfa943e4d7317c416b7afe",
+    "cmake/OwnDspComponents.cmake": "46ddd9cc20b9e5ae8b88b6a03daa737991e4ae38ceba2ace39269ba1f8430c7c"
+  },
+  "configuration": {
+    "standalone_release_no_tests_no_fuzz": "PASS configure/generate; no firmware executed",
+    "independent_component_tests": "PASS configure/generate; both new targets registered",
+    "held_wip_exclusion": "Only the additive two-test-target hunk is published; pre-existing saturation migration remains outside this increment."
+  },
+  "fuzz": false,
+  "local_evidence": {
+    "inputs": "doc/local/program-view-promotion-r1/inputs.json",
+    "build": "doc/local/program-view-promotion-r1/build-proof.json",
+    "native": "doc/local/program-view-promotion-r1/native.json",
+    "prior_pure": "doc/local/program-view-r1/native.json"
+  },
+  "limitations": [
+    "Connected scheduler still uses captured general execution",
+    "No connected speed or new original-reset evidence",
+    "External RAM accesses still use genuine C++ Io helpers",
+    "Y-to-P physical relocation remains unqualified",
+    "Full Desktop/Keyboard instrument acceptance incomplete"
+  ]
+}

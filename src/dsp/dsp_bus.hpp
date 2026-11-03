@@ -150,6 +150,12 @@ public:
   [[nodiscard]] std::uint32_t peek_program(std::uint32_t address) const;
   // Strict, side-effect-free P-space observation, including map/knowledge checks.
   [[nodiscard]] std::uint32_t inspect_program(std::uint32_t address) const;
+  // Pure compiler lookahead: unknown, unmapped or switching code is absent.
+  // Actual execution still uses the strict mapped bus and contextual failures.
+  [[nodiscard]] std::optional<std::uint32_t>
+  inspect_known_program(std::uint32_t address) const noexcept;
+
+  [[nodiscard]] std::uint64_t program_revision() const noexcept { return program_revision_; }
 
   [[nodiscard]] std::optional<std::uint64_t> last_dma_cycle() const { return dma_.last_cycle(); }
 
@@ -252,7 +258,9 @@ private:
   std::array<DspGpio, 4> gpio_{
       DspGpio(DspPort::c), DspGpio(DspPort::e), DspGpio(DspPort::f), DspGpio(DspPort::d)};
   std::uint32_t bus_control_ = 0;
+  void note_program_change();
   DspCodeChanges changes_;
+  std::uint64_t program_revision_ = 0;
   unsigned memory_mode_ = 0;
   unsigned requested_memory_mode_ = 0;
   unsigned switch_delay_ = 0;

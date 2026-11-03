@@ -40,6 +40,12 @@ live MCU/NAND stores. Both complete device profiles and normal standalone startu
 remain unqualified. Legacy test migration/dependency removal and subsequent
 OwnDsp naming cleanup remain open. See own-dsp-integration.txt, runtime.txt and
 nand-read-handoff-reference.json.
+The pinned core now defaults to native execution with the board bus's pure known
+program view and code/mapping revisions. Actual default-Core bus tests qualify
+native NOPs, data-cache reuse, code invalidation, real RAM/BCR transfers and
+precise unknown-code/BIU refusals. The connected scheduler still uses captured
+effects; finite cycle horizons and observable-I/O synchronization remain open.
+See dsp-native-bus.txt for the component evidence and its limits.
 The VSL component test now excludes the former interpreter/assembler and passes
 its 9,216 independent numeric/address cases, native REP/modulo and contextual
 refusals under both sanitizer profiles. This preserves useful legacy coverage;

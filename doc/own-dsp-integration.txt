@@ -4,6 +4,11 @@ The regular Board/headless target uses Weichwolf/dsp56300, pinned in
 dependencies.json. Blofeld memory decoding, peripheral state, wiring and device
 clocks belong to this repository; CPU execution belongs to the independent core.
 
+The current pin supplies automatic native execution through a pure known-code
+view exposed by OwnDspIo, plus code revisions and event yields. Direct default-
+Core/bus coupling is qualified; the coupled timeline below still uses captured
+effects. See dsp-native-bus.txt for exact evidence and pending native scheduling.
+
 OwnDspMachine owns CPU, bus, interrupts and clocks. OwnDspFetch/OwnDspTimeline
 coordinate captured program fetch, actual native effects, publication and DMA.
 McuDspRuntime couples MCU IPBus periods with DSP periods and external events.
