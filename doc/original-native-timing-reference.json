@@ -1,5 +1,5 @@
 {
-  "scope": "Actual original POR after controller-write fix; previous original NAND prefix preserved; next selected NAND timing candidate refusal",
+  "scope": "Original POR with strict candidate timing refusal; explicitly selected functional-policy follow-up with real NAND completion and native PCM",
   "source_commit": "c4f0721e833f8b56199f2e834e51d87bb9dab901",
   "binary_sha256": "20ed135f630e5aa793acc0b01390105806265904e39681d43be739dd7b04f7b3",
   "firmware_sha256": "095c760a576dcb04fe3e379bed1b95a0360002295ab42b29e3335a39514f0c72",
@@ -61,5 +61,59 @@
     "A coherent original runtime passes the former DMA-register overlap refusal; original boot and both complete instrument profiles remain unqualified",
     "The current held-selected NAND/clock/phase assumptions do not qualify a physical pulse; the firmware is not identified as defective",
     "Read/write/identity/update/recovery/USB/audio/long-run acceptance remains incomplete"
-  ]
+  ],
+  "functional_policy_followup": {
+    "source_commit": "a606871bd5eaa640ffe8dbff3704d6e476324003",
+    "binary_sha256": "235e928bc313c405f4e08d93331e4b345852d8a8549906d90e41ac194f0d0af6",
+    "policy": "functional-protocol explicitly selected before fresh POR; same immutable cold stores, clocks, firmware and MIDI input",
+    "previous_refusal_boundary_passed": true,
+    "original_FF_latch_ticks": 141640558129,
+    "actual_reset_completion_ticks": 141643733329,
+    "actual_reset_duration_common_ticks": 3175200,
+    "actual_reset_duration_microseconds": 5,
+    "common_hz": 635040000000,
+    "complete_boot_pages": 107,
+    "actual_Global_source_bytes_exact": 72,
+    "Global_logical_address": 4576,
+    "Global_scope": "Actual bounded 72-byte read; NAND_END markers describe only full 528-byte pages",
+    "observed_window_limits": "Fifteen 0x7fffff values and the original 0x100000 sentinel match the independent decode of known FF triples",
+    "MIDI_wire_frames_at_3500000_MCU_operations": 4,
+    "native_PCM_snapshot": {
+      "MCU_operations": 3566824,
+      "MCU_interrupts": 194,
+      "frames": 2420,
+      "nonzero_frames": 1830,
+      "first_nonzero_frame": 590,
+      "channels": 2,
+      "precision_bits": 24,
+      "frame_rate_hz": 44100,
+      "frame_common_ticks": 14400000,
+      "bit_common_ticks": 225000,
+      "peak_24bit": 357263,
+      "descriptive_FFT_peak_hz": 262.5544848708538,
+      "FFT_signal_frames": 1830,
+      "finite_window_resolution_hz": 24.098360655737704
+    },
+    "observation": "Read-only native memory copy with all four GDB mutation/call/breakpoint permissions off and detach; waveform derived offline from exact samples",
+    "MCU_phase": "At capture, input_startup_wait was waiting for the RTI/scan counter to reach 255, before actual peer status queries",
+    "runtime_active_at_capture": true,
+    "original_driver_main_WAI": false,
+    "native_driver_WAVE_saved_at_capture": false,
+    "physical_pitch_qualified": false,
+    "final_store_and_terminal_sanitizer_audit_pending": true,
+    "full_boot": false,
+    "complete_Desktop_Keyboard_profiles": false,
+    "firmware_patched": false,
+    "checkpoint_replay": false,
+    "real_time": false,
+    "fuzz": false,
+    "evidence_sha256": {
+      "doc/local/overlay-receiver-audit-r1/R9-NAND-prefix.json": "2ad2f176a4f0451b85d1e5fda0caff8f0d7d292f2a88fe4c76dd0135fdaf672c",
+      "doc/local/overlay-receiver-audit-r1/r9-global-partial-audit-central.json": "3287223e0462778521d60a00f186bb5a90a5b5f528caaa31ebf17d02967d1219",
+      "doc/local/overlay-receiver-audit-r1/r9-queues.json": "c241525bda51a41be39152757f84958a635ca02506953cfc1ba1b958043df77e",
+      "doc/local/overlay-receiver-audit-r1/r9-pcm-third.json": "c4bccb0dff3c7859b70985c7f6c8b151a7a646f38a0c658295a128bd3fadb0aa",
+      "doc/local/overlay-receiver-audit-r1/r9-pcm-spectrum.json": "dd4cfc897c121cf4472a660b7a6580d4597aad448a4c3b9680208ed5d871cbc4"
+    },
+    "known_NAND_boot_read_bytes_matching_cold_input": 56496
+  }
 }
