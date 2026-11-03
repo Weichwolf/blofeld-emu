@@ -6,6 +6,12 @@ in function-acceptance.tsv; its pending entries are not waived by component test
 Reference manifests pin specific source/input/test scopes, not an assertion that
 all functions or every current binary have passed.
 
+The bounded optimized original-reset measurement in instrument-performance.txt
+reaches 3M MCU operations and 393 original DSP PCM frames at RTF 0.0021272 with
+core 3903224. Profiler-on/off outputs match exactly, including the earlier
+original-reset waveform prefix. This is cold-start-prefix evidence, not normal
+boot, playable sound, steady-state throughput or any instrument milestone.
+
 1. Local references — partial
 Official 1.25 firmware, manuals, images and sample references are private inputs.
 Downloads and primary-source hashes are in downloads.json, dependencies.json,

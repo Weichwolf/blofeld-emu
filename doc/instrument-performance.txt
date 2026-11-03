@@ -1,0 +1,49 @@
+Connected instrument performance
+
+Measure the connected emulator with original firmware from reset in an optimized
+Release build. Keep emulated clock ratios and declared inputs fixed. Use fresh
+stores for cold-start comparisons; checkpoint replay is a separate workload.
+Report elapsed monotonic host time and the common emulated timebase independently
+of a profiler's time estimates. Disable --trace for ordinary measurements.
+
+The bounded reference in instrument-performance-reference.json reaches 3,000,000
+MCU operations, 5,080,669 original DSP instructions and 393 PCM frames. With the
+independent core at 3903224, it simulates 0.27293105 seconds in 128.305106 host
+seconds: RTF 0.0021272. This includes cold initialization and final WAV/state
+output. It is one round with another diagnostic process on the host, not a
+steady-state or whole-instrument benchmark. Normal boot, playable audio and all
+three instrument milestones remain unqualified.
+
+The same frozen Release executable under userspace gprofng clock sampling takes
+129.466444 seconds. Its endpoint output and WAV are byte-identical to the
+profiler-off run; all 393 PCM frames also match the previous original-reset
+0115-core waveform prefix. The sampled child attributes 37.69% of its samples to
+_Unwind_RaiseException. This identifies suspension/replay as an optimization
+candidate, not a measured prediction of an eventual speedup. The collector's
+absolute CPU-time total differs from independent child rusage by about tenfold;
+use its sample distribution and the separate monotonic timing, not that total.
+
+The connected board uses captured/staged DSP instruction execution. That route
+currently uses the general executor for every backend choice; the independent
+core's ordinary JIT benchmarks do not measure this path. CPU-result planning,
+external-memory JIT integration and functional scheduler batching must be tested
+against actual connected execution, original audio and observable event timing.
+
+Example local measurement (scenario, firmware and cold images remain local):
+
+  blofeld-headless --firmware update.zip --sla HC12.sla \
+    --reference-board bounded-cold.bfboard --dsp-rom packed24.bin \
+    --device-state fresh.bfnvm --midi-file held-note.bytes \
+    --instructions 3000000 --audio-out startup.wav --audio-rate 44100 \
+    --audio-max-frames 4096 --display-dir existing-private-display-directory
+
+Set the scenario's operation budget to 3000000 and point its NAND store to a
+fresh copy. Preserve the scenario's declared clock, input and decoder hypotheses.
+For optional userspace profiling, wrap an owned run with:
+
+  gprofng collect app -p 10 -F on -a off -o run.er <owned-run-command>
+  gprofng display text -limit 30 -functions <actual-child-experiment.er>
+
+Do not attach to or alter an independently owned running experiment. Profiling
+is an explicit diagnostic operation; ordinary event telemetry remains disabled
+unless --trace selects a stream. See telemetry.txt for its narrower contract.

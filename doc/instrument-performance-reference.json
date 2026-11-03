@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "scope": "bounded connected original-reset prefix; no whole-instrument claim",
+  "source_commit": "5a4cf3d976a1451b236242e0e4c840ad66c87229",
+  "Core_revision": "3903224d5df8feb7c23cd9629d1d2c28ded6b288",
+  "executable_sha256": "1e3eaf0fd84d146ba9559896b8a8b3452d1f635dff75a5934072417369cc3da2",
+  "build": {
+    "language": "C++23",
+    "compiler": "LLVM 19",
+    "optimization": [
+      "O3",
+      "march=native",
+      "ThinLTO",
+      "lld19"
+    ],
+    "sanitizer": "none",
+    "event_trace": false
+  },
+  "host": {
+    "cpu": "Intel Core i5-1135G7",
+    "physical_cores": 4,
+    "logical_cpus": 8,
+    "kernel": "6.12.113+deb13-amd64",
+    "other_diagnostic_process_present": true
+  },
+  "local_inputs": {
+    "firmware_zip_sha256": "095c760a576dcb04fe3e379bed1b95a0360002295ab42b29e3335a39514f0c72",
+    "DSP_document_ROM_sha256": "4d72a5bd75ad086ec7190c6c25b4438aa1cfaa2ddc0ac510055c2540e886de56",
+    "HC12_SLA_sha256": "b42ab86cb4c230e49c21e73c4295fc009caa2b2f31662e8f29d8dd65f699bce8",
+    "scenario_sha256": "7bad5e668814855debea24b43f600611bd365a59143fd967cd7361765ae20470",
+    "midi_bytes_sha256": "e1a6136f98cdcce30ddb8b8ca8bebf1acf37171af61be52f315d5d9b2739ae1a",
+    "cold_MCU_sha256": "6745e1e1f1f57d1506a8c3b19e15182c62734ca16030c2e731b5e48ab1b383a2",
+    "cold_NAND_sha256": "edf5b8cfdca475570267116f1020cdc9264e091f5040b074e0b9685b668ed3a6"
+  },
+  "measurement": {
+    "status": "PASS-bounded-original-reset-prefix-not-full-instrument",
+    "original_firmware": true,
+    "unmodified": true,
+    "Core": "3903224",
+    "operations": 3000000,
+    "dsp_instructions": 5080669,
+    "pcm_frames": 393,
+    "wall_seconds": 128.305105749,
+    "emulated_seconds": 0.27293105,
+    "RTF": 0.0021272033439879473,
+    "profile_wall_seconds": 129.466444452,
+    "profile_wall_ratio": 1.0090513833897763,
+    "profile_off_stdout_and_wave_identical": true,
+    "previous_0115_PCM_prefix_exact": true,
+    "previous_0115_PC_and_count_prefix_exact": true,
+    "limitations": [
+      "Boot/main-WAI/playable sound not established",
+      "RTF includes cold setup and endpoint serialization, not steady-state audio",
+      "Only one timing round, concurrent old diagnostic process present",
+      "gprofng sample time scale disagrees with child rusage by about 10x; sample percentages and independent monotonic timing kept separate"
+    ],
+    "fuzz": false,
+    "full_instrument": false
+  },
+  "sampling": {
+    "tool": "GNU gprofng 2.44",
+    "requested_interval_ms": 10,
+    "child_only": true,
+    "unwind_raise_inclusive_sample_percent": 37.69,
+    "absolute_collector_time_not_used": true
+  },
+  "artifact_hashes": {
+    "profile_run_receipt": "49bc62eb7d2d1806ef830bb44c590f8f9a5a6cf6aa4d94b2129ddcbeb9008851",
+    "plain_run_receipt": "f555f17ca8b778753a7abf3c549d02bde150308b834a955d672397f84b252bb7",
+    "plain_stdout": "657c57c7b756be0e02badef38bf2e54c9afac65d420caf7c1e783e899ee4352e",
+    "wave": "9c84da0d3bc71d8960b8675d386210c1d3d56b0689df33e7e62e5480d1c733d6",
+    "comparison": "6d54b72648c62bcf382645152126a174da46b9f8e1d315b383ae6bc4f37a7fa1"
+  },
+  "acceptance": {
+    "normal_boot": false,
+    "playable_instrument": false,
+    "steady_state_throughput": false,
+    "milestone_1": false,
+    "milestone_2": false,
+    "milestone_3": false
+  },
+  "fuzz": false
+}
