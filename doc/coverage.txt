@@ -67,11 +67,14 @@ contract. See nand-functional-timing-reference.json and nand-board.txt.
 An original POR with that explicit policy now passes the former pulse refusal
 and completes the real five-microsecond NAND reset. All 107 boot pages and the
 72-byte Global read match known input bytes. Four MIDI wire frames are delivered;
-a read-only native snapshot contains 2,420 PCM frames, 1,830 nonzero, at exactly
-44.1 kHz. The short signal's descriptive FFT peak is about 262.6 Hz; physical pitch
-remains unqualified. At capture the MCU was in its fixed RTI wait before peer status
-queries. Main WAI, normal UI, final store/cleanup and full instrument acceptance
-remain open. See the functional follow-up in original-native-timing-reference.json.
+a read-only native snapshot contains 6,627 PCM frames, 6,037 nonzero, at exactly
+44.1 kHz. The short signal's descriptive FFT peak is about 261.7 Hz; physical pitch
+remains unqualified. The original MCU accepts all 528 secondary-page bytes and
+reaches logo arithmetic using PACNT. Its unimplemented word write at 0x0062
+stops execution visibly at PC0x1740. A prior post-transfer RAM snapshot had one
+wrong byte; its cause remains unqualified. Natural exit/cleanup is sanitizer-clean,
+and both CRC-valid stores remain byte-identical. Main WAI, normal UI and complete
+instrument acceptance remain open. See original-native-timing-reference.json.
 An original reference-effects run with all sixteen secondary pages installed
 read NAND page 15 correctly 21 times. Two completed MCU RAM snapshots each differ
 from that source at 474 of 528 bytes. The run was deliberately stopped and reaped;

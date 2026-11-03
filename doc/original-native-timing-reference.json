@@ -79,10 +79,10 @@
     "observed_window_limits": "Fifteen 0x7fffff values and the original 0x100000 sentinel match the independent decode of known FF triples",
     "MIDI_wire_frames_at_3500000_MCU_operations": 4,
     "native_PCM_snapshot": {
-      "MCU_operations": 3566824,
-      "MCU_interrupts": 194,
-      "frames": 2420,
-      "nonzero_frames": 1830,
+      "MCU_operations": 4751983,
+      "MCU_interrupts": 365,
+      "frames": 6627,
+      "nonzero_frames": 6037,
       "first_nonzero_frame": 590,
       "channels": 2,
       "precision_bits": 24,
@@ -90,17 +90,16 @@
       "frame_common_ticks": 14400000,
       "bit_common_ticks": 225000,
       "peak_24bit": 357263,
-      "descriptive_FFT_peak_hz": 262.5544848708538,
-      "FFT_signal_frames": 1830,
-      "finite_window_resolution_hz": 24.098360655737704
+      "descriptive_FFT_peak_hz": 261.67706616904024,
+      "FFT_signal_frames": 6037,
+      "finite_window_resolution_hz": 7.304952791121418
     },
     "observation": "Read-only native memory copy with all four GDB mutation/call/breakpoint permissions off and detach; waveform derived offline from exact samples",
-    "MCU_phase": "At capture, input_startup_wait was waiting for the RTI/scan counter to reach 255, before actual peer status queries",
-    "runtime_active_at_capture": true,
+    "MCU_phase": "Original secondary page15 accepted byte-exact; startup logo arithmetic stops at unimplemented PACNT word write0062, MCU PC1740",
     "original_driver_main_WAI": false,
     "native_driver_WAVE_saved_at_capture": false,
     "physical_pitch_qualified": false,
-    "final_store_and_terminal_sanitizer_audit_pending": true,
+    "final_store_and_terminal_sanitizer_audit_pending": false,
     "full_boot": false,
     "complete_Desktop_Keyboard_profiles": false,
     "firmware_patched": false,
@@ -112,8 +111,33 @@
       "doc/local/overlay-receiver-audit-r1/r9-global-partial-audit-central.json": "3287223e0462778521d60a00f186bb5a90a5b5f528caaa31ebf17d02967d1219",
       "doc/local/overlay-receiver-audit-r1/r9-queues.json": "c241525bda51a41be39152757f84958a635ca02506953cfc1ba1b958043df77e",
       "doc/local/overlay-receiver-audit-r1/r9-pcm-third.json": "c4bccb0dff3c7859b70985c7f6c8b151a7a646f38a0c658295a128bd3fadb0aa",
-      "doc/local/overlay-receiver-audit-r1/r9-pcm-spectrum.json": "dd4cfc897c121cf4472a660b7a6580d4597aad448a4c3b9680208ed5d871cbc4"
+      "doc/local/overlay-receiver-audit-r1/r9-pcm-spectrum.json": "dd4cfc897c121cf4472a660b7a6580d4597aad448a4c3b9680208ed5d871cbc4",
+      "doc/local/durable-cli-midi-audio/r9/observed/terminal-audit.json": "ff02ef695c68ae92d2ae43f8e99f042041e5b3c95f3a29b35a54760b7cc9c0e3",
+      "doc/local/overlay-receiver-audit-r1/r9-held.json": "6084ba7504494c8e4c2be90c83ee76fe44485b7201c793d979c5d9c321bdc4f7",
+      "doc/local/overlay-receiver-audit-r1/r9-pcm-held.json": "699b5ba5a202bcc51beddf48c642fff4cf9ae329c1e68b90ca47b5e9f4033a18",
+      "doc/local/overlay-receiver-audit-r1/r9-pcm-held-spectrum.json": "d1af93f36deb0d7e16dd1fa97af45571aec2b48a8c1fc1a97d141aadee701f51"
     },
-    "known_NAND_boot_read_bytes_matching_cold_input": 56496
+    "known_NAND_boot_read_bytes_matching_cold_input": 56496,
+    "secondary_page15_receiver": {
+      "bytes": 528,
+      "matching_bytes": 528,
+      "checksum_accepted": true,
+      "cached_selector": 143,
+      "first_post_transfer_snapshot_matching_bytes": 527,
+      "first_mismatch_offset": 287,
+      "transient_discrepancy_cause_qualified": false
+    },
+    "termination": {
+      "actual_exit": 2,
+      "naturally_reaped": true,
+      "signal_sent": false,
+      "timeout": false,
+      "sanitizer_diagnostics": 0,
+      "normal_cleanup_completed": true
+    },
+    "persistent_store_bytes_unchanged": true,
+    "persistent_store_CRC_valid": true,
+    "guest_execution_stopped_at_capture": true,
+    "runtime_terminal_after_capture": true
   }
 }
