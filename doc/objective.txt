@@ -59,6 +59,22 @@ local reference scope. Commit and push verified increments in each affected
 project to its configured remote. Performance and visual/audio bring-up use
 optimized Release builds while this migration proceeds; the complete instrument
 acceptance scope remains unchanged.
+
+Highest current performance priority: use the independent core's fast native
+execution in the connected emulator. dsp56300 must automatically select its
+fastest correctly supported path; ordinary memory/I/O integration must not
+silently replace native JIT execution with a diagnostic interpreter. Replace
+the connected instruction/effect/cycle replay bottleneck with bounded native
+regions and functional event scheduling that preserve original DSP audio,
+MIDI, peripheral side effects and emulated clocks. Keep slow reference and
+instrumented paths explicit diagnostic choices. Measure native/helper counts
+and whole-emulator throughput; isolated JIT benchmark speed does not establish
+that the instrument uses the JIT. Keep integration as simple as constructing
+a CPU with memory/peripherals and running to an event budget. MCU, DSP and
+keyboard-controller data exchange uses direct storage, registers and bounded
+serial/FIFO state; avoid unnecessary abstraction and per-cycle bookkeeping in
+the hot path. This priority does not waive the migration,
+unmodified firmware or full instrument acceptance requirements.
 After the old backend is removed, replace transitional OwnDsp/own_dsp names in
 classes, files, build targets, configuration and documentation with normal DSP
 names. No permanent parallel implementation or backend-selection option is part
