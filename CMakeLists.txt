@@ -3299,6 +3299,8 @@ add_custom_target(quality
     blofeld-controller-write-test
     blofeld-native-budget-test
     blofeld-native-budget-events-test
+    blofeld-native-loop-test
+    blofeld-loop-prefill-test
     blofeld-loop-fetch-test blofeld-loop-program-fetch-test blofeld-loop-native-fetch-test
     blofeld-loop-identity-thread-test blofeld-pipeline-occurrence-test blofeld-loop-port-test
     blofeld-auto-loop-test blofeld-auto-loop-source-test blofeld-auto-loop-transfer-source-test

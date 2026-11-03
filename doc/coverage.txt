@@ -41,6 +41,11 @@ pass authored REP/NOP/GPIO, actual DMA wait/restore, vector-read/IRQ/reset and
 affected fetch/timeline regressions. Physical interlocks, corrected original
 overlay transfer and normal-profile integration remain open. See
 dsp-native-budget.txt and dsp-native-budget-reference.json.
+The native F2 owner now retains actual prefetched DO/DOR bodies and confirms
+genuine loop backedges without an extra refill period in qualified authored
+cases. Native PCU groups, occurrence identities, checkpoints, DMA and control
+fallbacks remain guarded. This does not qualify corrected original overlay
+transfer or full startup. See dsp-native-loops.txt and dsp-native-loop-reference.json.
 The ordinary text-config CLI now accepts native-cycles. Both sanitizer profiles
 pass actual DSP-reset/no-prefill REP/NOP timing, unchanged MCU/NVM expectations,
 fixed config refusals and affected reference-effects regressions. This is authored

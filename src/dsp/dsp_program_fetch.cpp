@@ -42,6 +42,12 @@ DspFetchedSample DspFetchedSample::retain(const DspFetchedWord known) {
 namespace {
 constexpr unsigned word_mask = 0xffffff;
 
+bool next_fetch_at(const DspProgramFetchView &state, const std::uint32_t pc) {
+  if (state.used != 0) { return state.words.front().address == pc; }
+  if (!state.pending_address) { return state.next_address == pc; }
+  return *state.pending_address == pc && state.next_address == ((pc + 1) & word_mask);
+}
+
 // Retire only completed speculative loop metadata. Actual F1/F2 receipts,
 // addresses, resource origins, branch decisions and CPU state remain owned.
 void release_loop_history(
@@ -389,6 +395,43 @@ void DspProgramFetch::redirect(const std::uint32_t pc, const std::uint32_t omr) 
   clear_continuation();
 }
 
+bool DspProgramFetch::retire_native_control(const DspFetchedInstruction &completed,
+                                            const DspFetchCommit actual) {
+  if (!loop_) { return false; }
+  completed.check_consumed(consumed_, state_.omr);
+  const auto last = completed.extension.value_or(completed.opcode);
+  if (!state_.active || opening_ || branch_ || repeat_ ||
+      actual.pc != completed.opcode.word.address || actual.next_pc > word_mask ||
+      actual.omr > word_mask || (consumed_end_ && consumed_end_->last != last.word)) {
+    throw Fault("Native control lost its consumed loop witness read P:" +
+                hex(completed.opcode.word.address, 6) + " pc=" + hex(actual.pc, 6) +
+                " omr=" + hex(actual.omr, 6));
+  }
+  // This is a confirmed native result, not an arbitrary forecast redirect.
+  // Keep the sequence monotonic while invalidating every speculative suffix.
+  state_ = {.next_address = actual.next_pc,
+            .consume_address = actual.next_pc,
+            .omr = actual.omr,
+            .active = true};
+  clear_continuation();
+  return true;
+}
+
+bool DspProgramFetch::suspend_loop_forecast(const DspFetchedInstruction &foreground) {
+  if (!loop_) { return false; }
+  foreground.check_front(*this);
+  if (!state_.active || opening_ || consumed_end_ || branch_ || repeat_ ||
+      foreground.opcode.word.address != state_.consume_address) {
+    throw Fault("Native interrupt lost its loop foreground read P:" +
+                hex(foreground.opcode.word.address, 6) + " pc=" + hex(state_.consume_address, 6) +
+                " omr=" + hex(state_.omr, 6));
+  }
+  const auto pc = foreground.opcode.word.address;
+  state_ = {.next_address = pc, .consume_address = pc, .omr = state_.omr, .active = true};
+  clear_continuation();
+  return true;
+}
+
 std::size_t DspProgramFetch::branch_position(const DspBranchDecision &decision,
                                              const std::uint64_t identity) const {
   std::optional<std::size_t> found;
@@ -652,11 +695,20 @@ void DspProgramFetch::open_loop(const DspLoopOpening &opening,
                                 const DspFetchedWord opcode,
                                 const DspFetchedWord extension) {
   const auto body = (opening.word.address + 2) & word_mask;
-  if (!state_.active || state_.used != 0 || state_.pending_address || branch_ || opening_ ||
-      consumed_end_ || consumed_[0] != opcode || consumed_[1] != extension ||
-      opcode.occurrence == 0 || opening.word != opcode.word ||
-      opening.extension != extension.word || state_.consume_address != body ||
-      state_.next_address != body || opening.before.omr != state_.omr) {
+  const auto queued_end = (body + static_cast<std::uint32_t>(state_.used)) & word_mask;
+  const auto issued_end = (queued_end + (state_.pending_address ? 1U : 0U)) & word_mask;
+  bool contiguous = true;
+  for (std::size_t index = 0; index < state_.used; ++index) {
+    contiguous = contiguous && state_.words.at(index).address ==
+                                   ((body + static_cast<std::uint32_t>(index)) & word_mask);
+  }
+  if (!state_.active || branch_ || opening_ || !contiguous ||
+      (loop_ && (state_.used != 0 || state_.pending_address)) || consumed_end_ ||
+      consumed_[0] != opcode || consumed_[1] != extension || opcode.occurrence == 0 ||
+      opening.word != opcode.word || opening.extension != extension.word ||
+      state_.consume_address != body ||
+      (state_.pending_address && state_.pending_address != queued_end) ||
+      state_.next_address != issued_end || opening.before.omr != state_.omr) {
     throw Fault("DSP DO lost actual consumed F2 barrier read P:" + hex(opening.word.address, 6) +
                 " pc=" + hex(opening.before.pc, 6) + " omr=" + hex(state_.omr, 6));
   }
@@ -666,9 +718,30 @@ void DspProgramFetch::open_loop(const DspLoopOpening &opening,
     static_cast<void>(candidate.fetched(extension.word));
   }
   candidate.opened(opening);
+  // The native PCU can publish after F2 has already read part of the body.
+  // Retain those actual values/occurrences; assign only forecast metadata.
+  // A now-known backedge or annulled body discards the wrong-path suffix.
+  decltype(predictions_) predictions{};
+  decltype(boundaries_) boundaries{};
+  std::size_t retained = 0;
+  while (retained < state_.used && state_.words.at(retained).address == candidate.next_address()) {
+    boundaries.at(retained) = candidate.sampled(state_.words.at(retained));
+    predictions.at(retained) = candidate.prediction();
+    ++retained;
+  }
+  const auto next = candidate.next_address();
+  if (retained != state_.used || state_.pending_address != next) { state_.pending_address.reset(); }
+  for (std::size_t index = retained; index < state_.used; ++index) {
+    state_.words.at(index) = {};
+    occurrences_.at(index) = 0;
+    origins_.at(index) = {};
+  }
+  state_.used = retained;
+  predictions_ = std::move(predictions);
+  boundaries_ = boundaries;
   loop_ = std::move(candidate);
   opening_ = opening;
-  state_.next_address = loop_->next_address();
+  state_.next_address = (next + (state_.pending_address ? 1U : 0U)) & word_mask;
   state_.consume_address = opening.after.pc;
 }
 
@@ -690,9 +763,10 @@ bool DspProgramFetch::confirm_opening(const DspLoopArchitecture native_result,
 
 bool DspProgramFetch::confirm_loop(const DspLoopArchitecture native_result, const bool redirected) {
   if (!consumed_end_) { return false; }
+  // Retirement confirms the consumed boundary. A DMA stall may still hold
+  // its next F2 read; the owned next address must agree independently.
   if (!loop_ || redirected != consumed_end_->backedge ||
-      state_.consume_address != native_result.pc || state_.used == 0 ||
-      state_.words.front().address != native_result.pc) {
+      state_.consume_address != native_result.pc || !next_fetch_at(state_, native_result.pc)) {
     throw Fault(
         "Native loop end differs from actual F2 read P:" + hex(consumed_end_->last.address, 6) +
         " pc=" + hex(native_result.pc, 6) + " omr=" + hex(native_result.omr, 6));

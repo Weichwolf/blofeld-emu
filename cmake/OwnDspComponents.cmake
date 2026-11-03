@@ -36,7 +36,7 @@ add_library(blofeld_dsp_control_decode src/dsp/dsp_control_move.cpp src/dsp/dsp_
 target_include_directories(blofeld_dsp_control_decode PUBLIC src)
 target_link_libraries(blofeld_dsp_control_decode PUBLIC blofeld_firmware dsp56300::core)
 add_library(blofeld_own_dsp_fetch STATIC EXCLUDE_FROM_ALL src/dsp/own_dsp_fetch.cpp
-  src/dsp/own_dsp_fetch_checkpoint.cpp src/dsp/dsp_native_budget.cpp
+  src/dsp/own_dsp_fetch_checkpoint.cpp src/dsp/dsp_native_budget.cpp src/dsp/dsp_loop_publication.cpp
   src/dsp/own_dsp_timeline.cpp src/dsp/own_dsp_timeline_checkpoint.cpp
   src/dsp/dsp_program_fetch.cpp src/dsp/dsp_fetch_context.cpp src/dsp/dsp_loop_fetch.cpp
   src/dsp/dsp_loop_source.cpp)
@@ -64,6 +64,15 @@ if(BUILD_TESTING)
   add_executable(blofeld-native-budget-events-test test/dsp_native_budget_events_test.cpp)
   target_link_libraries(blofeld-native-budget-events-test PRIVATE blofeld_own_dsp_fetch blofeld_dma_fixture)
   add_test(NAME dsp_native_cycle_budget_events COMMAND blofeld-native-budget-events-test)
+  add_executable(blofeld-native-loop-test test/dsp_native_loop_test.cpp
+    test/dsp_native_loop_state.cpp test/dsp_native_loop_events.cpp test/dsp_native_loop_control.cpp)
+  target_link_libraries(blofeld-native-loop-test PRIVATE blofeld_own_dsp_fetch blofeld_dma_fixture)
+  add_test(NAME dsp_native_loop COMMAND blofeld-native-loop-test)
+  set_tests_properties(dsp_native_loop PROPERTIES TIMEOUT 60)
+  add_executable(blofeld-loop-prefill-test test/dsp_loop_prefill_test.cpp)
+  target_link_libraries(blofeld-loop-prefill-test PRIVATE blofeld_own_dsp_fetch)
+  add_test(NAME dsp_loop_prefill COMMAND blofeld-loop-prefill-test)
+  set_tests_properties(dsp_loop_prefill PROPERTIES TIMEOUT 30)
   add_executable(blofeld-dsp-shifted-subtract-test test/dsp_shifted_subtract_test.cpp)
   target_link_libraries(blofeld-dsp-shifted-subtract-test PRIVATE blofeld_dma_fixture)
   add_test(NAME dsp_subl COMMAND blofeld-dsp-shifted-subtract-test --left)

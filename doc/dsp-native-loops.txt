@@ -1,0 +1,37 @@
+Native loop fetch
+=================
+
+DSP56300FM Rev.5 section12.3.4 specifies DO bodies without extra loop overhead.
+The native-cycle adapter now opens its fetch forecast after all actual native
+PCU groups have published, while instruction retirement still owes its base
+periods. Register-source setups can publish several PCU groups; no partial
+group is treated as the completed frame.
+
+Already sampled body words retain their values, knownness, occurrence IDs and
+memory origins. A newly known backedge or zero count discards only a wrong-path
+suffix. Each later iteration samples program memory again. Admission selects
+the actual front occurrence, including when several queued iterations have
+the same address. Boundary confirmation checks the native control result and
+owned continuation address independently of a future F2 arrival.
+
+Nested setups, explicit control changes and tested IRQA entry retain conservative
+refill. A consumed-instruction retirement or an accepted native foreground
+witness authorizes dropping the forecast. The ordinary redirect guard still
+rejects an active loop. Unsupported forecast profiles and wrapped extents keep
+native execution without claiming this optimization.
+
+Validation uses authored words: 84 immediate DO/DOR cases with zero/one/three
+counts, short/long bodies, one/two-word instructions and different prefill;
+eight X0/Y1 register-source cases; literal full register/stack expectations;
+checkpoint suffixes, stale-owner refusals, changed P-memory, unknown F2, actual
+reset, DMA stalls, nested loops, REP, JSR/RTS and real IRQA vector reads.
+Low-level tests retain value/origin/identity checks and malformed-witness refusals.
+
+Reproduce these two scoped groups after configuring strict or thread:
+  cmake --build build/strict --target blofeld-native-loop-test blofeld-loop-prefill-test -j 1
+  ctest --test-dir build/strict -R '^(dsp_native_loop|dsp_loop_prefill)$' --output-on-failure
+
+Base units remain a scheduling model, not verified silicon pipeline timing.
+The authored refill correction does not establish the cause of an original
+overlay checksum failure, corrected original startup or complete instrument
+operation. Qualification pins are in dsp-native-loop-reference.json.

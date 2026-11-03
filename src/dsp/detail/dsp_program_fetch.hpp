@@ -118,6 +118,11 @@ public:
   void check_consume(std::uint32_t address) const;
   [[nodiscard]] std::uint32_t consume(std::uint32_t address);
   void redirect(std::uint32_t pc, std::uint32_t omr);
+  // Adapter fallback witnesses: actual consumed/native control retirement, or
+  // the captured foreground accepted by the native interrupt owner.
+  [[nodiscard]] bool retire_native_control(const DspFetchedInstruction &completed,
+                                           DspFetchCommit actual);
+  [[nodiscard]] bool suspend_loop_forecast(const DspFetchedInstruction &foreground);
   void predict_branch(const DspBranchDecision &decision, std::uint64_t identity = 0);
   // Follow actual older control retirement without changing the owned target.
   void follow_subroutine_writer(const DspFetchedInstruction &writer,

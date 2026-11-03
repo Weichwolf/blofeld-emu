@@ -6,6 +6,7 @@
 #include "dsp/detail/dsp_program_fetch.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_loop_publication.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/own_dsp_machine.hpp"
@@ -26,6 +27,16 @@
 namespace blofeld {
 namespace {
 constexpr unsigned cache_enable = 1U << 19U;
+
+DspFetchedWord front_opcode(const DspProgramFetch &fetch, const std::uint32_t address) {
+  const auto front = fetch.queued(0);
+  if (!front || front->word.address != address) {
+    throw Fault("Native opcode differs from the actual F2 front read P:" + hex(address, 6) +
+                " pc=" + hex(fetch.view().consume_address, 6) + " omr=" + hex(fetch.view().omr, 6));
+  }
+  // Equal PCs in different loop iterations retain distinct F2 identities.
+  return fetch.select(address, front->occurrence);
+}
 
 bool dma_controller_access(const dsp56300::PendingInstruction &pending) {
   // FM ch10: controller registers are separate from P-memory fetch resources.
@@ -445,7 +456,7 @@ bool OwnDspFetch::admit_interrupt() {
     throw Fault("Own DSP interrupt foreground differs from F2 read P:" + hex(context.address, 6) +
                 " pc=" + hex(context.address, 6) + " omr=" + hex(state.omr, 6));
   }
-  const auto opcode = fetch_.select(context.address);
+  const auto opcode = front_opcode(fetch_, context.address);
   const auto shape = dsp56300::inspect_instruction(opcode.word.value);
   if (!shape) {
     throw Fault("Unsupported own DSP interrupt foreground opcode " + hex(opcode.word.value, 6) +
@@ -465,6 +476,7 @@ bool OwnDspFetch::admit_interrupt() {
     throw Fault("Own DSP admitted interrupt without native vector ownership pc=" +
                 hex(machine_.cpu_.registers().pc, 6));
   }
+  static_cast<void>(fetch_.suspend_loop_forecast(captured));
   interrupt_vector_ = vector.address;
   return true;
 }
@@ -498,7 +510,7 @@ dsp56300::InstructionProgress OwnDspFetch::begin() {
     throw Fault("Own DSP F2 context differs from CPU read P:" + hex(context.address, 6) +
                 " pc=" + hex(context.address, 6) + " omr=" + hex(state.omr, 6));
   }
-  const auto opcode = fetch_.select(context.address);
+  const auto opcode = front_opcode(fetch_, context.address);
   const auto shape = dsp56300::inspect_instruction(opcode.word.value);
   if (!shape) {
     throw Fault("Unsupported own DSP opcode " + hex(opcode.word.value, 6) +
@@ -585,6 +597,15 @@ void OwnDspFetch::synchronize() {
     in_flight_ = false;
     return;
   }
+  if (confirm_loop_publication(fetch_, *admitted_, regs, context, *outcome)) {
+    admitted_.reset();
+    in_flight_ = false;
+    return;
+  }
+  const DspFetchCommit completed{.pc = outcome->address,
+                                 .next_pc = context.address,
+                                 .omr = regs.omr,
+                                 .redirected = outcome->control_transfer};
   if (context.latched_opcode) {
     if (!admitted_ || admitted_->extension || admitted_->opcode.word.address != context.address ||
         admitted_->opcode.word.value != *context.latched_opcode || state.omr != regs.omr ||
@@ -595,7 +616,7 @@ void OwnDspFetch::synchronize() {
     repeated_ = admitted_;
   } else if (outcome->control_transfer || state.consume_address != context.address ||
              state.omr != regs.omr) {
-    fetch_.redirect(context.address, regs.omr);
+    redirect_loop_control(fetch_, *admitted_, completed);
   }
   if (!context.latched_opcode) { repeated_.reset(); }
   admitted_.reset();

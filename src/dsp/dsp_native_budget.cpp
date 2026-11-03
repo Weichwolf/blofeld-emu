@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "dsp/dsp_loop_publication.hpp"
 #include "dsp/own_dsp_fetch.hpp"
 #include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 
 #include <cstdint>
 #include <limits>
+#include <optional>
 
 namespace blofeld {
 namespace {
@@ -13,6 +15,28 @@ bool internal(const dsp56300::EffectKind kind) {
   using enum dsp56300::EffectKind;
   return kind == address_update || kind == move_update || kind == alu_update ||
          kind == unit_update || kind == pcu_update || kind == retire;
+}
+
+void finish_loop_opening(DspProgramFetch &fetch,
+                         const DspFetchedInstruction *admitted,
+                         std::optional<dsp56300::Registers> &before,
+                         const dsp56300::Core &cpu) {
+  if (!before) { return; }
+  if (admitted == nullptr) { throw Fault("Native loop lost its admitted opening"); }
+  // DO publishes several real PCU groups. Open only after their complete
+  // native result exists, while genuine retirement is still held.
+  observe_loop_publication(fetch, *admitted, *before, cpu.registers());
+  before.reset();
+}
+
+bool retirement_ready(const dsp56300::Core &cpu,
+                      const dsp56300::PendingInstruction &pending,
+                      const std::uint64_t cycles) {
+  const auto delta = cpu.retirement_delta(pending.ticket);
+  if (delta.instructions != 1 || delta.estimated_cycles == 0) {
+    throw Fault("DSP native retirement has no instruction budget pc=" + hex(pending.effect.pc, 6));
+  }
+  return cycles >= delta.estimated_cycles;
 }
 }
 
@@ -41,22 +65,29 @@ void OwnDspFetch::advance_native_budget(OwnDspFetchCycleResult &result,
     throw Fault("DSP native cycle budget is unavailable pc=" + hex(pending.effect.pc, 6));
   }
   ++native_cycles_;
+  const auto *admitted = admitted_ ? &*admitted_ : nullptr;
+  std::optional<dsp56300::Registers> loop_before;
   for (unsigned index = 0; index < maximum_internal_effects; ++index) {
     if (pending.effect.kind == dsp56300::EffectKind::retire) {
-      const auto delta = machine_.cpu_.retirement_delta(pending.ticket);
-      if (delta.instructions != 1 || delta.estimated_cycles == 0) {
-        throw Fault("DSP native retirement has no instruction budget pc=" +
-                    hex(pending.effect.pc, 6));
-      }
-      if (native_cycles_ < delta.estimated_cycles) { return; }
+      finish_loop_opening(fetch_, admitted, loop_before, machine_.cpu_);
+      if (!retirement_ready(machine_.cpu_, pending, native_cycles_)) { return; }
     }
     result.native_pc = pending.effect.pc;
+    if (!loop_before && native_loop_publication(admitted, pending)) {
+      loop_before = machine_.cpu_.registers();
+    }
     result.native = machine_.interrupts_.advance(pending.ticket);
     if (result.native->fault.kind != dsp56300::FaultKind::none || result.native->retired) {
       return;
     }
     const auto &next = result.native->pending;
-    if (!next || !internal(next->effect.kind)) { return; }
+    if (!next || !internal(next->effect.kind)) {
+      if (loop_before) {
+        throw Fault("Native register DO yielded before its complete PCU publication pc=" +
+                    hex(pending.effect.pc, 6));
+      }
+      return;
+    }
     pending = *next;
   }
   throw Fault("DSP native CPU publication bound exceeded pc=" + hex(pending.effect.pc, 6));
