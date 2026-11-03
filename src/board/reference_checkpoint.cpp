@@ -6,6 +6,7 @@
 #include "common/bus.hpp"
 #include "mcu/hc12.hpp"
 #include "mcu/mcu_machine.hpp"
+#include "mcu/mcu_memory.hpp"
 #include "mcu/mcu_reset.hpp"
 #include "storage/flash_image.hpp"
 #include "usb/usbip_runtime.hpp"
@@ -214,6 +215,23 @@ Status Board::status() const {
 
 Status Board::runtime_status() const {
   return observe_status(false);
+}
+
+std::vector<McuMemoryByte> Board::inspect_mcu_memory(const std::uint16_t address,
+                                                     const std::uint32_t count) const {
+  require_idle();
+  constexpr std::uint32_t address_space_size = 1U << 16U;
+  if (count > address_space_size - address) {
+    throw Fault("Reference MCU inspection range wraps at " + hex(address) +
+                " count=" + std::to_string(count));
+  }
+  std::vector<McuMemoryByte> result;
+  result.reserve(count);
+  for (std::uint32_t offset = 0; offset < count; ++offset) {
+    result.push_back(
+        native_->mcu.bus().inspect_memory(static_cast<std::uint16_t>(address + offset)));
+  }
+  return result;
 }
 
 Status Board::observe_status(const bool include_cold_nvm) const {

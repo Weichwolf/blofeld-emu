@@ -22,6 +22,7 @@
 #include "mcu/mcu_clocked_midi.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_machine.hpp"
+#include "mcu/mcu_memory.hpp"
 #include "mcu/mcu_midi_output.hpp"
 #include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_sci.hpp"
@@ -327,6 +328,10 @@ public:
   // Read-only live observation without encoding a cold flash image; cold_nvm is empty.
   // Release retained PCM history before advancing to avoid forcing copy-on-write.
   [[nodiscard]] Status runtime_status() const;
+  // Host-only copy at an inactive boundary, including faulted diagnostic state.
+  // This observes storage knowledge; it does not qualify a timed memory read.
+  [[nodiscard]] std::vector<McuMemoryByte> inspect_mcu_memory(std::uint16_t address,
+                                                              std::uint32_t count) const;
   [[nodiscard]] std::optional<NandPeerDetailed> nand_status() const;
   [[nodiscard]] std::optional<NandImage> nand_image() const;
   [[nodiscard]] MidiInputWindow midi_window() const;

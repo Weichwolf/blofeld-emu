@@ -89,6 +89,7 @@ void McuRunClock::advance_cycle(McuBus &bus, const ExecutionContext context, con
                             .bus_period_ticks = next_cycle_ticks(bus),
                             .include_endpoint = !period.cop_deadline});
     if (period.cop_deadline) { advance_to_cop_deadline(bus, static_cast<unsigned>(edges)); }
+    bus.advance_gpio_inputs();
     if (gates.sci) { bus.advance_sci(1); }
     if (gates.timer) { bus.advance_timer(1); }
     bus.advance_oscillator(static_cast<unsigned>(edges), gates.cop);

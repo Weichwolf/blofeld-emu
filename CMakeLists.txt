@@ -4499,3 +4499,5 @@ endif()
 if(TARGET blofeld-dma-callback-allocation-test)
   add_dependencies(quality blofeld-dma-callback-allocation-test)
 endif()
+
+include(cmake/McuInspectionTests.cmake)

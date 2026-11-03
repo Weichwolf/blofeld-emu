@@ -55,6 +55,10 @@ public:
   void write_memory(MemoryWrite access) override;
   [[nodiscard]] std::uint8_t peek(std::uint16_t address) const override;
 
+  [[nodiscard]] McuMemoryByte inspect_memory(const std::uint16_t address) const {
+    return memory_.inspect(address);
+  }
+
   [[nodiscard]] std::uint64_t revision() const override { return revision_; }
 
   [[nodiscard]] std::uint64_t code_revision() const override { return code_revision_; }
@@ -104,6 +108,7 @@ public:
   }
 
   [[nodiscard]] unsigned oscillator_cycles_until_rti() const;
+
   void advance_sci(unsigned bus_cycles);
   void sample_timer_inputs(std::uint8_t mask);
   void advance_timer(unsigned bus_cycles);
@@ -120,6 +125,11 @@ public:
 
 private:
   friend class McuMachine;
+  friend class McuRunClock;
+
+  // Only the owner of an actual IPBus edge can advance register input history.
+  void advance_gpio_inputs() { gpio_.advance_inputs(); }
+
   void notify(const BusEvent &event);
   void check_cop_reset() const;
   void reset_modules();

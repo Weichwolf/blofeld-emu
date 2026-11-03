@@ -8,6 +8,7 @@
 #include <bitset>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string_view>
 
@@ -20,6 +21,14 @@ struct McuLocation {
   std::uint16_t offset = 0;
 };
 
+// Underlying storage observation; I/O and unknown bytes have no value.
+struct McuMemoryByte {
+  McuSpace space = McuSpace::unmapped;
+  std::uint16_t offset = 0;
+  std::optional<std::uint8_t> value = std::nullopt;
+  bool operator==(const McuMemoryByte &) const = default;
+};
+
 // Normal single-chip MC9S12UF32 mapping. Power-on RAM is unknown until written.
 class McuMemory {
 public:
@@ -27,6 +36,8 @@ public:
   explicit McuMemory(const McuFlashImage &image);
   [[nodiscard]] McuFlashImage flash_image() const;
   [[nodiscard]] McuLocation locate(std::uint16_t address) const;
+  // Pure inspection: no read transaction, initialization or register side effect.
+  [[nodiscard]] McuMemoryByte inspect(std::uint16_t address) const;
   [[nodiscard]] std::uint8_t read(std::uint16_t address) const;
   void write(ByteWrite write);
   [[nodiscard]] std::uint8_t peek(std::uint16_t address) const;

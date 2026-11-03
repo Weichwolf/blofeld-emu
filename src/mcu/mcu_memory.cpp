@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string_view>
 
@@ -97,6 +98,13 @@ bool McuMemory::initialized(const McuLocation location) const {
     case McuSpace::unmapped: return false;
     default: throw Fault("Invalid MCU memory space");
   }
+}
+
+McuMemoryByte McuMemory::inspect(const std::uint16_t address) const {
+  const auto location = locate(address);
+  return {.space = location.space,
+          .offset = location.offset,
+          .value = initialized(location) ? std::optional{peek(address)} : std::nullopt};
 }
 
 std::uint8_t McuMemory::read(const std::uint16_t address) const {
