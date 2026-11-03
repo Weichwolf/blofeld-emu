@@ -35,6 +35,12 @@ public:
   void observe_synchronized_tio(unsigned index, bool level);
   [[nodiscard]] DspTimerPin observe_tio(unsigned index) const;
   void advance_clk2(std::uint64_t edges);
+  // Positive CLK/2 edges until a new enabled IRQ flag or an unknown-input
+  // check. Already latched flags do not block regions while CPU/priority masks
+  // defer admission; query current vectors separately. External edges remain
+  // board-owned. Null means no internally clocked IRQ/check boundary.
+  [[nodiscard]] std::optional<std::uint64_t> next_clk2_boundary() const noexcept;
+
   [[nodiscard]] std::vector<std::uint32_t> interrupt_vectors() const;
   void acknowledge_interrupt(std::uint32_t vector);
 
@@ -66,6 +72,11 @@ private:
   static void advance_timer(Timer &timer, std::size_t index, std::uint64_t edges);
   static void advance_free(Timer &timer, CounterAdvance advance);
   static void advance_capture(Timer &timer, std::size_t index, std::uint64_t edges);
+  [[nodiscard]] static std::optional<std::uint64_t> timer_boundary(const Timer &timer) noexcept;
+  [[nodiscard]] static std::optional<std::uint64_t> capture_boundary(const Timer &timer,
+                                                                     unsigned interrupts) noexcept;
+  [[nodiscard]] static std::optional<std::uint64_t> counting_boundary(const Timer &timer,
+                                                                      unsigned interrupts) noexcept;
   std::array<Timer, 3> timers_{};
   std::array<std::optional<bool>, 2> external_{};
   std::uint32_t prescaler_load_ = 0;

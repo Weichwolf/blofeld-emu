@@ -65,6 +65,13 @@ public:
   void write(unsigned address, std::uint32_t value);
   [[nodiscard]] std::uint32_t requested_sources() const;
   [[nodiscard]] bool active() const;
+  // No transfer, enable settling or first request sample can change on a held
+  // request baseline. Pending IRQ flags remain separately admissible.
+  [[nodiscard]] bool quiescent() const noexcept;
+  // Consume a nonempty span after an actual sampled cycle. The board owns
+  // all request edges and must stop the span before their next change.
+  // Rejects changed/unknown baselines and any uncompleted DMA transition.
+  void advance_quiescent(DspDmaInputs inputs);
 
   [[nodiscard]] std::optional<std::uint64_t> last_cycle() const { return cycle_; }
 

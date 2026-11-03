@@ -10,7 +10,8 @@ add_library(blofeld_dsp_peripherals src/dsp/dsp_shi.cpp src/dsp/dsp_shi_spi.cpp 
   src/dsp/dsp_esai.cpp src/dsp/dsp_esai_transmit.cpp src/dsp/dsp_esai_clock.cpp src/dsp/dsp_bus_esai.cpp
   src/dsp/dsp_dma.cpp src/dsp/dsp_dma_address.cpp src/dsp/dsp_dma_cycle.cpp src/dsp/dsp_bus_dma.cpp
   src/dsp/dsp_dax.cpp src/dsp/dsp_dax_clock.cpp src/dsp/dsp_bus_dax.cpp
-  src/dsp/dsp_gpio.cpp src/dsp/dsp_timers.cpp src/dsp/dsp_timer_clock.cpp src/dsp/dsp_timer_capture.cpp src/dsp/dsp_interrupts.cpp
+  src/dsp/dsp_gpio.cpp src/dsp/dsp_timers.cpp src/dsp/dsp_timer_clock.cpp src/dsp/dsp_timer_capture.cpp
+  src/dsp/dsp_timer_boundary.cpp src/dsp/dsp_dma_quiescent.cpp src/dsp/dsp_interrupts.cpp
   src/dsp/dsp_run_clock.cpp src/dsp/dsp_run_reset.cpp)
 target_include_directories(blofeld_dsp_peripherals PUBLIC src)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware blofeld_gpio_pads)
@@ -55,6 +56,12 @@ if(NOT BLOFELD_OWN_DSP_ONLY)
   endif()
 endif()
 if(BUILD_TESTING)
+  add_executable(blofeld-dsp-timer-boundary-test test/dsp_timer_boundary_test.cpp)
+  target_link_libraries(blofeld-dsp-timer-boundary-test PRIVATE blofeld_dsp_peripherals)
+  add_test(NAME dsp_timer_boundary COMMAND blofeld-dsp-timer-boundary-test)
+  add_executable(blofeld-dsp-dma-quiescent-test test/dsp_dma_quiescent_test.cpp)
+  target_link_libraries(blofeld-dsp-dma-quiescent-test PRIVATE blofeld_dsp_peripherals)
+  add_test(NAME dsp_dma_quiescent COMMAND blofeld-dsp-dma-quiescent-test)
   add_executable(blofeld-dsp-program-view-test test/dsp_program_view_test.cpp)
   target_link_libraries(blofeld-dsp-program-view-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_program_view COMMAND blofeld-dsp-program-view-test)
