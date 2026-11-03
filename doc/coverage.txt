@@ -50,6 +50,12 @@ The native F2 owner also routes DMA controller word writes through their distinc
 register port. Authored quiet/held/committed DMA cases and checkpoint continuations
 retain busy-write and read-only refusals; original boot remains unqualified. See
 dsp-dma-controller-write.txt and dsp-dma-controller-write-reference.json.
+A current original POR passes the former controller-write refusal and advances
+both DMA0/DMA3 source pointers by11 words. Its next refusal is a14.76ns NAND WE
+pulse against the selected21ns candidate minimum. The preceding226736 NAND
+events match the prior run exactly; stores remain unchanged. Fitted device,
+physical phasing and full boot remain unqualified. See
+original-native-timing-reference.json.
 An original reference-effects run with all sixteen secondary pages installed
 read NAND page 15 correctly 21 times. Two completed MCU RAM snapshots each differ
 from that source at 474 of 528 bytes. The run was deliberately stopped and reaped;

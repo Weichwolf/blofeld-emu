@@ -1,0 +1,65 @@
+{
+  "scope": "Actual original POR after controller-write fix; previous original NAND prefix preserved; next selected NAND timing candidate refusal",
+  "source_commit": "c4f0721e833f8b56199f2e834e51d87bb9dab901",
+  "binary_sha256": "20ed135f630e5aa793acc0b01390105806265904e39681d43be739dd7b04f7b3",
+  "firmware_sha256": "095c760a576dcb04fe3e379bed1b95a0360002295ab42b29e3335a39514f0c72",
+  "MCU_operations": 2384831,
+  "DSP_instructions": 948931,
+  "previous_controller_write_frontier_passed": true,
+  "DMA_source_pointer_advance_words": {
+    "channel0": 11,
+    "channel3": 11
+  },
+  "complete_NAND_pages": 107,
+  "known_NAND_bytes_matching_cold_input": 56496,
+  "unchanged_prior_NAND_event_prefix": {
+    "events": 226736,
+    "sha256": "48a482f388cc7d5bee5987163bfaf7b3a06905e6625fd1df17f57290772569a3"
+  },
+  "NAND_input_timing": {
+    "pulse_periods": 3,
+    "pulse_common_ticks": 9375,
+    "common_timebase_hz": 635040000000,
+    "pulse_nanoseconds": 14.762849584278156,
+    "selected_candidate_minimum_nanoseconds": 21,
+    "fitted_device_or_physical_waveform_verified": false,
+    "candidate_primary_PDF_sha256": "bf9217e55bdad1d3c1e3eb9462fcdafb02c2a77231f89261c3f3927c3fde226f",
+    "primary_input_table_page12_visually_rechecked": true
+  },
+  "read_only_observation": {
+    "inferior_calls_or_writes": false,
+    "breakpoints": false,
+    "all_four_GDB_permissions_off": true,
+    "detached": true
+  },
+  "termination": {
+    "actual_exit": 2,
+    "original_driver_reaped": true,
+    "signal_sent": false,
+    "timeout": false,
+    "sanitizer_diagnostics": 0,
+    "normal_cleanup_completed": true
+  },
+  "persistent_store_bytes_unchanged": true,
+  "native_LCD_pair_valid": true,
+  "receiver_started": false,
+  "main_WAI": false,
+  "saved_PCM": false,
+  "firmware_patched": false,
+  "checkpoint_replay": false,
+  "fuzz": false,
+  "physical_traffic": false,
+  "whole_instrument": false,
+  "evidence_sha256": {
+    "doc/local/durable-cli-midi-audio/r8/observed/terminal-audit.json": "cd9103cb51d02f06b2c93b04c0c5951e19798e7590e7164d6fbcd9e68e04a585",
+    "doc/local/durable-cli-midi-audio/r8/observed/timing-frontier.json": "69f3c9c7472d1ee247046387e1f24aceb61c64e6501b368a911182efa6f81530",
+    "doc/local/durable-cli-midi-audio/r8/observed/control-prefix-audit.json": "f5ec905d5da553b8164b76925ec96475cc76e9e643135cf3f8963cd1f7e52409",
+    "doc/local/overlay-receiver-audit-r1/r8-timing.json": "e03c30cb63586d0543c4dae1fd107916aa89608013e5e663a33c3e4d4330ceb3",
+    "doc/local/durable-cli-midi-audio/r8/observed/conditional-timing-constraints.json": "747ecfe3efbbfa5d1878e65887509190a66c69a44d1aeb95a164dcd480b73f3d"
+  },
+  "limitations": [
+    "A coherent original runtime passes the former DMA-register overlap refusal; original boot and both complete instrument profiles remain unqualified",
+    "The current held-selected NAND/clock/phase assumptions do not qualify a physical pulse; the firmware is not identified as defective",
+    "Read/write/identity/update/recovery/USB/audio/long-run acceptance remains incomplete"
+  ]
+}
