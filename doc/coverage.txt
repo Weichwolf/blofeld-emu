@@ -80,8 +80,14 @@ software scratch access. Independent literal register cases and native signed
 multiply/word operands pass, including reset/copy and unrelated-flag isolation.
 The reset fixture now uses the canonical independent DSP runtime. Both sanitizer
 profiles pass all12 affected groups with no foreign DSP symbols in their13 frozen
-targets. Active pulse counting/IRQ remain visibly unsupported; a fresh original
-POR and complete instrument operation are pending. See mcu-pacnt-reference.json.
+targets. Active pulse counting/IRQ remain visibly unsupported. See
+mcu-pacnt-reference.json. A fresh original POR now passes the former PACNT
+frontier and runs the logo warp. All 528 overlay bytes are accepted, but the
+1024-byte MCU source frame is still known zero; logo decoding is unqualified.
+A partial LCD shows the startup caption. The new 2891-frame PCM prefix contains
+2301 nonzero frames and matches the prior native samples/clocks exactly. Main
+WAI, normal UI, final storage/cleanup and full instrument acceptance remain
+open. See original-native-timing-reference.json.
 An original reference-effects run with all sixteen secondary pages installed
 read NAND page 15 correctly 21 times. Two completed MCU RAM snapshots each differ
 from that source at 474 of 528 bytes. The run was deliberately stopped and reaped;

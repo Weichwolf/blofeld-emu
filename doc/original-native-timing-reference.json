@@ -139,5 +139,65 @@
     "persistent_store_CRC_valid": true,
     "guest_execution_stopped_at_capture": true,
     "runtime_terminal_after_capture": true
+  },
+  "inactive_PACNT_followup": {
+    "source_commit": "c988224e632fa9ceaedef6fe393f9b4e8187356e",
+    "binary_sha256": "781feb612bad66de65f1c8a3ffd5a237ed286f7288629e75a4d959eb93df3310",
+    "MCU_operations": 5136380,
+    "MCU_PC": "0x1668",
+    "original_PACNT_frontier_passed": true,
+    "PACNT": 2045,
+    "PACTL": 0,
+    "PAFLG": 0,
+    "secondary_page15": {
+      "bytes_exact": 528,
+      "cache_accepted": true,
+      "selector": 143
+    },
+    "initialization_prefix": {
+      "complete_pages": 157,
+      "known_bytes_exact": 82896,
+      "native_rows_hashes_and_times_equal_prior_run": true
+    },
+    "MCU_source_frame": {
+      "bytes": 1024,
+      "all_known": true,
+      "all_zero": true,
+      "sha256": "5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef"
+    },
+    "native_LCD": "Startup caption observed; snapshot is inside warp rendering, not a qualified complete logo frame",
+    "native_PCM_snapshot": {
+      "frames": 2891,
+      "nonzero_frames": 2301,
+      "channels": 2,
+      "precision_bits": 24,
+      "frame_rate_hz": 44100,
+      "all_samples_and_clocks_equal_prior_native_prefix": true,
+      "MCU_operations": 3698384
+    },
+    "observation": "Four GDB call/write/breakpoint permissions off; actual same-PID Board provenance; detached without guest changes",
+    "limitations": [
+      "Zero source buffer does not establish that the original logo decoder ran. An early loader return is a hypothesis; the prior one-byte post-transfer discrepancy retains its unknown cause.",
+      "Active pulse counting, complete logo animation, main WAI, normal UI and complete Desktop/Keyboard operation remain unqualified.",
+      "Snapshot evidence does not establish final persistent stores, cleanup, physical timing, pitch or realtime performance."
+    ],
+    "evidence_sha256": {
+      "doc/local/durable-cli-midi-audio/r10/frozen-context.json": "b4ed645aa1ab7d7223beceed34d868beb78d8749f74eaacc8a8411c01414c253",
+      "doc/local/overlay-receiver-audit-r1/r10-logo-first.json": "696d673f1c86da653f720d7a1c3fd8f74bc1372cfe256081355c380f5efd8462",
+      "doc/local/pacnt-independent-reference-r1/R10-logo-first-independent.json": "761209db9de6f93a7b02e39bec6b36e1c11485435f1bb50bda2c8038f46a5e45",
+      "doc/local/pacnt-independent-reference-r1/R10-initialization-continuity.json": "1ec221f25df009e0f31f04f9d598860b85f3355d4bf6c266ac3da700a1b34522",
+      "doc/local/overlay-receiver-audit-r1/r10-pcm-first.json": "95612308aaa802fda2e6df78fc7f6feaa7a55eab09867f7459385937c9eb505c",
+      "doc/local/pacnt-independent-reference-r1/R10-PCM-first-independent.json": "fa5283e4a266ce5700735299ac40ecc15a8b5bdbeb69cad2de4f63161265fc0e",
+      "doc/local/overlay-receiver-audit-r1/r10-live-first-display.json": "a814a1a0382254bb9a2beda133e1d55118e198d91e213470ca05473e5ac185cd"
+    },
+    "main_WAI_observed_at_capture": false,
+    "complete_logo_frame_qualified": false,
+    "final_store_and_cleanup_audit_pending": true,
+    "firmware_patched": false,
+    "checkpoint_replay": false,
+    "full_boot": false,
+    "whole_instrument": false,
+    "fuzz": false,
+    "physical_traffic": false
   }
 }
