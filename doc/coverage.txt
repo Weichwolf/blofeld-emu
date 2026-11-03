@@ -40,6 +40,13 @@ refusals under both sanitizer profiles. This preserves useful legacy coverage;
 it does not establish full startup or instrument acceptance. See
 dsp-vsl-reference.json.
 
+The migrated comparison tests retain 16,902 independent CMPM cases and 256 signed
+immediate-CMP cases with real F2/ALU/PCU/retirement checkpoint checks. They exposed
+a minimum-magnitude overflow error now corrected in the pinned independent core.
+Both sanitizer profiles also qualify the affected loop/budget/ownership/runtime
+regressions. These remain component evidence. See dsp-compare-native-reference.json
+and dsp-cmpm.txt; ordinary original startup and full instrument acceptance remain open.
+
 The explicit native_cycle_budget timeline now groups CPU-only publications
 and holds genuine retirement for computed base periods. Both sanitizer profiles
 pass authored REP/NOP/GPIO, actual DMA wait/restore, vector-read/IRQ/reset and

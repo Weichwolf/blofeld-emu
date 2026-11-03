@@ -1,0 +1,131 @@
+{
+  "scope": "Independent-core comparison migration and CMPM minimum-magnitude flag correction; supporting component evidence",
+  "emulator_source_base": "f1554525e11948e036f6952418887cb079b4c542",
+  "core_revision": "0115bffe7eea3384d8c089cac54af6c0c59eb520",
+  "sources": {
+    "test/dsp_cmpm_test.cpp": "0ac90bf767485ad1c7275c6d2f3cb3442ac898f29d3b81c5edaf9d74e13ca932",
+    "test/dsp_immediate_compare_test.cpp": "966d767cbdf7c77ad73e8a827a7ba53406005d390d9b275d06d63bf49ca8081a",
+    "test/dsp_norm_expectations.hpp": "1ed9c97fc8f39fc88cdffde49b0b0c338ce53455ad1077240b64b6b28fe1600a",
+    "test/dma_native_fixture.hpp": "02e52d55cb207494d8851765cc5cd98eacc44e6c3283985d32113633fe63c739",
+    "test/dma_native_fixture.cpp": "f0dd16e0aad9e5e37fca04b6c44c5836fa874500b88e10fae5d63646c08048c0",
+    "CMakeLists.txt": "1e54f73d9a02f7fdf21b84816fa0e6b19189c6161f2b62930940de62d69e6219",
+    "cmake/OwnDsp.cmake": "181730645909670df546c142934ae10959e78f3b81c61e21002e2704fe13cae0",
+    "cmake/OwnDspComponents.cmake": "9b049cfdf149ac159dd89273fe789f304dbf4617c331451e1af9de961f53c3a3",
+    "doc/dependencies.json": "5f42a6445c0a839eca28bde7002f6bcaa0bfa53faca6bac639c83c573086193f"
+  },
+  "unchanged_independent_oracles": [
+    "CMPM signed_accumulator/source_value/expected/source_registers/variants/inputs",
+    "Immediate CMP signed56 flags model"
+  ],
+  "cmpm": {
+    "accumulator_cases": 6144,
+    "word_cases": 10752,
+    "minimum_cases": 6,
+    "total_cases": 16902,
+    "qualified_carry_cases": 9506,
+    "full_register_stack_and_retirement_checks": true,
+    "manual_derived_minimum_flags": true,
+    "silicon_minimum_flags_validated": false
+  },
+  "immediate_cmp": {
+    "cases": 256,
+    "checkpoint_cuts": 768,
+    "suffix_retirements": 1536,
+    "stale_effect_capability_refusals": 768,
+    "assertions": 11520,
+    "genuine_F2_adjacent_extension": true,
+    "backing_program_changed_after_capture": true,
+    "full_register_stack_checks": true,
+    "separate_native_ALU_PCU_and_retirement": true,
+    "legacy_E1_E2_adapter_contract_retired": true
+  },
+  "core_change": {
+    "reference": "https://github.com/Weichwolf/dsp56300/commit/0115bffe7eea3384d8c089cac54af6c0c59eb520",
+    "library_source": "src/core/arithmetic.cpp",
+    "public_headers_changed": false,
+    "declared_result": "0-|min56| is representable; |min56|-0 overflows; equal minima yield zero; ordinary signed CMP is unchanged"
+  },
+  "validation": {
+    "strict": {
+      "owned_and_core_compile_contexts": 283,
+      "exact_qualified_core_contexts_reused": 74,
+      "archives": 51,
+      "actual_native_exit0_exec_reaps": 10,
+      "sanitizer": "ASan/UBSan",
+      "compiler_tidy_format_sanitizer_findings": 0,
+      "ELFs": {
+        "blofeld-dsp-cmpm-test": "ea56038e65a5d77faef91298c58f33d7748d15ad23127d0de6c811c594d6a989",
+        "blofeld-immediate-compare-test": "fb4d5e1f52cbe53d224929e7723d5e42f1dba238e71421de966b83e4bff62253",
+        "blofeld-native-loop-test": "2f6403e976d074014763eddad5d13717d6c57d3725c02af33b6e53892214e4b6",
+        "blofeld-native-budget-test": "e50cb7ddf4102f6aeb954fd2e48334e7e0c21bbde51a0b1b9d7a108dfa4e3b6c",
+        "blofeld-native-budget-events-test": "793d171c13fb58f368ffbc0fc2d916f5a2b143ccf45473ae1769b6c505788cbe",
+        "blofeld-own-dsp-fetch-test": "fc3275ba8ef99a6e02ca07a516491f8ce999fe463870257598aca81b9ed8373e",
+        "blofeld-own-dsp-checkpoint-test": "a85b9cd7730d911fd8972835bee26073a12d87ba6c8db283d8995c8c3b966425",
+        "blofeld-mcu-dsp-runtime-test": "1335873819137a37aa80dd8cb36f3ba9363759db1741ee6389ea7ab2431cbfed",
+        "blofeld-headless": "3d712a6c0ac8f57689187aab7fcdb5dbf61cb3192fb9f58a38d95b469ce2f6c7"
+      },
+      "native_logs": {
+        "blofeld-dsp-cmpm-test --full": "ea873cf9b1401e218514059249074953b153cb5203b52e04de347d6d2a7e6e06",
+        "blofeld-dsp-cmpm-test --word": "b09b0be5c26b3b5c8208f41b3ddc773ee13b740bcab5bbb2c36f75e240d512fe",
+        "blofeld-dsp-cmpm-test --minimum": "345231765fd2653162f9d80be89410f13064d29be47f995043ed4fd466dbc73a",
+        "blofeld-immediate-compare-test": "0c414f7b3f8419a03bd1b992cbcb6b5508c1eabd7865136e39f7dd63191165f0",
+        "blofeld-native-loop-test": "a6900cae4178a80844422aa7d6d53692cacbeda2562fbdfd2773aeaca7a555b5",
+        "blofeld-native-budget-test": "70e9f41c3f147f03379e3d79cb42dfd7afdc8e72677e0f9be606916dff1623b3",
+        "blofeld-native-budget-events-test": "25c7187895bb530eba1e2f421ca25996813cf0019a22156511eb4aef441cadd6",
+        "blofeld-own-dsp-fetch-test": "e4f581a700ca700e26e03a6bca9e7a33608f34333a3c095802b85294ad474775",
+        "blofeld-own-dsp-checkpoint-test": "d668a587b36f1a1fe38f7fd5fad3e8eace87bd03ddaf653d5e02811345f25404",
+        "blofeld-mcu-dsp-runtime-test": "b3249f075daba75a0322d886b649d8eecbd5d2db18ae1b2c300f8b0730799f92"
+      },
+      "link_graph_at_qualification": {
+        "total": 648,
+        "legacy_mixed": 266,
+        "legacy_only": 0,
+        "independent_only": 125,
+        "neutral": 257
+      }
+    },
+    "thread": {
+      "owned_and_core_compile_contexts": 283,
+      "exact_qualified_core_contexts_reused": 74,
+      "archives": 51,
+      "actual_native_exit0_exec_reaps": 10,
+      "sanitizer": "TSan",
+      "compiler_tidy_format_sanitizer_findings": 0,
+      "ELFs": {
+        "blofeld-dsp-cmpm-test": "990afa4fb89bab5a7efce2aa429ecd23ad6b2df9a3e31939906d9aa8ed98a310",
+        "blofeld-immediate-compare-test": "cb2383f7c96377f5a27d2bea7909fb1d5799be6e618ddf9b6f7ff24dd985f5e4",
+        "blofeld-native-loop-test": "c7c45ebbb0961d38464396d510afd467b61f8dd8accdda53112f57a44b84cb1d",
+        "blofeld-native-budget-test": "1621b1ec4b84f10588e4cbbba739b92a80aaa705e0edc56b3978b10567d48cb7",
+        "blofeld-native-budget-events-test": "7de487c219d7d955d2026a1aa1abf912bd279232c3a0b5037b9661f0b12d1e0b",
+        "blofeld-own-dsp-fetch-test": "84c50c77a2dc7721da294ba737d979443f40a21c2b2609bb13b33fe40ad2769a",
+        "blofeld-own-dsp-checkpoint-test": "4f44db6ccd90d35a5711f7f07c059d2baf91a1fe669cd0278cb82b50d2073273",
+        "blofeld-mcu-dsp-runtime-test": "1a325170d7ee352eef9ed86da4b7f9684235fc43b59badfa181f718f2c2d42f1",
+        "blofeld-headless": "9d27a0ca2d45a26df9a53ef357badc6008de1cd5ae4c2737074a9a27b0e65148"
+      },
+      "native_logs": {
+        "blofeld-dsp-cmpm-test --full": "ea873cf9b1401e218514059249074953b153cb5203b52e04de347d6d2a7e6e06",
+        "blofeld-dsp-cmpm-test --word": "b09b0be5c26b3b5c8208f41b3ddc773ee13b740bcab5bbb2c36f75e240d512fe",
+        "blofeld-dsp-cmpm-test --minimum": "345231765fd2653162f9d80be89410f13064d29be47f995043ed4fd466dbc73a",
+        "blofeld-immediate-compare-test": "0c414f7b3f8419a03bd1b992cbcb6b5508c1eabd7865136e39f7dd63191165f0",
+        "blofeld-native-loop-test": "a6900cae4178a80844422aa7d6d53692cacbeda2562fbdfd2773aeaca7a555b5",
+        "blofeld-native-budget-test": "70e9f41c3f147f03379e3d79cb42dfd7afdc8e72677e0f9be606916dff1623b3",
+        "blofeld-native-budget-events-test": "25c7187895bb530eba1e2f421ca25996813cf0019a22156511eb4aef441cadd6",
+        "blofeld-own-dsp-fetch-test": "e4f581a700ca700e26e03a6bca9e7a33608f34333a3c095802b85294ad474775",
+        "blofeld-own-dsp-checkpoint-test": "d668a587b36f1a1fe38f7fd5fad3e8eace87bd03ddaf653d5e02811345f25404",
+        "blofeld-mcu-dsp-runtime-test": "b3249f075daba75a0322d886b649d8eecbd5d2db18ae1b2c300f8b0730799f92"
+      },
+      "link_graph_at_qualification": {
+        "total": 648,
+        "legacy_mixed": 266,
+        "legacy_only": 0,
+        "independent_only": 125,
+        "neutral": 257
+      }
+    }
+  },
+  "manufacturer_program_bytes_embedded": false,
+  "fuzz_executed": false,
+  "original_restarted": false,
+  "physical_timing_validated": false,
+  "complete_instrument_acceptance": false
+}

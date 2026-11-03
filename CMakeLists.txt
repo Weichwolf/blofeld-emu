@@ -2436,7 +2436,6 @@ if(BUILD_TESTING)
     add_test(NAME dsp_saturation_${scope} COMMAND blofeld-dsp-saturation-test ${scope})
     set_tests_properties(dsp_saturation_${scope} PROPERTIES TIMEOUT 120)
   endforeach()
-  add_executable(blofeld-dsp-cmpm-test test/dsp_cmpm_test.cpp)
   add_executable(blofeld-dsp-power-test test/dsp_power_test.cpp test/dsp_saturation_oracle.cpp)
   target_link_libraries(blofeld-dsp-power-test PRIVATE blofeld_dsp blofeld_dsp_native)
   foreach(scope IN ITEMS mpy mpyr mac macr reject-a-mpy reject-b-mpy reject-a-mpyr reject-b-mpyr
@@ -2444,11 +2443,6 @@ if(BUILD_TESTING)
     add_test(NAME dsp_power_${scope} COMMAND blofeld-dsp-power-test ${scope})
     set_tests_properties(dsp_power_${scope} PROPERTIES TIMEOUT 120)
   endforeach()
-  target_link_libraries(blofeld-dsp-cmpm-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_cmpm_accumulators COMMAND blofeld-dsp-cmpm-test --full)
-  add_test(NAME dsp_cmpm_words COMMAND blofeld-dsp-cmpm-test --word)
-  add_test(NAME dsp_cmpm_minimum COMMAND blofeld-dsp-cmpm-test --minimum)
-  set_tests_properties(dsp_cmpm_accumulators dsp_cmpm_words dsp_cmpm_minimum PROPERTIES TIMEOUT 120)
   add_executable(blofeld-original-dsp-master-output-test test/original_dsp_master_output_test.cpp
     test/dsp_master_output_fixture.cpp)
   target_link_libraries(blofeld-original-dsp-master-output-test PRIVATE blofeld_dsp blofeld_dsp_native)
@@ -3392,7 +3386,7 @@ add_custom_target(quality
     blofeld-dsp-transfer-test blofeld-dsp-shifted-subtract-test blofeld-dsp-vsl-test
     blofeld-dsp-saturation-test
     blofeld-dsp-power-test
-    blofeld-dsp-cmpm-test
+    blofeld-dsp-cmpm-test blofeld-immediate-compare-test
     blofeld-original-dsp-filters-test
     blofeld-original-dsp-master-output-test
     blofeld-original-dsp-sample-test
@@ -4155,19 +4149,17 @@ endif()
 if(BUILD_TESTING)
   add_executable(blofeld-word-decode-test test/dsp_word_decode_test.cpp)
   add_executable(blofeld-decode-extension-test test/dsp_decode_extension_test.cpp)
-  add_executable(blofeld-immediate-compare-test test/dsp_immediate_compare_test.cpp)
   add_executable(blofeld-conditional-branch-test test/dsp_conditional_branch_test.cpp)
   foreach(target blofeld-word-decode-test blofeld-decode-extension-test
-      blofeld-immediate-compare-test blofeld-conditional-branch-test)
+      blofeld-conditional-branch-test)
     target_link_libraries(${target} PRIVATE blofeld_dsp blofeld_dsp_native)
     add_dependencies(quality ${target})
   endforeach()
   add_test(NAME dsp_initial_word_decode COMMAND blofeld-word-decode-test)
   add_test(NAME dsp_decode_extension_streams COMMAND blofeld-decode-extension-test)
-  add_test(NAME dsp_immediate_compare_pipeline COMMAND blofeld-immediate-compare-test)
   add_test(NAME dsp_conditional_branch_pipeline COMMAND blofeld-conditional-branch-test)
   set_tests_properties(dsp_initial_word_decode dsp_decode_extension_streams
-    dsp_immediate_compare_pipeline dsp_conditional_branch_pipeline
+    dsp_conditional_branch_pipeline
     PROPERTIES LABELS dsp_word_decode_runtime TIMEOUT 300)
 endif()
 

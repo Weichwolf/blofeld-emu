@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dma_native_fixture.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
+#include "dsp_norm_expectations.hpp"
 
 #include <algorithm>
 #include <array>
@@ -17,6 +18,8 @@
 
 namespace blofeld::test {
 namespace {
+namespace native = dma_test;
+using Program = native::NativeProgram;
 constexpr std::uint64_t full_range = std::uint64_t{1} << 56;
 constexpr std::int64_t signed_bound = std::int64_t{1} << 55;
 constexpr std::int64_t word_bound = std::int64_t{1} << 23;
@@ -42,7 +45,11 @@ constexpr std::array values{std::uint64_t{0},
                             accumulator_mask - (std::uint64_t{1} << 46) + 1,
                             other_accumulator};
 constexpr std::array word_values{0U, 1U, 2U, 0x7fffffU, 0x800000U, 0xfffffeU, word_mask};
-constexpr std::array<std::string_view, 4> registers{"x0", "y0", "x1", "y1"};
+// FM13-118/131: literal long-immediate register seeds, without a runtime assembler.
+constexpr std::array data_seeds{0x44f400U, 0x46f400U, 0x45f400U, 0x47f400U};
+constexpr std::array a_seeds{0x50f400U, 0x54f400U, 0x52f400U};
+constexpr std::array b_seeds{0x51f400U, 0x55f400U, 0x53f400U};
+constexpr unsigned move_sr = 0x05f439;
 constexpr std::array register_seeds{0x246813U, 0xabcdefU, 0x135790U, 0x654321U};
 
 struct Input {
@@ -97,53 +104,57 @@ std::array<unsigned, 4> source_registers(const Input &input) {
   return result;
 }
 
-void seed_accumulator(DspProgram &code, const std::string_view name, const std::uint64_t value) {
-  code.immediate(std::string(name) + '0', value & word_mask);
-  code.immediate(std::string(name) + '1', (value >> word_bits) & word_mask);
-  code.immediate(std::string(name) + '2', value >> data_bits);
+void immediate(Program &code, const unsigned opcode, const unsigned value) {
+  code.word(opcode);
+  code.word(value);
 }
 
-void emit(DspProgram &code, const Input &input) {
+void seed_accumulator(Program &code, const bool accumulator_b, const std::uint64_t value) {
+  const auto &seeds = accumulator_b ? b_seeds : a_seeds;
+  immediate(code, seeds[0], static_cast<unsigned>(value & word_mask));
+  immediate(code, seeds[1], static_cast<unsigned>((value >> word_bits) & word_mask));
+  immediate(code, seeds[2], static_cast<unsigned>(value >> data_bits));
+}
+
+void emit(Program &code, const Input &input) {
   const auto other = input.source_field == 0 ? input.source : other_accumulator;
-  seed_accumulator(code, "a", input.destination_b ? other : input.destination);
-  seed_accumulator(code, "b", input.destination_b ? input.destination : other);
+  seed_accumulator(code, false, input.destination_b ? other : input.destination);
+  seed_accumulator(code, true, input.destination_b ? input.destination : other);
   const auto words = source_registers(input);
   for (std::size_t index = 0; index < words.size(); ++index) {
-    code.immediate(std::string(registers.at(index)), words.at(index));
+    immediate(code, data_seeds.at(index), words.at(index));
   }
-  code.immediate("sr", masked_status | input.status);
+  immediate(code, move_sr, masked_status | input.status);
   code.word(compare_magnitude_word | (input.source_field << 4) | (input.destination_b ? 8U : 0U));
 }
 
-void verify(DspMachine &machine, const Input &input) {
-  const auto before = machine.cpu().debug_state();
+void verify(OwnDspMachine &machine, const Input &input) {
+  const auto before = machine.cpu().registers();
+  const auto progress = machine.cpu().progress();
   const auto other = input.source_field == 0 ? input.source : other_accumulator;
   const auto words = source_registers(input);
   const auto x = (std::uint64_t{words.at(2)} << word_bits) | words.at(0);
   const auto y = (std::uint64_t{words.at(3)} << word_bits) | words.at(1);
-  require(before.cpu.a == (input.destination_b ? other : input.destination) &&
-              before.cpu.b == (input.destination_b ? input.destination : other) &&
-              before.cpu.x == x && before.cpu.y == y &&
-              before.cpu.sr == (masked_status | input.status),
+  require(before.a == (input.destination_b ? other : input.destination) &&
+              before.b == (input.destination_b ? input.destination : other) && before.x == x &&
+              before.y == y && before.sr == (masked_status | input.status),
           "Actual native setup supplies all specified operands, modes and flags");
   const auto wanted = expected(input);
-  auto cpu = before.cpu;
+  auto cpu = before;
   ++cpu.pc;
   cpu.sr = masked_status | wanted.status;
-  machine.cpu().step();
-  auto after = machine.cpu().debug_state();
-  const auto observed_status = after.cpu.sr;
+  native::step_native(machine);
+  auto after = machine.cpu().registers();
+  const auto observed_status = after.sr;
   if (!wanted.qualified_carry) {
     cpu.sr &= ~carry;
-    after.cpu.sr &= ~carry;
+    after.sr &= ~carry;
   }
   const auto context = "CMPM destination=" + number(input.destination) +
                        " source=" + number(input.source) + " field=" + number(input.source_field) +
                        " incoming SR=" + number(input.status) + " expected SR=" + number(cpu.sr) +
                        " observed SR=" + number(observed_status);
-  require(after.cpu == cpu && after.native_instructions == before.native_instructions + 1 &&
-              after.stack_high == before.stack_high && after.stack_low == before.stack_low &&
-              after.ep == before.ep && after.sz == before.sz && after.sc == before.sc,
+  require(after == cpu && machine.cpu().progress().instructions == progress.instructions + 1,
           "Independent CMPM magnitude/result flags and unchanged operands/whole state: " + context);
 }
 
@@ -189,16 +200,15 @@ std::vector<Input> inputs(const std::string_view scope) {
 }
 
 void run(const std::span<const Input> cases) {
-  DspMachine machine;
   unsigned qualified = 0;
   for (std::size_t start = 0; start < cases.size(); start += batch_limit) {
     const auto batch = cases.subspan(start, std::min(batch_limit, cases.size() - start));
-    DspProgram code;
+    Program code;
     for (const auto &input : batch) { emit(code, input); }
-    machine.cpu().reset_spi_boot();
-    code.install(machine.bus());
+    OwnDspMachine machine(native::native_clocks);
+    native::reset_native(machine, code);
     for (const auto &input : batch) {
-      for (unsigned step = 0; step < setup_steps; ++step) { machine.cpu().step(); }
+      for (unsigned step = 0; step < setup_steps; ++step) { native::step_native(machine); }
       verify(machine, input);
       if (expected(input).qualified_carry) { ++qualified; }
     }

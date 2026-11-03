@@ -1,4 +1,7 @@
 {
+  "evidence_status": "Historical legacy-adapter qualification; does not establish current independent-runtime comparison timing or results",
+  "archived_manifest_blob": "9746d33df8e8733b3fe73d54c81c6d2c824be931",
+  "current_immediate_cmp_reference": "doc/dsp-compare-native-reference.json",
   "scope": "Own actual-F2 word phases, native long-immediate CMP and short CCR branches; not complete original instrument or physical sampling qualification.",
   "primary": {
     "file": "doc/hardware/DSP56300FM.pdf",

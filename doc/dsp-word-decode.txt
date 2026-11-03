@@ -1,4 +1,9 @@
-Program-word Decode and conditional control
+Legacy reference: program-word Decode and conditional control
+
+This describes the remaining legacy adapter's declared word-stage contracts.
+The independent runtime uses its own captured-F2/native-publication interface;
+these phase records do not qualify its timing. Current immediate-CMP coverage
+is documented in dsp-cmpm.txt and dsp-compare-native-reference.json.
 
 DSP56300FM2.3.1/Table2-1 shows each opcode and extension traversing Decode,
 AG1,AG2,E1,E2 in consecutive word periods. Opcode AG1 overlaps extension
@@ -20,17 +25,17 @@ DMA holds preserve these owners with the older actual stages. Rebuild every
 consumer of the public/internal pipeline layout after changes. No firmware
 bytes, program-counter assignments or invented fetches supply data.
 
-Long-immediate CMP executes through the native interpreter with its captured
-extension. Independent signed56 subtraction expectations check all CCR bits,
-unchanged operands and full architectural state, including E2 restore suffixes.
+Long-immediate CMP's independent signed56 oracle is retained in the migrated
+native-publication test. Its former E1/E2 adapter expectations are retired;
+the historical reference manifest does not establish the replacement's results.
 Short Bcc supports all16 CCR conditions. CCR control resolves in AG2 after an
 older genuine E1 candidate is available; that forecast changes fetching only.
 Native branch E1/E2 independently confirm the condition, target and PC/SR.
 The short-branch reference timing and false Decode delay follow FM A1/A2.6.3.
 
 Own controls check literal Table2-1 word phases and joint mid-extension restore,
-consecutive two-word peripheral writes, REP exit, literal X/Y data,256 signed56
-CMP cases and4144 conditional cases. The latter include all256 prior CCR values
+consecutive two-word peripheral writes, REP exit, literal X/Y data and4144
+conditional cases. The latter include all256 prior CCR values
 and adjacent two-word CMP/one-word CLR producers. Existing independent aggregate
 branch,AGU,MOVEM and control timing expectations remain required.
 
@@ -38,17 +43,17 @@ branch,AGU,MOVEM and control timing expectations remain required.
     blofeld-decode-extension-test blofeld-immediate-compare-test \
     blofeld-conditional-branch-test
   ctest --test-dir build/strict -j1 --output-on-failure \
-    -R '^(dsp_initial_word_decode|dsp_decode_extension_streams|dsp_immediate_compare_pipeline|dsp_conditional_branch_pipeline)$'
+    -R '^(dsp_initial_word_decode|dsp_decode_extension_streams|dsp_immediate_compare_publication|dsp_conditional_branch_pipeline)$'
 
 Use the separate thread preset for TSan. These controls do not run fuzzing.
-Forty named affected regression cases pass separately under ASan/UBSan and TSan,
+The manifest records forty earlier affected regression cases under ASan/UBSan and TSan,
 including unchanged aggregate branch,AGU,MOVEM,subroutine and control references.
 See dsp-word-decode-reference.json for the exact scope and word-phase rules.
 
 This is supporting CPU/DSP evidence, not complete-device acceptance. Other
 instruction/IRQ/loop contexts, authentic required ROM contents, reserved-memory
 semantics, board wiring and complete original reset-to-instrument execution
-remain open. The strict original reserved Y:002000 failure is not bypassed.
+remain open. Legacy phase tests do not establish the current original runtime frontier.
 Original MIDI/audio/storage/update/recovery, both device profiles, all documented
 functions and real-time operation still require connected tests. No measured
 physical sampling edge or physical flash-safety claim follows from these
