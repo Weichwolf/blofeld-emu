@@ -1,6 +1,6 @@
 Native DSP code view on the board bus
 
-The independent DSP dependency is pinned to 339c3a083b51ecdb4712f6707e8580b7cc1333ab.
+The independent DSP dependency is pinned to caa20ccc401f7744ffbe6817eebd434052271724.
 Its normal Core(Io&) constructor selects native execution on supported hosts.
 OwnDspIo supplies the bus's pure known-code view and program revision. Unknown,
 unmapped, unqualified or switching code remains absent from inspection; actual
@@ -25,8 +25,10 @@ counters do not count the synchronous C++ memory/Io callbacks: zero ALU helpers
 is not callback-free RAM or a performance result.
 
 The current public-Core consumers pass ASan/UBSan and separate TSan. Both test
-sources and their canonical dependency closure build with strict warnings and
-clang-tidy zero findings. A bounded query stops before a complete real RAM
+sources and the actual canonical adapter build with strict warnings and
+clang-tidy zero findings. Sealed CPU-independent board providers are reused
+with identical source/header closure and object dependencies excluding changed
+Core headers; the Core comes from its matching qualified sanitizer archive. A bounded query stops before a complete real RAM
 instruction, retaining known opcode/extension/base cost and unchanged CPU state;
 the normal owner path then performs actual RAM/BCR effects and refusals.
 Results and identity hashes are recorded in dsp-native-bus-reference.json.
@@ -34,7 +36,10 @@ Results and identity hashes are recorded in dsp-native-bus-reference.json.
 The core also caches eligible short native prefixes and exposes genuine known
 next-fetch snapshots at zero/exhausted budgets. See its bounded-execution.txt.
 These interfaces are available to the scheduler; their presence does not mean
-the connected runtime already uses native regions.
+the connected runtime already uses native regions. The pinned core additionally
+supports direct sparse X/Y windows with known-byte, permission, alias and mapping
+guards. This board adapter still uses real data callbacks. Grant export must
+respect memory-switch boundaries and existing all-access observer contracts.
 
 Reproduce the selected component gates without the remaining legacy harness:
 
