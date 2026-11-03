@@ -5,6 +5,7 @@
 #include "board/nand_bus_decode.hpp"
 #include "board/nand_peer_medium.hpp"
 #include "common/bus.hpp"
+#include "common/telemetry.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_peripheral_calendar.hpp"
@@ -23,9 +24,9 @@
 #include "storage/nand_write_timing.hpp"
 
 #include <cstdint>
-#include <iostream>
 #include <memory>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <utility>
 
@@ -90,13 +91,6 @@ struct NandPeer::Impl {
       : machine_(machine),
         state_(std::make_unique<PeerState>(
             std::move(medium), machine.clock().timebase_hz(), contract, timing)) {
-    std::cerr << "NAND_BOARD_MODEL CE=held-selected power=100us-reference "
-                 "part=explicit-device-contract GPIO=logical sample=period-completion "
-                 "board-qualified=0 contract="
-              << static_cast<unsigned>(contract) << " timing="
-              << (timing == NandTiming::functional_protocol ? "functional-protocol"
-                                                            : "candidate-minima")
-              << '\n';
     drive(0);
   }
 
@@ -106,6 +100,19 @@ struct NandPeer::Impl {
       : machine_(target),
         state_(std::make_unique<PeerState>(state)),
         identity_(std::move(identity)) {}
+
+  void set_telemetry(std::ostream *destination) {
+    telemetry_ = Telemetry(destination);
+    telemetry_.emit([&](std::ostream &event_output) {
+      event_output << "NAND_BOARD_MODEL CE=held-selected power=100us-reference "
+                      "part=explicit-device-contract GPIO=logical sample=period-completion "
+                      "board-qualified=0 contract="
+                   << static_cast<unsigned>(state_->decoder.contract()) << " timing="
+                   << (state_->timing == NandTiming::functional_protocol ? "functional-protocol"
+                                                                         : "candidate-minima")
+                   << '\n';
+    });
+  }
 
   [[nodiscard]] NandPeerDetailed detailed() const {
     healthy();
@@ -182,28 +189,37 @@ struct NandPeer::Impl {
       if (power) {
         state_->device.observe_power_ready();
         state_->power_ready = true;
-        std::cerr << "NAND_AUTONOMOUS_POWER ticks=" << ticks << " timebase=" << state_->timebase_hz
-                  << " reference-observation=100us fitted-latency=unknown\n";
+        telemetry_.emit([&](std::ostream &event_output) {
+          event_output << "NAND_AUTONOMOUS_POWER ticks=" << ticks
+                       << " timebase=" << state_->timebase_hz
+                       << " reference-observation=100us fitted-latency=unknown\n";
+        });
       }
       if (operation) {
         if (!completed || completed->ticks != ticks) { fail("operation completion mismatch"); }
-        std::cerr << "NAND_AUTONOMOUS_COMPLETION ticks=" << ticks
-                  << " operation=" << static_cast<unsigned>(completed->operation) << '\n';
+        telemetry_.emit([&](std::ostream &event_output) {
+          event_output << "NAND_AUTONOMOUS_COMPLETION ticks=" << ticks
+                       << " operation=" << static_cast<unsigned>(completed->operation) << '\n';
+        });
       } else if (completed) {
         fail("unoffered operation completed");
       }
       if (output) {
-        std::cerr << "NAND_OUTPUT_BOUND ticks=" << ticks
-                  << " last-native-pc=" << hex(state_->context.pc, 6)
-                  << " omr=" << hex(state_->context.omr, 6) << " physical-edge=unobserved\n";
+        telemetry_.emit([&](std::ostream &event_output) {
+          event_output << "NAND_OUTPUT_BOUND ticks=" << ticks
+                       << " last-native-pc=" << hex(state_->context.pc, 6)
+                       << " omr=" << hex(state_->context.omr, 6) << " physical-edge=unobserved\n";
+        });
       }
       publish();
       drive(ticks);
       if (operation && state_->device.device().status_mode() && state_->previous_re == false) {
         const auto status = state_->device.device().status();
-        std::cerr << "NAND_STATUS_REFRESH ticks=" << ticks << " value=" << hex(status.value, 2)
-                  << " known=" << hex(status.known, 2)
-                  << " controller-boundary-projection=1 physical-pad-delay=unknown\n";
+        telemetry_.emit([&](std::ostream &event_output) {
+          event_output << "NAND_STATUS_REFRESH ticks=" << ticks << " value=" << hex(status.value, 2)
+                       << " known=" << hex(status.known, 2)
+                       << " controller-boundary-projection=1 physical-pad-delay=unknown\n";
+        });
       }
       state_->faulted = false;
     } catch (const Fault &cause) { fail(std::string("dispatch: ") + cause.what()); }
@@ -288,9 +304,11 @@ struct NandPeer::Impl {
   }
 
   void latch(const NandWriteLatch input, const std::uint64_t ticks) const {
-    std::cerr << "NAND_LATCH ticks=" << ticks << " pc=" << hex(state_->context.pc, 6)
-              << " kind=" << static_cast<unsigned>(input.kind) << " value=" << hex(input.value, 2)
-              << '\n';
+    telemetry_.emit([&](std::ostream &event_output) {
+      event_output << "NAND_LATCH ticks=" << ticks << " pc=" << hex(state_->context.pc, 6)
+                   << " kind=" << static_cast<unsigned>(input.kind)
+                   << " value=" << hex(input.value, 2) << '\n';
+    });
     switch (input.kind) {
       case NandWriteKind::command: {
         state_->device.command(input.value);
@@ -312,10 +330,12 @@ struct NandPeer::Impl {
     if (before_column != Nand::page_bytes) { return; }
     const auto ready = state_->device.device().ready();
     if (!ready) { throw Fault("P-part read-end lost Ready knowledge"); }
-    std::cerr << (neutral_array ? "NAND_NEUTRAL_READ_END ticks=" : "NAND_END ticks=") << ticks
-              << " pc=" << hex(state_->context.pc, 6) << " row=" << before_page
-              << " next-row=" << state_->device.device().page() << " ready=" << *ready
-              << " reference-tRB=0ns\n";
+    telemetry_.emit([&](std::ostream &event_output) {
+      event_output << (neutral_array ? "NAND_NEUTRAL_READ_END ticks=" : "NAND_END ticks=") << ticks
+                   << " pc=" << hex(state_->context.pc, 6) << " row=" << before_page
+                   << " next-row=" << state_->device.device().page() << " ready=" << *ready
+                   << " reference-tRB=0ns\n";
+    });
   }
 
   [[nodiscard]] unsigned decode_controls(const unsigned controls) const {
@@ -335,25 +355,33 @@ struct NandPeer::Impl {
         throw Fault("NAND control knowledge lost after observation-window entry");
       }
       if (controls.known != state_->previous_known) {
-        std::cerr << "UNQUALIFIED_NAND_STARTUP pc=" << hex(state_->context.pc, 6)
-                  << " ticks=" << ticks
-                  << " unknown-control-mask=" << hex(control_mask & ~controls.known, 3)
-                  << " no-pre-window-pin-semantics=1\n";
+        telemetry_.emit([&](std::ostream &event_output) {
+          event_output << "UNQUALIFIED_NAND_STARTUP pc=" << hex(state_->context.pc, 6)
+                       << " ticks=" << ticks
+                       << " unknown-control-mask=" << hex(control_mask & ~controls.known, 3)
+                       << " no-pre-window-pin-semantics=1\n";
+        });
         state_->previous_known = controls.known;
       }
       return;
     }
     if (!state_->connected) {
-      std::cerr << "UNQUALIFIED_NAND_WINDOW pc=" << hex(state_->context.pc, 6) << " ticks=" << ticks
-                << " controls=" << hex(controls.levels, 3) << " CE=held-selected-lab\n";
+      telemetry_.emit([&](std::ostream &event_output) {
+        event_output << "UNQUALIFIED_NAND_WINDOW pc=" << hex(state_->context.pc, 6)
+                     << " ticks=" << ticks << " controls=" << hex(controls.levels, 3)
+                     << " CE=held-selected-lab\n";
+      });
       state_->connected = true;
     }
     const bool was_neutral = state_->decoder.neutral();
     const auto logical = decode_controls(controls.levels);
     if (was_neutral != state_->decoder.neutral()) {
-      std::cerr << "NAND_FUNCTIONAL_BUS ticks=" << ticks << " pc=" << hex(state_->context.pc, 6)
-                << " raw=" << hex(controls.levels, 3) << " logical=" << hex(logical, 3)
-                << " neutral=" << state_->decoder.neutral() << '\n';
+      telemetry_.emit([&](std::ostream &event_output) {
+        event_output << "NAND_FUNCTIONAL_BUS ticks=" << ticks
+                     << " pc=" << hex(state_->context.pc, 6) << " raw=" << hex(controls.levels, 3)
+                     << " logical=" << hex(logical, 3) << " neutral=" << state_->decoder.neutral()
+                     << '\n';
+      });
     }
     const bool re_n = (logical & re_pin) != 0;
     const bool we_n = (logical & we_pin) != 0;
@@ -386,9 +414,11 @@ struct NandPeer::Impl {
           status ? (state_->device.device().status().known & Nand::status_bits) : Nand::byte_mask;
       const auto value = state_->device.read(static_cast<std::uint8_t>(mask));
       state_->trace_access = true;
-      std::cerr << "NAND_BYTE ticks=" << ticks << " pc=" << hex(state_->context.pc, 6)
-                << " value=" << hex(value, 2) << " next-column=" << state_->device.device().column()
-                << '\n';
+      telemetry_.emit([&](std::ostream &event_output) {
+        event_output << "NAND_BYTE ticks=" << ticks << " pc=" << hex(state_->context.pc, 6)
+                     << " value=" << hex(value, 2)
+                     << " next-column=" << state_->device.device().column() << '\n';
+      });
       return NandByte{.value = value, .known = static_cast<std::uint8_t>(mask)};
     });
     if (state_->previous_re == false && re_n) { release_read(ticks); }
@@ -396,6 +426,7 @@ struct NandPeer::Impl {
     publish();
   }
 
+  Telemetry telemetry_;
   OwnDspMachine &machine_;
   std::unique_ptr<PeerState> state_;
   bool needs_binding_ = true;
@@ -491,6 +522,10 @@ NandPeerEvents NandPeer::events() {
                 impl_->bind(owner);
                 impl_->dispatch(ticks);
               }};
+}
+
+void NandPeer::set_telemetry(std::ostream *output) {
+  impl_->set_telemetry(output);
 }
 
 void NandPeer::before_native(const std::uint64_t common_ticks) {

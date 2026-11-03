@@ -11,6 +11,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <iosfwd>
 #include <memory>
 #include <optional>
 
@@ -95,6 +96,8 @@ public:
   ~NandPeer();
   NandPeer(const NandPeer &) = delete;
   NandPeer &operator=(const NandPeer &) = delete;
+  // Host-only diagnostics; select before running. Null disables all event formatting.
+  void set_telemetry(std::ostream *output);
   [[nodiscard]] NandPeerEvents events();
   void before_native(std::uint64_t common_ticks);
   void after_native(std::uint64_t common_ticks, std::optional<std::uint32_t> native_pc);

@@ -248,3 +248,17 @@ Actual ordinary Board output and authored/conditional LCD tests are distinct
 from the separate paused MCU-only preview that can show Play Sound/A001/Init.
 That preview is not proof of coupled DSP, live MIDI or normal full-device startup.
 See display-export.txt. MIDI-triggered original UI changes remain unqualified.
+
+Runtime telemetry and optimized integration
+
+NAND event formatting is disabled by default and follows the runtime --trace
+option. A startup-selected lazy sink evaluates no formatter when disabled;
+contextual failures remain visible. Off/on component tests preserve the actual
+array byte, complete protocol/timing state, reset and clone/refusal contracts in
+both sanitizer profiles and Core0115/390. The regular runtime pins Core390 with
+four actual fetch/checkpoint interface passes. Optimized O3/ThinLTO/native-CPU
+ELFs contain no sanitizer or foreign-DSP runtime and pass the two telemetry
+contracts plus a firmware inspection smoke. Full original boot, playable output
+and measured real-time factor remain open. A rounded full56 MACR V/L boundary
+and saturation test migration remain open; no instrument percentage is inferred.
+See telemetry.txt and telemetry-reference.json. No fuzzing was run.

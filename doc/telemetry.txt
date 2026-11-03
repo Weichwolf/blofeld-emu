@@ -1,0 +1,34 @@
+Runtime-selected diagnostic output
+
+NAND event output follows the existing --trace PATH runtime option. Without a
+trace file, the regular Board emits no NAND event stream. The choice also
+applies after checkpoint restoration. Contextual faults remain visible and
+are independent of tracing; no emulated clock, pin, byte or state is replaced.
+
+The shared Telemetry sink selects its function once at host setup. Its C++23
+formatter concept accepts a synchronous, lazy writer. The disabled sink never
+invokes that writer, formats data or allocates output storage. Event dispatch
+uses an indirect call instead of an enabled/disabled condition at each event.
+The host owns the output stream and must keep it alive. Host output policy is
+separate from emulated checkpoint state and is rebound by the Board on restore.
+This change does not remove every existing trace condition elsewhere.
+
+Targeted ASan/UBSan and TSan checks cover disabled side effects, exact output,
+copying and visible formatter failures. The same protocol fixture runs with
+output off/on: 512 independent decoder transitions, actual array byte 0x42,
+matching full protocol/timing state, genuine reset, clone/restore and contextual
+refusals. Both Core0115 and Core390 consumer libraries pass. The three changed model callers compile with zero format/tidy findings.
+These are component contracts; no instrument correctness percentage, full boot
+or throughput improvement is inferred. See telemetry-reference.json.
+
+After building the two targets in the chosen profile:
+  ctest --test-dir build/release -R '^(telemetry_lazy_output|nand_telemetry_equivalence)$' --output-on-failure
+Use optimized Release for visual/audio/long runs. Sanitizer variants are for
+selected tests and occasional regression qualification. No fuzzing is automatic.
+
+The regular runtime now pins the independently qualified Core390. Four actual
+fetch/checkpoint interface scopes pass under ASan/UBSan and TSan, reusing only
+identical source/dependency/archive closures. A MACR rounded full56 V/L boundary
+remains under adjudication; the pending saturation-harness migration is not part
+of this increment. The optimized canonical build passes the two telemetry tests
+and a real-firmware inspection smoke; this is not full instrument acceptance.

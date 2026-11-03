@@ -4501,3 +4501,5 @@ if(TARGET blofeld-dma-callback-allocation-test)
 endif()
 
 include(cmake/McuInspectionTests.cmake)
+
+include(cmake/TelemetryTests.cmake)

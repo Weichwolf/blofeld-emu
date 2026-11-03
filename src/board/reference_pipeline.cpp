@@ -78,6 +78,7 @@ void Board::prepare_dsp() {
     } else {
       throw Fault("Invalid NAND backing contract");
     }
+    native_->nand->set_telemetry(execution_.trace);
   }
 }
 

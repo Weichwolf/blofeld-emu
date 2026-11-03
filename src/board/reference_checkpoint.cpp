@@ -151,7 +151,10 @@ void Board::restore(const Checkpoint &checkpoint) {
   const Busy guard(*this);
   const auto &saved = *checkpoint.storage_;
   auto replacement = std::make_unique<Owners>(config_, execution_);
-  if (saved.nand) { replacement->nand = std::make_unique<NandPeer>(*saved.nand, replacement->dsp); }
+  if (saved.nand) {
+    replacement->nand = std::make_unique<NandPeer>(*saved.nand, replacement->dsp);
+    replacement->nand->set_telemetry(execution_.trace);
+  }
   replacement->runtime = std::make_unique<McuDspRuntime>(saved.runtime,
                                                          replacement->mcu,
                                                          replacement->dsp,
