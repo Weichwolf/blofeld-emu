@@ -1,6 +1,6 @@
 Native DSP code view on the board bus
 
-The independent DSP dependency is pinned to caa20ccc401f7744ffbe6817eebd434052271724.
+The independent DSP dependency is pinned to c39050d72eee4f90698cfb59542fb562510f92df.
 Its normal Core(Io&) constructor selects native execution on supported hosts.
 OwnDspIo supplies the bus's pure known-code view and program revision. Unknown,
 unmapped, unqualified or switching code remains absent from inspection; actual
@@ -40,6 +40,11 @@ the connected runtime already uses native regions. The pinned core additionally
 supports direct sparse X/Y windows with known-byte, permission, alias and mapping
 guards. This board adapter still uses real data callbacks. Grant export must
 respect memory-switch boundaries and existing all-access observer contracts.
+The pinned Core also provides request_interrupt(vector, level), which admits
+real WAIT/unknown foreground without a vector read or retirement. Completed-REP
+unknown metadata remains explicit. Its independent 1272-case gate and seven
+affected groups pass both sanitizer profiles in the Core project; these board
+consumer tests do not establish connected interrupt scheduling.
 
 Reproduce the selected component gates without the remaining legacy harness:
 

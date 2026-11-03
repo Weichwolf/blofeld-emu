@@ -1,19 +1,19 @@
 {
   "qualification": "PASS",
   "scope": "Actual canonical board adapter and bounded default-Core consumers with source-identical sealed CPU-independent board providers; direct-window board grants and connected firmware remain pending",
-  "core_revision": "caa20ccc401f7744ffbe6817eebd434052271724",
+  "core_revision": "c39050d72eee4f90698cfb59542fb562510f92df",
   "profiles": {
     "strict": {
       "sanitizer": "ASan/UBSan",
       "quality": "LLVM19/C++23, strict compiler/linker flags, clang-format, clang-tidy zero findings",
       "binaries": {
         "blofeld-dsp-native-bus-test": {
-          "elf_sha256": "c581de02a17b24a54ca3a69dae1c75a24b6e32ebd87604e2584d8db1cc30665c",
+          "elf_sha256": "46fe501f9f102283ceb326d0e4e4f2e440b76613f7f662b4d857032de95d79cd",
           "actual_exit": 0,
           "reaped": true
         },
         "blofeld-dsp-program-view-test": {
-          "elf_sha256": "7f72cca2ef6696ae74c71a0975096969374afc06ac8de65c61b597bb44aa90fe",
+          "elf_sha256": "1b64a576db953a03ef1d0f7ff2b66e2b9d70aab7d4160dbe1f07004cc18bc413",
           "actual_exit": 0,
           "reaped": true
         }
@@ -27,8 +27,8 @@
         "doc/local/bounded-core-adoption-r1/r2/strict/libblofeld_dsp_peripherals.a": "60941d4516e49caae7bca7eed1d4034b41445266e45203f221e01581a9f27b20",
         "doc/local/bounded-core-adoption-r1/r2/strict/libblofeld_gpio_pads.a": "fc691f0452fc98800cc530d869ce1a709b1ed01ef3b96b3020da474bb59c7a9e",
         "doc/local/bounded-core-adoption-r1/r2/strict/libblofeld_firmware.a": "9048df9a995b3de66caf34dc074a7543528cd13a702653fd16b81db7e78b4053",
-        "core/libdsp56300_core.a": "9dd2a990f76d39d46462fb85008d08cc4b9af098db22c0941658659b1f2876a5",
-        "build/strict/zlib/libz.a": "a7bc23614e488ae1b6f57521bc7aa75904bd4d048f3331bb61dc68094dec9117"
+        "build/strict/zlib/libz.a": "a7bc23614e488ae1b6f57521bc7aa75904bd4d048f3331bb61dc68094dec9117",
+        "core/libdsp56300_core.a": "6b3008f9d3655995a6e35a583d8bc9174fddaaa40dce98b2bb678c849dae32e2"
       },
       "provider_reuse": "Exact prior source/header closure; actual Ninja object dependency lists exclude changed Core headers; native symbols have no Core references",
       "provider_objects_without_CPU_headers": 31,
@@ -39,12 +39,12 @@
       "quality": "LLVM19/C++23, strict compiler/linker flags, clang-format, clang-tidy zero findings",
       "binaries": {
         "blofeld-dsp-native-bus-test": {
-          "elf_sha256": "188fdd08b8416800690b8394bc2d2fac2e9302398de8aa8e704aa57a2401f38e",
+          "elf_sha256": "e7ede786bd2a68d805025d8e95af2a2addaf0b069226175c422e70e80fc87300",
           "actual_exit": 0,
           "reaped": true
         },
         "blofeld-dsp-program-view-test": {
-          "elf_sha256": "278b6216066303f94b41c1f49506d1b398123ba0f12ab8b7510fb3d937287caf",
+          "elf_sha256": "e5ecd2caf6dac2add3b1ac6acbf95d56846a7f6635db01511f7938e8a2f74c6b",
           "actual_exit": 0,
           "reaped": true
         }
@@ -58,8 +58,8 @@
         "doc/local/bounded-core-adoption-r1/r2/thread/libblofeld_dsp_peripherals.a": "2b6166b91603dc6c05c7d215e831d033c433c41bf62b589907dca2d6c222a0c5",
         "doc/local/bounded-core-adoption-r1/r2/thread/libblofeld_gpio_pads.a": "91eed1c921bdc52964c3ccef1555908a424781c9a9a5feb6202ca04049b24437",
         "doc/local/bounded-core-adoption-r1/r2/thread/libblofeld_firmware.a": "82c456487a44a5a86c53ebb71c0d12be18713c2a267275a6f5801088341825ff",
-        "core/libdsp56300_core.a": "6fada1b9468cc8bbee110849348ca373d1266943e236443dea8c3e9b488264b8",
-        "build/thread/zlib/libz.a": "1e19e7379f20c0a37aa2aaf03e28219095247005bf8d4df4c472f9ee7f20698c"
+        "build/thread/zlib/libz.a": "1e19e7379f20c0a37aa2aaf03e28219095247005bf8d4df4c472f9ee7f20698c",
+        "core/libdsp56300_core.a": "4ec8c63435c23ee36e4cc0f38d007b1b25d8ed4ebbd1c2a1d62bb44be3f466ec"
       },
       "provider_reuse": "Exact prior source/header closure; actual Ninja object dependency lists exclude changed Core headers; native symbols have no Core references",
       "provider_objects_without_CPU_headers": 31,
@@ -88,16 +88,17 @@
     "src/dsp/own_dsp_io.cpp": "406f52f32393c8b393d99cc8928adc6ad05297452375f267ee9f58b25b20665d",
     "test/dsp_program_view_test.cpp": "e69970f47ee7964729d44f1fd2abd8d770139b9e01768a3ce8ebaba05ac6f45f",
     "test/dsp_native_bus_test.cpp": "cc8a5821bc2c44f3b24f99201febc5139a1e3e026b475707c3dccf67a9d768b2",
-    "cmake/OwnDsp.cmake": "40055f9e4190b1fed3706da87b5bc45baf33859741e032620e3cceb81a77ca5d"
+    "cmake/OwnDsp.cmake": "9f92c1c9e225a631a4865551335b49484aae8c52493b47c4b71f7186af5f8ca5"
   },
   "fuzz": false,
   "full_suite": false,
   "local_evidence": {
-    "inputs": "doc/local/window-core-adoption-r1/inputs.json",
-    "build": "doc/local/window-core-adoption-r1/build.json",
-    "native": "doc/local/window-core-adoption-r1/qualification.json",
-    "release_configuration": "doc/local/window-core-adoption-r1/release-configure.json",
-    "native_zlib": "doc/local/bounded-core-adoption-r1/r2/native-zlib-review.json"
+    "inputs": "doc/local/irq-core-adoption-r1/inputs.json",
+    "build": "doc/local/irq-core-adoption-r1/build.json",
+    "native": "doc/local/irq-core-adoption-r1/qualification.json",
+    "release_configuration": "doc/local/irq-core-adoption-r1/release-configure-final.json",
+    "native_zlib": "doc/local/bounded-core-adoption-r1/r2/native-zlib-review.json",
+    "metadata_pin_advance": "doc/local/irq-core-adoption-r1/metadata-pin-advance.json"
   },
   "limitations": [
     "The Core supports explicit direct data windows; the current board adapter has not granted them yet",
@@ -107,5 +108,19 @@
     "Y-to-P relocation remains unqualified",
     "Remaining legacy test migration and full Desktop/Keyboard instrument acceptance incomplete"
   ],
-  "release_configuration": "PASS optimized canonical configure/generate with the public Core pin; no Release binary or firmware run"
+  "release_configuration": "PASS optimized canonical configure/generate with the public Core pin; no Release binary or firmware run",
+  "qualified_core_implementation_revision": "6ffcd0abd7a8fcde9b66c98ea0f57f93c0cae2d8",
+  "core_pin_code_identity": {
+    "src": "d56b8fed7d41b9ff15815281ec268b63e9238d44",
+    "include": "e4a7b25a430b443428b34d0617c7a8210d1692ee",
+    "test": "ab1476a21a1346783a8d0ed161e82d0012dd538b",
+    "cmake": "f5f36129197cf86bd6ebb1e221d604e812ccd63a",
+    "CMakeLists.txt": "e96f875056b0714af31f0e9a3ac7eaa6448aece3"
+  },
+  "core_deferred_irq": {
+    "api": "request_interrupt(vector, level)",
+    "independent_checks_per_profile": 1272,
+    "scoped_sanitizer_groups_per_profile": 7,
+    "scope": "Core component; connected IRQ frontend integration remains separate"
+  }
 }

@@ -54,6 +54,9 @@ The Core now also qualifies direct sparse data windows, including both-port
 guards, known bytes, readonly/executable aliases and descriptor rebinding. Board
 grants are pending observability/memory-switch integration; no connected speed
 or original-firmware progress is inferred from this library interface.
+State-only deferred IRQ admission is also available from WAIT and ordinary
+unknown foreground. The Core qualifies its actual vector/continuation and
+rejection contracts; connected frontend integration remains separate.
 The VSL component test now excludes the former interpreter/assembler and passes
 its 9,216 independent numeric/address cases, native REP/modulo and contextual
 refusals under both sanitizer profiles. This preserves useful legacy coverage;
