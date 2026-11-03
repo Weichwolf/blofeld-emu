@@ -52,8 +52,8 @@
     "peak_24bit": 357263,
     "scope": "First original loader-return recording; no later audio or physical pitch/realtime proof."
   },
-  "native_exit": null,
-  "native_reaped": false,
+  "native_exit": -15,
+  "native_reaped": true,
   "final_sanitizer_cleanup_observed": false,
   "main_WAI_observed": false,
   "firmware_modified": false,
@@ -65,5 +65,7 @@
   "fuzz": false,
   "local_case": "local/pim-original-start-r1",
   "local_independent_audit": "local/pim-original-audit-r1/latest.json",
-  "limitations": "Functional PIM hypothesis passes this connected interval; silicon pipeline depth, normal main loop, every later transfer, both profiles, full MIDI/audio/storage/update behavior and terminal cleanup remain open."
+  "limitations": "Functional PIM hypothesis passes this connected interval; silicon pipeline depth, normal main loop, every later transfer, both profiles and full MIDI/audio/storage/update behavior remain unqualified. Final sanitizer cleanup was not observed after intentional host termination.",
+  "native_termination_signal": "SIGTERM",
+  "terminal_status": "Intentional host cancellation after evidence preservation to replace the instrumented long run with a qualified optimized Release; not PASS or guest failure."
 }
