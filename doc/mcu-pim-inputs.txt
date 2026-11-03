@@ -18,9 +18,12 @@ but must reconnect external pad providers. Unclocked transaction fixtures retain
 their existing direct semantics until a native clock stream is attached.
 
 Authored regressions cover registers, masks, direction, WAI, divider/PHY changes,
-reset, copies and pad rebinding. A local replay of recorded original source pins
-predicts 32 correct bytes with unchanged clocks and original page data; this is
-not an original-firmware boot or a complete 528-byte transport observation.
+reset, copies and pad rebinding. Captured-pad replay predicts 32 correct bytes.
+An actual unmodified original 1.25 cold reset now receives all 528 overlay bytes
+exactly and executes its original decoder, producing the expected 1024-byte logo
+before a regular loader return. Declared clocks and DSP core match the earlier
+failed transfer. Normal main-loop entry and complete instrument operation remain
+open. See original-pim-startup-reference.json; this is not measured silicon timing.
 
 Ordinary-memory inspection returns decoded space, physical offset and optional
 value without a guest read. Unknown storage and I/O have no value. Board range

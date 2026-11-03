@@ -67,8 +67,11 @@ latency or establish RAM contents from absent register events. See
 boot-gpio-transfer-reference.json.
 Clocked PIM register inputs and pure mapped-memory inspection now have authored
 regressions. CPU-clock, GPIO, reset, joint-checkpoint and failed-Board inspection
-cases pass with the coherent MCU/Board classes. The candidate still needs an
-original-reset run; captured-pin replay alone is not boot proof. See mcu-pim-inputs.txt.
+cases pass with the coherent MCU/Board classes. A subsequent actual original
+reset receives all 528 secondary-page bytes exactly, executes the original overlay
+and produces the expected 1024-byte logo before its first loader return.
+Main WAI, later transfers, both complete profiles and terminal cleanup remain
+open. See mcu-pim-inputs.txt and original-pim-startup-reference.json.
 The ordinary text-config CLI now accepts native-cycles. Both sanitizer profiles
 pass actual DSP-reset/no-prefill REP/NOP timing, unchanged MCU/NVM expectations,
 fixed config refusals and affected reference-effects regressions. This is authored
