@@ -27,10 +27,13 @@ All six settings are required exactly once:
 - clock: MCU OSC Hz, initial MCU oscillator phase, DSP EXTAL Hz and common Hz,
   followed by reference-boundaries. Both owners use explicit cycle boundaries;
   the common timebase must be an exact positive MCU-timebase multiple.
-- dsp-execution reference-effects: explicit DMA/F2/native-effect/F1 ordering,
-  program-access priority and real native interrupt/vector effects. Each admitted
-  effect consumes a reference period. This is not calibrated DSP56371 timing,
-  legacy instruction-cost estimation or permission to skip an unsupported effect.
+- dsp-execution: reference-effects selects explicit DMA/F2/native-effect/F1 ordering,
+  program-access priority and real native interrupt/vector effects, with one period
+  per admitted effect. native-cycles groups CPU-only publications and waits for the
+  real instruction's computed base budget. Both choices preserve actual bus/vector
+  effects and visible unsupported accesses. Physical pipeline/interlock timing and
+  complete instrument operation remain unqualified; see dsp-native-budget.txt and
+  reference-native-cycle-cli-reference.json.
 - ordering: DSP versus MCU shared-write order (dsp-before-mcu, mcu-before-dsp or
   reject), committed WAI order (dsp-before-mcu), positive DSP-cycle budget per MCU
   period. Reset periods also use the explicit DSP-before-MCU runtime contract.

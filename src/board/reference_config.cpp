@@ -291,8 +291,15 @@ AudioClockRoute audio_clock(std::istringstream &line) {
 }
 
 void dsp_execution(Config &config, std::istringstream &line) {
-  literal(line, "reference-effects");
-  config.dsp.timing = OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts;
+  const auto timing = token(line);
+  if (timing == "reference-effects") {
+    config.dsp.timing =
+        OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts;
+  } else if (timing == "native-cycles") {
+    config.dsp.timing = OwnDspAutomaticTiming::native_cycle_budget;
+  } else {
+    throw Fault("Unknown reference-board DSP execution timing: " + timing);
+  }
   config.dsp.reset_dsp_first = true;
   config.dma_grant = DspDmaGrant::available;
 }
@@ -550,7 +557,7 @@ struct Parser {
       if (key != "blofeld-reference-board") { throw Fault("Missing reference-board header"); }
       const auto version = token(line);
       if (version != "2") {
-        throw Fault("Reference-board format2 requires explicit dsp-execution reference-effects; "
+        throw Fault("Reference-board format2 requires explicit dsp-execution timing; "
                     "legacy interrupt estimates are unsupported");
       }
       header = true;

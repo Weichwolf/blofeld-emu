@@ -4,9 +4,12 @@ Native instruction budgets
   ctest --test-dir build/strict -R '^dsp_native_cycle_budget(_events)?$' --output-on-failure
 Repeat with thread for TSan. Exact qualification scope: dsp-native-budget-reference.json.
 
-OwnDspAutomaticTiming::native_cycle_budget is an explicit C++ scheduling choice.
-The text-config CLI still selects reference-effects; normal device profiles are
-not implicitly switched. Instruction semantics and original firmware remain unchanged.
+OwnDspAutomaticTiming::native_cycle_budget is selected explicitly in C++, or with
+dsp-execution native-cycles in a format2 text config. reference-effects retains
+its admitted-effect ordering. Both text choices are required explicitly; complete
+normal device profiles remain unqualified. Instruction semantics and original
+firmware remain unchanged. CLI qualification from actual DSP reset is recorded
+separately in reference-native-cycle-cli-reference.json.
 
 Each admitted period advances DMA/F2 and at most the first external CPU effect.
 Consecutive CPU-only address/MOVE/ALU/unit/PCU publications share that period.

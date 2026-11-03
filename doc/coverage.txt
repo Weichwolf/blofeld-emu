@@ -35,12 +35,17 @@ remain unqualified. Legacy test migration/dependency removal and subsequent
 OwnDsp naming cleanup remain open. See own-dsp-integration.txt, runtime.txt and
 nand-read-handoff-reference.json.
 
-The explicit native_cycle_budget C++ timeline now groups CPU-only publications
+The explicit native_cycle_budget timeline now groups CPU-only publications
 and holds genuine retirement for computed base periods. Both sanitizer profiles
 pass authored REP/NOP/GPIO, actual DMA wait/restore, vector-read/IRQ/reset and
 affected fetch/timeline regressions. Physical interlocks, corrected original
 overlay transfer and normal-profile integration remain open. See
 dsp-native-budget.txt and dsp-native-budget-reference.json.
+The ordinary text-config CLI now accepts native-cycles. Both sanitizer profiles
+pass actual DSP-reset/no-prefill REP/NOP timing, unchanged MCU/NVM expectations,
+fixed config refusals and affected reference-effects regressions. This is authored
+fixture evidence, not an original instrument startup claim. See
+reference-native-cycle-cli-reference.json.
 An original reference-effects run with all sixteen secondary pages installed
 read NAND page 15 correctly 21 times. Two completed MCU RAM snapshots each differ
 from that source at 474 of 528 bytes. The run was deliberately stopped and reaped;

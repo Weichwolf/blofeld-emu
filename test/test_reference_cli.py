@@ -194,6 +194,54 @@ class ReferenceCli(unittest.TestCase):
                               int(instruction is not None)))
         self.assertEqual(saved, image(WAIT))
 
+    def test_native_cycle_budget_from_reset_has_independent_rep_costs(self):
+        config = CONFIG.replace("dsp-execution reference-effects", "dsp-execution native-cycles")
+        rom = bytes.fromhex("0617a0") + bytes(64 * 3)  # Authored REP #23 followed by real NOPs.
+        result, trace, saved = self.run_native(config, rom)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("instructions=6 operations=23 interrupts=0 cycles=38 idle=17 ticks=380",
+                      result.stdout)
+        self.assertIn("completed-steps=58 units=64 ticks=3420", result.stdout)
+        self.assertEqual(saved, image(WAIT))
+        cycles = re.findall(
+            r"^DSP-PIPELINE start=(\d+) end=(\d+) cycle=(\d+) f1=(\d+) "
+            r"f1-known=([01]) native-pc=0x([0-9a-f]+) native-pc-known=([01]) "
+            r"retirement=([01])$", trace, re.M)
+        # Native reset recovery ends at540. Two genuine F1/F2 fill periods,
+        # five REP setup periods and23 one-period bodies precede34 plain NOPs.
+        self.assertEqual(len(cycles), 64)
+        retired = []
+        for index, row in enumerate(cycles):
+            start, end, cycle, _, _, pc, known, retirement = row
+            self.assertEqual((int(start), int(end), int(cycle)),
+                             (540 + index * 45, 585 + index * 45, index))
+            if retirement == "1":
+                self.assertEqual(known, "1")
+                retired.append((index, int(pc, 16)))
+        expected = [(6, 0xff0000)]
+        expected += [(7 + index, 0xff0001) for index in range(23)]
+        expected += [(30 + index, 0xff0002 + index) for index in range(34)]
+        self.assertEqual(retired, expected)
+
+    def test_execution_timing_rejects_unknown_missing_extra_and_duplicate_fields(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            board, rom, state = self.prepared(root)
+            before = state.read_bytes()
+            trace = root / "out.trace"
+            cases = [CONFIG.replace("reference-effects", "native-cyclez"),
+                     CONFIG.replace("dsp-execution reference-effects", "dsp-execution"),
+                     CONFIG.replace("reference-effects", "native-cycles surplus"),
+                     CONFIG + "dsp-execution native-cycles\n"]
+            for text in cases:
+                board.write_text(text)
+                result = self.invoke("--reference-board", board, "--dsp-rom", rom,
+                                     "--flash-in", state, "--trace", trace)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertRegex(result.stderr, "[Rr]eference")
+                self.assertFalse(trace.exists())
+                self.assertEqual(state.read_bytes(), before)
+
     def test_power_on_executes_reset_edges_before_native_mcu_steps(self):
         config = CONFIG.replace("operations 23", "operations 215") + "mcu-power-on 3 high\n"
         result, trace, saved = self.run_native(config)
