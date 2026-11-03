@@ -3286,6 +3286,7 @@ add_custom_target(quality
     blofeld-reference-runtime-status-test
     blofeld-reference-access-test
     blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test blofeld-reference-cycle-test
+    blofeld-controller-write-test
     blofeld-native-budget-test
     blofeld-native-budget-events-test
     blofeld-loop-fetch-test blofeld-loop-program-fetch-test blofeld-loop-native-fetch-test

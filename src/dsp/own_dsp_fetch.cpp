@@ -27,10 +27,12 @@ namespace blofeld {
 namespace {
 constexpr unsigned cache_enable = 1U << 19U;
 
-bool dma_controller_read(const dsp56300::PendingInstruction &pending) {
+bool dma_controller_access(const dsp56300::PendingInstruction &pending) {
   // FM ch10: controller registers are separate from P-memory fetch resources.
-  // Only real reads qualify; atomic bit effects also have read footprints.
-  return pending.effect.kind == dsp56300::EffectKind::read &&
+  // Native handlers retain read-only, unknown-state and busy-write checks.
+  // Atomic bit effects also have read footprints and remain separately guarded.
+  return (pending.effect.kind == dsp56300::EffectKind::read ||
+          pending.effect.kind == dsp56300::EffectKind::write) &&
          pending.effect.space == dsp56300::Space::x && DspDma::handles(pending.effect.address);
 }
 
@@ -276,7 +278,7 @@ std::optional<DspMemoryAccess>
 OwnDspFetch::native_overlap(const DspProgramFetchView &state,
                             const dsp56300::PendingInstruction &pending) const {
   const auto access = OwnDspMachine::dma_native_footprint(pending);
-  if (dma_controller_read(pending)) { return access; }
+  if (dma_controller_access(pending)) { return access; }
   if (access && pending.effect.kind == dsp56300::EffectKind::read &&
       machine_.bus_.unselected_read(access->target)) {
     return access;

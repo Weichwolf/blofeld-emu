@@ -4,7 +4,8 @@ The connected original voice-list service reaches MOVEP X:ffffef,A at P:00043e
 while F2 owns P:00043f. These are a DMA controller register and a program fetch,
 not two accesses to the same RAM. The frontend now admits real read effects
 in X space when DspDma::handles identifies the controller register. Atomic bit
-effects and writes do not acquire that permission. The native I/O interface
+effects retain their separate guard; word writes are qualified separately in
+dsp-dma-controller-write.txt. The native I/O interface
 still performs the actual transaction and reports unknown/unsupported state.
 Reference: DSP56300FM chapter10 register map and MOVEP/MOVE instruction entries.
 
