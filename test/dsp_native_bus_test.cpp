@@ -102,19 +102,20 @@ void real_peripheral_transfer() {
   OwnDspIo io(bus);
   dsp56300::Core cpu(io);
   const auto boundary = cpu.run(dsp56300::RunBudget{.instructions = 10, .cycles = 10});
-  require(boundary.execution.dispatches == 0 && boundary.cycles == 0 &&
-              boundary.stop == dsp56300::RunStop::external_effect && boundary.pc == 0 &&
-              boundary.next && boundary.next->opcode == load_x &&
-              boundary.next->extension == datum_address && boundary.next_cycles == 2 &&
-              cpu.registers().pc == 0 && cpu.registers().x == 0 && !io.failure(),
-          "The bounded board consumer stops before the whole real RAM/peripheral instruction");
-  const auto result = cpu.run(2);
-  require(result.dispatches == 2 && result.fault.kind == dsp56300::FaultKind::none &&
+  require(boundary.execution.dispatches == 1 && boundary.cycles == 2 &&
+              boundary.stop == dsp56300::RunStop::external_effect && boundary.pc == 2 &&
+              boundary.next && boundary.next->opcode == store_x &&
+              boundary.next->extension == bus_control && boundary.next_cycles == 2 &&
+              cpu.registers().pc == 2 && cpu.registers().x == datum &&
+              cpu.jit_statistics().native_move_instructions == 1 && !io.failure(),
+          "The native RAM load retires before the whole real peripheral-store owner boundary");
+  const auto result = cpu.run(1);
+  require(result.dispatches == 1 && result.fault.kind == dsp56300::FaultKind::none &&
               result.progress.instructions == 2 && result.progress.estimated_cycles == 4 &&
               cpu.registers().pc == 4 && (cpu.registers().x & word_mask) == datum &&
               bus.read({.space = DspSpace::y, .address = port_f_control}) == 0 &&
               bus.program_revision() == revision && !io.failure(),
-          "Real native load/store callbacks move an actual RAM word into the board BCR");
+          "The native RAM load and genuine peripheral callback move the actual word into BCR");
   const auto stats = cpu.jit_statistics();
   std::cout << "ACTUAL_IO blocks=" << stats.compiled_blocks
             << " alu=" << stats.native_alu_instructions << " helpers=" << stats.helper_instructions

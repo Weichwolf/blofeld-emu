@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -304,6 +305,28 @@ DspBus::MemoryLayout DspBus::memory_layout(const unsigned mode) {
       {.program_end = 0x3000, .x_end = 0x10000, .y_end = 0x16000},
   }};
   return layouts.at(mode);
+}
+
+std::array<DspDataWindow, 3> DspBus::data_windows(const DspSpace space) {
+  if (space != DspSpace::x && space != DspSpace::y) {
+    throw Fault("DSP data-window query requires X or Y space");
+  }
+  const bool x = space == DspSpace::x;
+  const auto index = bank(space);
+  const auto low = x ? x_low_end : y_low_end;
+  const auto before = memory_layout(memory_mode_);
+  const auto after = memory_layout(switch_delay_ != 0 ? requested_memory_mode_ : memory_mode_);
+  const auto high = x ? std::min(before.x_end, after.x_end) : std::min(before.y_end, after.y_end);
+  auto &ram = ram_.at(index);
+  auto &rom = rom_.at(index);
+  return {DspDataWindow{.words = std::span(ram.words).first(low),
+                        .known = std::span(ram.known).first(low),
+                        .writable = true},
+          DspDataWindow{.address = data_rom_base, .words = rom.words, .known = rom.known},
+          DspDataWindow{.address = data_rom_end,
+                        .words = std::span(ram.words).subspan(low, high - data_rom_end),
+                        .known = std::span(ram.known).subspan(low, high - data_rom_end),
+                        .writable = true}};
 }
 
 bool DspBus::stable_program_context(const std::uint32_t address, const std::uint32_t omr) const {

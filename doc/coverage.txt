@@ -50,10 +50,12 @@ The pinned core additionally provides bounded native CPU-only regions, native
 short JMP/cached tails and genuine known next-fetch snapshots. The real bus
 consumer passes both sanitizer profiles with native NOP/JMP and pre-effect owner
 boundaries. Connected scheduling and instrument throughput remain unqualified.
-The Core now also qualifies direct sparse data windows, including both-port
-guards, known bytes, readonly/executable aliases and descriptor rebinding. Board
-grants are pending observability/memory-switch integration; no connected speed
-or original-firmware progress is inferred from this library interface.
+The Core and board adapter now qualify direct sparse internal X/Y data windows,
+including known-byte guards, readonly ROM, all map transitions, matching storage
+and paired restore. Full-access observers retain genuine callbacks and detach
+back to native execution. The 462-case board gate and nine affected groups pass
+both sanitizer profiles. Connected native frontend integration and instrument
+throughput remain separate; see dsp-data-windows.txt.
 State-only deferred IRQ admission is also available from WAIT and ordinary
 unknown foreground. The Core qualifies its actual vector/continuation and
 rejection contracts; connected frontend integration remains separate.

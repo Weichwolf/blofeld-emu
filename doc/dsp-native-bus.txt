@@ -18,9 +18,10 @@ are covered. The unresolved Y-to-P relocation remains an actual access failure.
 The authored default-Core consumer test performs 32 native NOPs and one native
 short JMP within exact instruction/base-cycle bounds, with zero ALU helpers.
 It then checks data-only cache reuse, code invalidation and exact
-unknown-code failure context. A native load/store pair reads real RAM and writes
-BCR, enabling the actual Port-F gate. A later BCR read rejects unknown BIU status
-with its real cause and exact io_read/X/$fffffb/PC=$4 fault. Native ALU/helper
+unknown-code failure context. A native RAM load retires inside the bounded prefix;
+the following BCR store remains a real owner boundary. The subsequent genuine
+peripheral callback enables the actual Port-F gate. A later BCR read rejects
+unknown BIU status with its real cause and exact io_read/X/$fffffb/PC=$4 fault. Native ALU/helper
 counters do not count the synchronous C++ memory/Io callbacks: zero ALU helpers
 is not callback-free RAM or a performance result.
 
@@ -28,18 +29,19 @@ The current public-Core consumers pass ASan/UBSan and separate TSan. Both test
 sources and the actual canonical adapter build with strict warnings and
 clang-tidy zero findings. Sealed CPU-independent board providers are reused
 with identical source/header closure and object dependencies excluding changed
-Core headers; the Core comes from its matching qualified sanitizer archive. A bounded query stops before a complete real RAM
-instruction, retaining known opcode/extension/base cost and unchanged CPU state;
-the normal owner path then performs actual RAM/BCR effects and refusals.
+Core headers; the Core comes from its matching qualified sanitizer archive.
+The changed peripheral/owner closure rebuilds against the actual new bus and
+adapter headers. A bounded query now completes its known RAM load, retaining the
+following store's opcode/extension/base cost before its peripheral effect.
 Results and identity hashes are recorded in dsp-native-bus-reference.json.
 
 The core also caches eligible short native prefixes and exposes genuine known
 next-fetch snapshots at zero/exhausted budgets. See its bounded-execution.txt.
-These interfaces are available to the scheduler; their presence does not mean
-the connected runtime already uses native regions. The pinned core additionally
-supports direct sparse X/Y windows with known-byte, permission, alias and mapping
-guards. This board adapter still uses real data callbacks. Grant export must
-respect memory-switch boundaries and existing all-access observer contracts.
+These interfaces are available to the scheduler; connected native frontend
+integration remains separate. The board adapter now exports actual sparse
+internal X/Y storage with known-byte, permission and mapping guards. Full-access
+observers retain real RAM callbacks; the direct path returns after detachment.
+See dsp-data-windows.txt for layout, restore and observation qualification.
 The pinned Core also provides request_interrupt(vector, level), which admits
 real WAIT/unknown foreground without a vector read or retirement. Completed-REP
 unknown metadata remains explicit. Its independent 1272-case gate and seven

@@ -4,7 +4,9 @@
 #include "dsp/dsp_bus.hpp"
 #include "dsp56300/core.hpp"
 
+#include <cstddef>
 #include <exception>
+#include <span>
 #include <stdexcept>
 
 namespace blofeld {
@@ -27,6 +29,25 @@ DspBitOperation board_action(const dsp56300::BitAction action) {
     default: throw std::invalid_argument("Unknown DSP bit operation");
   }
 }
+}
+
+std::span<const dsp56300::MemoryWindow>
+OwnDspIo::memory_windows(const dsp56300::Space space) noexcept {
+  if ((space != dsp56300::Space::x && space != dsp56300::Space::y) || failure_ ||
+      read_observer_.completed != nullptr || write_observer_.completed != nullptr) {
+    return {};
+  }
+  const bool x = space == dsp56300::Space::x;
+  const auto source = bus_.data_windows(x ? DspSpace::x : DspSpace::y);
+  auto &target = windows_.at(x ? 0U : 1U);
+  for (std::size_t index = 0; index < source.size(); ++index) {
+    const auto &entry = source.at(index);
+    target.at(index) = {.address = entry.address,
+                        .words = entry.words,
+                        .known = entry.known,
+                        .writable = entry.writable};
+  }
+  return target;
 }
 
 bool OwnDspIo::fail(const Operation operation,

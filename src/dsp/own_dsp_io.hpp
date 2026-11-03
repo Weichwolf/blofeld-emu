@@ -4,9 +4,11 @@
 #include "dsp/dsp_bus.hpp"
 #include "dsp56300/core.hpp"
 
+#include <array>
 #include <cstdint>
 #include <exception>
 #include <optional>
+#include <span>
 
 namespace blofeld {
 struct DspIoReadAccess {
@@ -54,6 +56,9 @@ public:
     return bus_.program_revision();
   }
 
+  [[nodiscard]] std::span<const dsp56300::MemoryWindow>
+  memory_windows(dsp56300::Space space) noexcept override;
+
   [[nodiscard]] const std::optional<Failure> &failure() const noexcept { return failure_; }
 
   void clear_failure() noexcept { failure_.reset(); }
@@ -87,5 +92,6 @@ private:
   std::optional<Failure> failure_;
   DspIoReadObserver read_observer_;
   DspIoWriteObserver write_observer_;
+  std::array<std::array<dsp56300::MemoryWindow, 3>, 2> windows_{};
 };
 } // namespace blofeld

@@ -6,46 +6,36 @@
 
 namespace blofeld {
 namespace {
-class InstructionGuard {
-public:
-  InstructionGuard(bool &active, DspIoWriteObserver &slot, const DspIoWriteObserver observer)
-      : active_(active), slot_(slot) {
-    active_ = true;
-    slot_ = observer;
-  }
-
-  ~InstructionGuard() {
-    slot_ = {};
-    active_ = false;
-  }
-
-  InstructionGuard(const InstructionGuard &) = delete;
-  InstructionGuard &operator=(const InstructionGuard &) = delete;
-
-private:
-  bool &active_;
-  DspIoWriteObserver &slot_;
-};
-
 class ObservedEffectGuard {
 public:
   ObservedEffectGuard(bool &active,
                       DspIoReadObserver &reads,
                       DspIoWriteObserver &writes,
                       const DspIoReadObserver read_observer,
-                      const DspIoWriteObserver write_observer)
-      : instruction_(active, writes, write_observer), reads_(reads) {
+                      const DspIoWriteObserver write_observer,
+                      dsp56300::Core *const rebind = nullptr)
+      : active_(active), reads_(reads), writes_(writes), rebind_(rebind) {
+    if (rebind_ != nullptr) { rebind_->clear_code_cache(); }
+    active_ = true;
     reads_ = read_observer;
+    writes_ = write_observer;
   }
 
-  ~ObservedEffectGuard() { reads_ = {}; }
+  ~ObservedEffectGuard() {
+    reads_ = {};
+    writes_ = {};
+    active_ = false;
+    if (rebind_ != nullptr) { rebind_->clear_code_cache(); }
+  }
 
   ObservedEffectGuard(const ObservedEffectGuard &) = delete;
   ObservedEffectGuard &operator=(const ObservedEffectGuard &) = delete;
 
 private:
-  InstructionGuard instruction_;
+  bool &active_;
   DspIoReadObserver &reads_;
+  DspIoWriteObserver &writes_;
+  dsp56300::Core *rebind_;
 };
 }
 
@@ -63,8 +53,13 @@ dsp56300::RunResult OwnDspMachine::run_observed_unclocked(const DspIoReadObserve
     throw Fault("Own DSP synchronous instruction requires an inactive unclocked owner pc=" +
                 hex(state.pc, 6) + " omr=" + hex(state.omr, 6));
   }
-  const ObservedEffectGuard guard(
-      advancing_effect_, io_.read_observer_, io_.write_observer_, reads, writes);
+  const bool observes_ram = reads.completed != nullptr || writes.completed != nullptr;
+  const ObservedEffectGuard guard(advancing_effect_,
+                                  io_.read_observer_,
+                                  io_.write_observer_,
+                                  reads,
+                                  writes,
+                                  observes_ram ? &cpu_ : nullptr);
   auto result = cpu_.run(1);
   if (result.fault.kind == dsp56300::FaultKind::none && result.dispatches == 1) {
     bus_.observe_omr(cpu_.registers().omr);

@@ -1,0 +1,144 @@
+{
+  "qualification": "PASS-component-native",
+  "scope": "Actual internal X/Y data storage grants, native transfers, memory-switch bounds, matching knowledge bytes and full-access observation; connected instrument runtime remains separate",
+  "core_revision": "c39050d72eee4f90698cfb59542fb562510f92df",
+  "new_independent_checks_per_profile": 462,
+  "release_new_independent_checks": 462,
+  "source_sha256": {
+    "src/dsp/dsp_bus.hpp": "448ef65ae114fa5a3e37b605329b89aa9699c0277b0e8651ee642cc51aaa7235",
+    "src/dsp/dsp_bus.cpp": "d5f102f23e5683d119c8ed064e8b65827b1e0e732654ac304b9afd741baba01c",
+    "src/dsp/own_dsp_io.hpp": "4061e0d6e47ef74026a2dff42e0f94e5fb9ca482801e9c5217b40d21be258075",
+    "src/dsp/own_dsp_io.cpp": "b51381813ed8deefd3510920925798cf95fec4772d3d5e5055b427013f88b058",
+    "src/dsp/dsp_unclocked.cpp": "03417d14a52d0d05ffca5a1fe74c4f394d1673817c0d3ff8b28cd92bfb337dc1",
+    "test/dsp_data_windows_test.cpp": "19dbf59f1864648897f2a28a5efdca9cc14fca9b9b9d02ea43fe16c74de2d9d3",
+    "test/dsp_native_bus_test.cpp": "9dead6a34f01a7db04c8e2b35a2ac877fb373a7471800e957219971c6e472153"
+  },
+  "profiles": {
+    "strict": {
+      "sanitizer": "ASan/UBSan",
+      "groups": {
+        "blofeld-dsp-data-windows-test": {
+          "elf_sha256": "cb2e5b5c845347ea040f4c94b4d8321a0485a5455e3db9be99f526f65dafadf0",
+          "actual_exit": 0,
+          "reaped": true
+        },
+        "blofeld-dsp-native-bus-test": {
+          "elf_sha256": "1b5c929f54755526d60f601d82a297fabae23ecfa05bf0c75d99f51fe0bdec2e",
+          "actual_exit": 0,
+          "reaped": true
+        },
+        "blofeld-dsp-program-view-test": {
+          "elf_sha256": "2347aefd1282830ddf1cb8d75e85a9abd300166c76c395bbb9c0cfbad9aff937",
+          "actual_exit": 0,
+          "reaped": true
+        },
+        "blofeld-own-dsp-io-test": {
+          "elf_sha256": "e8d2100b92f9cca3e5a926e755d7cd12a441b64c034463e2237c3501e629d2c3",
+          "actual_exit": 0,
+          "reaped": true
+        },
+        "blofeld-own-dsp-reset-test": {
+          "elf_sha256": "65a5ec387cf85f5ddaad46dbac3d57371ebce2f71679b8cb334c34a83410a253",
+          "actual_exit": 0,
+          "reaped": true
+        },
+        "blofeld-own-dsp-checkpoint-test": {
+          "elf_sha256": "a859fb478c8fa8f40b8d312e4767830cb21f3ac714843a23c0f802ad31eddd56",
+          "actual_exit": 0,
+          "reaped": true
+        },
+        "blofeld-own-dsp-interrupts-test": {
+          "elf_sha256": "acef798efb6efbfa962206f720faaff68fd5f4e84436730ac0c762e1189b8561",
+          "actual_exit": 0,
+          "reaped": true
+        },
+        "blofeld-dsp-unclocked-test": {
+          "elf_sha256": "632c7476bf00328cc613d69c9fa202ac7e5d9c4fffea1d2f9e1bd66a5eba711a",
+          "actual_exit": 0,
+          "reaped": true
+        },
+        "blofeld-dsp-observed-test": {
+          "elf_sha256": "a33c256aa0ceb95d3c3c9882169a5bcf2f7a0e2aa48d1ecccbd5bae9188bd179",
+          "actual_exit": 0,
+          "reaped": true
+        }
+      },
+      "provider_reuse": "Six firmware/GPIO objects have identical actual source/header dependencies, excluding changed bus/Core headers; sealed matching zlib and Core archives retained",
+      "provider_dependency_sha256": "e31351836080a4f7f09147d5feaf00b71391debcdb1d956e5b530910f5ce3813",
+      "configured_compile_contexts": 59,
+      "built_source_units": 55
+    },
+    "thread": {
+      "sanitizer": "TSan",
+      "groups": {
+        "blofeld-dsp-data-windows-test": {
+          "elf_sha256": "2ad8c501e6f4a2a7a3dd4d2d0e353998cf65506b664d48dfe8939da33703e75f",
+          "actual_exit": 0,
+          "reaped": true
+        },
+        "blofeld-dsp-native-bus-test": {
+          "elf_sha256": "459c668558572a15b2f8d733fa213da3fae9d6fab0c107cb22a2153a19b9f9e0",
+          "actual_exit": 0,
+          "reaped": true
+        },
+        "blofeld-dsp-program-view-test": {
+          "elf_sha256": "c1ea618c017fa09a2e888653671d85f20c6dd63aa1dbf760ea1ef3d30b7bb68b",
+          "actual_exit": 0,
+          "reaped": true
+        },
+        "blofeld-own-dsp-io-test": {
+          "elf_sha256": "ba30068737d929516a2c42ebd3da06393420b608f4c45e8cb89be5993322161f",
+          "actual_exit": 0,
+          "reaped": true
+        },
+        "blofeld-own-dsp-reset-test": {
+          "elf_sha256": "7111301084751d0249fbbc7fbe218f4a71be5f1504d3a711dcbc3ee010d6d89a",
+          "actual_exit": 0,
+          "reaped": true
+        },
+        "blofeld-own-dsp-checkpoint-test": {
+          "elf_sha256": "30ddc79cb341d4164d285e4e9441c832867eb2b3b7715f196d1e2ce60f60bb79",
+          "actual_exit": 0,
+          "reaped": true
+        },
+        "blofeld-own-dsp-interrupts-test": {
+          "elf_sha256": "afca3e5a283ca4040676e1b0085f51257325b0a3cd43265a23ebeb912c102b36",
+          "actual_exit": 0,
+          "reaped": true
+        },
+        "blofeld-dsp-unclocked-test": {
+          "elf_sha256": "6cecbbddf1c06583d2fa5edb8ebb18dc0127ba24c29ac24c37358a81b8cd1177",
+          "actual_exit": 0,
+          "reaped": true
+        },
+        "blofeld-dsp-observed-test": {
+          "elf_sha256": "c2a5a5497dfe42dbdd524bf8d39687d4cd7e224d19a9413b81531d63205ba539",
+          "actual_exit": 0,
+          "reaped": true
+        }
+      },
+      "provider_reuse": "Six firmware/GPIO objects have identical actual source/header dependencies, excluding changed bus/Core headers; sealed matching zlib and Core archives retained",
+      "provider_dependency_sha256": "7a0c7f40c424f9a9e5c52185162b897894b2b3f34804d2a111471a9ba14ff4d8",
+      "configured_compile_contexts": 59,
+      "built_source_units": 55
+    }
+  },
+  "contracts": [
+    "Sorted low RAM, readonly data ROM and stable high RAM reference actual bus vectors; no unknown word is initialized for execution",
+    "All five memory maps and request/partial/commit/reset phases retain independent interval and permission expectations",
+    "During a map change only the intersection of stable data extents is granted; relocated X-to-P storage loses its X grant",
+    "Real owner writes and ROM installation change the exact borrowed words/knowledge bytes; native stores initialize the same high RAM cell",
+    "Unknown RAM/ROM, holes and readonly stores stop before effects and retain real owner refusals with bank/address/PC",
+    "Paired CPU/bus restore moves storage allocations and rebinds before native writes",
+    "Full read/write observers suppress direct grants; unclocked native cache rebinding retains each callback and restores native transfers after detachment",
+    "The native RAM load retires before the real peripheral-store boundary, preserving actual BCR effects and unknown BIU refusals"
+  ],
+  "fuzz": false,
+  "whole_instrument": false,
+  "local_evidence": {
+    "inputs": "doc/local/direct-board-windows-r1/inputs.json",
+    "build": "doc/local/direct-board-windows-r1/build-sanitizers.json",
+    "native": "doc/local/direct-board-windows-r1/qualification.json",
+    "release": "doc/local/direct-board-windows-r1/release/native-r2.json"
+  }
+}

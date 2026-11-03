@@ -27,6 +27,15 @@ struct DspAddress {
   std::uint32_t address = 0;
 };
 
+// Borrowed ordinary data storage; descriptors exclude I/O and unstable maps.
+// Words and knowledge bytes belong to the bus, including subsequent DMA writes.
+struct DspDataWindow {
+  std::uint32_t address = 0;
+  std::span<std::uint32_t> words;
+  std::span<std::uint8_t> known;
+  bool writable = false;
+};
+
 struct DspStore {
   DspSpace space = DspSpace::p;
   std::uint32_t address = 0;
@@ -154,6 +163,10 @@ public:
   // Actual execution still uses the strict mapped bus and contextual failures.
   [[nodiscard]] std::optional<std::uint32_t>
   inspect_known_program(std::uint32_t address) const noexcept;
+
+  // Sorted low RAM, readonly data ROM and stable high RAM. No P aliases are
+  // visible in these grants. Reacquire after a map revision or paired restore.
+  [[nodiscard]] std::array<DspDataWindow, 3> data_windows(DspSpace space);
 
   [[nodiscard]] std::uint64_t program_revision() const noexcept { return program_revision_; }
 
