@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "board/mcu_dsp_schedule.hpp"
+#include "board/mcu_dsp_runtime.hpp"
 #include "common/bus.hpp"
-#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
+#include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_machine.hpp"
 #include "mcu/hc12.hpp"
 #include "mcu/hc12_cycles.hpp"
 #include "mcu/hc12_registers.hpp"
@@ -338,22 +338,27 @@ void test_admission_and_unknown_vector() {
 
 void test_stale_joint_epoch() {
   McuMachine mcu(image(), BLOFELD_DEFAULT_SLA, contract());
-  DspMachine dsp(
-      DspRunContract{.clock = {.extal_hz = oscillator_hz,
-                               .timebase_hz = common_hz,
-                               .switch_timing = DspClockSwitch::reference_instruction_boundary},
-                     .timing = DspRunTiming::native_internal_estimates});
-  McuDspSchedule schedule(
-      {.dsp = {.observation = DspStepObservation::reference_completion_boundary},
-       .maximum_dsp_steps_per_cycle = 16},
-      mcu,
-      dsp);
-  const auto ticks = dsp.run_clock().elapsed_ticks();
+  OwnDspMachine dsp({.extal_hz = oscillator_hz,
+                     .timebase_hz = common_hz,
+                     .switch_timing = DspClockSwitch::reference_cycle_boundary});
+  McuDspRuntime runtime({.timing = OwnDspAutomaticTiming::native_cycle_budget,
+                         .maximum_cycles_per_period = 16,
+                         .reset_dsp_first = true,
+                         .initial_reset = OwnDspResetInputs{.mode_known = 15,
+                                                            .mode_levels = 5,
+                                                            .pinit = false,
+                                                            .recovery_cycles = 2}},
+                        mcu,
+                        dsp);
+  const auto ticks = dsp.clock().elapsed_ticks();
+  const auto registers = dsp.cpu().registers();
+  const auto progress = dsp.cpu().progress();
   mcu.begin_system_reset(McuResetSource::external, minimum_sync);
-  require(schedule.faulted() &&
-              rejects([&] { schedule.end_instruction(); }).contains("healthy inactive") &&
-              dsp.run_clock().elapsed_ticks() == ticks,
-          "Old joint scheduling rejects the changed MCU epoch before advancing an independent DSP");
+  require(runtime.faulted() &&
+              rejects([&] { runtime.end_instruction(); }).contains("healthy inactive") &&
+              dsp.clock().elapsed_ticks() == ticks && dsp.cpu().registers() == registers &&
+              dsp.cpu().progress() == progress,
+          "Joint runtime rejects the changed MCU epoch before advancing or mutating the DSP");
 }
 }
 

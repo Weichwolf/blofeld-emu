@@ -1,0 +1,66 @@
+{
+  "scope": "TIM16B8CV1 software-visible inactive pulse accumulator; active counting and original startup remain open",
+  "hardware_reference": {
+    "archive_url": "https://www.nxp.com/docs/en/data-sheet/9S12UF32_ZIP.zip",
+    "archive_bytes": 4392344,
+    "archive_sha256": "a9126741fa59bb31680c9931e936120d1c71fa7af58ab0646ea1600014101d5d",
+    "member": "S12TIM16B8C_V1.pdf",
+    "member_bytes": 163562,
+    "member_sha256": "6e19bbde4528ade9f7fc9b8149dfb66e879858c7d77a6508ff3624258528a2fa"
+  },
+  "implemented": [
+    "Reset-zero PACTL/PAFLG/PACNT at0060..0063 and independent software reads/writes of both PACNT bytes with PAEN clear, regardless of TEN",
+    "Reserved PACTL bit7 reads zero; dormant configuration fields retain values without changing TCNT clock",
+    "V1 TEN-gated PAFLG W1C and TEN/TFFCA PACNT-access clearing paths; raised PA flag generation/clearing remains unqualified",
+    "PAEN activation refuses visibly before changing configuration"
+  ],
+  "authored_expectations": [
+    "32 independent register/reset/byte-preservation cases across all TEN/TFFCA combinations",
+    "Six literal signed EMULS products and N/Z/C flags; actual HC12 STY/LDD word operands against the real peripheral, clone/reset isolation",
+    "Real TCNT overflow/channel flags survive PACNT accesses; software FFFF writes do not generate pulse overflow",
+    "Canonical independent-DSP reset fixture rejects a stale MCU epoch before changing DSP time, full registers or progress"
+  ],
+  "qualification": {
+    "compiler": "LLVM19/C++23; warnings as errors; clang-tidy zero owned findings; clang-format",
+    "profiles": [
+      "ASan/UBSan",
+      "TSan"
+    ],
+    "native_scopes_per_profile": 12,
+    "actual_zero_exits_and_reaps": 24,
+    "linked_project_compiler_contexts_per_profile": 210,
+    "frozen_targets_per_profile": 13,
+    "foreign_DSP_symbols_in_frozen_targets": false,
+    "fuzz": false,
+    "ctest_names": [
+      "mcu_pacnt_storage",
+      "mcu_pacnt_native",
+      "mcu_timer",
+      "mcu_pin_routing",
+      "mcu_interrupt",
+      "mcu_clock_checkpoint",
+      "mcu_wait_clock",
+      "mcu_run_clock",
+      "mcu_reset",
+      "mcu_checkpoint",
+      "reference_reset_release",
+      "reference_nand_functional_timing"
+    ],
+    "build_receipt_sha256": "7b2497662706a31491254c60bff2bfaa1c0be5fe91103aa78e69cc712badde01",
+    "native_receipt_sha256": "714797aa7cc874ceb4417d09c38b4533722848b3c109269bd3a2a6ae2f6bb60c",
+    "review_sha256": "3a07cd2c213161e6f8075087d4a6a43ff3abdd37a6693c9b362e7e6d7f20b301",
+    "reproduce_commands": [
+      "ctest --test-dir build/strict --output-on-failure -R \"^(mcu_pacnt_storage|mcu_pacnt_native|mcu_timer|mcu_pin_routing|mcu_interrupt|mcu_clock_checkpoint|mcu_wait_clock|mcu_run_clock|mcu_reset|mcu_checkpoint|reference_reset_release|reference_nand_functional_timing)$\"",
+      "ctest --test-dir build/thread --output-on-failure -R \"^(mcu_pacnt_storage|mcu_pacnt_native|mcu_timer|mcu_pin_routing|mcu_interrupt|mcu_clock_checkpoint|mcu_wait_clock|mcu_run_clock|mcu_reset|mcu_checkpoint|reference_reset_release|reference_nand_functional_timing)$\""
+    ]
+  },
+  "limitations": [
+    "Active pulse counting, timer clock mux, gated inputs, PA interrupts and raw synchronization remain unsupported; PAEN activation refuses",
+    "Positive clearing of raised PAIF/PAOVF awaits the active-counter implementation",
+    "Authored native cases support the original startup scratch access; a fresh original POR and complete Desktop/Keyboard instrument acceptance are pending"
+  ],
+  "original_startup_verified": false,
+  "firmware_patched": false,
+  "checkpoint_replay": false,
+  "whole_instrument": false
+}

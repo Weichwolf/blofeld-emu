@@ -41,6 +41,9 @@ private:
   [[nodiscard]] unsigned output_mask() const;
   [[nodiscard]] std::uint8_t read_channel(std::uint16_t offset);
   void write_channel(ByteWrite write);
+  [[nodiscard]] std::uint8_t read_accumulator(std::uint16_t offset);
+  void write_accumulator(ByteWrite write);
+  void clear_accumulator_flags();
   void output_actions(unsigned matches);
   void apply_output(unsigned channel);
   void count_tick();
@@ -48,6 +51,9 @@ private:
   std::array<std::uint8_t, 16> controls_{};
   std::array<std::uint16_t, channel_count> channels_{};
   std::uint16_t counter_ = 0;
+  std::uint16_t pulse_counter_ = 0;
+  std::uint8_t pulse_control_ = 0;
+  std::uint8_t pulse_flags_ = 0;
   std::uint8_t outputs_ = 0;
   std::uint8_t outputs_known_ = 0;
   std::uint8_t inputs_ = 0;

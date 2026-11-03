@@ -17,6 +17,13 @@ constexpr unsigned controls_size = 16;
 constexpr unsigned channels_end = 0x60;
 constexpr unsigned module_end = 0x70;
 constexpr unsigned accumulator_end = 0x64;
+constexpr unsigned accumulator_control = 0x60;
+constexpr unsigned accumulator_flags = 0x61;
+constexpr unsigned accumulator_high = 0x62;
+constexpr unsigned accumulator_enable = 0x40;
+constexpr unsigned accumulator_control_mask = 0x7f;
+constexpr std::array<std::string_view, 4> accumulator_names{
+    "PACTL", "PAFLG", "PACNT high", "PACNT low"};
 constexpr unsigned counter_high = 4;
 constexpr unsigned counter_low = 5;
 constexpr unsigned system_control1 = 6;
@@ -77,7 +84,7 @@ std::string_view McuTimer::register_name(const std::uint16_t offset) {
   if (offset < base || offset >= module_end) { return {}; }
   if (offset < channel_base) { return names.at(offset - base); }
   if (offset < channels_end) { return "Timer channel high/low"; }
-  if (offset < accumulator_end) { return "Timer pulse accumulator"; }
+  if (offset < accumulator_end) { return accumulator_names.at(offset - accumulator_control); }
   return "Timer reserved/test in normal mode";
 }
 
@@ -130,9 +137,7 @@ std::uint8_t McuTimer::read_channel(const std::uint16_t offset) {
 std::uint8_t McuTimer::read(const std::uint16_t offset) {
   if (register_name(offset).empty()) { throw Fault("Unknown timer read at " + hex(offset)); }
   if (offset >= channel_base && offset < channels_end) { return read_channel(offset); }
-  if (offset >= channels_end && offset < accumulator_end) {
-    throw Fault("Unimplemented timer pulse accumulator read at " + hex(offset));
-  }
+  if (offset >= channels_end && offset < accumulator_end) { return read_accumulator(offset); }
   if (offset >= accumulator_end) { return 0; }
   const auto relative = offset - base;
   if (relative == counter_high || relative == counter_low) {
@@ -142,6 +147,40 @@ std::uint8_t McuTimer::read(const std::uint16_t offset) {
   }
   if (relative == 1) { return 0; }
   return controls_.at(relative);
+}
+
+void McuTimer::clear_accumulator_flags() {
+  // TIM16B8CV1 requires TEN as well as TFFCA; later module versions differ.
+  if (enabled() && (controls_[system_control1] & fast_clear) != 0) { pulse_flags_ = 0; }
+}
+
+std::uint8_t McuTimer::read_accumulator(const std::uint16_t offset) {
+  if (offset == accumulator_control) { return pulse_control_; }
+  if (offset == accumulator_flags) { return pulse_flags_; }
+  clear_accumulator_flags();
+  return static_cast<std::uint8_t>(
+      (offset == accumulator_high ? pulse_counter_ >> 8U : pulse_counter_) & byte_mask);
+}
+
+void McuTimer::write_accumulator(const ByteWrite write) {
+  if (write.address == accumulator_control) {
+    if ((write.value & accumulator_enable) != 0) {
+      throw Fault("Unimplemented active timer pulse accumulator at " + hex(write.address));
+    }
+    pulse_control_ = static_cast<std::uint8_t>(write.value & accumulator_control_mask);
+    return;
+  }
+  if (write.address == accumulator_flags) {
+    if (enabled()) {
+      pulse_flags_ = static_cast<std::uint8_t>(pulse_flags_ & ~static_cast<unsigned>(write.value));
+    }
+    return;
+  }
+  clear_accumulator_flags();
+  pulse_counter_ = static_cast<std::uint16_t>(
+      write.address == accumulator_high
+          ? (static_cast<unsigned>(write.value) << 8U) | (pulse_counter_ & byte_mask)
+          : (pulse_counter_ & (word_mask ^ byte_mask)) | write.value);
 }
 
 void McuTimer::write_channel(const ByteWrite write) {
@@ -197,7 +236,8 @@ void McuTimer::write(const ByteWrite write) {
     return;
   }
   if (offset >= channels_end && offset < accumulator_end) {
-    throw Fault("Unimplemented timer pulse accumulator write at " + hex(offset));
+    write_accumulator(write);
+    return;
   }
   if (offset >= accumulator_end) { return; }
   const auto relative = offset - base;

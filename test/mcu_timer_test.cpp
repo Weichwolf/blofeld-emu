@@ -316,8 +316,10 @@ void test_overflow_toggle_and_unsupported_cases() {
   timer.write({.address = flags2, .value = timer_on});
   require(!timer.overflow_interrupt(), "Overflow W1C deasserts its interrupt request");
   constexpr unsigned pulse_control = 0x60;
-  reject([&timer] { static_cast<void>(timer.read(pulse_control)); },
-         "Pulse accumulator is not a successful stub");
+  require(timer.read(pulse_control) == 0, "Pulse accumulator control resets disabled");
+  reject([&timer] { timer.write({.address = pulse_control, .value = 0x40}); },
+         "Active pulse accumulator remains visibly unsupported");
+  require(timer.read(pulse_control) == 0, "Unsupported PAEN does not change the configuration");
   timer.reset();
   timer.write({.address = tios, .value = 1});
   timer.write({.address = control1, .value = timer_on});

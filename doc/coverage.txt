@@ -70,11 +70,18 @@ and completes the real five-microsecond NAND reset. All 107 boot pages and the
 a read-only native snapshot contains 6,627 PCM frames, 6,037 nonzero, at exactly
 44.1 kHz. The short signal's descriptive FFT peak is about 261.7 Hz; physical pitch
 remains unqualified. The original MCU accepts all 528 secondary-page bytes and
-reaches logo arithmetic using PACNT. Its unimplemented word write at 0x0062
-stops execution visibly at PC0x1740. A prior post-transfer RAM snapshot had one
+reaches logo arithmetic using PACNT. That run stopped at the then-unimplemented
+word write at0x0062, PC0x1740. A prior post-transfer RAM snapshot had one
 wrong byte; its cause remains unqualified. Natural exit/cleanup is sanitizer-clean,
 and both CRC-valid stores remain byte-identical. Main WAI, normal UI and complete
 instrument acceptance remain open. See original-native-timing-reference.json.
+The inactive TIM16B8CV1 PACNT register interface now supports the documented
+software scratch access. Independent literal register cases and native signed
+multiply/word operands pass, including reset/copy and unrelated-flag isolation.
+The reset fixture now uses the canonical independent DSP runtime. Both sanitizer
+profiles pass all12 affected groups with no foreign DSP symbols in their13 frozen
+targets. Active pulse counting/IRQ remain visibly unsupported; a fresh original
+POR and complete instrument operation are pending. See mcu-pacnt-reference.json.
 An original reference-effects run with all sixteen secondary pages installed
 read NAND page 15 correctly 21 times. Two completed MCU RAM snapshots each differ
 from that source at 474 of 528 bytes. The run was deliberately stopped and reaped;

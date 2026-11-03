@@ -43,6 +43,24 @@ Capture and compare
   coincident TTOV/compare actions, and forced channel 7 with TCRE fail explicitly.
   These boundaries require more timing evidence; they are not successful stubs.
 
+Inactive pulse accumulator
+- PACTL, PAFLG and the PACNT word at0060..0063 reset to zero. With PAEN clear,
+  software may read/write either PACNT byte regardless of TEN. Writes preserve
+  the other byte and never generate overflow. Dormant clock/mode/interrupt bits
+  retain their values; reserved PACTL bit7 reads zero. TCNT retains its normal
+  prescaler clock regardless of dormant PACTL CLK bits.
+- PACNT access implements the V1 TEN/TFFCA PAFLG clearing rule; PAFLG implements
+  TEN-gated W1C. Active edge/overflow flag generation and interrupt delivery
+  remain unqualified. PACNT accesses must not clear TCNT or channel flags.
+- Setting PAEN fails visibly before changing PACTL: active counting, clock mux,
+  gated input and PA interrupts are pending. No active mode is a successful stub.
+- Authored native EMULS/STY/LDD operands use this real peripheral as scratch,
+  including aligned single-cycle word slots. Reset and independent bus copies
+  preserve the documented storage behavior. This supports the original startup
+  arithmetic access; it does not establish a completed original boot.
+  Run blofeld-pacnt-storage-test and blofeld-pacnt-native-test. Exact scoped
+  qualification and remaining limits are recorded in mcu-pacnt-reference.json.
+
 Pin integration and scope
 - In 100-pin mode channels 0..3 route to PT0..3 and 4..7 to PR4..7. In 64-pin mode
   the default inputs route to PT0/1, PM3/4, PQ4..7; outputs also have the Port B
@@ -52,7 +70,7 @@ Pin integration and scope
   remain distinct from pad levels, and known opposing output drivers fail.
 - This is the normal-reset profile with ATA/CF/SD/MS controllers inactive.
   Enabling those unimplemented controllers fails. Their pin-priority integration,
-  wait/freeze behavior and the pulse accumulator are pending. TIE/TOI gate
+  wait/freeze behavior and active pulse accumulation are pending. TIE/TOI gate
   pending flags; instruction-boundary delivery is described in mcu-interrupts.txt.
   Normal-mode reserved/test registers read zero and ignore writes as documented.
 - The original reset code writes TSCR1=0x90 and TSCR2=6: TEN/TFFCA and divide by

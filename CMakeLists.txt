@@ -2988,7 +2988,7 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-mcu-dsp-reset-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
   add_test(NAME mcu_dsp_reset COMMAND blofeld-mcu-dsp-reset-test)
   add_executable(blofeld-mcu-reset-test test/mcu_reset_test.cpp)
-  target_link_libraries(blofeld-mcu-reset-test PRIVATE blofeld_core blofeld_mcu_dsp blofeld_dsp blofeld_dsp_native)
+  target_link_libraries(blofeld-mcu-reset-test PRIVATE blofeld_mcu_dsp_runtime)
   add_test(NAME mcu_reset COMMAND blofeld-mcu-reset-test)
   add_executable(blofeld-mcu-cop-test test/mcu_cop_test.cpp)
   target_link_libraries(blofeld-mcu-cop-test PRIVATE blofeld_core)
@@ -3075,6 +3075,12 @@ if(BUILD_TESTING)
   add_executable(blofeld-timer-test test/mcu_timer_test.cpp)
   target_link_libraries(blofeld-timer-test PRIVATE blofeld_mcu)
   add_test(NAME mcu_timer COMMAND blofeld-timer-test)
+  add_executable(blofeld-pacnt-storage-test test/mcu_pacnt_storage_test.cpp)
+  target_link_libraries(blofeld-pacnt-storage-test PRIVATE blofeld_mcu)
+  add_test(NAME mcu_pacnt_storage COMMAND blofeld-pacnt-storage-test)
+  add_executable(blofeld-pacnt-native-test test/mcu_pacnt_native_test.cpp)
+  target_link_libraries(blofeld-pacnt-native-test PRIVATE blofeld_core)
+  add_test(NAME mcu_pacnt_native COMMAND blofeld-pacnt-native-test)
   add_executable(blofeld-pin-routing-test test/mcu_pin_routing_test.cpp)
   target_link_libraries(blofeld-pin-routing-test PRIVATE blofeld_mcu)
   add_test(NAME mcu_pin_routing COMMAND blofeld-pin-routing-test)
@@ -3414,7 +3420,8 @@ add_custom_target(quality
     blofeld-scheduled-coupling-test
     blofeld-mcu-cop-test blofeld-mcu-reset-test blofeld-mcu-dsp-reset-test
     blofeld-clock-test blofeld-sci-test blofeld-sci-reference-test
-    blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
+    blofeld-timer-test blofeld-pacnt-storage-test blofeld-pacnt-native-test
+    blofeld-interrupt-test blofeld-rti-test
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test
     blofeld-usb-configuration-status-test blofeld-usb-standard-read-test
     blofeld-usb-device-status-test
