@@ -20,6 +20,11 @@ remain independent. The regular Board still uses an unqualified cell profile:
 wp high alone cannot complete programming or erase, invent a successful status,
 or qualify original preset saving, updates or recovery.
 
+A frozen original-1.25 cold reset without this input reaches an erase setup and
+refuses unknown WP. Its 64365 recorded DSP frames match the preceding recording
+exactly. No erase target, completed write or normal main loop follows from that
+observation; see original-nand-write-frontier-reference.json.
+
 Targeted regression scope: both backing parsers preserve unknown/default and
 explicit high/low inputs; authored native GPIO erase sequences refuse unknown
 or low WP at setup. Explicit high reaches confirmation and still refuses the

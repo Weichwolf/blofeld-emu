@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "scope": "Unmodified original 1.25 cold reset through an erase-setup refusal; not normal instrument operation.",
+  "production_source_commit": "409badd6b65daf57326d7af56e0ca07f5bb1670f",
+  "dsp_core_commit": "0115bffe7eea3384d8c089cac54af6c0c59eb520",
+  "executable_sha256": "1be9febcad44bb00bb8b7bc7d20b43df8531044589783082c8a165f253b2b6a7",
+  "firmware_zip_sha256": "095c760a576dcb04fe3e379bed1b95a0360002295ab42b29e3335a39514f0c72",
+  "profile": "Frozen explicit development board, with unknown NAND WP_n and unqualified cell model.",
+  "mcu_snapshot": {
+    "operations": 20573423,
+    "common_ticks": 1094509909080,
+    "pc": "0x1683",
+    "faulted": true,
+    "known_bytes": 5120,
+    "bytes": 5120,
+    "sha256": "51a4a3cd4f27306a3284c48109ffb50ecd7994855fad3640326af36aa368f034"
+  },
+  "refusal": {
+    "operation": "NAND erase setup",
+    "command": "0x60",
+    "dsp_pc": "0x0018a1",
+    "dsp_common_ticks": 1094509923754,
+    "missing_input": "Observed high WP_n",
+    "previous_read_page": "0x00038f",
+    "previous_read_column": 528,
+    "erase_address_not_yet_latched": true
+  },
+  "audio": {
+    "frames": 64365,
+    "channels": 2,
+    "wave_sample_rate_hz": 44100,
+    "container_bits": 32,
+    "valid_bits": 24,
+    "wave_sha256": "138c733e0b3eb1e9b47fd27a45419b2e2316d5544c605b8374dc9172784f1d8a",
+    "PCM_sha256": "5fd52651658bd53f30e7854e8b8c54210988d733d918b2e9339302fa3cabbb3a",
+    "first5491_strict_recording_prefix_exact": true,
+    "previous64365_recording_exact": true,
+    "physical_audio_validation": false
+  },
+  "native_exit": 2,
+  "native_reaped": true,
+  "signals_sent": false,
+  "immutable_inputs_unchanged": true,
+  "stores_unchanged": true,
+  "main_WAI_observed": false,
+  "firmware_modified": false,
+  "checkpoint_replay": false,
+  "full_instrument_acceptance": false,
+  "fuzz": false,
+  "local_case": "local/pim-release-start-r1",
+  "local_artifact_inspection": "local/pim-release-start-r1/observed/inspection.json",
+  "limitations": "Erase target is not inferred from the preceding read cursor. Both profiles, normal MIDI/audio, complete storage/update/recovery and instrument performance remain unqualified. Host elapsed time includes a deliberate failure-inspection hold."
+}
