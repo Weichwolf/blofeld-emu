@@ -154,6 +154,8 @@ struct NandConnection {
   // Parsed file provenance; typed in-memory fixtures need no input filename.
   std::optional<std::filesystem::path> source_path = std::nullopt;
   NandTiming timing = NandTiming::candidate_minima;
+  // Explicit held active-low input; absence does not imply write permission.
+  std::optional<bool> write_protect_n = std::nullopt;
 };
 
 // Declared peripheral POR source; first native pad observation at/after release wins.

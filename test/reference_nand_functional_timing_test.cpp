@@ -13,9 +13,11 @@
 #include "mcu/mcu_machine.hpp"
 #include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_run_clock.hpp"
+#include "nand_persistence_fixture.hpp"
 #include "storage/flash_image.hpp"
 #include "storage/nand.hpp"
 #include "storage/nand_array.hpp"
+#include "storage/nand_file.hpp"
 #include "storage/nand_image.hpp"
 #include "storage/nand_timing.hpp"
 
@@ -25,6 +27,7 @@
 #include <iostream>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -42,6 +45,7 @@ constexpr unsigned slow_pll = 0x02e112, fast_pll = 0x02a012, bus = 0x1ffff;
 constexpr unsigned operation_limit = 10000, cycle_budget = 64, padding_words = 64;
 constexpr unsigned jump = 0x0af080, sample = 0x42;
 constexpr unsigned control_outputs = 0xf00, data_direction = 0x4ff;
+constexpr unsigned erase_setup = 0x60, erase_confirm = 0xd0, address_phase = 0xb00;
 constexpr std::uint64_t power_tick = common_hz / 10000;
 
 McuFlashImage flash() {
@@ -77,23 +81,43 @@ void store(test::DspRomProgram &rom, const PortWrite input) {
   rom.word(input.value);
 }
 
-test::DspRomProgram program() {
+struct NandLatch {
+  unsigned phase;
+  unsigned value;
+};
+
+void latch(test::DspRomProgram &rom, const NandLatch input) {
+  store(rom, {.address = control, .value = input.phase});
+  store(rom, {.y = true, .address = f_data, .value = input.value});
+  store(rom, {.address = control, .value = input.phase & ~0x200U});
+  rom.word(0);
+  store(rom, {.address = control, .value = input.phase});
+}
+
+test::DspRomProgram program(const bool erase = false) {
   test::DspRomProgram rom;
-  for (const auto input : {PortWrite{.address = bcr, .value = bus},
-                           PortWrite{.address = control, .value = inactive},
-                           PortWrite{.address = function, .value = full},
-                           PortWrite{.address = direction, .value = control_outputs},
-                           PortWrite{.y = true, .address = f_data, .value = full},
-                           PortWrite{.y = true, .address = f_function, .value = inactive},
-                           PortWrite{.y = true, .address = f_direction, .value = data_direction},
-                           PortWrite{.address = pctl, .value = slow_pll},
-                           PortWrite{.address = pctl, .value = fast_pll},
-                           PortWrite{.address = control, .value = command},
-                           PortWrite{.address = control, .value = low}}) {
+  for (const auto input :
+       {PortWrite{.address = bcr, .value = bus},
+        PortWrite{.address = control, .value = inactive},
+        PortWrite{.address = function, .value = full},
+        PortWrite{.address = direction, .value = control_outputs},
+        PortWrite{.y = true, .address = f_data, .value = erase ? erase_setup : full},
+        PortWrite{.y = true, .address = f_function, .value = inactive},
+        PortWrite{.y = true, .address = f_direction, .value = data_direction},
+        PortWrite{.address = pctl, .value = slow_pll},
+        PortWrite{.address = pctl, .value = fast_pll},
+        PortWrite{.address = control, .value = command},
+        PortWrite{.address = control, .value = low}}) {
     store(rom, input);
   }
   rom.word(0);
   store(rom, {.address = control, .value = command});
+  if (erase) {
+    for (unsigned index = 0; index < 3; ++index) {
+      latch(rom, {.phase = address_phase, .value = 0});
+    }
+    latch(rom, {.phase = command, .value = erase_confirm});
+  }
   const auto loop = rom.pc();
   rom.word(0);
   rom.word(jump);
@@ -201,12 +225,57 @@ void exercise(const NandTiming timing) {
           "Real native reset completion preserves data and creates no fake array read or PCM");
   std::cout << "Native POR functional reset/Busy/cell/policy and two full owner restores pass\n";
 }
+
+void write_protection(const bool live, const std::optional<bool> high) {
+  const test::PersistenceDirectory directory;
+  const auto path = directory.file();
+  const auto original = image();
+  if (live) { save_nand_image(path, original); }
+  const auto mcu = flash();
+  const auto authored = program(true);
+  const std::vector<std::uint32_t> rom(authored.words().begin(), authored.words().end());
+  auto settings = config(NandTiming::functional_protocol);
+  if (!settings.nand) { throw Fault("Expected the authored NAND connection"); }
+  settings.nand->write_protect_n = high;
+  if (live) {
+    settings.nand->image = {};
+    settings.nand->backing = reference::NandBacking::live_store;
+    settings.nand->source_path = path;
+  }
+  const reference::Execution execution{.image = mcu,
+                                       .rom = rom,
+                                       .specification = BLOFELD_DEFAULT_SLA,
+                                       .flash_out = {},
+                                       .instructions = operation_limit};
+  std::string refusal;
+  {
+    reference::Board board(settings, execution);
+    try {
+      while (!board.finished()) { board.advance(); }
+    } catch (const Fault &error) { refusal = error.what(); }
+  }
+  const std::string_view expected = high == true ? "completion requires an explicit cell model"
+                                                 : "WP high must be explicitly observed";
+  require(refusal.contains(expected) && refusal.contains("X:0xffffbd/Y:0xfffff5") &&
+              refusal.contains("pc="),
+          "Native erase refuses unknown/low WP; explicit high retains the cell-model guard: " +
+              refusal);
+  if (live) {
+    require(encode_nand_image(load_nand_image(path)) == encode_nand_image(original),
+            "A refused native erase cannot change the durable cells or block metadata");
+  }
+}
 }
 
 int main() {
   try {
     exercise(NandTiming::candidate_minima);
     exercise(NandTiming::functional_protocol);
+    for (const bool live : {false, true}) {
+      for (const auto high : {std::optional<bool>{}, std::optional{false}, std::optional{true}}) {
+        write_protection(live, high);
+      }
+    }
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
     return 1;

@@ -64,17 +64,19 @@ void Board::prepare_dsp() {
       }
       auto store = std::make_unique<NandWriteStore>(
           *config_.nand->source_path, config_.nand->continuation, common_hz(), NandCellProfile{});
+      store->observe_wp(config_.nand->write_protect_n);
       native_->nand = std::make_unique<NandPeer>(native_->dsp,
                                                  std::move(store),
                                                  NandBusContract::functional_transactions,
                                                  config_.nand->timing);
     } else if (config_.nand->backing == NandBacking::cold_image) {
-      native_->nand =
-          std::make_unique<NandPeer>(native_->dsp,
-                                     Nand(config_.nand->image, config_.nand->continuation),
-                                     NandCellProfile{},
-                                     NandBusContract::functional_transactions,
-                                     config_.nand->timing);
+      Nand device(config_.nand->image, config_.nand->continuation);
+      device.observe_wp(config_.nand->write_protect_n);
+      native_->nand = std::make_unique<NandPeer>(native_->dsp,
+                                                 std::move(device),
+                                                 NandCellProfile{},
+                                                 NandBusContract::functional_transactions,
+                                                 config_.nand->timing);
     } else {
       throw Fault("Invalid NAND backing contract");
     }

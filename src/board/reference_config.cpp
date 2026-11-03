@@ -448,19 +448,31 @@ NandConnection nand_connection(std::istringstream &line, const NandBacking backi
   std::string path;
   if (!(line >> std::quoted(path)) || path.empty()) { throw Fault("Missing NAND backing path"); }
   auto timing = NandTiming::candidate_minima;
+  std::optional<bool> write_protect_n;
+  bool timing_selected = false;
   std::string policy;
-  if (line >> policy) {
-    if (policy == "functional-protocol") {
-      timing = NandTiming::functional_protocol;
-    } else if (policy != "candidate-minima") {
-      throw Fault("NAND timing must be candidate-minima or functional-protocol");
+  while (line >> policy) {
+    if (policy == "wp") {
+      if (write_protect_n.has_value()) { throw Fault("Duplicate NAND WP input"); }
+      const auto level = token(line);
+      if (level != "high" && level != "low") { throw Fault("NAND WP must be high or low"); }
+      write_protect_n = level == "high";
+    } else {
+      if (timing_selected) { throw Fault("Duplicate or unknown NAND timing selector"); }
+      if (policy == "functional-protocol") {
+        timing = NandTiming::functional_protocol;
+      } else if (policy != "candidate-minima") {
+        throw Fault("NAND timing must be candidate-minima or functional-protocol");
+      }
+      timing_selected = true;
     }
   }
   return {.image = backing == NandBacking::cold_image ? load_nand_image(path) : NandImage{},
           .continuation = continuation,
           .backing = backing,
           .source_path = path,
-          .timing = timing};
+          .timing = timing,
+          .write_protect_n = write_protect_n};
 }
 
 McuDspGpioWiring gpio_peer(std::istringstream &line) {

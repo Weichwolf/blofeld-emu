@@ -185,10 +185,41 @@ void timing_configuration(const ConfigurationFiles &files, const bool live) {
           live ? reference::NandBacking::live_store : reference::NandBacking::cold_image;
       const auto expected_image = live ? NandImage{} : cells();
       require(c.nand && c.nand->timing == expected && c.nand->backing == backing &&
-                  c.nand->source_path == files.image &&
+                  !c.nand->write_protect_n.has_value() && c.nand->source_path == files.image &&
                   encode_nand_image(c.nand.value().image) == encode_nand_image(expected_image),
               "Timing selection defaults to candidate minima and preserves cold/live backing");
     }
+  }
+}
+
+void wp_configuration(const ConfigurationFiles &files, const bool live) {
+  for (const std::string options : {"wp high",
+                                    "wp low",
+                                    "functional-protocol wp high",
+                                    "wp low functional-protocol",
+                                    "wp",
+                                    "wp unknown",
+                                    "wp low wp high",
+                                    "wp high wp low"}) {
+    {
+      std::ofstream output(files.profile);
+      output.exceptions(std::ios::failbit | std::ios::badbit);
+      output << files.prefix << (live ? "nand-store j " : "nand-image j ")
+             << std::quoted(files.image.string()) << ' ' << options << '\n';
+    }
+    if (options == "wp" || options.contains("unknown") || options == "wp low wp high" ||
+        options == "wp high wp low") {
+      require(!rejects([&] { static_cast<void>(reference::load_config(files.profile)); }).empty(),
+              "Missing, unknown and duplicate WP sources fail before Board construction");
+      continue;
+    }
+    const auto parsed = reference::load_config(files.profile);
+    require(parsed.nand && parsed.nand->write_protect_n.has_value() &&
+                *parsed.nand->write_protect_n == options.contains("high") &&
+                parsed.nand->timing == (options.contains("functional-protocol")
+                                            ? NandTiming::functional_protocol
+                                            : NandTiming::candidate_minima),
+            "The parser preserves explicit active-low WP separately from the timing policy");
   }
 }
 
@@ -222,6 +253,7 @@ void configuration(const std::filesystem::path &directory) {
   }
   for (const bool live : {false, true}) {
     timing_configuration({.profile = profile, .image = image, .prefix = prefix}, live);
+    wp_configuration({.profile = profile, .image = image, .prefix = prefix}, live);
   }
 }
 }
