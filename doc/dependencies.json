@@ -1,9 +1,9 @@
 {
   "independent_dsp56300": {
     "source": "https://github.com/Weichwolf/dsp56300",
-    "revision": "7d87f922af058da50b7652bf0c6808e40adcb22f",
+    "revision": "339c3a083b51ecdb4712f6707e8580b7cc1333ab",
     "license": "GPL-3.0-only",
-    "integration": "Pinned source subproject for the regular Board/headless runtime. Default Core selects native execution with a pure known program view and code/mapping revisions. The board bus exposes that view; connected MCU/DSP scheduling still uses captured effects, so native whole-instrument speed remains unqualified. Legacy test migration and full instrument operation remain incomplete."
+    "integration": "Pinned source subproject for the regular Board/headless runtime. Default Core selects native execution with a pure known program view and code/mapping revisions. Bounded CPU-only execution caps instructions/base cycles with pre-effect owner boundaries and genuine next-fetch snapshots; short JMP and short cached prefixes are native. The board bus exposes known code; connected MCU/DSP scheduling still uses captured effects, so native whole-instrument speed remains unqualified. Legacy test migration and full instrument operation remain incomplete."
   },
   "zlib": {
     "version": "1.3.2",

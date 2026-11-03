@@ -46,6 +46,10 @@ native NOPs, data-cache reuse, code invalidation, real RAM/BCR transfers and
 precise unknown-code/BIU refusals. The connected scheduler still uses captured
 effects; finite cycle horizons and observable-I/O synchronization remain open.
 See dsp-native-bus.txt for the component evidence and its limits.
+The pinned core additionally provides bounded native CPU-only regions, native
+short JMP/cached tails and genuine known next-fetch snapshots. The real bus
+consumer passes both sanitizer profiles with native NOP/JMP and pre-effect owner
+boundaries. Connected scheduling and instrument throughput remain unqualified.
 The VSL component test now excludes the former interpreter/assembler and passes
 its 9,216 independent numeric/address cases, native REP/modulo and contextual
 refusals under both sanitizer profiles. This preserves useful legacy coverage;

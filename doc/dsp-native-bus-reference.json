@@ -1,13 +1,73 @@
 {
-  "scope": "Known P code view and real board-bus/default-Core coupling; not connected firmware or instrument qualification",
-  "core_revision": "7d87f922af058da50b7652bf0c6808e40adcb22f",
-  "profile": "ASan/UBSan, LLVM19, strict compiler/linker flags, clang-format and clang-tidy zero findings",
+  "qualification": "PASS",
+  "scope": "Known P view and actual board-bus/default-Core consumer, including bounded native CPU prefixes and pre-effect owner stop; no connected firmware or instrument qualification",
+  "core_revision": "339c3a083b51ecdb4712f6707e8580b7cc1333ab",
+  "profiles": {
+    "strict": {
+      "sanitizer": "ASan/UBSan",
+      "quality": "LLVM19/C++23, strict compiler/linker flags, clang-format, clang-tidy zero findings",
+      "binaries": {
+        "blofeld-dsp-program-view-test": {
+          "elf_sha256": "975850c2da8b0b208c8f33cbb702f540434488bb04ce9bfbd0e8116bdfd22c2a",
+          "actual_exit": 0,
+          "reaped": true
+        },
+        "blofeld-dsp-native-bus-test": {
+          "elf_sha256": "2336fd464ac3a211e313edf09d707945eaea705dfd01dd6f4a200420ed9f637b",
+          "actual_exit": 0,
+          "reaped": true
+        }
+      },
+      "archives": {
+        "libblofeld_dsp_peripherals.a": "60941d4516e49caae7bca7eed1d4034b41445266e45203f221e01581a9f27b20",
+        "libblofeld_own_dsp_io.a": "33a07cea47b2e04acdd3b82e7d579a4ecd37b905e844d6fe99383e390d9dd95a",
+        "libblofeld_firmware.a": "9048df9a995b3de66caf34dc074a7543528cd13a702653fd16b81db7e78b4053",
+        "libblofeld_gpio_pads.a": "fc691f0452fc98800cc530d869ce1a709b1ed01ef3b96b3020da474bb59c7a9e",
+        "independent-dsp/libdsp56300_core.a": "5729b40ab6b3702831589f073ec4c255c15ae2a91ae8bdd44de63226d351a99a"
+      },
+      "checked_compile_contexts": 1231,
+      "native_zlib": {
+        "compile_contexts": 15,
+        "sha256": "a7bc23614e488ae1b6f57521bc7aa75904bd4d048f3331bb61dc68094dec9117",
+        "sanitizers_and_hardening": "PASS"
+      }
+    },
+    "thread": {
+      "sanitizer": "TSan",
+      "quality": "LLVM19/C++23, strict compiler/linker flags, clang-format, clang-tidy zero findings",
+      "binaries": {
+        "blofeld-dsp-program-view-test": {
+          "elf_sha256": "f382d0302b026abf255e4eb52fded99d57c62025e840fa1c261ec79f7e599af4",
+          "actual_exit": 0,
+          "reaped": true
+        },
+        "blofeld-dsp-native-bus-test": {
+          "elf_sha256": "f582070f81c792ba513ef4e7168f4cb81d85780aded2c046225ee5e10244a23e",
+          "actual_exit": 0,
+          "reaped": true
+        }
+      },
+      "archives": {
+        "libblofeld_dsp_peripherals.a": "2b6166b91603dc6c05c7d215e831d033c433c41bf62b589907dca2d6c222a0c5",
+        "libblofeld_own_dsp_io.a": "c4eb39aff960994a58f6023ed2a993a19cb004cd8f0170d17a09d1a06ecbbad4",
+        "libblofeld_firmware.a": "82c456487a44a5a86c53ebb71c0d12be18713c2a267275a6f5801088341825ff",
+        "libblofeld_gpio_pads.a": "91eed1c921bdc52964c3ccef1555908a424781c9a9a5feb6202ca04049b24437",
+        "independent-dsp/libdsp56300_core.a": "d7f0066aa26c63507fc3049caf75296d47fe9730f345025d292cb491c1f5f657"
+      },
+      "checked_compile_contexts": 1231,
+      "native_zlib": {
+        "compile_contexts": 15,
+        "sha256": "1e19e7379f20c0a37aa2aaf03e28219095247005bf8d4df4c472f9ee7f20698c",
+        "sanitizers_and_hardening": "PASS"
+      }
+    }
+  },
   "native_consumer": {
-    "actual_exit": 0,
-    "reaped": true,
-    "elf_sha256": "70539a7ac71b853bee88bc3dd14ab1a7980cdb41a6e68602d897949c031a3085",
     "native_nops": 32,
-    "short_jmp_alu_helpers": 1,
+    "native_short_jmp": 1,
+    "alu_helpers": 0,
+    "bounded_instruction_and_base_cycle_limits": true,
+    "stops_before_whole_external_instruction": true,
     "ram_load_bcr_store_native_alu": 2,
     "ram_load_bcr_store_alu_helpers": 0,
     "real_Cpp_Io_callbacks": true,
@@ -17,41 +77,29 @@
     "actual_PortF_gate_change": true,
     "unknown_BIU_exact_refusal": true
   },
-  "pure_view_evidence": {
-    "reused": true,
-    "prior_elf_sha256": "3711b19bbe49fea4c6927c36e70c13c311ebf3c1f250ab68b9b570cd7fc6f11c",
-    "actual_exit": 0,
-    "reaped": true,
-    "provider_archive_sha256": "7496da3a5f4bf92369a50179c82c37577f950660c3b3b0f2924f58ca1cbfe666",
-    "identity": "Complete provider source/header closure and pure fixture source identical. New pure test ELF contains no Core definitions; no duplicate native run."
-  },
   "source_sha256": {
     "src/dsp/dsp_bus.cpp": "85e9010305fea688f44ce7c80c5b709c777bfbca17f5a2f55b58126f913b7ec8",
     "src/dsp/dsp_bus.hpp": "b998d01098f4bc86b6eaeae51011e4b9fe7713aa6ff8ac2a0180d7549a78188b",
     "src/dsp/own_dsp_io.hpp": "044da3b2273a538224f2cd00fbd10cadb9e07927ec5cd045828c5c8c4f607ad5",
     "src/dsp/own_dsp_io.cpp": "406f52f32393c8b393d99cc8928adc6ad05297452375f267ee9f58b25b20665d",
     "test/dsp_program_view_test.cpp": "e69970f47ee7964729d44f1fd2abd8d770139b9e01768a3ce8ebaba05ac6f45f",
-    "test/dsp_native_bus_test.cpp": "5908b78fb76222d970df3c182a5101e8bc9536e6a941c2050bb3442facf1f3f9",
-    "cmake/OwnDsp.cmake": "7a941359b7bcb7af348160e6a036dcecfc5fa5c142cfa943e4d7317c416b7afe",
-    "cmake/OwnDspComponents.cmake": "46ddd9cc20b9e5ae8b88b6a03daa737991e4ae38ceba2ace39269ba1f8430c7c"
-  },
-  "configuration": {
-    "standalone_release_no_tests_no_fuzz": "PASS configure/generate; no firmware executed",
-    "independent_component_tests": "PASS configure/generate; both new targets registered",
-    "held_wip_exclusion": "Only the additive two-test-target hunk is published; pre-existing saturation migration remains outside this increment."
+    "test/dsp_native_bus_test.cpp": "cc8a5821bc2c44f3b24f99201febc5139a1e3e026b475707c3dccf67a9d768b2",
+    "cmake/OwnDsp.cmake": "0a5ffd61a1c2fa1b8e360fd27ad525dd29865bd08cf335d95db86981dc4cb6b5"
   },
   "fuzz": false,
+  "full_suite": false,
   "local_evidence": {
-    "inputs": "doc/local/program-view-promotion-r1/inputs.json",
-    "build": "doc/local/program-view-promotion-r1/build-proof.json",
-    "native": "doc/local/program-view-promotion-r1/native.json",
-    "prior_pure": "doc/local/program-view-r1/native.json"
+    "build": "doc/local/bounded-core-adoption-r1/r2/build.json",
+    "native": "doc/local/bounded-core-adoption-r1/r2/qualification.json",
+    "release_configuration": "doc/local/bounded-core-adoption-r1/r2/release-configure.json",
+    "native_zlib": "doc/local/bounded-core-adoption-r1/r2/native-zlib-review.json"
   },
   "limitations": [
-    "Connected scheduler still uses captured general execution",
-    "No connected speed or new original-reset evidence",
-    "External RAM accesses still use genuine C++ Io helpers",
-    "Y-to-P physical relocation remains unqualified",
-    "Full Desktop/Keyboard instrument acceptance incomplete"
-  ]
+    "Connected MCU/DSP scheduler still uses captured effects",
+    "No new original-reset or instrument-throughput evidence",
+    "External RAM still uses actual C++ Io callbacks",
+    "Y-to-P relocation remains unqualified",
+    "Remaining legacy test migration and full Desktop/Keyboard instrument acceptance incomplete"
+  ],
+  "release_configuration": "PASS optimized canonical configure/generate with the public Core pin; no Release binary or firmware run"
 }

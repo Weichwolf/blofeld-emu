@@ -75,6 +75,11 @@ keyboard-controller data exchange uses direct storage, registers and bounded
 serial/FIFO state; avoid unnecessary abstraction and per-cycle bookkeeping in
 the hot path. This priority does not waive the migration,
 unmodified firmware or full instrument acceptance requirements.
+Correct discovered slow DSP helpers and similar performance defects promptly
+in the independent dsp56300 library, with scoped correctness and actual native
+execution evidence. Commit and push verified core increments there, then adopt
+the qualified dependency revision here. Application-side workarounds do not
+replace an efficient core implementation.
 After the old backend is removed, replace transitional OwnDsp/own_dsp names in
 classes, files, build targets, configuration and documentation with normal DSP
 names. No permanent parallel implementation or backend-selection option is part

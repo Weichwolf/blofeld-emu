@@ -44,14 +44,19 @@ void native_cache_and_refusal() {
   program(bus, words);
   OwnDspIo io(bus);
   dsp56300::Core cpu(io);
-  const auto first = cpu.run(loop_instructions);
+  const auto bounded =
+      cpu.run(dsp56300::RunBudget{.instructions = loop_instructions, .cycles = loop_cycles});
+  const auto &first = bounded.execution;
   const auto native = cpu.jit_statistics();
   require(cpu.backend() == dsp56300::Backend::jit && first.dispatches == loop_instructions &&
               first.fault.kind == dsp56300::FaultKind::none && cpu.registers().pc == 0 &&
               first.progress.instructions == loop_instructions &&
               first.progress.estimated_cycles == loop_cycles && native.compiled_blocks > 0 &&
-              native.native_alu_instructions >= nops && !io.failure(),
-          "The actual board adapter and default Core execute generated known NOP/branch code");
+              native.native_alu_instructions == loop_instructions &&
+              native.helper_instructions == 0 && bounded.cycles == loop_cycles &&
+              bounded.stop == dsp56300::RunStop::instruction_budget && bounded.next &&
+              bounded.next->address == 0 && bounded.next->opcode == 0 && !io.failure(),
+          "The actual board adapter executes bounded native NOP/JMP code with no ALU helper");
   const auto revision = bus.program_revision();
   bus.write({.space = DspSpace::x, .address = datum_address, .value = datum});
   const auto second = cpu.run(loop_instructions);
@@ -96,6 +101,13 @@ void real_peripheral_transfer() {
           "Before a real BCR write the documented Port-F BIU gate rejects register access");
   OwnDspIo io(bus);
   dsp56300::Core cpu(io);
+  const auto boundary = cpu.run(dsp56300::RunBudget{.instructions = 10, .cycles = 10});
+  require(boundary.execution.dispatches == 0 && boundary.cycles == 0 &&
+              boundary.stop == dsp56300::RunStop::external_effect && boundary.pc == 0 &&
+              boundary.next && boundary.next->opcode == load_x &&
+              boundary.next->extension == datum_address && boundary.next_cycles == 2 &&
+              cpu.registers().pc == 0 && cpu.registers().x == 0 && !io.failure(),
+          "The bounded board consumer stops before the whole real RAM/peripheral instruction");
   const auto result = cpu.run(2);
   require(result.dispatches == 2 && result.fault.kind == dsp56300::FaultKind::none &&
               result.progress.instructions == 2 && result.progress.estimated_cycles == 4 &&
