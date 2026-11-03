@@ -56,12 +56,47 @@ using the independent core do not by themselves complete that migration. Extend
 the independent core for general CPU, JIT and checkpoint interfaces when required;
 keep board wiring, device clocks and manufacturer programs in the emulator's
 local reference scope. Commit and push verified increments in each affected
-project to its configured remote. Broader audio-clock experiments follow this
-migration priority; the complete instrument acceptance scope remains unchanged.
+project to its configured remote. Performance and visual/audio bring-up use
+optimized Release builds while this migration proceeds; the complete instrument
+acceptance scope remains unchanged.
 After the old backend is removed, replace transitional OwnDsp/own_dsp names in
 classes, files, build targets, configuration and documentation with normal DSP
 names. No permanent parallel implementation or backend-selection option is part
 of the final device.
+
+Performance and playable-instrument milestones
+
+Milestone 1: whole-device real-time factor >= 1 and playable-instrument score >= 99%.
+Milestone 2: whole-device real-time factor >= 10 and playable-instrument score >= 99.9%.
+Milestone 3: whole-device real-time factor >= 100 and playable-instrument score >= 99.99%.
+These scores concern the playable instrument: original DSP sound, MIDI/USB-MIDI,
+voice behavior, musical timing, effects, controls/display, persistence and the
+other documented instrument functions on both profiles. They do not measure
+internal wiring fidelity, instruction-test pass rates or electrical similarity.
+Each milestone requires an actually playable instrument; a boot screen or a
+large set of passing component tests cannot substitute for that requirement.
+Use a versioned instrument acceptance catalogue and published tolerances, fixed
+weights/denominator and independent references. Keep untested instrument scope
+visible; do not inflate the score by duplicating low-level cases or removing
+failing features. These are intermediate milestones, not a waiver of complete
+instrument acceptance. Internal wiring/timing detail is investigated only when
+needed to preserve firmware execution and observable instrument behavior.
+
+Measure real-time factor as emulated common-timebase seconds divided by
+monotonic host seconds over a declared complete-device workload. Preserve guest
+clock rates, MIDI timestamps and every required audio frame. Report warm-up,
+host/build configuration, output mode, overload and the measured interval.
+Faster offline processing does not run a physical audio device at 100x its rate.
+
+Use the fastest validated optimized Release build for visual/audio bring-up,
+long firmware experiments and performance measurements. ASan/UBSan and separate
+TSan builds are for targeted tests and occasional broader regressions; do not
+use an instrumented long run as the default development or throughput path.
+Telemetry is a runtime choice, disabled by default. Prefer startup dispatch to
+specialized policies/concepts so disabled telemetry adds no condition, capture,
+formatting or allocation to instruction/audio hot paths. Sanitizers remain
+separate compile-time build configurations. Required emulation, correctness
+checks and contextual unsupported-access failures are not optional telemetry.
 
 Acceptance requirements (current evidence and gaps: coverage.txt):
 Instrument-visible results and musical timing, including USB, storage, update
@@ -94,9 +129,11 @@ gates merely because they differ from a possible physical implementation.
    recovery or physical-device flash safety.
 5. Maintain automatic deterministic regressions, offline parser-fuzz harnesses
    with preserved regression inputs, long-run and real-time load tests. Run fuzz
-   tests only when the user explicitly requests them. Instrument project/native
-   dependencies with ASan/UBSan and use separate TSan once concurrency exists;
-   retain strict LLVM 19/C++23, warning, format and zero-finding analysis gates.
+   tests only when the user explicitly requests them. Maintain ASan/UBSan builds
+   for project/native dependencies and separate TSan once concurrency exists;
+   run targeted sanitizer tests and occasional broader regressions. Use optimized
+   Release for visual/audio/long runs. Retain strict LLVM 19/C++23, warning,
+   format and zero-finding analysis gates in every build configuration.
 6. Provide reproducible execution traces and memory snapshots suitable for
    diagnosing failures and replaying firmware behavior. Document coverage,
    deviations, unresolved inputs and remaining uncertainty requirement by
