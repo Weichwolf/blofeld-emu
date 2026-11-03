@@ -1,0 +1,113 @@
+{
+  "scope": "Explicit functional NAND pad timing; authored connected POR and affected NAND regression qualification",
+  "source_basis": "3b0569e3d1e4e4b2cd95dd28e17dd19b224af3c8",
+  "source_sha256": {
+    "src/board/nand_peer.cpp": "a416ed96eab2cc097ee012bc73630f5c3a93c5b6256cd0cfbdfc09aac0277185",
+    "src/board/nand_peer.hpp": "e90b8c9efe8e75e4b3ccc8f1887c94a4aaa22b52075f42c9393d751f5847ce2a",
+    "src/board/reference_board.hpp": "db3d1c12169910083d78f7006f129f3da700f4510f499b23e0fb8a61e4696686",
+    "src/board/reference_config.cpp": "63c80789cb47d8d0a250788519a00d1532c2b2ba00f31663317ab78e86a2f29f",
+    "src/board/reference_pipeline.cpp": "1f7dbfe9a501327aedce29e6c19c5b9cd8c5897788ca84310a37945b23ee403e",
+    "src/storage/nand_read_setup.cpp": "5d2608bddfc1f6428d6077ca8064beecdcfd6b7aca753ad8bcfb588c74bf47cd",
+    "src/storage/nand_read_setup.hpp": "9a7dd013345f9985587ec622dc90c7067f20745029f9a42e6f089a6460d2aa04",
+    "src/storage/nand_read_timing.cpp": "2b2b5e3c260af414173cd89df5aa2119b0a02768f1ec3283ba40018050b1528c",
+    "src/storage/nand_read_timing.hpp": "d67939a5e95b97680b5eca73236512cf3a86babe5d9af21b77c5c38fca972400",
+    "src/storage/nand_setup_ce_window.cpp": "520d9a8c9baada1b6a3eb2d0b2f32d3d49f185bb23cc9f89d3a00446fca1ba96",
+    "src/storage/nand_timing.hpp": "cd3eca275ca7043d646dd1a1d44eb92290f62a73ad380e0bcb9bbe5603b074c6",
+    "src/storage/nand_write_timing.cpp": "dcee8caad761da14c9386b72683a012b3af43a7f160c14b4f935bdb03021b354",
+    "src/storage/nand_write_timing.hpp": "07278bfdc95e9b56dffa1ea1e975b6fd12abec9e5283758524820121a5d70d7f",
+    "test/nand_functional_timing_test.cpp": "0d75d2c7bf8bf8ea53ccf88ed3cd92644f40f47cd5a8737e423aae902083cf7d",
+    "test/reference_nand_functional_timing_test.cpp": "f2bd73f48cf2be38447d4e3036d718ddd0ce5c3b40489b3b4ea31e197405281e",
+    "test/reference_nand_test.cpp": "b77e27dc32a4ddd50d5c31b4c70aaf19588b5ea6c854a72b0da33a6622215f4e"
+  },
+  "DSP_core": "9563020c1fb06daec0d81fa96fde52bd3c8dc01e",
+  "default": "Existing APIs and omitted or explicit candidate-minima selector retain all candidate electrical intervals",
+  "functional": "Optional functional-protocol selector on nand-image or nand-store before reset: ordered logical strobes and immediate output/release; no electrical timing or fitted-chip claim",
+  "preserved": [
+    "Actual NAND command/address/data protocol and selection/ownership guards",
+    "Real cell knowledge, program history, computed inhibit/failure outcome and failed-block refusal",
+    "Actual Ready/Busy and independent read/reset/program/erase operation deadlines",
+    "Unknown/unsupported input and malformed configuration refusal",
+    "Selected timing and complete pending state in fresh native-owner checkpoint restoration",
+    "Existing live-store custody and no-rewind guards"
+  ],
+  "limitation": "Timing selection does not supply a missing cell-write contract. Original POR under this policy, complete Desktop/Keyboard startup, sound, storage and update acceptance remain separate requirements.",
+  "independent_encoding": "All twelve authored POR MOVEP stores match the vendor assembler; exact current source equivalence verified after include/style-only changes",
+  "encoding_qualification_sha256": "b0c05857eb1a63c850d9c6ecb2b5ce3c62072cd374a2eba891f5125cc11c4cb4",
+  "validation": {
+    "compiler": "LLVM19 C++23 warnings as errors; zero project clang-tidy findings; all16 changed C++ files clang-format clean",
+    "runtime_layout_closure": {
+      "project_compiler_contexts_per_profile": 222,
+      "linked_archives_per_profile": 51,
+      "frozen_targets_per_profile": 20
+    },
+    "component_receipt_sha256": "afc152fcb3b7a341e9f7a38a98bb240b6500f42ec3e8c64917140f493dea4000",
+    "runtime_build_sha256": "dff6861f4dd8e8dfd41f0d5f21cab4dc5082c3c7922c4eb353f6024ee6ccadcc",
+    "runtime_receipt_sha256": "bb3ab98bf16aa0fd7130387e91a8860d09ee5490aab095c731a3b5195777f4b3",
+    "profiles": {
+      "strict": {
+        "component_exit": 0,
+        "runtime_scopes": [
+          "reference-nand-functional-timing",
+          "reference-nand",
+          "nand-read-timing",
+          "nand-write-timing",
+          "nand-read-setup",
+          "nand-ce-window-boundaries",
+          "nand-ce-window-guards",
+          "nand-ce-window-histories",
+          "nand-read-transition",
+          "nand-standby",
+          "nand-read-exit",
+          "nand-initial-observation",
+          "nand-wide-timebase",
+          "nand-bus-decode",
+          "nand-native-runtime",
+          "nand-peer-timebase",
+          "nand-read-handoff",
+          "nand-write-medium",
+          "nand-busy-status",
+          "nand-durable-peer",
+          "reference-nand-store"
+        ],
+        "runtime_passes": 21,
+        "authored_POR_ELF_sha256": "90dbdbfb6e5bbe65438f15379dde5f2660ee6609cc2619b9efe93f0081d7d71c"
+      },
+      "thread": {
+        "component_exit": 0,
+        "runtime_scopes": [
+          "reference-nand-functional-timing",
+          "reference-nand",
+          "nand-read-timing",
+          "nand-write-timing",
+          "nand-read-setup",
+          "nand-ce-window-boundaries",
+          "nand-ce-window-guards",
+          "nand-ce-window-histories",
+          "nand-read-transition",
+          "nand-standby",
+          "nand-read-exit",
+          "nand-initial-observation",
+          "nand-wide-timebase",
+          "nand-bus-decode",
+          "nand-native-runtime",
+          "nand-peer-timebase",
+          "nand-read-handoff",
+          "nand-write-medium",
+          "nand-busy-status",
+          "nand-durable-peer",
+          "reference-nand-store"
+        ],
+        "runtime_passes": 21,
+        "authored_POR_ELF_sha256": "ba115c68065377e9f6a1d9450f935f7015b1ea37b764b603ecdd5ce684c0ef29"
+      }
+    },
+    "native_exec_identity_verified": true,
+    "detached_before_initialization": true,
+    "naturally_reaped": true,
+    "original_firmware_executed": false,
+    "fuzz": false,
+    "physical_traffic": false
+  },
+  "electrical_NAND_qualified": false,
+  "complete_instrument": false
+}

@@ -7,6 +7,7 @@
 #include "storage/nand_array.hpp"
 #include "storage/nand_cell_model.hpp"
 #include "storage/nand_read_timing.hpp"
+#include "storage/nand_timing.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -43,6 +44,7 @@ struct NandPeerDetailed {
   bool trace_access;
   NandBusContract bus_contract;
   bool neutral_bus;
+  NandTiming timing = NandTiming::candidate_minima;
   bool operator==(const NandPeerDetailed &) const = default;
 };
 
@@ -78,8 +80,17 @@ public:
            NandCellProfile profile,
            NandBusContract contract);
   NandPeer(blofeld::OwnDspMachine &machine,
+           blofeld::Nand device,
+           NandCellProfile profile,
+           NandBusContract contract,
+           NandTiming timing);
+  NandPeer(blofeld::OwnDspMachine &machine,
            std::unique_ptr<NandWriteStore> store,
            NandBusContract contract);
+  NandPeer(blofeld::OwnDspMachine &machine,
+           std::unique_ptr<NandWriteStore> store,
+           NandBusContract contract,
+           NandTiming timing);
   NandPeer(const NandPeerSnapshot &snapshot, blofeld::OwnDspMachine &target);
   ~NandPeer();
   NandPeer(const NandPeer &) = delete;

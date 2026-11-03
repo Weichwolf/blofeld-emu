@@ -19,6 +19,7 @@
 #include "storage/nand.hpp"
 #include "storage/nand_file.hpp"
 #include "storage/nand_image.hpp"
+#include "storage/nand_timing.hpp"
 #include "storage/private_file.hpp"
 
 #include <algorithm>
@@ -446,10 +447,20 @@ NandConnection nand_connection(std::istringstream &line, const NandBacking backi
   }
   std::string path;
   if (!(line >> std::quoted(path)) || path.empty()) { throw Fault("Missing NAND backing path"); }
+  auto timing = NandTiming::candidate_minima;
+  std::string policy;
+  if (line >> policy) {
+    if (policy == "functional-protocol") {
+      timing = NandTiming::functional_protocol;
+    } else if (policy != "candidate-minima") {
+      throw Fault("NAND timing must be candidate-minima or functional-protocol");
+    }
+  }
   return {.image = backing == NandBacking::cold_image ? load_nand_image(path) : NandImage{},
           .continuation = continuation,
           .backing = backing,
-          .source_path = path};
+          .source_path = path,
+          .timing = timing};
 }
 
 McuDspGpioWiring gpio_peer(std::istringstream &line) {

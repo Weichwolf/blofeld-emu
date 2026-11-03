@@ -2,6 +2,7 @@
 #pragma once
 
 #include "storage/nand_time_window.hpp"
+#include "storage/nand_timing.hpp"
 
 #include <array>
 #include <cstdint>
@@ -30,6 +31,7 @@ struct NandReadSetupPins {
 class NandReadSetup {
 public:
   explicit NandReadSetup(std::uint64_t timebase_hz);
+  NandReadSetup(std::uint64_t timebase_hz, NandTiming timing);
   bool operator==(const NandReadSetup &) const = default;
   // True only for a selected falling RE edge meeting all setup requirements.
   // Compose before protocol consumption; failures retain the preceding state.
@@ -59,6 +61,7 @@ private:
   void check_control_hold(std::uint64_t ticks) const;
   void observe_read_exit(std::uint64_t ticks, const KnownPins &pins);
   std::uint64_t timebase_hz_;
+  NandTiming timing_;
   std::uint64_t ticks_ = 0;
   // nullopt means the minimum is permanently met until the next actual change.
   std::array<std::optional<std::uint64_t>, 4> stable_since_{};

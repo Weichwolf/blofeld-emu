@@ -3,6 +3,7 @@
 
 #include "storage/nand_array.hpp"
 #include "storage/nand_time_window.hpp"
+#include "storage/nand_timing.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -39,6 +40,7 @@ public:
   using Source = std::function<NandByte()>;
   bool operator==(const NandReadTiming &) const = default;
   explicit NandReadTiming(std::uint64_t timebase_hz);
+  NandReadTiming(std::uint64_t timebase_hz, NandTiming timing);
   // The source is called only for an admitted selected falling RE edge and is
   // never retained. Coordinate protocol and timing checkpoints in the owner.
   void observe(std::uint64_t ticks, NandReadPins pins, const Source &source = {});
@@ -69,6 +71,7 @@ private:
   void release(std::uint64_t ticks, std::chrono::nanoseconds maximum_ns);
   [[nodiscard]] NandReadOutput at(std::uint64_t ticks) const;
   std::uint64_t timebase_hz_ = 0;
+  NandTiming timing_;
   std::uint64_t ticks_ = 0;
   NandTimeWindow selected_at_{};
   NandTimeWindow valid_at_{};

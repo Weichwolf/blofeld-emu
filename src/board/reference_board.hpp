@@ -30,6 +30,7 @@
 #include "storage/flash_image.hpp"
 #include "storage/nand.hpp"
 #include "storage/nand_image.hpp"
+#include "storage/nand_timing.hpp"
 
 #include <array>
 #include <cstddef>
@@ -151,6 +152,7 @@ struct NandConnection {
   // Live backing requires an existing source file and an empty in-memory image.
   // Parsed file provenance; typed in-memory fixtures need no input filename.
   std::optional<std::filesystem::path> source_path = std::nullopt;
+  NandTiming timing = NandTiming::candidate_minima;
 };
 
 // Declared peripheral POR source; first native pad observation at/after release wins.

@@ -3,6 +3,7 @@
 
 #include "storage/nand_array.hpp"
 #include "storage/nand_time_window.hpp"
+#include "storage/nand_timing.hpp"
 
 #include <array>
 #include <chrono>
@@ -35,6 +36,7 @@ struct NandWriteLatch {
 class NandWriteTiming {
 public:
   explicit NandWriteTiming(std::uint64_t timebase_hz);
+  NandWriteTiming(std::uint64_t timebase_hz, NandTiming timing);
   bool operator==(const NandWriteTiming &) const = default;
   [[nodiscard]] std::optional<NandWriteLatch> observe(std::uint64_t ticks, NandWritePins pins);
 
@@ -63,6 +65,7 @@ private:
   [[nodiscard]] std::optional<NandWriteLatch> edge(std::uint64_t ticks, const KnownPins &pins);
   [[nodiscard]] NandWriteLatch latch(std::uint64_t ticks, const KnownPins &pins) const;
   std::uint64_t timebase_hz_;
+  NandTiming timing_;
   std::uint64_t ticks_ = 0;
   // nullopt is a retired constraint: its minimum is met for every future time.
   std::array<std::optional<NandTimeWindow>, 4> stable_since_{};

@@ -1904,6 +1904,10 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-nand-wide-timebase-test PRIVATE blofeld_nand_write_medium
     blofeld_nand_read_timing blofeld_nand_write_timing blofeld_nand_read_setup)
   add_test(NAME nand_wide_timebase COMMAND blofeld-nand-wide-timebase-test)
+  add_executable(blofeld-nand-functional-timing-test test/nand_functional_timing_test.cpp)
+  target_link_libraries(blofeld-nand-functional-timing-test PRIVATE blofeld_nand_write_medium
+    blofeld_nand_read_timing blofeld_nand_write_timing blofeld_nand_read_setup)
+  add_test(NAME nand_functional_timing COMMAND blofeld-nand-functional-timing-test)
   add_executable(blofeld-nand-ce-window-test test/nand_ce_window_test.cpp
     test/nand_ce_window_boundaries.cpp test/nand_ce_window_guards.cpp test/nand_ce_window_histories.cpp)
   target_link_libraries(blofeld-nand-ce-window-test PRIVATE
@@ -3359,6 +3363,7 @@ add_custom_target(quality
     blofeld-nand-read-timing-test blofeld-original-nand-read-timing-test
     blofeld-original-nand-pack-test
     blofeld-original-nand-records-test
+    blofeld-nand-functional-timing-test
     blofeld-nand-write-timing-test blofeld-original-nand-write-timing-test
     blofeld-nand-read-setup-test blofeld-original-nand-read-setup-test
     blofeld-nand-image-test
@@ -3443,6 +3448,10 @@ add_custom_target(quality
     "${CMAKE_CURRENT_BINARY_DIR}/reference-reset-release-test")
   set_tests_properties(reference_reset_release PROPERTIES TIMEOUT 60)
   add_executable(blofeld-reference-nand-test test/reference_nand_test.cpp)
+  add_executable(blofeld-reference-nand-functional-timing-test test/reference_nand_functional_timing_test.cpp)
+  target_link_libraries(blofeld-reference-nand-functional-timing-test PRIVATE blofeld_reference_board)
+  add_test(NAME reference_nand_functional_timing COMMAND blofeld-reference-nand-functional-timing-test)
+  add_dependencies(quality blofeld-reference-nand-functional-timing-test)
   target_link_libraries(blofeld-reference-nand-test PRIVATE blofeld_reference_board)
   add_test(NAME reference_nand COMMAND blofeld-reference-nand-test
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-nand")

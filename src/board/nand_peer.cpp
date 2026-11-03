@@ -17,6 +17,7 @@
 #include "storage/nand_interval.hpp"
 #include "storage/nand_read_setup.hpp"
 #include "storage/nand_read_timing.hpp"
+#include "storage/nand_timing.hpp"
 #include "storage/nand_write_medium.hpp"
 #include "storage/nand_write_store.hpp"
 #include "storage/nand_write_timing.hpp"
@@ -49,12 +50,16 @@ std::uint64_t power_deadline(const std::uint64_t timebase) {
 }
 
 struct PeerState {
-  PeerState(NandPeerMedium clock, const std::uint64_t timebase, const NandBusContract contract)
+  PeerState(NandPeerMedium clock,
+            const std::uint64_t timebase,
+            const NandBusContract contract,
+            const NandTiming timing_policy)
       : device(std::move(clock)),
         decoder(contract),
-        write(timebase),
-        setup(timebase),
-        output(timebase),
+        write(timebase, timing_policy),
+        setup(timebase, timing_policy),
+        output(timebase, timing_policy),
+        timing(timing_policy),
         timebase_hz(timebase),
         power_ready_tick(power_deadline(timebase)) {}
 
@@ -65,6 +70,7 @@ struct PeerState {
   NandWriteTiming write;
   NandReadSetup setup;
   NandReadTiming output;
+  NandTiming timing;
   DspGpioDrive drive;
   std::uint64_t timebase_hz;
   std::uint64_t power_ready_tick;
@@ -77,14 +83,20 @@ struct PeerState {
 }
 
 struct NandPeer::Impl {
-  Impl(OwnDspMachine &machine, NandPeerMedium medium, const NandBusContract contract)
+  Impl(OwnDspMachine &machine,
+       NandPeerMedium medium,
+       const NandBusContract contract,
+       const NandTiming timing)
       : machine_(machine),
         state_(std::make_unique<PeerState>(
-            std::move(medium), machine.clock().timebase_hz(), contract)) {
+            std::move(medium), machine.clock().timebase_hz(), contract, timing)) {
     std::cerr << "NAND_BOARD_MODEL CE=held-selected power=100us-reference "
                  "part=explicit-device-contract GPIO=logical sample=period-completion "
                  "board-qualified=0 contract="
-              << static_cast<unsigned>(contract) << '\n';
+              << static_cast<unsigned>(contract) << " timing="
+              << (timing == NandTiming::functional_protocol ? "functional-protocol"
+                                                            : "candidate-minima")
+              << '\n';
     drive(0);
   }
 
@@ -110,7 +122,8 @@ struct NandPeer::Impl {
             .last_omr = state_->context.omr,
             .trace_access = state_->trace_access,
             .bus_contract = state_->decoder.contract(),
-            .neutral_bus = state_->decoder.neutral()};
+            .neutral_bus = state_->decoder.neutral(),
+            .timing = state_->timing};
   }
 
   void bind(const std::weak_ptr<const bool> &owner) {
@@ -413,11 +426,20 @@ NandPeer::NandPeer(OwnDspMachine &machine,
                    Nand device,
                    NandCellProfile profile,
                    const NandBusContract contract)
+    : NandPeer(
+          machine, std::move(device), std::move(profile), contract, NandTiming::candidate_minima) {}
+
+NandPeer::NandPeer(OwnDspMachine &machine,
+                   Nand device,
+                   NandCellProfile profile,
+                   const NandBusContract contract,
+                   const NandTiming timing)
     : impl_(std::make_unique<Impl>(machine,
                                    NandPeerMedium(NandWriteMedium(std::move(device),
                                                                   machine.clock().timebase_hz(),
                                                                   std::move(profile))),
-                                   contract)) {
+                                   contract,
+                                   timing)) {
   impl_->bind(lifetime_);
   impl_->publish();
 }
@@ -425,8 +447,16 @@ NandPeer::NandPeer(OwnDspMachine &machine,
 NandPeer::NandPeer(OwnDspMachine &machine,
                    std::unique_ptr<NandWriteStore> store,
                    const NandBusContract contract)
-    : impl_(std::make_unique<Impl>(
-          machine, NandPeerMedium(std::move(store), machine.clock().timebase_hz()), contract)) {
+    : NandPeer(machine, std::move(store), contract, NandTiming::candidate_minima) {}
+
+NandPeer::NandPeer(OwnDspMachine &machine,
+                   std::unique_ptr<NandWriteStore> store,
+                   const NandBusContract contract,
+                   const NandTiming timing)
+    : impl_(std::make_unique<Impl>(machine,
+                                   NandPeerMedium(std::move(store), machine.clock().timebase_hz()),
+                                   contract,
+                                   timing)) {
   impl_->bind(lifetime_);
   impl_->publish();
 }

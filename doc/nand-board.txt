@@ -103,6 +103,25 @@ MCU device store. Use the exclusive timed file owner explicitly for durability:
 
 The existing file, part profile and source path remain explicit. nand-store and
 nand-image are mutually exclusive; no second in-memory image is accepted.
+Both directives accept one optional timing selector after the quoted path:
+
+  nand-store j "/absolute/path/to/device.bfnand" functional-protocol
+
+Omitting the selector or using candidate-minima retains the existing candidate
+pad, pulse, setup, hold and release bounds. functional-protocol explicitly
+models ordered logical strobes with immediate output/release; it does not assert
+electrical timing or identify the fitted chip. Select it before reset: there is
+no automatic fallback after a timing fault. Command/address/data order, known
+selection and cell bits, pad ownership, Ready/Busy and scheduled read/reset/
+program/erase durations remain enforced. Unsupported commands and unknown
+program history still fail. Timing selection does not supply a missing cell-write
+contract. NAND checkpoints retain the selected policy.
+The authored nand_functional_timing and reference_nand_functional_timing tests
+check real operation deadlines and computed cell failure, native POR/short pulse,
+the unchanged strict refusal and pending-reset restoration with fresh owners.
+Both sanitizer profiles pass these and the affected NAND regressions; see
+nand-functional-timing-reference.json. Original instrument startup under this
+policy and electrical chip qualification remain open.
 A live NAND may coexist with --device-state for MCU flash. Each medium retains
 its own physical persistence; there is no cross-chip atomic transaction. Either
 live store prohibits RAM-only Board checkpoints/restores and cold flash export.
@@ -149,7 +168,7 @@ phase; raw GPIO is unchanged. Unfinished writes, partial-byte output ownership
 and unknown controls fail visibly with address and native PC. An array read
 released into neutral uses the device's CE-style
 protocol pause, preserving its next column without a P-part sequential-row
-start. Output hold/release keeps its existing timing model; no physical CE
+start. Output hold/release follows the selected timing policy; no physical CE
 wiring or edge ordering is inferred. Status uses ordinary read release.
 Outside the host phase CLE/ALE and data retain their values. Neutral creates no
 read, write latch, reset, Ready response or cell change. Single-strobe transfers

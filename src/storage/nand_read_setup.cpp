@@ -4,6 +4,7 @@
 #include "common/bus.hpp"
 #include "storage/nand_interval.hpp"
 #include "storage/nand_time_window.hpp"
+#include "storage/nand_timing.hpp"
 
 #include <array>
 #include <cstddef>
@@ -19,8 +20,13 @@ constexpr unsigned nanoseconds_per_second = 1000000000;
 constexpr unsigned read_exit_control_hold_ns = 10;
 }
 
-NandReadSetup::NandReadSetup(const std::uint64_t timebase_hz) : timebase_hz_(timebase_hz) {
+NandReadSetup::NandReadSetup(const std::uint64_t timebase_hz)
+    : NandReadSetup(timebase_hz, NandTiming::candidate_minima) {}
+
+NandReadSetup::NandReadSetup(const std::uint64_t timebase_hz, const NandTiming timing)
+    : timebase_hz_(timebase_hz), timing_(timing) {
   if (timebase_hz_ == 0) { fail("zero reference timebase"); }
+  if (!valid_nand_timing(timing_)) { fail("invalid timing policy"); }
 }
 
 void NandReadSetup::fail(const std::string &reason) const {
@@ -38,8 +44,8 @@ void NandReadSetup::check_read(const std::uint64_t ticks,
   }
   for (std::size_t index = 0; index < minimum_ns.size(); ++index) {
     if (kind == NandReadKind::status70 && index + 1 == minimum_ns.size()) { continue; }
-    const auto duration =
-        nand_interval_ticks<nanoseconds_per_second>(timebase_hz_, minimum_ns[index]);
+    const auto duration = nand_interval_ticks<nanoseconds_per_second>(
+        timebase_hz_, nand_interval_ns(timing_, minimum_ns[index]));
     if (!duration) { fail("reference interval overflow"); }
     // Subtraction avoids forming future deadlines beyond the reference counter.
     const auto &anchor = stable_since_[index];
@@ -49,8 +55,8 @@ void NandReadSetup::check_read(const std::uint64_t ticks,
 
 void NandReadSetup::check_control_hold(const std::uint64_t ticks) const {
   if (!read_ce_release_) { return; }
-  const auto duration =
-      nand_interval_ticks<nanoseconds_per_second>(timebase_hz_, read_exit_control_hold_ns);
+  const auto duration = nand_interval_ticks<nanoseconds_per_second>(
+      timebase_hz_, nand_interval_ns(timing_, read_exit_control_hold_ns));
   if (!duration) { fail("reference interval overflow"); }
   if (ticks - read_ce_release_->latest < *duration) {
     fail("tCSD: selected-read exit requires10ns before CLE/ALE change");

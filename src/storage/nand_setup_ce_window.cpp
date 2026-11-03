@@ -2,6 +2,7 @@
 #include "storage/nand_interval.hpp"
 #include "storage/nand_read_setup.hpp"
 #include "storage/nand_time_window.hpp"
+#include "storage/nand_timing.hpp"
 
 #include <array>
 #include <cstddef>
@@ -20,7 +21,8 @@ void NandReadSetup::qualify_ce_window(const std::uint64_t start) const {
   }
   check_control_hold(start);
   for (std::size_t index = 0; index < read_setup.size(); ++index) {
-    const auto duration = nand_interval_ticks<billion>(timebase_hz_, read_setup[index]);
+    const auto duration =
+        nand_interval_ticks<billion>(timebase_hz_, nand_interval_ns(timing_, read_setup[index]));
     if (!duration) { fail("reference interval overflow"); }
     const auto &anchor = stable_since_[index];
     if (anchor && start - *anchor < *duration) {

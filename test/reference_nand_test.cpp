@@ -2,6 +2,7 @@
 #include "board/mcu_dsp_runtime.hpp"
 #include "board/nand_peer.hpp"
 #include "board/reference_board.hpp"
+#include "common/bus.hpp"
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/own_dsp_fetch.hpp"
@@ -15,6 +16,7 @@
 #include "storage/nand_array.hpp"
 #include "storage/nand_file.hpp"
 #include "storage/nand_image.hpp"
+#include "storage/nand_timing.hpp"
 
 #include <array>
 #include <cstdint>
@@ -94,10 +96,12 @@ std::vector<std::uint8_t> nand_bytes(const reference::Board &board) {
   return encode_nand_image(*image);
 }
 
-void power_and_restore(const unsigned hz) {
+void power_and_restore(const unsigned hz, const NandTiming timing) {
   const auto image = flash();
   const std::vector<std::uint32_t> rom(instruction_budget, 0);
-  const auto c = config(hz);
+  auto c = config(hz);
+  if (!c.nand) { throw Fault("The authored config requires its NAND connection"); }
+  c.nand->timing = timing;
   const reference::Execution execution{.image = image,
                                        .rom = rom,
                                        .specification = BLOFELD_DEFAULT_SLA,
@@ -107,7 +111,8 @@ void power_and_restore(const unsigned hz) {
   const auto original = encode_nand_image(cells());
   const auto power_tick = hz / power_divisor;
   const auto mcu_period = hz / mcu_hz;
-  require(!nand_status(board).base.ready && nand_bytes(board) == original,
+  require(!nand_status(board).base.ready && nand_status(board).timing == timing &&
+              nand_bytes(board) == original,
           "The regular Board retains cold unknown Ready and the explicitly supplied sparse cells");
   while (board.status().common_ticks < power_tick - mcu_period) { board.advance(); }
   const auto before = board.status();
@@ -154,6 +159,39 @@ void power_and_restore(const unsigned hz) {
           "A cold image projection cannot remove live Ready, protocol state or pending deadlines");
 }
 
+struct ConfigurationFiles {
+  std::filesystem::path profile;
+  std::filesystem::path image;
+  std::string prefix;
+};
+
+void timing_configuration(const ConfigurationFiles &files, const bool live) {
+  for (const std::string policy :
+       {"", "candidate-minima", "functional-protocol", "unknown", "functional-protocol extra"}) {
+    {
+      std::ofstream output(files.profile);
+      output.exceptions(std::ios::failbit | std::ios::badbit);
+      output << files.prefix << (live ? "nand-store j " : "nand-image j ")
+             << std::quoted(files.image.string()) << ' ' << policy << '\n';
+    }
+    if (policy == "unknown" || policy.contains("extra")) {
+      require(!rejects([&] { static_cast<void>(reference::load_config(files.profile)); }).empty(),
+              "Unknown timing selectors and surplus fields cannot silently choose a policy");
+    } else {
+      const auto c = reference::load_config(files.profile);
+      const auto expected = policy == "functional-protocol" ? NandTiming::functional_protocol
+                                                            : NandTiming::candidate_minima;
+      const auto backing =
+          live ? reference::NandBacking::live_store : reference::NandBacking::cold_image;
+      const auto expected_image = live ? NandImage{} : cells();
+      require(c.nand && c.nand->timing == expected && c.nand->backing == backing &&
+                  c.nand->source_path == files.image &&
+                  encode_nand_image(c.nand.value().image) == encode_nand_image(expected_image),
+              "Timing selection defaults to candidate minima and preserves cold/live backing");
+    }
+  }
+}
+
 void configuration(const std::filesystem::path &directory) {
   std::filesystem::create_directories(directory);
   const auto image = directory / "authored sparse NAND.bfnand";
@@ -182,6 +220,9 @@ void configuration(const std::filesystem::path &directory) {
               "The regular profile imports exact sparse cells through a quoted image path");
     }
   }
+  for (const bool live : {false, true}) {
+    timing_configuration({.profile = profile, .image = image, .prefix = prefix}, live);
+  }
 }
 }
 
@@ -189,7 +230,11 @@ int main(const int count, char **args) {
   try {
     require(count == 2, "A private test artifact directory is required");
     configuration(args[1]);
-    for (const unsigned hz : {540000000U, 1080000000U}) { power_and_restore(hz); }
+    for (const unsigned hz : {540000000U, 1080000000U}) {
+      for (const auto timing : {NandTiming::candidate_minima, NandTiming::functional_protocol}) {
+        power_and_restore(hz, timing);
+      }
+    }
     std::cout << "Regular Board NAND power, native callbacks, image import and restore passed.\n";
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
