@@ -1,9 +1,9 @@
 {
   "independent_dsp56300": {
     "source": "https://github.com/Weichwolf/dsp56300",
-    "revision": "8561bdf62cb8a8dbc36871f266b826ec9cd40737",
+    "revision": "0c201ba6a9354064e4821ed74f31187d010eaa85",
     "license": "GPL-3.0-only",
-    "integration": "Pinned independent execution core for the regular Board/headless runtime, with retained native REP, bounded memory grants and explicit instruction-publication/checkpoint interfaces. Ordinary scalar X/Y stores from accumulator parts now execute natively; general JIT coverage remains incomplete (see the core jit-helper-coverage record). The six public SDK headers are unchanged. Current changes use focused Release qualification; extensive quality campaigns are deferred until firmware realtime. Complete original Desktop/Keyboard instrument operation, steady performance and remaining legacy test migration are incomplete."
+    "integration": "Pinned independent execution core for the regular Board/headless runtime, with retained native REP, bounded memory grants and explicit instruction-publication/checkpoint interfaces. Ordinary scalar accumulator-part stores and all eight L: store source views now execute native guarded RAM transfers, including sparse windows and one shared L: AGU update. Focused Release checks cover state, flags, REP, aliases and real I/O faults; shared component streams improve 5.75-6.35x for L: stores, without a whole-instrument speed claim. General JIT coverage remains incomplete (see the core jit-helper-coverage record). The six public SDK headers are unchanged; private core transfer users were rebuilt coherently. Extensive quality campaigns are deferred until firmware realtime. Complete Desktop/Keyboard instrument operation and remaining legacy test migration are incomplete."
   },
   "zlib": {
     "version": "1.3.2",
