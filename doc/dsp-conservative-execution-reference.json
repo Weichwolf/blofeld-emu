@@ -1,0 +1,98 @@
+{
+  "license": "GPL-3.0-only",
+  "scope": "Conservative dependency serialization around genuine Core execution; focused optimized Release and bounded original reset, not instrument acceptance",
+  "source_base": "8503822dd1388b707f4941c043797d1372387bbe",
+  "source_sha256": {
+    "src/dsp/dsp_native_timed_execution.cpp": "684378b3dd50315711157f07ce927376546bf613d99b991a5944a62b8d65b940",
+    "src/dsp/dsp_native_timed_execution.hpp": "53f80d5d64b0395160ceb071f8d36e3dde5a6594a2f004f782653cbbded1480a",
+    "src/dsp/own_dsp_timeline.cpp": "b1d78a56af85ac3d8b5ce19517651a4e9aea805e28ad524ee8d3b4a2ba2e8eb8",
+    "src/dsp/own_dsp_timeline.hpp": "0619616e58772336e117a735b78d9421d201f4f1fe5f5c3ba224a5f89a5cf82b",
+    "test/dsp_native_timed_test.cpp": "0abdf6736cbf23399b3347d7188363f74c8a3b78517b3804e0c545e0c0608f57",
+    "test/native_dependency_timeline_test.cpp": "503049e8539879225f753b9b9d56a8aa6dce19937c087ba928dd3cd399c7f203"
+  },
+  "policy": {
+    "raw_kernel_default": "qualified",
+    "device_timeline_default": "conservative",
+    "unknown_description": "Only valid implemented Core instructions may use three pre/post functional serialization clocks; execute actual staged effects and require the original retirement receipt",
+    "known_description": "Existing dependency preview and completion remain authoritative; unsupported timing still fails visibly",
+    "timing_limit": "Serialization covers pending resources in the current model; it does not qualify measured hardware timing or external bus latency",
+    "faults": "Unsupported instructions and genuine bus failures retain address, PC and context; no successful peripheral replies are invented",
+    "state": "Copy, assignment and paired checkpoint/restore preserve policy and pending clocks; hardware reset clears pending work and preserves policy"
+  },
+  "core": {
+    "revision": "0c201ba6a9354064e4821ed74f31187d010eaa85",
+    "archive_sha256": "8034ef9bc20b18544d2f9b87311a1683b00c4d409f9869010e0a74de394a25e8",
+    "source_modified": false
+  },
+  "build": {
+    "configuration": "LLVM19/C++23 optimized Release; compiler warnings as errors and zero clang-tidy findings in the affected build",
+    "class_declarations_changed": true,
+    "affected_consumers_rebuilt": true,
+    "unaffected_external_objects_reused": 139,
+    "reuse_condition": "Full source and dependency-header byte identity checked; stale affected closure removed before rebuilding",
+    "functional_receipt_sha256": "d0461cb3876b0c1e2426353187aba0bcb3563764b42d359329ba05cbcbd13102",
+    "private_configuration": {
+      "CMakeLists.txt": "Includes retained-bootstrap-release.cmake for verified unchanged object reuse",
+      "cmake/OwnDsp.cmake": "Imports the exact published archive hash above and matching immutable SDK headers; refuses sanitizer configurations",
+      "remaining_source_and_configuration_files": "1784 byte-identical to the canonical source; these two private build files are the only source-manifest exceptions",
+      "scope": "These receipts qualify the frozen Release code generation. The canonical source build independently rebuilt the full pinned Core with native/ThinLTO and passed 197 prefix checks, but is not substituted for this connected-runtime ELF."
+    }
+  },
+  "focused_checks": {
+    "prefix": 197,
+    "timeline": 13172,
+    "mcu": 43,
+    "all_actual_exit": 0,
+    "all_reaped": true,
+    "mcu_receipt_reuse": "Same ELF from the rebuilt policy class closure; subsequent changes affected only test objects",
+    "executables_sha256": {
+      "blofeld-headless": "e81fe400e99d33f24743792baf35de37dc94b3bba960bd4017c7ab170c74905f",
+      "blofeld-native-dependency-timeline-test": "1887959aa4c4f663d53a3b4a4cc3f498cd63d029c25e260718283e1ec602d9c6",
+      "blofeld-dsp-native-timed-test": "63a0204f84484a73a4facfc7a0ad55b873227e5c6a9413c803e490de7d845726",
+      "blofeld-native-region-mcu-test": "585781942bf108e3af9dc13961b46f13aaa17061f21f31035132a27599692e99"
+    },
+    "independent_expectations": [
+      "Actual INC changes A and status once after the explicit pre-gap",
+      "Qualified mode refuses missing descriptions without executing the CPU",
+      "Missing retirement and shortened-clock receipts fail",
+      "Real GPIO publication waits for the post-gap; paired restores preserve both gaps",
+      "Hardware reset retains uninitialized ALU state in the board model and retains the selected policy",
+      "Real failed X/Y reads keep memory_read fault, space, address, PC and zero successful retirement"
+    ]
+  },
+  "original_reset": {
+    "profile": "Desktop 1.25; unmodified local reference firmware and fresh persistent stores",
+    "mcu_operation_budget": 4450000,
+    "dsp_retirements": 18836211,
+    "serial_PCM_frames": 5552,
+    "serial_locked": true,
+    "PCM_all_zero": true,
+    "MIDI_accepted": 0,
+    "host_seconds": 189.772685605,
+    "emulated_seconds": 0.38991385,
+    "actual_exit": 0,
+    "reaped": true,
+    "stores_unchanged": true,
+    "receipt_sha256": "7b64fb1a0ddcc56ca7148a3a47431923e048b6a316d6e2530de7d2b0c3d42ed2",
+    "log_sha256": "ec1b36991164d421a8b29a5e680861320ec510e7b67fcd3ce5daa70e84354e31",
+    "read_only_observer": {
+      "first_overlay_bytes": 528,
+      "all_equal_at_entry_and_return": true,
+      "original_overlay_executed": true,
+      "PCM_all_zero": true,
+      "normal_end_state_counters_match": true,
+      "actual_exit": 2,
+      "exit_reason": "Explicit diagnostic budget",
+      "reaped": true,
+      "receipt_sha256": "ae94ef6e558ba628c762e634768c7a2f7e662b423c896ed3194dc28e91574db0",
+      "transfer_analysis_sha256": "88e7853f4228bf11c223ec795597742663f2cf5dd009d6ab9a009ad57880afca"
+    }
+  },
+  "deferred": "Extensive quality, sanitizer and broad regression campaigns until original firmware runs in real time; focused behavior checks continue",
+  "fuzz": false,
+  "boot_complete": false,
+  "audible_voice_validated": false,
+  "real_time": false,
+  "instrument_complete": false,
+  "open": "Complete original startup, physical IRQ timing, playable MIDI/audio, Keyboard profile and all remaining coverage.txt requirements. Manufacturer bytes and detailed analysis remain local only."
+}

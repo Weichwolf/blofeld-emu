@@ -6,8 +6,8 @@ Timed native DSP prefixes
     -R '^(dsp_native_timed|native_dependency_timeline|native_region_mcu)$'
 
 Costs come from actual Core previews. Only completed CPU prefixes commit history;
-unknown costs/dependencies stop planning. Control and DO endpoints terminate the
-plan. REP retains the real Core latch. Native execution remains enabled.
+unknown costs/dependencies stop native prefix planning. Control and DO endpoints
+terminate the plan. REP retains the real Core latch. Native execution remains enabled.
 Owner completion requires the offered opcode/extension/base cost and a genuine
 staged retirement; changing a host-supplied word cannot replace that offer.
 
@@ -20,16 +20,32 @@ captured words and remaining periods; reset discards pending execution.
 Selected literal/effective calls, DOR and P-memory transfers retain genuine Core
 stack, memory and code-invalidation effects. False conditional outcomes delay the
 next instruction by one period (FM A.2.6.3), using the actual Core flow receipt
-including equal taken/fallthrough PCs. Unknown descriptions still fail visibly.
+including equal taken/fallthrough PCs.
+
+The raw timing kernel defaults to qualified dependency descriptions. The device
+timeline defaults to conservative execution: a valid Core instruction without a
+dependency description executes through genuine staged Core effects, with three
+functional serialization clocks before and after it. Adjacent barriers overlap;
+base instruction costs still come from the Core. These clocks cover pending
+resources in the current model; they are not measured hardware instruction or bus
+timings. Existing described paths keep their qualified dependency handling.
+Unsupported opcodes, real bus faults, inconsistent retirement receipts and known
+descriptions with unsupported timing still fail visibly. No peripheral response,
+resource description or CPU result is fabricated. Checkpoint/copy preserve policy
+and pending barriers; reset preserves policy and clears pending work. Negative fixtures explicitly
+select qualified mode. See dsp-conservative-execution-reference.json.
 
 Register bit jumps/branches and DO/DOR/REP counters cover all six accumulator
 parts and X0/X1/Y0/Y1. Matching accumulator writers require one transfer period;
 an intervening NOP removes it. Independent controls and source/status readback
 are pinned in dsp-register-control-reference.json (238 new NXP windows).
 
-Focused Release consumers pass 178 prefix, 13,125 timeline and 43 MCU checks.
-Original reset passes the register-bit and DOR initialization paths, then stops
-at unqualified RTI dependency metadata. Complete boot, original 528-byte reception,
-IRQ entry timing and instrument operation remain unqualified.
+Focused Release consumers pass 197 prefix, 13,172 timeline and 43 MCU checks.
+A bounded original 1.25 reset reaches 18,836,211 DSP retirements and 5,552 valid
+serial PCM frames. A read-only public-Board observer confirms all 528 bytes of
+the first overlay at entry and return, and original overlay execution. Every
+captured PCM sample is zero. The normal run uses 189.773 host seconds for
+0.38991385 emulated seconds; it establishes neither real-time speed nor boot
+completion. Full startup, IRQ timing and playable MIDI/audio remain open.
 Extensive sanitizer/regression campaigns are deferred until real-time firmware
 under the current project workflow; compiler diagnostics remain enforced.

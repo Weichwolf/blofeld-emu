@@ -4,6 +4,7 @@
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_native_timed_execution.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/own_dsp_fetch.hpp"
 #include "dsp/own_dsp_machine.hpp"
@@ -19,7 +20,8 @@ namespace blofeld {
 OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine,
                                const OwnDspAutomaticTiming timing,
                                const std::uint64_t epoch_ticks,
-                               const std::optional<OwnDspResetInputs> initial_reset)
+                               const std::optional<OwnDspResetInputs> initial_reset,
+                               const DspDependencyPolicy dependencies)
     : machine_(machine),
       timing_(timing),
       epoch_ticks_(epoch_ticks),
@@ -27,7 +29,7 @@ OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine,
       expected_epoch_(machine.clock().native_epoch()),
       expected_dma_(machine.bus().last_dma_cycle()),
       horizon_(epoch_ticks),
-      native_history_(machine.cpu().progress()) {
+      native_history_(machine.cpu().progress(), dependencies) {
   const auto clock_mode = machine_.clock_inputs_.switch_timing;
   const bool native = native_regions() && clock_mode == DspClockSwitch::functional_region_boundary;
   const bool diagnostic =

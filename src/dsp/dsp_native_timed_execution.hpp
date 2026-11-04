@@ -10,6 +10,10 @@
 #include <vector>
 
 namespace blofeld {
+// Qualified uses measured resource descriptions only. Conservative serializes
+// valid Core instructions when that description is absent; bus effects remain real.
+enum class DspDependencyPolicy : std::uint8_t { qualified, conservative };
+
 struct DspTimedInstruction {
   dsp56300::InstructionWords words;
   unsigned base_units;
@@ -21,7 +25,8 @@ struct DspTimedInstruction {
 // run(); native Core guards still own cache, peripheral and RAM admission.
 class DspNativeTimedExecution {
 public:
-  explicit DspNativeTimedExecution(dsp56300::Progress initial = {});
+  explicit DspNativeTimedExecution(dsp56300::Progress initial = {},
+                                   DspDependencyPolicy policy = DspDependencyPolicy::qualified);
   DspNativeTimedExecution(const DspNativeTimedExecution &other);
   DspNativeTimedExecution &operator=(const DspNativeTimedExecution &other);
   DspNativeTimedExecution(DspNativeTimedExecution &&) noexcept = default;
@@ -39,6 +44,8 @@ public:
   void complete_owner(const dsp56300::Core &cpu, DspTimedInstruction accounted);
   void idle(const dsp56300::Core &cpu, unsigned units);
   void reset(dsp56300::Progress actual);
+
+  [[nodiscard]] DspDependencyPolicy policy() const noexcept { return policy_; }
 
 private:
   static constexpr unsigned maximum_prefix = 64;
@@ -88,6 +95,7 @@ private:
                               dsp56300::RunBudget budget);
   void accept(const dsp56300::Core &cpu, const dsp56300::BoundedRunResult &actual);
   dsp56300::Progress expected_;
+  DspDependencyPolicy policy_ = DspDependencyPolicy::qualified;
   unsigned control_delay_ = 0;
   DspInterlocks history_;
   std::optional<Offered> offered_;

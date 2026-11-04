@@ -410,11 +410,16 @@ Clocked native instruction dependencies
 The Board timeline now charges selected dependencies before genuine retirement,
 including PCU false-condition holes, P-memory ports and L-store limiting/status.
 Checkpoint/reset and finite MCU budgets retain both clock domains. Focused Release
-checks: 13,125 timeline, 178 prefix, 43 MCU. Register-bit branches/jumps and all
+checks: 13,172 timeline, 197 prefix, 43 MCU. Register-bit branches/jumps and all
 six accumulator DO/DOR/REP counters add 238 independent NXP windows; source,
 flags, taken/fallthrough paths and matching/unrelated producer delays are checked
-(dsp-register-control-reference.json). Original 1.25 passes first-stage SPI/NAND,
-register-bit control and DOR initialization; RTI dependency metadata is next.
-Full boot, 528-byte overlay reception, IRQ latency, MIDI/audio and the
-complete instrument remain open. Broader sanitizer/regression work is deferred
-until real-time firmware; no physical-hardware or instrument-speed claim.
+(dsp-register-control-reference.json). The device timeline conservatively
+serializes implemented instructions without dependency metadata through actual
+Core effects; the raw timing kernel remains qualified by default. Paired restores,
+reset, genuine bus faults and refusal of forged completion receipts are checked
+(dsp-conservative-execution-reference.json). A bounded original reset completes
+18,836,211 DSP retirements and 5,552 valid but all-zero serial PCM frames; a public
+Board observer confirms exact first 528-byte overlay reception and execution.
+Host time is 189.773s for 0.38991385s emulated. Full boot, IRQ latency, playable
+MIDI/audio and the complete instrument remain open. Broader sanitizer/regression
+work is deferred until real-time firmware; no physical-hardware or instrument-speed claim.

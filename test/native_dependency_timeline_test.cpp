@@ -3,6 +3,7 @@
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_gpio.hpp"
+#include "dsp/dsp_native_timed_execution.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_shi.hpp"
 #include "dsp/own_dsp_fetch.hpp"
@@ -15,6 +16,7 @@
 #include <exception>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -65,7 +67,10 @@ struct Device {
   blofeld::OwnDspMachine chip{clocks};
   std::unique_ptr<blofeld::OwnDspTimeline> timeline;
 
-  explicit Device(const std::span<const unsigned> program, const bool configure_port_f = true) {
+  explicit Device(
+      const std::span<const unsigned> program,
+      const bool configure_port_f = true,
+      const blofeld::DspDependencyPolicy policy = blofeld::DspDependencyPolicy::qualified) {
     constexpr std::array bootstrap{jump};
     chip.bus().install_rom({.start = boot, .words = bootstrap});
     chip.begin_hardware_reset(reset);
@@ -87,7 +92,7 @@ struct Device {
     gpio.write({.reg = blofeld::DspGpioRegister::direction, .value = 1});
     gpio.write({.reg = blofeld::DspGpioRegister::data, .value = 0});
     timeline = std::make_unique<blofeld::OwnDspTimeline>(
-        chip, blofeld::OwnDspAutomaticTiming::functional_native_regions, 0);
+        chip, blofeld::OwnDspAutomaticTiming::functional_native_regions, 0, std::nullopt, policy);
   }
 
   void retire_until(const unsigned count) {
@@ -804,6 +809,106 @@ void test_real_accumulator_loop_counters() {
   }
 }
 
+void test_conservative_timeline_checkpoint_and_reset() {
+  constexpr unsigned increment_a = 0x000008;
+  constexpr unsigned store_a0_gpio = 0x04c8dd;
+  constexpr std::uint64_t serialization = 3;
+  constexpr unsigned increment_status = 0xc00310;
+  constexpr std::array program{increment_a, store_a0_gpio, 0U};
+  Device device(program, true, blofeld::DspDependencyPolicy::conservative);
+  device.retire_until(1);
+  advance(device.chip, *device.timeline);
+  const auto before_increment = device.timeline->checkpoint();
+  require(device.chip.cpu().progress().instructions == 1 && device.chip.cpu().registers().a == 0 &&
+              device.chip.clock().interlock_cycle_units() == 1 && device.output() == 0,
+          "The explicit serialization period cannot retire INC or publish its later GPIO write");
+  for (unsigned cycle = 0; cycle < serialization; ++cycle) {
+    advance(device.chip, *device.timeline);
+  }
+  require(device.chip.cpu().progress().instructions == 2 && device.chip.cpu().registers().a == 1 &&
+              device.chip.cpu().registers().pc == 1 &&
+              device.chip.cpu().registers().sr == increment_status &&
+              device.chip.clock().interlock_cycle_units() == serialization && device.output() == 0,
+          "The genuine INC completes once after its three functional serialization clocks");
+  blofeld::OwnDspMachine pre_clone(clocks);
+  blofeld::OwnDspTimeline pre_restored(pre_clone, before_increment);
+  for (unsigned cycle = 0; cycle < serialization; ++cycle) { advance(pre_clone, pre_restored); }
+  require(pre_clone.cpu().registers() == device.chip.cpu().registers() &&
+              pre_clone.clock().elapsed_ticks() == device.chip.clock().elapsed_ticks() &&
+              pre_clone.clock().interlock_cycle_units() == serialization,
+          "Paired restore retains the conservative policy, captured INC and remaining pre-gap");
+
+  advance(device.chip, *device.timeline);
+  const auto before_gpio = device.timeline->checkpoint();
+  require(device.chip.cpu().progress().instructions == 2 && device.output() == 0 &&
+              device.chip.clock().interlock_cycle_units() == serialization + 1,
+          "A completed unknown descriptor leaves a real pending post-gap before GPIO admission");
+  for (unsigned cycle = 0; cycle < serialization; ++cycle) {
+    advance(device.chip, *device.timeline);
+  }
+  constexpr std::uint64_t native_periods = 5;
+  require(device.output() == 1 && device.chip.cpu().progress().instructions == 3 &&
+              device.chip.clock().native_cycle_units() == native_periods &&
+              device.chip.clock().interlock_cycle_units() == 2 * serialization &&
+              device.chip.clock().elapsed_ticks() ==
+                  reset_ticks + (native_periods + 2 * serialization) * period,
+          "Actual A0 reaches the GPIO once after the complete pre/base/post sequence");
+  blofeld::OwnDspMachine post_clone(clocks);
+  blofeld::OwnDspTimeline post_restored(post_clone, before_gpio);
+  for (unsigned cycle = 0; cycle < serialization; ++cycle) { advance(post_clone, post_restored); }
+  require(post_clone.cpu().registers() == device.chip.cpu().registers() &&
+              post_clone.clock().elapsed_ticks() == device.chip.clock().elapsed_ticks() &&
+              post_clone.bus().gpio(blofeld::DspPort::c).outputs().levels == 1,
+          "A mid-post-gap checkpoint preserves the policy and delayed genuine bus effect");
+
+  blofeld::OwnDspMachine reset_clone(clocks);
+  blofeld::OwnDspTimeline reset_restored(reset_clone, before_gpio);
+  reset_restored.begin_hardware_reset(reset);
+  require(
+      reset_clone.cpu().registers().a == 1 && reset_clone.cpu().registers().pc == boot &&
+          reset_clone.clock().epoch_interlock_cycle_units() == 0,
+      "The board reset model retains uninitialized ALU registers and clears pending epoch time");
+  const auto held = reset_clone.clock().elapsed_ticks() + (reset_ticks / 2);
+  static_cast<void>(reset_restored.advance_reset_to(held));
+  reset_restored.release_hardware_reset();
+  static_cast<void>(reset_restored.advance_reset_to(held + (reset_ticks / 2)));
+  constexpr unsigned limit = 32;
+  for (unsigned attempt = 0; attempt < limit && reset_clone.cpu().progress().instructions < 2;
+       ++attempt) {
+    advance(reset_clone, reset_restored);
+  }
+  require(
+      reset_clone.cpu().progress().instructions == 2 && reset_clone.cpu().registers().a == 2 &&
+          reset_clone.clock().epoch_interlock_cycle_units() == serialization,
+      "Conservative reset: retired=" + std::to_string(reset_clone.cpu().progress().instructions) +
+          " a=" + blofeld::hex(reset_clone.cpu().registers().a, 14) +
+          " pc=" + blofeld::hex(reset_clone.cpu().registers().pc, 6) +
+          " extra=" + std::to_string(reset_clone.clock().epoch_interlock_cycle_units()));
+}
+
+void test_conservative_timeline_keeps_real_bus_fault() {
+  constexpr unsigned move_r0 = 0x308000;
+  constexpr unsigned load_long_a10 = 0x40e000;
+  constexpr std::array program{move_r0, load_long_a10, 0U};
+  Device device(program, true, blofeld::DspDependencyPolicy::conservative);
+  device.retire_until(2);
+  // Device initializes X:source only; the genuine second L operand in Y is unknown.
+  std::string refusal;
+  constexpr unsigned limit = 16;
+  try {
+    for (unsigned attempt = 0; attempt < limit; ++attempt) {
+      advance(device.chip, *device.timeline);
+    }
+  } catch (const blofeld::Fault &error) { refusal = error.what(); }
+  const auto fault = device.chip.cpu().fault();
+  require(
+      !refusal.empty() && refusal.find(blofeld::hex(source, 6)) != std::string::npos &&
+          fault.kind == dsp56300::FaultKind::memory_read && fault.space == dsp56300::Space::y &&
+          fault.address == source && fault.pc == 1 &&
+          device.chip.cpu().progress().instructions == 2 && device.chip.cpu().registers().a == 0,
+      "Conservative timing cannot hide a real unknown Y read, its PC/address or failed retirement");
+}
+
 void receive_spi_word(blofeld::DspShi &shi, const unsigned word) {
   constexpr unsigned hcsr = 0xffff91;
   constexpr unsigned spi_fifo = 0xa9;
@@ -872,6 +977,8 @@ int main() {
     test_real_relative_bit_control();
     test_real_register_bit_control();
     test_real_accumulator_loop_counters();
+    test_conservative_timeline_checkpoint_and_reset();
+    test_conservative_timeline_keeps_real_bus_fault();
     std::cout << "Native dependency timeline: " << assertions << " assertions passed\n";
     return 0;
   } catch (const std::exception &error) {

@@ -375,6 +375,109 @@ void captured_offer_guard() {
   require(cpu.progress().instructions == 1,
           "Refused substitution preserves the genuine captured instruction and its retirement");
 }
+
+void conservative_cpu_owner() {
+  constexpr unsigned increment_a = 0x000008;
+  constexpr unsigned serial_gap = 3;
+  constexpr unsigned increment_status = 0x10;
+  const std::array<unsigned, 3> code{increment_a, 0, 0};
+  Memory memory(code);
+  dsp56300::Core cpu(memory);
+  const auto before = cpu.registers();
+  blofeld::DspNativeTimedExecution qualified(cpu.progress());
+  const auto offer = qualified.run(cpu, memory, {.instructions = 1, .cycles = 16});
+  if (!offer.next || !offer.next_cycles) { throw std::runtime_error("Missing actual Core offer"); }
+  require(offer.execution.dispatches == 0,
+          "An uncharacterized but implemented opcode remains a real Core offer");
+  bool refused = false;
+  try {
+    static_cast<void>(qualified.prepare_owner(cpu, offer.next.value(), offer.next_cycles.value()));
+  } catch (const blofeld::Fault &) { refused = true; }
+  require(refused && cpu.registers() == before,
+          "Qualified dependency mode retains its explicit refusal and unchanged CPU");
+  blofeld::DspNativeTimedExecution timing(cpu.progress(),
+                                          blofeld::DspDependencyPolicy::conservative);
+  const auto offered = timing.run(cpu, memory, {.instructions = 1, .cycles = 16});
+  if (!offered.next || !offered.next_cycles) {
+    throw std::runtime_error("Missing actual conservative Core offer");
+  }
+  require(offered.execution.dispatches == 0, "Conservative timing retains the actual Core offer");
+  const auto owned = timing.prepare_owner(cpu, offered.next.value(), offered.next_cycles.value());
+  refused = false;
+  try {
+    timing.complete_owner(cpu, owned);
+  } catch (const blofeld::Fault &) { refused = true; }
+  require(refused && cpu.registers() == before && cpu.progress().instructions == 0,
+          "Conservative timing cannot complete an instruction that the Core has not retired");
+  require(owned.dependency_units == serial_gap,
+          "Conservative execution clocks an explicit pre-instruction serialization gap");
+  memory.advance_clock(owned.base_units + owned.dependency_units);
+  stage(cpu, owned);
+  auto forged = owned;
+  --forged.dependency_units;
+  refused = false;
+  try {
+    timing.complete_owner(cpu, forged);
+  } catch (const blofeld::Fault &) { refused = true; }
+  require(refused && cpu.progress().instructions == 1,
+          "A genuine retirement still cannot substitute a shorter serialization interval");
+  timing.complete_owner(cpu, owned);
+  auto expected = before;
+  expected.a = 1;
+  expected.pc = 1;
+  expected.sr = increment_status;
+  require(cpu.registers() == expected &&
+              cpu.progress() == dsp56300::Progress{.instructions = 1, .estimated_cycles = 1} &&
+              memory.clock() == serial_gap + 1 && memory.output_count() == 0,
+          "The original Core performs the real increment, status change and sole retirement");
+  auto copied = timing;
+  timing = qualified;
+  timing = copied;
+  require(timing.policy() == blofeld::DspDependencyPolicy::conservative &&
+              timed_step(timing, cpu, memory) == serial_gap && cpu.registers().pc == 2,
+          "Copy and assignment preserve the post-instruction barrier and execution policy");
+  cpu.reset();
+  timing.reset(cpu.progress());
+  require(timing.policy() == blofeld::DspDependencyPolicy::conservative &&
+              timed_step(timing, cpu, memory) == serial_gap && cpu.registers().a == 1,
+          "Real reset preserves the selected conservative policy while clearing old timing");
+}
+
+void conservative_bus_fault() {
+  constexpr unsigned load_long_a10 = 0x40e000;
+  const std::array<unsigned, 1> code{load_long_a10};
+  Memory memory(code);
+  dsp56300::Core cpu(memory);
+  auto state = cpu.registers();
+  state.r[0] = output_register;
+  cpu.set_registers(state);
+  blofeld::DspNativeTimedExecution timing(cpu.progress(),
+                                          blofeld::DspDependencyPolicy::conservative);
+  const auto offer = timing.run(cpu, memory, {.instructions = 1, .cycles = 16});
+  if (!offer.next || !offer.next_cycles) { throw std::runtime_error("Missing actual bus offer"); }
+  require(offer.execution.dispatches == 0, "A real long peripheral read ends the CPU-only prefix");
+  const auto owned = timing.prepare_owner(cpu, offer.next.value(), offer.next_cycles.value());
+  memory.advance_clock(owned.base_units + owned.dependency_units);
+  auto actual = cpu.begin_instruction(owned.words, dsp56300::InstructionPublication::pcu_updates);
+  constexpr unsigned maximum_effects = 16;
+  for (unsigned index = 0; actual.pending && index < maximum_effects; ++index) {
+    actual = cpu.advance_instruction(actual.pending->ticket);
+  }
+  require(
+      !actual.retired && actual.fault.kind == dsp56300::FaultKind::memory_read &&
+          actual.fault.space == dsp56300::Space::x && actual.fault.address == output_register &&
+          actual.fault.pc == 0 && cpu.progress().instructions == 0 && memory.output_count() == 0,
+      "Conservative bus fault: kind=" + std::to_string(static_cast<unsigned>(actual.fault.kind)) +
+          " space=" + std::to_string(static_cast<unsigned>(actual.fault.space)) + " address=" +
+          blofeld::hex(actual.fault.address, 6) + " pc=" + blofeld::hex(actual.fault.pc, 6) +
+          " retired=" + std::to_string(static_cast<unsigned>(actual.retired)) +
+          " progress=" + std::to_string(cpu.progress().instructions));
+  bool refused = false;
+  try {
+    timing.complete_owner(cpu, owned);
+  } catch (const blofeld::Fault &) { refused = true; }
+  require(refused, "A failed real bus transfer cannot manufacture a successful timing completion");
+}
 }
 
 int main() {
@@ -386,6 +489,8 @@ int main() {
     loop_endpoints();
     explicit_control_tail();
     captured_offer_guard();
+    conservative_cpu_owner();
+    conservative_bus_fault();
     std::cout << "PASS timed native prefixes: " << assertions << " checks\n";
     return 0;
   } catch (const std::exception &error) {

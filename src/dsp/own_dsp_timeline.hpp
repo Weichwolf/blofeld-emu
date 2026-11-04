@@ -43,7 +43,8 @@ public:
   OwnDspTimeline(OwnDspMachine &machine,
                  OwnDspAutomaticTiming timing,
                  std::uint64_t epoch_ticks,
-                 std::optional<OwnDspResetInputs> initial_reset = std::nullopt);
+                 std::optional<OwnDspResetInputs> initial_reset = std::nullopt,
+                 DspDependencyPolicy dependencies = DspDependencyPolicy::conservative);
   // Restore chip/frontend/time together into a staged target. Reconnect external
   // pad readers and board devices before execution; target may change on failure.
   OwnDspTimeline(OwnDspMachine &machine, const OwnDspTimelineCheckpoint &checkpoint);

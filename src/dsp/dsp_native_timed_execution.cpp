@@ -5,19 +5,30 @@
 #include "dsp/dsp_interlocks.hpp"
 #include "dsp/dsp_native_dependencies.hpp"
 #include "dsp56300/core.hpp"
+#include "dsp56300/instruction.hpp"
 
 #include <algorithm>
 #include <optional>
 
 namespace blofeld {
+namespace {
+// Functional serialization covers this model's pending normal-mode resources.
+// This is not a measured instruction delay or a substitute for external bus timing.
+constexpr unsigned serialization_clocks = 3;
+}
 
-DspNativeTimedExecution::DspNativeTimedExecution(const dsp56300::Progress initial)
-    : expected_(initial) {
+DspNativeTimedExecution::DspNativeTimedExecution(const dsp56300::Progress initial,
+                                                 const DspDependencyPolicy policy)
+    : expected_(initial), policy_(policy) {
+  if (policy != DspDependencyPolicy::qualified && policy != DspDependencyPolicy::conservative) {
+    throw Fault("Unknown DSP dependency policy");
+  }
   prefix_.reserve(maximum_prefix);
 }
 
 DspNativeTimedExecution::DspNativeTimedExecution(const DspNativeTimedExecution &other)
     : expected_(other.expected_),
+      policy_(other.policy_),
       control_delay_(other.control_delay_),
       history_(other.history_),
       offered_(other.offered_),
@@ -28,6 +39,7 @@ DspNativeTimedExecution::DspNativeTimedExecution(const DspNativeTimedExecution &
 DspNativeTimedExecution &DspNativeTimedExecution::operator=(const DspNativeTimedExecution &other) {
   if (this != &other) {
     expected_ = other.expected_;
+    policy_ = other.policy_;
     control_delay_ = other.control_delay_;
     history_ = other.history_;
     offered_ = other.offered_;
@@ -97,10 +109,21 @@ DspTimedInstruction DspNativeTimedExecution::prepare_owner(const dsp56300::Core 
                                                            const unsigned base_units) const {
   check_progress(cpu);
   check_offer(words, base_units);
+  const auto decoded = describe(words.opcode, base_units);
+  unsigned delay = 0;
+  if (decoded) {
+    delay = history_.preview(*decoded);
+  } else if (policy_ == DspDependencyPolicy::conservative &&
+             dsp56300::inspect_instruction(words.opcode)) {
+    // The caller still has to execute every genuine staged effect and supply
+    // its actual retirement receipt. No success or resource map is invented.
+    delay = serialization_clocks;
+  } else {
+    delay = history_.preview(required(words, base_units));
+  }
   return {.words = words,
           .base_units = base_units,
-          .dependency_units =
-              std::max(history_.preview(required(words, base_units)), control_delay_)};
+          .dependency_units = std::max(delay, control_delay_)};
 }
 
 void DspNativeTimedExecution::complete_owner(const dsp56300::Core &cpu,
@@ -120,7 +143,20 @@ void DspNativeTimedExecution::complete_owner(const dsp56300::Core &cpu,
     throw Fault("DSP dependency completion lacks its actual staged retirement pc=" +
                 hex(words.address, 6));
   }
-  const auto decoded = required(words, base_units);
+  const auto described = describe(words.opcode, base_units);
+  if (!described && policy_ == DspDependencyPolicy::conservative &&
+      dsp56300::inspect_instruction(words.opcode)) {
+    if (accounted.dependency_units != std::max(serialization_clocks, control_delay_)) {
+      throw Fault("Conservative DSP execution lost its actual serialization clocks pc=" +
+                  hex(words.address, 6));
+    }
+    history_.elapse_idle(accounted.dependency_units + base_units);
+    expected_ = after;
+    offered_.reset();
+    control_delay_ = serialization_clocks;
+    return;
+  }
+  const auto decoded = described ? *described : required(words, base_units);
   if (std::max(history_.preview(decoded), control_delay_) != accounted.dependency_units) {
     throw Fault("DSP owner clocked a different dependency delay pc=" + hex(words.address, 6));
   }
