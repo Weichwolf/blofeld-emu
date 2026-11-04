@@ -309,3 +309,14 @@ profile. Fused MACR cancellation and independent full56 overflow/limiting contro
 retain their real V/L behavior. Full original boot, playable output and measured
 real-time factor remain open; no instrument percentage is inferred.
 See telemetry.txt and telemetry-reference.json. No fuzzing was run.
+
+Captured DSP planning with an empty cache interval
+------------------------------------------------
+The pinned independent core preserves CE while avoiding repeated captured-PCU
+CPU computation for an empty architectural cache interval. Real cache activation
+retains the next effect boundary. The actual board adapter test keeps its native
+and fetched cases and adds captured CE-on RAM/BCR/unknown-status handling, full
+registers, exact base costs, tampered observation isolation and refusal context.
+ASan/UBSan and separate TSan qualify that adapter closure, not the full clocked
+machine or instrument. See dsp-cacheless-plan-reference.json; connected reset,
+transfer alignment, MIDI/audio/storage/USB/update and realtime remain open.

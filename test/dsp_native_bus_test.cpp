@@ -142,15 +142,24 @@ void real_peripheral_transfer() {
   std::cout << "ACTUAL_BIU unknown-status-refusal=1 context=1\n";
 }
 
-void staged_peripheral_transfer() {
+void staged_peripheral_transfer(const bool captured = false) {
   DspBus bus;
   constexpr std::array words{load_x, datum_address, store_x, bus_control, load_x, bus_control};
   program(bus, words);
   bus.write({.space = DspSpace::x, .address = datum_address, .value = datum});
   OwnDspIo io(bus);
   dsp56300::Core cpu(io);
-  const auto advance = [&cpu] {
-    auto step = cpu.begin_fetch(dsp56300::InstructionPublication::pcu_updates);
+  auto initial = cpu.registers();
+  initial.sr = captured ? dsp56300::Word{0x80000} : 0U;
+  cpu.set_registers(initial);
+  const auto advance = [&cpu, &words, captured] {
+    const auto pc = cpu.registers().pc;
+    constexpr auto publication = dsp56300::InstructionPublication::pcu_updates;
+    auto step = captured
+                    ? cpu.begin_instruction(
+                          {.address = pc, .opcode = words.at(pc), .extension = words.at(pc + 1)},
+                          publication)
+                    : cpu.begin_fetch(publication);
     for (unsigned effect = 0; effect < 32 && step.pending && !step.retired; ++effect) {
       auto observation = *step.pending;
       observation.effect.value ^= word_mask;
@@ -185,7 +194,8 @@ void staged_peripheral_transfer() {
               cpu.progress() == dsp56300::Progress{.instructions = 2, .estimated_cycles = 4},
           "An actual unknown BIU status refuses with context and preserves the retired prefix");
   std::cout << "ACTUAL_STAGED_IO caller-copy-isolation=1 peripheral-write=1 "
-               "unknown-refusal=1 retained-prefix=1\n";
+               "unknown-refusal=1 retained-prefix=1 captured-ce="
+            << captured << '\n';
 }
 
 }
@@ -195,6 +205,7 @@ int main() {
     native_cache_and_refusal();
     real_peripheral_transfer();
     staged_peripheral_transfer();
+    staged_peripheral_transfer(true);
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
     return 1;
