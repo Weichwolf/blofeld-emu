@@ -51,8 +51,8 @@ std::optional<std::uint8_t> McuUsb::read_live(const std::uint16_t offset) const 
     return read_ique_control(offset);
   }
   if (offset >= usb::setup_begin && offset < usb::setup_end) {
-    if ((status_ & usb::setup) == 0) { throw Fault("USB setup-buffer contents are not valid"); }
-    return setup_.at(offset - usb::setup_begin);
+    if (!setup_) { throw Fault("USB setup-buffer contents are not known"); }
+    return setup_->at(offset - usb::setup_begin);
   }
   if (offset >= usb::buffer_begin && offset < usb::buffer_end) {
     const auto &buffer = buffers_data_.at(window_buffer(offset));

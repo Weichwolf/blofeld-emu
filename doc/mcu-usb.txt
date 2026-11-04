@@ -86,8 +86,11 @@ reset handler can now perform its real 0x3800 acknowledgements of both controls;
 see usb-reset.txt for the actual startup/IRQ/replay scope and next MIDI boundary.
 
 Buffers and transactions
-- USTB at 0x0338..0x033f stores the eight-byte application SETUP request in wire
-  order and is valid only while SETUP=1. GET_DESCRIPTOR, class/vendor requests
+- USTB at 0x0338..0x033f retains accepted application SETUP bytes in wire order
+  independently of SETUP/SETOVR acknowledgment. The guide guarantees validity
+  only while SETUP=1; this functional compatibility hypothesis and its reset/
+  unknownness rules are explicit in usb-setup-latch.txt. GET_DESCRIPTOR and
+  class/vendor requests
   and supported optional standard requests reach firmware. An unprocessed
   request overwritten by another application SETUP latches SETOVR. Disabled
   SET_DESCRIPTOR/SYNCH_FRAME support stalls the later data/status phase.

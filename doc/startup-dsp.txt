@@ -1,3 +1,9 @@
+Recorded connected runtime: original-a4-runtime-reference.json pins an actual
+original1.25 reset to main WAI/A001 Init and MIDI-driven original DSP stereo PCM.
+This is one declared functional profile; SL, complete instrument behavior and
+realtime remain open. The component frontiers below describe their older explicit
+input/model contracts and do not negate that separate recorded runtime.
+
 Original startup DSP response: acceptance boundary
 
 A healthy startup must execute both original processors, including reset,
@@ -68,5 +74,5 @@ acceptance criterion; see objective.txt and coupled-boot.txt.
 
 These are bounded component/frontier checks, not a full startup acceptance
 command. Firmware, private source analysis, pin traces and run receipts remain
-local. Full boot, both device profiles, host USB-MIDI/audio, update/recovery and
-hardware comparison retain their separate requirements in objective.txt.
+local. Complete Desktop-SL instrument operation, host USB-MIDI/audio, update/recovery
+and hardware comparison retain their separate requirements in objective.txt.

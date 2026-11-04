@@ -213,8 +213,10 @@ void test_setup_buffers_overrun_and_explicit_limits() {
           "A second application SETUP overwrites the request and latches SETOVR");
   usb.write({.address = status + 1, .value = setup_flag});
   require(usb.interrupt_sources() == 2, "SETOVR remains pending after SETUP is acknowledged");
-  reject([&usb] { static_cast<void>(usb.read(setup_buffer)); },
-         "Cleared SETUP invalidates buffer reads despite retained bytes");
+  for (unsigned index = 0; index < class_request.size(); ++index) {
+    require(usb.read(static_cast<std::uint16_t>(setup_buffer + index)) == class_request[index],
+            "SETUP acknowledgment preserves every accepted byte independently of pending flags");
+  }
   usb.write({.address = status + 1, .value = overrun_flag});
   require(usb.interrupt_sources() == 0, "SETOVR W1C clears its independent sticky event");
   constexpr std::array<std::uint8_t, 8> automatic_status{0x82, 0, 0, 0, 0, 0, 2, 0};
@@ -569,6 +571,67 @@ void test_control_enable_gates() {
   require(clock.read(control) == 0, "After MEN clears, another write can disable the module clock");
 }
 
+void unknown_setup(const blofeld::McuUsb &usb) {
+  for (unsigned index = 0; index < descriptor_request.size(); ++index) {
+    bool unknown = false;
+    try {
+      static_cast<void>(usb.read(static_cast<std::uint16_t>(setup_buffer + index)));
+    } catch (const blofeld::Fault &fault) {
+      unknown = std::string(fault.what()).contains("setup-buffer contents are not known");
+    }
+    require(unknown, "Every unobserved application SETUP byte remains unknown");
+  }
+}
+
+void retained_setup(const blofeld::McuUsb &usb, const std::array<std::uint8_t, 8> &expected) {
+  for (unsigned index = 0; index < expected.size(); ++index) {
+    require(usb.read(static_cast<std::uint16_t>(setup_buffer + index)) == expected[index],
+            "Every retained byte matches the actual independently specified wire request");
+  }
+}
+
+void test_retained_setup_knowledge() {
+  // Own vendor requests distinguish all eight bytes without manufacturer program data.
+  constexpr std::array<std::uint8_t, 8> first{0x40, 0x47, 0x18, 0x26, 0x35, 0x49, 0x57, 0x68};
+  constexpr std::array<std::uint8_t, 8> second{0x41, 0x5a, 0x69, 0x38, 0x27, 0x16, 0x45, 0x72};
+  blofeld::McuUsb usb;
+  unknown_setup(usb);
+  start(usb);
+  unknown_setup(usb);
+  require(usb.receive_setup(first) == blofeld::UsbResponse::ack,
+          "Only an actual accepted application SETUP populates the retained latch");
+  usb.write({.address = status + 1, .value = setup_flag});
+  retained_setup(usb, first);
+  const auto saved = usb;
+  require(usb.receive_setup(second, false) == blofeld::UsbResponse::none,
+          "Bad CRC cannot replace the accepted bytes");
+  retained_setup(usb, first);
+  require(usb.receive_setup(second) == blofeld::UsbResponse::ack,
+          "The next accepted request replaces every retained byte");
+  retained_setup(usb, second);
+  retained_setup(saved, first);
+  require(usb.receive_setup(first) == blofeld::UsbResponse::ack &&
+              (usb.read(status + 1) & setup_mask) == setup_mask,
+          "Actual replacement while SETUP is pending latches SETOVR");
+  usb.write({.address = status + 1, .value = setup_mask});
+  retained_setup(usb, first);
+  require(usb.interrupt_sources() == 0, "Acknowledged bytes do not manufacture another interrupt");
+  auto endpoint_reset = usb;
+  endpoint_reset.reset_endpoints();
+  unknown_setup(endpoint_reset);
+  retained_setup(usb, first);
+  auto module_reset = usb;
+  module_reset.reset();
+  unknown_setup(module_reset);
+  usb.observe_decoder({.reset = true});
+  unknown_setup(usb);
+  usb.observe_decoder({.enumerated = true});
+  unknown_setup(usb);
+  require(usb.receive_setup(second) == blofeld::UsbResponse::ack,
+          "Only a new accepted packet can repopulate reset setup storage");
+  retained_setup(usb, second);
+}
+
 void test_unconfigured_endpoint_size_registers() {
   constexpr unsigned size_mask = 0x7f;
   for (const unsigned endpoint : {endpoint2, endpoint3}) {
@@ -611,6 +674,7 @@ int main() {
     test_packet_boundaries_and_reset_during_in();
     test_control_enable_gates();
     test_unconfigured_endpoint_size_registers();
+    test_retained_setup_knowledge();
     std::cout << "USB status, interrupts, setup, local buffers and retry checks passed\n";
     return 0;
   } catch (const std::exception &error) {

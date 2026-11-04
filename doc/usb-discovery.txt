@@ -43,8 +43,8 @@ export after reset, descriptor/configuration changes or loss of qualified state.
 A nonblocking loopback listener/session is described in usbip-session.txt.
 Runtime CLI binding, kernel attachment, host class binding, original enumeration,
 original MIDI/sample exchange and Spectre communication remain unqualified. Import success here reserves an existing qualified export; it is not a
-simulated successful device reset or proof of host attachment. The original USTB
-and NISOF boundaries remain strict. Full objective and gaps: objective.txt and
+simulated successful device reset or proof of host attachment. Retained application USTB is an explicit functional hypothesis; original bulk
+NISOF remains strict. Full objective and gaps: objective.txt and
 coverage.txt. No fuzzing, physical traffic, modules or system routing are used.
 
 Deterministic gates:
@@ -61,14 +61,11 @@ actual IN/OUT completion IRQs/RTIs. Guest ROM loads and USB RAM stores produce
 all captured bytes before an import record can exist. These own fixtures do not
 establish original Blofeld descriptor or host enumeration behavior.
 
-original_usb_reset also drives the production probe against unchanged1.25 MCU
-code after its conditional cold start. Its actual first GET_DESCRIPTOR reaches
-the retained post-ack USTB failure. Descriptor capture remains unavailable;
-polling and metadata queries preserve CPU/RAM/USB payload knowledge and NVM.
-Two joint pending-probe/native pre-read restores repeat the same refusal. This
-negative original result cannot supply an export identity or normal enumeration.
-
-References:
-  https://docs.kernel.org/usb/usbip_protocol.html
-  https://github.com/torvalds/linux/blob/v6.12/tools/usb/usbip/configure.ac
-  https://www.usb.org/document-library/usb-20-specification
+original_usb_reset drives the production probe against unchanged1.25 MCU after
+its conditional startup/reset/configuration. Actual original callbacks and
+completion IRQs supply all device/header/configuration bytes. Two joint pre-read
+restores reproduce complete CPU/RAM/USB/payload/write state and NVM; three fresh
+production runtimes return exact332-byte original-device TCP lists. Trusted
+restore retires their accepted peers before any stale export or guest mutation.
+This retained-USTB functional model is not common-clock/physical qualification;
+original bulk NISOF remains strict. See usb-reset.txt and usb-setup-latch.txt.

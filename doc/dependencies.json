@@ -1,9 +1,9 @@
 {
   "independent_dsp56300": {
     "source": "https://github.com/Weichwolf/dsp56300",
-    "revision": "bd79f96ef38729b25303f23829fb847574790ae7",
+    "revision": "82467d22bd93470fbf0c47971b9dc6d04317025e",
     "license": "GPL-3.0-only",
-    "integration": "Pinned independent execution core for the regular Board/headless runtime. The timing owner uses the actual captured ordinary Core entry after complete reserved dependency clocks for parallel/NOP/register-MOVEP instructions. Genuine Core offers, base costs and actual sole-retirement/progress remain required. Captured original words survive backing-P changes; real Io and exact refusals occur once. Conditional/vector/control publication retains genuine staged handling. Core.hpp and Backend.hpp add the captured API and concept/forwarder; matching Core-class consumer rebuilds are required. Focused new-SDK raw-owner/prefix proofs pass 57/197 checks; matching source/header/archive/code-generation evidence is reused after a coherent canonical rebuild. Current Timeline/MCU binaries pass 13199/43 assertions, and standalone read-only firmware inspection passes. New-ELF connected reset acceptance remains pending. Unlowered MOVEP/general helpers, complete native ISA and remaining legacy test migration remain open. Extensive quality campaigns remain deferred until original-firmware realtime.",
+    "integration": "Pinned independent DSP core for the regular Board/headless runtime. Explicit borrowed Memory and real external Io preserve native grants, callbacks, captured execution and clocks. Typed-memory API/alias/bounded component checks and one coherent Root SDK/USTB class rebuild with nine targeted native gates are qualified; see memory_api_integration. Earlier captured/bounded records pin historical sources. Complete native ISA, original full-instrument acceptance, realtime and remaining legacy test migration remain open.",
     "release_integration": {
       "core_archive_sha256": "d7f4c17711cb075824a75b3d2ddc555a85e67af1bc26871bed74d15f14bfbb05",
       "unchanged_public_headers": 6,
@@ -23,6 +23,11 @@
     "historical_bounded_owner": {
       "reference": "doc/dsp-native-owner-reference.json",
       "scope": "Clocked bounded owners and preserved genuine staged fallbacks; no new original cold boot or instrument-throughput claim"
+    },
+    "memory_api_integration": {
+      "reference": "doc/dsp-memory-api-reference.json",
+      "core_reference": "https://github.com/Weichwolf/dsp56300/blob/82467d22bd93470fbf0c47971b9dc6d04317025e/doc/memory-api-reference.json",
+      "scope": "Coherent LLVM19 optimized Release SDK/USTB class rebuild; nine targeted native checks, including original USB reset/setup/probe/TCP and13199 timeline/43 MCU assertions. No new-Core original full boot, instrument-speed or physical-equivalence claim."
     }
   },
   "zlib": {

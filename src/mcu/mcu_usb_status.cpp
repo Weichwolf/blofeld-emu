@@ -82,6 +82,7 @@ void McuUsb::observe_decoder(const UsbDecoderState state) {
       ique_controls_.fill(0);
       configuration_status_ = 0;
       alternate_.fill(0);
+      setup_.reset();
       setup_stall_ = false;
       control_phase_known_ = true;
       configuration_control_ = false;

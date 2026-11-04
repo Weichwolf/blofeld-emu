@@ -77,55 +77,38 @@ and NVM remain unchanged. These are register facts and a manual/model conflict,
 not proof of defective firmware or of silicon behavior for reserved settings.
 The field is not masked, rewritten or treated as a successful transaction.
 
-The same configured original CPU also receives own GET_DESCRIPTOR requests.
-The ordinary request now comes from the production UsbDeviceProbe. Its exact
-eight SETUP bytes match an independent standard request. After the real CPU
-failure, pending probe polls and metadata queries leave capture unavailable and
-preserve CPU/RAM/USB payload knowledge and NVM. Both native pre-read restores
-also restore the pending probe and reproduce this refusal. No original identity
-is synthesized for export.
-One SETUP enters FFD2, acknowledges SETUP before the callback and retires nine
-instructions before its first USTB read fails: address 0x033f, PC 0xbc3d,
-CCR 0x90. S12USB20D6E2FV1 section 3.1.17 declares USTB valid only while SETUP=1.
-The failed byte read leaves architectural CPU state unchanged. Neither firmware
-nor the buffer-validity check is changed to resolve this manual/model conflict.
+Retained SETUP compatibility model
+The guide guarantees USTB validity only while SETUP=1. Original1.25 acknowledges
+SETUP before its LDAB7,X reads033f at PCbc3d/CCR90. The functional model retains
+only genuinely accepted application SETUP bytes after W1C; unknown/reset bytes
+still fail. This explicit hypothesis resolves the native access without changing
+firmware or supplying descriptor bytes from the host. See usb-setup-latch.txt.
 
-Two SETUPs before CPU service instead establish SETOVR. The first requests 18
-bytes; the superseding request asks for 0/1/8/9/17/18/65535 bytes. The original
-handler acknowledges only SETOVR, leaving SETUP set. Its real callback, unsigned
-clamp and paired-byte copy queue the corresponding device descriptor from the
-pinned ROM. Independent expectations cover every transmitted byte, the original
-conditional serial-index rule, the even copied extent for odd lengths, and all
-256 local-buffer byte knowledge states. Reference data and program bytes remain
-local; public tests pin their spans/hashes rather than embedding descriptors.
+Eight ordinary/overrun profiles cover requested lengths0/1/8/9/17/18/65535.
+Independent checks cover the retained load and NZVC, unsigned clamp, paired-byte
+copy (including odd lengths), conditional serial-index rule and all256 local
+buffer byte/knowledge states. Actual DATA1/ACK drives completion IRQ/RTI/WAI;
+overrun chains its second genuine SETUP before control-IN completion. Nonzero
+reads also execute the actual DATA1/ZLP status OUT and original completion IRQ.
+Sixteen joint pre-read restores reproduce every architectural CPU register,
+all5120 mapped RAM bytes, USB registers/descriptions/payload knowledge and write
+prefix. MCU NVM bytes, knowledge and erase history remain unchanged.
 
-The decoded host receives actual DATA1 payloads and ACKs them before original
-RTI. ACK alone sets TFRC and clears DVALID. Retained SETUP has higher priority
-than the new control-IN completion, so actual RTI immediately chains to FFD2
-using its original frame. The next callback then reaches the same invalid-USTB
-read. This conditional overrun reply does not establish normal enumeration or
-a successful complete control transfer. No foreground continuation is invented.
-Each of the eight profiles has a joint native/LCD snapshot after the real flag
-acknowledgement/JSR, before callback reads. Sixteen restores reproduce complete
-architectural CPU state, all mapped RAM, declared USB registers/descriptions,
-all local payload bytes/knowledge and the actual write prefix. NVM stays intact.
-USB-window instruction totals still exclude the shared original cold start.
+The production UsbDeviceProbe completes device18/header9/configuration101
+transfers through original handlers. Two joint pre-read/native-host restores
+reproduce complete state and every independently checked ROM descriptor byte.
+Completed metadata queries cannot mutate the native state or start new transfers.
 
-USB wire decoding, automatic enumeration/standard-request handling, active IQUE,
-host USB ports, original USB-MIDI delivery, DSP boot/audio, physical timing and
-stock-hardware equivalence remain open. No fuzzing or physical traffic runs.
+Three fresh UsbipRuntime adapters repeat the complete original discovery. Every
+byte of each332-byte loopback DEVLIST matches independent protocol layout plus
+ROM fields. Native outcome and NVM remain identical across attempts. A trusted
+pre-read restore retires the old listener and accepted idle TCP peer, exports no
+stale bytes and preserves every restored CPU/RAM/USB/payload/evidence bit.
+Host polls occur between native WAI/no-IRQ boundaries; poll ticks count host
+operations, not calibrated USB/common-clock time. Actual instruction retirements
+are counted outside checkpoints; restored path counters include saved prefixes.
 
-Production runtime refusal
-The same configured original MCU snapshot now starts three fresh UsbipRuntime
-adapters. Their ordinary GET_DESCRIPTOR reaches the unchanged nine-instruction
-USTB fault. Each real loopback DEVLIST returns exactly the12-byte zero-device
-reply and closes; no captured descriptor or export identity exists. Subsequent
-runtime polls preserve native registers, all watched RAM, USB payload knowledge,
-read-only evidence revisions and every NVM byte/knowledge/erase-history bit.
-Trusted pre-read restore increments the caller's transport revision; polling the
-old adapter then retires its listener and accepted idle TCP peer before any new
-USB callback. The three complete native/peripheral failure outcomes must agree.
-The wrapper checks all three USBIP_RUNTIME_REFUSAL rows and counts27 additional
-original instructions. This isolated fixture uses declared operation-count ticks,
-not a clocked-board or physical USB timing profile. The own-program live CLI test
-is separate (usb-runtime.txt); neither establishes normal original enumeration.
+Original bulk NISOF remains strict. Common-clock enumeration, kernel attachment,
+USB-MIDI/sample exchange, Spectre and physical timing remain unqualified. These
+conditional MCU fixtures do not replace the connected original MCU/DSP runtime.
+No fuzzing or physical traffic is part of this gate.

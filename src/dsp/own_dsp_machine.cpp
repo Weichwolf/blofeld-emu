@@ -12,6 +12,7 @@
 #include "dsp56300/checkpoint.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp56300/instruction.hpp"
+#include "dsp56300/memory.hpp"
 
 #include <algorithm>
 #include <array>
@@ -193,7 +194,7 @@ OwnDspCheckpoint::~OwnDspCheckpoint() = default;
 
 OwnDspMachine::OwnDspMachine(const DspRunClockInputs clock)
     : io_(bus_),
-      cpu_(io_, core_profile),
+      cpu_(dsp56300::Memory::external(), &io_, core_profile),
       interrupts_(bus_, cpu_),
       clock_(clock),
       clock_inputs_(clock) {}

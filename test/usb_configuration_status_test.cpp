@@ -154,7 +154,8 @@ void cancellation() {
   require(usb.request_in(UsbBuffer::control_in).response == UsbResponse::nak,
           "A replacement request does not inherit the old automatic status response");
   usb.write({.address = status_low, .value = 1});
-  rejects([&] { static_cast<void>(usb.read(setup_buffer)); });
+  require(usb.read(setup_buffer) == vendor[0],
+          "Acknowledgment retains the last actual application SETUP byte");
   require(usb.receive_setup(select_config) == UsbResponse::ack,
           "Next configuration SETUP is legal");
   acknowledge(usb);

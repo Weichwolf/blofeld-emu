@@ -28,7 +28,7 @@ void check_pid_barriers(blofeld::McuBus &bus) {
   put(bus, {.address = endpoint + 4, .size = 2, .value = software_ready});
   reject([&] { static_cast<void>(bus.request_usb_in(blofeld::UsbBuffer::endpoint2)); },
          "Unknown USB IN DATA PID after endpoint reset");
-  reject([&] { static_cast<void>(bus.read(setup_buffer)); }, "setup-buffer contents are not valid");
+  reject([&] { static_cast<void>(bus.read(setup_buffer)); }, "setup-buffer contents are not known");
 }
 
 void test_native_reset_and_joint_replays() {

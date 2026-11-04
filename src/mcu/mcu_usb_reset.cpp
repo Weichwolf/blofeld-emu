@@ -16,6 +16,7 @@ void McuUsb::reset_endpoints() {
     if (buffer.functional_halt.value_or(true)) { buffer.functional_halt.reset(); }
   }
   ique_controls_.fill(0);
+  setup_.reset();
   pending_in_.reset();
   automatic_read_.reset();
   pending_address_.reset();

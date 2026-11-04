@@ -79,8 +79,8 @@ void persistent(const Case test, const bool copy_before_first, const Transfer tr
   require(usb.receive_setup(vendor) == UsbResponse::ack, "An unrelated actual control SETUP");
   require(transaction(usb, test) == UsbResponse::stall, "SETUP does not end a bulk halt");
   usb.write({.address = status_low, .value = 1});
-  reject([&usb] { static_cast<void>(usb.read(setup_tail)); },
-         "setup-buffer contents are not valid");
+  require(usb.read(setup_tail) == vendor.back(),
+          "An acknowledged control SETUP retains its actual last byte independently of bulk halt");
   usb.observe_sof(1);
   usb.observe_decoder({.suspended = true, .enumerated = true});
   usb.observe_decoder({.enumerated = true});

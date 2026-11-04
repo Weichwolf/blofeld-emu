@@ -1,0 +1,73 @@
+{
+  "scope": "Typed memory Core setup in the connected board; no ISA, guest clock, peripheral or firmware change",
+  "Core_revision": "82467d22bd93470fbf0c47971b9dc6d04317025e",
+  "Core_reference": "https://github.com/Weichwolf/dsp56300/blob/82467d22bd93470fbf0c47971b9dc6d04317025e/doc/memory-api-reference.json",
+  "component_qualification": {
+    "archive_sha256": "7bbf2e6e27c80ffab5cf2898cb1dd3ca720259fb4f4a4fe01f33c8380cefd434",
+    "SDK_sha256": {
+      "include/dsp56300/backend.hpp": "1892fb154c9415654c2c5550579d2edfe1b29d23e4c36010d8ba6a238306502b",
+      "include/dsp56300/checkpoint.hpp": "79c17878620c5b7f2b929a1007711d7eab077c086ae702da9940ab3d6137acb6",
+      "include/dsp56300/core.hpp": "7d1718d63a8b87027fa211517d89a59cc7ade5c261a961e4645d096080ea7963",
+      "include/dsp56300/instruction.hpp": "564167bdc1ad3fe89f4a81a429e0fc6e44b119e3cd481a61e6c2e03d66f5e12b",
+      "include/dsp56300/memory.hpp": "a007a46847afb726cf55052bdf6701d96def86445877f964bd05ec0e2cdf2efe",
+      "include/dsp56300/simd.hpp": "6533a8294f06f05477fe036df55ea9d8d2c6cc1770051f28c62dbe954fc88eb7",
+      "include/dsp56300/transfers.hpp": "838c61e51fb09b665329951c8a0146fddf8257232f426d6dfa463eb1fa4345ed"
+    },
+    "tests": {
+      "api-1": {
+        "ELF_sha256": "7060061343b46f8601e3139dedae7d202bf13ea3c29c6b9ca8e115d998094b1e",
+        "actual_exit": 0,
+        "result": "Memory/Core/Io/Options API, Harvard partition, executable aliases, external access and ownership passed."
+      },
+      "alias-1": {
+        "ELF_sha256": "2c787abd8ecc429055a772e4d41b5ea41d21221f42c44df29678ec4257e7a98c",
+        "actual_exit": 0,
+        "result": "70 memory-alias checks passed"
+      },
+      "bounded-1": {
+        "ELF_sha256": "f6131e95b6ecc33647b4d8e997a10fb22ba960c0fd821d91c9050191c6f3ebcc",
+        "actual_exit": 0,
+        "result": "15670 bounded native prefix/effect checks passed"
+      }
+    },
+    "scope": "Independent library qualification only; not the final Root-linked archive or emulator acceptance"
+  },
+  "source_sha256": {
+    "cmake/OwnDsp.cmake": "9c6ba76d07c8f4911868f178e11e24c6c2d75abb1f471dce67e982c90cbf35b9",
+    "src/dsp/own_dsp_machine.cpp": "9fb907c1808e023051170f3398cc5834b63b2744ef1b973f7b41a33f6bfed7a4",
+    "doc/dependencies.json": "9f36ea7d7267825a2b92c7d16e58faa271a683102403fb4f75901f8e3557d357",
+    "doc/runtime.txt": "73b8b522c965b5214042dec4cbc9103dee7fc88b9ef36ec0b168f2816aa0bc36"
+  },
+  "canonical_root_qualification": {
+    "status": "passed",
+    "profile": "LLVM19 optimized Release O3/native ThinLTO; strict warnings/tidy/format; sanitizer matrices deferred during realtime bring-up",
+    "Core_archive_sha256": "7bbf2e6e27c80ffab5cf2898cb1dd3ca720259fb4f4a4fe01f33c8380cefd434",
+    "component_archive_and_seven_SDK_hashes_match": true,
+    "source_manifest_sha256": "069ffc339163ec846fba16b0efda612340d4ac30eeddce805399d8cc7e5e98b3",
+    "native_checks": 9,
+    "all_native_checks_actual_exit": 0,
+    "original_USB_actual_scenario_retirements": 56243,
+    "timeline_assertions": 13199,
+    "MCU_integration_assertions": 43,
+    "ELF_sha256": {
+      "blofeld-headless": "0e8b80b04c975945a61531ff6d881dd6d8f881be64dfba718c84ef2a6cbecb82",
+      "blofeld-usb-event-test": "4ba0e713cd0ca5058404e96fdc35dff6eee3e130485218f73bedf13f7e448b9c",
+      "blofeld-usb-configuration-status-test": "6ee99cd063cfb6a7b7825277d15436271658252421f26d63d993a375c4b6dc86",
+      "blofeld-usb-functional-halt-test": "9f69f5081120e8ad6adcd95b0d8ef02f2dce8891b18459b70b99f0971894e4bb",
+      "blofeld-usb-endpoint-reset-test": "50311bad4721acfab757fe60c85c2056c0257911b279cee448c7c76fd889a6e9",
+      "blofeld-usb-device-status-test": "63986b4e0bad19ba614493ba1b65ed186057acdd7fd6ae10e3707473d6f6dd94",
+      "blofeld-memory-usb-test": "3f68230ce9faa43ea317f7337f1c71ea2afbe1ba9aec9e2a2a8fd9c76b6c0345",
+      "blofeld-original-usb-reset-test": "0877810d41e33f888d24f8be6952d48806acc95acd2cbb29ce32ac9acf82d128",
+      "blofeld-native-dependency-timeline-test": "f436be13f2b8fa524fc0504356cc037b937cca4db2093054cf297467fe586c1f",
+      "blofeld-native-region-mcu-test": "79a300af20cac06e71b87ef6a0efa54373898bfbe02498b1f6ee4f8eb7f59bbb"
+    },
+    "hardening": "All ten named ELFs: PIE, full RELRO, NX stack, no text relocations;1181Root/81Core compiler command hardening checks. No runtime JIT/CET qualification.",
+    "private_evidence": "doc/local/usb-retained-setup-integration-r1/{source,build,qualification}.json",
+    "scope": "Named current binaries and shared class/SDK closure; no new original coupled boot, full instrument, physical timing or throughput result"
+  },
+  "thread_contract": "One MCU/DSP emulation owner; host audio/MIDI queues do not mutate guest clocks. A separate DSP execution thread is unimplemented and has no measured gain.",
+  "fuzz": false,
+  "original_firmware_restarted": false,
+  "throughput_claim": false,
+  "complete_instrument": false
+}

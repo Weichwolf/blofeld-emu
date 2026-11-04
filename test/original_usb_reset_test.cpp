@@ -14,7 +14,6 @@
 #include "usb/usbip.hpp"
 #include "usb/usbip_runtime.hpp"
 #include "usbip_fixture.hpp"
-#include "usbip_session_fixture.hpp"
 #include "usbip_tcp_fixture.hpp"
 
 #include <algorithm>
@@ -84,6 +83,10 @@ struct Counters {
   unsigned entries = 0;
   unsigned returns = 0;
   unsigned native = 0;
+  unsigned control_entries = 0;
+  unsigned control_returns = 0;
+  unsigned out_entries = 0;
+  unsigned out_returns = 0;
   Writes writes;
   bool operator==(const Counters &) const = default;
 };
@@ -175,6 +178,7 @@ struct Session {
   Profile profile;
   Counters counters;
   Registers interrupted{};
+  std::uint64_t actual_retirements = 0; // Host evidence; deliberately not checkpointed.
 
   std::ostream &trace_;
   blofeld::McuFlashImage initial_;
@@ -197,7 +201,10 @@ void Session::step(const unsigned vector) {
             "The original USB interrupt must enter through its real vector and existing WAI frame");
     ++counters.entries;
   }
-  if (result.instruction_executed) { ++counters.native; }
+  if (result.instruction_executed) {
+    ++counters.native;
+    ++actual_retirements;
+  }
   if (before.pc == main_wait) {
     const auto after = machine.cpu().state();
     constexpr unsigned interrupt_mask = 0x10;
@@ -413,10 +420,13 @@ void Session::reject_midi() {
 constexpr unsigned setup_vector = 0xffd2;
 constexpr unsigned setup_entry = 0xbe21;
 constexpr unsigned setup_return = 0xbe3b;
-constexpr unsigned setup_callback = 0xbc38;
 constexpr unsigned setup_fault_pc = 0xbc3d;
 constexpr unsigned status_word = 0x302;
 constexpr unsigned control_in_word = 0x314;
+constexpr unsigned control_out_vector = 0xffcc;
+constexpr unsigned control_in_entry = 0xbe50;
+constexpr unsigned control_out_entry = 0xbe5f;
+constexpr unsigned control_out_return = 0xbe6a;
 constexpr unsigned setup_source = 0x338;
 constexpr unsigned descriptor_source = 0xfe49;
 constexpr unsigned device_descriptor_size = 18;
@@ -448,9 +458,7 @@ std::array<std::uint8_t, 8> setup_request(const unsigned length) {
           static_cast<std::uint8_t>(length >> 8U)};
 }
 
-void start_setup(Session &session,
-                 const SetupProfile profile,
-                 std::optional<blofeld::UsbDeviceProbe> &probe) {
+void start_setup(Session &session, const SetupProfile profile) {
   session.counters = {};
   session.interrupted = registers(session.machine.cpu().state());
   if (profile.overrun) {
@@ -461,11 +469,9 @@ void start_setup(Session &session,
                 blofeld::UsbResponse::ack,
             "The last own SETUP supplies the actual requested word length");
   } else {
-    const auto state = session.machine.cpu().state();
-    auto &capture = probe.emplace();
-    require(!capture.poll(session.machine.bus(), {.pc = state.pc, .ccr = state.ccr}) &&
-                !capture.ready(),
-            "The production descriptor probe submits its real first GET_DESCRIPTOR");
+    require(session.machine.bus().receive_usb_setup(setup_request(profile.length)) ==
+                blofeld::UsbResponse::ack,
+            "Ordinary device GET_DESCRIPTOR is an actual decoded SETUP");
     const auto expected = setup_request(profile.length);
     for (unsigned byte = 0; byte < expected.size(); ++byte) {
       require(session.machine.bus().read(static_cast<std::uint16_t>(setup_source + byte)) ==
@@ -534,8 +540,8 @@ void check_device_reply(Session &session,
                         const SetupProfile profile) {
   const auto size = std::min(profile.length, device_descriptor_size);
   require(session.word(control_in_word) == (queued_control | size) &&
-              session.word(status_word) == setup_usb_status,
-          "The original overrun callback queues the clamped device descriptor and retains SETUP");
+              session.word(status_word) == (profile.overrun ? setup_usb_status : idle_usb_status),
+          "Original device callback queues the clamped payload with the actual SETUP flag state");
   check_descriptor_footprint(session, firmware, size);
   const auto packet = session.machine.bus().request_usb_in(blofeld::UsbBuffer::control_in);
   require(packet.response == blofeld::UsbResponse::data && packet.data1 && packet.size == size,
@@ -557,33 +563,84 @@ void check_device_reply(Session &session,
   require(!pending, "The original ISR still masks interrupt delivery before its RTI");
   constexpr unsigned enabled_ccr = 0x40;
   const auto selected = session.machine.bus().interrupt_request(enabled_ccr);
-  require(selected && selected->vector == setup_vector,
-          "Retained SETUP wins over the genuine lower-priority control-IN completion");
+  require(selected && selected->vector == (profile.overrun ? setup_vector : control_in_vector),
+          "Pending original SETUP has priority; otherwise the genuine control-IN IRQ is selected");
 }
 
 void check_setup_step(Session &session,
                       const blofeld::CpuState before,
                       const blofeld::CpuStep result) {
-  if (result.instruction_executed) { ++session.counters.native; }
+  if (result.instruction_executed) {
+    ++session.counters.native;
+    ++session.actual_retirements;
+  }
+  const bool setup_rti = result.instruction_executed && before.pc == setup_return;
+  const bool input_rti = result.instruction_executed && before.pc == control_in_return;
+  const bool output_rti = result.instruction_executed && before.pc == control_out_return;
+  if (setup_rti) { ++session.counters.returns; }
+  if (input_rti) { ++session.counters.control_returns; }
+  if (output_rti) { ++session.counters.out_returns; }
   if (result.interrupt_vector) {
-    require(*result.interrupt_vector == setup_vector && result.stack_reused &&
-                session.counters.entries < 2,
-            "Original SETUP entry and chained RTI reuse the actual interrupted frame");
-    if (session.counters.entries == 0) {
-      require(!result.instruction_executed && before.pc == main_resume && before.sp == wait_stack,
-              "The first SETUP interrupt enters directly from original main WAI");
-    } else {
-      require(result.instruction_executed && before.pc == setup_return,
-              "The second SETUP source chains only through the actual original RTI");
-      ++session.counters.returns;
+    unsigned entry = 0;
+    switch (*result.interrupt_vector) {
+      case setup_vector:
+        require(session.counters.entries < 2,
+                "Only the independently expected ordinary/overrun SETUP IRQs may enter");
+        ++session.counters.entries;
+        entry = setup_entry;
+        break;
+      case control_in_vector:
+        require(session.counters.control_entries++ == 0 && setup_rti,
+                "Real IN ACK chains its single completion IRQ through original SETUP RTI");
+        entry = control_in_entry;
+        break;
+      case control_out_vector:
+        require(session.counters.out_entries++ == 0 && !result.instruction_executed,
+                "Actual control status OUT wakes the original waiting foreground once");
+        entry = control_out_entry;
+        break;
+      default: throw blofeld::Fault("Unexpected IRQ during original SETUP completion");
     }
+    require(result.stack_reused,
+            "All original USB entries reuse the actual native interrupt frame");
     auto expected = session.interrupted;
-    expected[0] = setup_entry;
+    expected[0] = entry;
     expected[5] |= 0x10U;
     require(registers(session.machine.cpu().state()) == expected,
-            "Native interrupt entry restores the original interrupted registers and sets I");
-    ++session.counters.entries;
+            "Native entry preserves the independently expected interrupted registers and sets I");
+  } else if (setup_rti || input_rti || output_rti) {
+    auto expected = session.interrupted;
+    expected[4] = main_stack;
+    require(registers(session.machine.cpu().state()) == expected &&
+                !session.machine.cpu().waiting(),
+            "Actual original RTI restores every interrupted register before foreground resumes");
   }
+}
+
+void drain_setup(Session &session) {
+  while (!session.machine.cpu().waiting() || session.machine.cpu().pending_interrupt()) {
+    require(session.counters.native < instruction_limit, "Original USB completion must be bounded");
+    const auto before = session.machine.cpu().state();
+    check_setup_step(session, before, session.machine.cpu().step());
+  }
+  require(session.machine.cpu().state().pc == main_resume,
+          "Original completion and foreground must reach their genuine main WAI");
+}
+
+void verify_setup_read(Session &session, const blofeld::CpuState before, const unsigned length) {
+  // Original BC3D is LDAB 7,X: independently check the wire byte and S12 NZVC effect.
+  const auto expected_byte = setup_request(length).back();
+  constexpr unsigned nzv = 0x0e;
+  constexpr unsigned negative = 0x08;
+  constexpr unsigned zero = 0x04;
+  constexpr unsigned sign = 0x80;
+  const auto flags = (before.ccr & ~nzv) | ((expected_byte & sign) != 0 ? negative : 0U) |
+                     (expected_byte == 0 ? zero : 0U);
+  const auto after = session.machine.cpu().state();
+  require(
+      before.x == setup_source && before.d == setup_source && after.pc == setup_fault_pc + 2 &&
+          after.d == ((before.d & ~byte_mask) | expected_byte) && after.ccr == flags,
+      "Actual post-W1C LDAB retires once using the retained accepted byte and independent flags");
 }
 
 std::optional<Saved> finish_setup(Session &session,
@@ -592,210 +649,44 @@ std::optional<Saved> finish_setup(Session &session,
                                   const bool capture) {
   std::optional<Saved> middle;
   bool packet = false;
-  while (session.counters.native < instruction_limit) {
+  do {
+    require(session.counters.native < instruction_limit,
+            "Original SETUP completion must be bounded");
     const auto before = session.machine.cpu().state();
-    if (capture && !middle && before.pc == setup_callback) {
-      require(session.word(status_word) == (profile.overrun ? setup_usb_status : idle_usb_status) &&
-                  before.d == setup_source && before.sp == wait_stack - 2,
-              "The snapshot follows the real flag acknowledgement and JSR, before callback reads");
+    if (capture && !middle && before.pc == setup_fault_pc) {
+      require(before.ccr == fault_ccr && before.sp == wait_stack - callback_frame_bytes,
+              "Pre-read snapshot retains the original frame and masked original CCR");
       middle.emplace(session.save());
     }
-    if (before.pc == setup_return) {
-      require(profile.overrun && !packet, "Only the overrun path reaches its first original RTI");
+    if (!packet && before.pc == setup_return) {
       check_device_reply(session, firmware, profile);
       packet = true;
     }
-    try {
-      check_setup_step(session, before, session.machine.cpu().step());
-    } catch (const blofeld::Fault &fault) {
-      const std::string_view reason(fault.what());
-      require(before.pc == setup_fault_pc && reason.contains("MCU read at 0x033f") &&
-                  reason.contains("pc=0xbc3d ccr=0x90") &&
-                  reason.contains("USB setup-buffer contents are not valid"),
-              "Only the actual post-acknowledgement original USTB read is the expected frontier");
-      require(registers(session.machine.cpu().state()) == registers(before) &&
-                  before.d == setup_source && before.x == setup_source &&
-                  before.y == session.interrupted[3] &&
-                  before.sp == wait_stack - callback_frame_bytes && before.ccr == fault_ccr &&
-                  session.word(status_word) == idle_usb_status &&
-                  session.counters.entries == (profile.overrun ? 2U : 1U) &&
-                  session.counters.returns == (profile.overrun ? 1U : 0U) &&
-                  packet == profile.overrun,
-              "Unknown setup data cannot commit a fabricated CPU byte or skip the real IRQ path");
-      if (!profile.overrun) {
-        require(session.counters.native == 9,
-                "The ordinary path retires exactly its nine original pre-read instructions");
-      }
-      session.check_flash();
-      return middle;
-    }
-  }
-  throw blofeld::Fault("Original SETUP must return or reach its explicit invalid-data boundary");
-}
-
-void check_incomplete_probe(Session &session, std::optional<blofeld::UsbDeviceProbe> &probe) {
-  if (!probe) { return; }
-  auto before = session.outcome();
-  inspect_setup_payload(session, before);
-  const auto state = session.machine.cpu().state();
-  require(!probe->poll(session.machine.bus(), {.pc = state.pc, .ccr = state.ccr}) &&
-              !probe->ready(),
-          "Original USTB failure leaves descriptor capture pending without inventing bytes");
-  bool unavailable = false;
-  try {
-    static_cast<void>(probe->descriptors());
-  } catch (const blofeld::Fault &fault) {
-    require(std::string_view(fault.what()).contains("USB descriptor capture is unavailable"),
-            "No original descriptor metadata can escape the incomplete transfer");
-    unavailable = true;
-  }
-  auto after = session.outcome();
-  inspect_setup_payload(session, after);
-  require(unavailable && before == after,
-          "Incomplete metadata queries preserve every native register, RAM and USB payload bit");
-  session.check_flash();
-  session.trace_ << "DESCRIPTOR_PROBE_UNAVAILABLE " << session.counters.native << ' ' << state.pc
-                 << ' ' << static_cast<unsigned>(state.ccr) << '\n';
-}
-
-void poll_runtime(Session &session,
-                  blofeld::UsbipRuntime &runtime,
-                  blofeld::UsbipRuntimeBoundary &boundary) {
-  const auto cpu = session.machine.cpu().state();
-  static_cast<void>(runtime.poll(session.machine.bus(), {.pc = cpu.pc, .ccr = cpu.ccr}, boundary));
-  // Explicit operation-count reference, not a clocked board/USB timing claim.
-  ++boundary.ticks;
-}
-
-Saved runtime_setup_fault(Session &session,
-                          blofeld::UsbipRuntime &runtime,
-                          blofeld::UsbipRuntimeBoundary &boundary) {
-  std::optional<Saved> before_fault;
-  constexpr unsigned maximum_operations = 16;
-  for (unsigned operation = 0; operation < maximum_operations; ++operation) {
-    poll_runtime(session, runtime, boundary);
-    if (operation == 0) {
-      const auto expected = setup_request(device_descriptor_size);
-      for (unsigned i = 0; i < expected.size(); ++i) {
-        require(session.machine.bus().read(static_cast<std::uint16_t>(setup_source + i)) ==
-                    expected[i],
-                "The runtime submits every independently specified ordinary SETUP byte");
-      }
-      require(session.word(status_word) == setup_usb_status,
-              "Runtime admission establishes the real original SETUP flag");
-    }
-    const auto before = session.machine.cpu().state();
-    if (before.pc == setup_fault_pc) { before_fault.emplace(session.save()); }
-    try {
-      check_setup_step(session, before, session.machine.cpu().step());
-    } catch (const blofeld::Fault &fault) {
-      const std::string_view reason(fault.what());
-      if (!before_fault) {
-        throw blofeld::Fault("Original runtime fault lacks its pre-read state");
-      }
-      require(before.pc == setup_fault_pc && session.counters.native == 9 &&
-                  session.counters.entries == 1 && before.ccr == fault_ccr &&
-                  registers(session.machine.cpu().state()) == registers(before) &&
-                  reason.contains("MCU read at 0x033f") && reason.contains("pc=0xbc3d ccr=0x90") &&
-                  reason.contains("USB setup-buffer contents are not valid"),
-              "Only the unchanged original nine-instruction USTB frontier qualifies this runtime");
-      return *before_fault;
-    }
-  }
-  throw blofeld::Fault("Original runtime SETUP did not reach its independently expected failure");
-}
-
-void runtime_empty_list(Session &session,
-                        blofeld::UsbipRuntime &runtime,
-                        blofeld::UsbipRuntimeBoundary &boundary) {
-  namespace tcp = blofeld::test::usbip_tcp;
-  auto client = tcp::connect(runtime.port());
-  tcp::send(client, blofeld::test::usbip_session::list);
-  tcp::Received received;
-  constexpr unsigned maximum_polls = 64;
-  for (unsigned attempt = 0; !received.eof && attempt < maximum_polls; ++attempt) {
-    poll_runtime(session, runtime, boundary);
-    tcp::read(client, received);
-    if (!received.eof) {
-      pollfd ready{.fd = client.get(), .events = POLLIN, .revents = 0};
-      static_cast<void>(::poll(&ready, 1, 1));
-    }
-  }
-  constexpr std::array<std::uint8_t, 12> empty_list{1, 0x11, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0};
-  require(
-      received.eof && std::ranges::equal(received.bytes, empty_list) && runtime.started() &&
-          !runtime.published() && !runtime.faulted(),
-      "A real TCP DEVLIST after the original fault returns exactly zero devices and no identity");
-}
-
-void check_runtime_paths(Session &session, const Saved &configured) {
-  namespace tcp = blofeld::test::usbip_tcp;
-  std::optional<Outcome> expected;
-  for (unsigned replay = 0; replay < 3; ++replay) {
-    session.restore(configured);
-    session.counters = {};
+    check_setup_step(session, before, session.machine.cpu().step());
+    if (before.pc == setup_fault_pc) { verify_setup_read(session, before, profile.length); }
+  } while (!session.machine.cpu().waiting() || session.machine.cpu().pending_interrupt());
+  require(packet && session.counters.entries == (profile.overrun ? 2U : 1U) &&
+              session.counters.returns == session.counters.entries &&
+              session.counters.control_entries == 1 && session.counters.control_returns == 1,
+          "Original SETUP/overrun and real IN completion each return through actual native RTI");
+  if (profile.length != 0) {
     session.interrupted = registers(session.machine.cpu().state());
-    const blofeld::UsbipRuntimeOptions options{
-        .tcp = {},
-        .location = {.path = "/blofeld-emu/usb/1-1", .busid = "1-1", .bus = 1, .device = 1},
-        .after_ticks = 0,
-        .period_ticks = 1,
-        .probe_timeout_ticks = instruction_limit};
-    blofeld::UsbipRuntime runtime(options);
-    blofeld::UsbipRuntimeBoundary boundary{.owner = std::make_shared<const int>(0),
-                                           .restore_revision = replay};
-    const auto middle = runtime_setup_fault(session, runtime, boundary);
-    auto before = session.outcome();
-    inspect_setup_payload(session, before);
-    const auto evidence = session.machine.bus().usb_host_evidence();
-    runtime_empty_list(session, runtime, boundary);
-    auto after = session.outcome();
-    inspect_setup_payload(session, after);
-    require(
-        before == after && session.machine.bus().usb_host_evidence() == evidence,
-        "Post-fault TCP/probe polling preserves CPU, all RAM, USB payload knowledge and evidence");
-    if (expected) {
-      require(after == *expected,
-              "Three fresh runtime attempts reproduce the complete original failure state");
-    } else {
-      expected = after;
-    }
-    auto pending = tcp::connect(runtime.port());
-    poll_runtime(session, runtime, boundary);
-    session.restore(middle);
-    ++boundary.restore_revision;
-    bool retired = false;
-    try {
-      poll_runtime(session, runtime, boundary);
-    } catch (const blofeld::Fault &fault) {
-      const std::string_view reason(fault.what());
-      require(
-          reason.contains("board owner/restore/time changed") &&
-              reason.contains("mcu-pc=0xbc3d ccr=0x90"),
-          "A trusted native restore invalidates its old live transport with actual MCU context");
-      retired = true;
-    }
-    tcp::Received closed;
-    constexpr unsigned maximum_close_polls = 64;
-    for (unsigned attempt = 0; !closed.eof && attempt < maximum_close_polls; ++attempt) {
-      tcp::read(pending, closed);
-      if (!closed.eof) {
-        pollfd ready{.fd = pending.get(), .events = POLLIN, .revents = 0};
-        static_cast<void>(::poll(&ready, 1, 1));
-      }
-    }
-    require(retired && runtime.faulted() && !runtime.published() && closed.eof &&
-                closed.bytes.empty(),
-            "Restore retirement closes an accepted idle TCP peer without publishing any bytes");
-    auto restored = session.outcome();
-    inspect_setup_payload(session, restored);
-    require(restored == after && session.machine.bus().usb_host_evidence() == evidence,
-            "Transport retirement cannot mutate the restored native/peripheral state");
-    session.check_flash();
-    session.trace_ << "USBIP_RUNTIME_REFUSAL " << replay << ' ' << session.counters.native << ' '
-                   << session.machine.cpu().state().pc << ' '
-                   << static_cast<unsigned>(session.machine.cpu().state().ccr) << " 12 1\n";
+    require(session.machine.bus().receive_usb_out(
+                {.buffer = blofeld::UsbBuffer::control_out, .data = {}, .data1 = true}) ==
+                blofeld::UsbResponse::ack,
+            "Only a real DATA1/ZLP supplies the control read's OUT status stage");
+    drain_setup(session);
   }
+  require(session.machine.cpu().state().pc == main_resume &&
+              session.word(status_word) == idle_usb_status,
+          "Original control request completes without a fabricated flag or skipped instruction");
+  for (unsigned i = 0; i < 8; ++i) {
+    require(session.machine.bus().read(static_cast<std::uint16_t>(setup_source + i)) ==
+                setup_request(profile.length)[i],
+            "All actual accepted SETUP bytes remain known after both firmware acknowledgements");
+  }
+  session.check_flash();
+  return middle;
 }
 
 std::optional<Saved> finish_suspend(Session &session, const bool capture) {
@@ -894,29 +785,29 @@ void check_setup_paths(Session &session, const blofeld::Firmware &firmware) {
     const SetupProfile profile{.length = index == 0 ? device_descriptor_size : lengths[index - 1],
                                .overrun = index != 0};
     session.restore(configured);
-    std::optional<blofeld::UsbDeviceProbe> probe;
-    start_setup(session, profile, probe);
-    const auto pending_probe = probe;
+    start_setup(session, profile);
     const auto middle = finish_setup(session, firmware, profile, true);
     if (!middle) {
       throw blofeld::Fault("Each original SETUP branch requires its real pre-read snapshot");
     }
-    check_incomplete_probe(session, probe);
     auto expected = session.outcome();
     inspect_setup_payload(session, expected);
     const auto report = [&](const std::string_view kind) {
       session.trace_ << kind << ' ' << profile.overrun << ' ' << profile.length << ' '
                      << session.counters.native << ' ' << session.counters.entries << ' '
                      << session.counters.returns << ' '
-                     << (profile.overrun ? std::min(profile.length, device_descriptor_size) : 0)
+                     << std::min(profile.length, device_descriptor_size) << '\n';
+      session.trace_ << "SETUP_COMPLETION " << profile.overrun << ' ' << profile.length << ' '
+                     << session.counters.control_entries << ' ' << session.counters.control_returns
+                     << ' ' << session.counters.out_entries << ' ' << session.counters.out_returns
                      << '\n';
     };
     report("SETUP_CASE");
+    session.trace_ << "SETUP_PREFIX " << profile.overrun << ' ' << profile.length << ' '
+                   << middle->counters.native << '\n';
     for (unsigned replay = 0; replay < 2; ++replay) {
       session.restore(*middle);
-      probe = pending_probe;
       static_cast<void>(finish_setup(session, firmware, profile, false));
-      check_incomplete_probe(session, probe);
       auto actual = session.outcome();
       inspect_setup_payload(session, actual);
       require(actual == expected,
@@ -925,7 +816,289 @@ void check_setup_paths(Session &session, const blofeld::Firmware &firmware) {
       report("SETUP_REPLAY");
     }
   }
-  check_runtime_paths(session, configured);
+}
+
+using Bytes = std::vector<std::uint8_t>;
+
+Bytes expected_list(const blofeld::Firmware &firmware) {
+  constexpr unsigned configuration_bytes = 101;
+  constexpr unsigned configuration_source = descriptor_source + device_descriptor_size;
+  // Independent USB/IP OP_REP_DEVLIST layout: 12-byte prefix, 312-byte device,
+  // then four bytes per active interface. Identity fields come only from ROM.
+  constexpr unsigned reply_prefix = 12;
+  constexpr unsigned record_bytes = 312;
+  constexpr unsigned interface_bytes = 4;
+  constexpr unsigned path_bytes = 256;
+  constexpr unsigned location_bytes = 288;
+  constexpr unsigned identity_offset = 300;
+  const std::span<const std::uint8_t> rom(firmware.mcu);
+  const auto device = rom.subspan(descriptor_source - flash_begin, device_descriptor_size);
+  const auto configuration = rom.subspan(configuration_source - flash_begin, configuration_bytes);
+  const auto count = configuration[4];
+  Bytes expected(reply_prefix + record_bytes + (count * interface_bytes), 0);
+  expected[0] = 1;
+  constexpr unsigned usbip_version_low = 0x11;
+  expected[1] = usbip_version_low; // USB/IP version 0x0111.
+  expected[3] = 5;                 // OP_REP_DEVLIST.
+  expected[11] = 1;                // One device, big-endian uint32.
+  constexpr std::string_view path = "/blofeld-emu/usb/1-1";
+  constexpr std::string_view busid = "1-1";
+  std::ranges::copy(path, expected.begin() + reply_prefix);
+  std::ranges::copy(busid, expected.begin() + reply_prefix + path_bytes);
+  expected[reply_prefix + location_bytes + 3] = 1;  // Bus 1.
+  expected[reply_prefix + location_bytes + 7] = 1;  // Device 1.
+  expected[reply_prefix + location_bytes + 11] = 2; // USB_SPEED_FULL.
+  unsigned output = reply_prefix + identity_offset;
+  for (const unsigned input : {8U, 10U, 12U}) {
+    expected.at(output++) = device[input + 1];
+    expected.at(output++) = device[input];
+  }
+  for (const unsigned input : {4U, 5U, 6U}) { expected.at(output++) = device[input]; }
+  expected.at(output++) = configuration[5];
+  constexpr unsigned configuration_count_offset = 17;
+  expected.at(output++) = device[configuration_count_offset];
+  expected.at(output++) = count;
+  for (unsigned offset = 0; offset < configuration.size();) {
+    const auto length = configuration[offset];
+    require(length >= 2 && length <= configuration.size() - offset,
+            "Independently traversed original descriptor spans must fit the ROM extent");
+    if (configuration[offset + 1] == 4) {
+      require(length >= 9, "Original interface descriptor must contain class metadata");
+      if (configuration[offset + 3] == 0) {
+        for (unsigned field = 5; field < 8; ++field) {
+          expected.at(output++) = configuration[offset + field];
+        }
+        ++output;
+      }
+    }
+    offset += length;
+  }
+  require(output == expected.size(), "Wire interface count must equal the independent ROM count");
+  return expected;
+}
+
+Bytes list_device(Session &instrument,
+                  blofeld::UsbipRuntime &runtime,
+                  blofeld::UsbipRuntimeBoundary &boundary) {
+  namespace tcp = blofeld::test::usbip_tcp;
+  auto client = tcp::connect(runtime.port());
+  constexpr unsigned usbip_version_low = 0x11;
+  constexpr std::array<std::uint8_t, 8> request{1, usbip_version_low, 0x80, 5, 0, 0, 0, 0};
+  tcp::send(client, request);
+  tcp::Received received;
+  constexpr unsigned maximum_polls = 64;
+  for (unsigned attempt = 0; !received.eof && attempt < maximum_polls; ++attempt) {
+    ++boundary.ticks;
+    static_cast<void>(
+        runtime.poll(instrument.machine.bus(),
+                     blofeld::ExecutionContext{.pc = instrument.machine.cpu().state().pc,
+                                               .ccr = instrument.machine.cpu().state().ccr},
+                     boundary));
+    tcp::read(client, received);
+    if (!received.eof) {
+      pollfd ready{.fd = client.get(), .events = POLLIN, .revents = 0};
+      static_cast<void>(::poll(&ready, 1, 1));
+    }
+  }
+  require(received.eof && runtime.published() && !runtime.faulted(),
+          "Real loopback DEVLIST must finish without retiring its native descriptor publication");
+  return received.bytes;
+}
+
+void drain_discovery(Session &session, std::optional<Saved> &middle) {
+  while (!session.machine.cpu().waiting() || session.machine.cpu().pending_interrupt()) {
+    require(session.counters.native < instruction_limit,
+            "Original descriptor discovery must finish within its native instruction bound");
+    const auto before = session.machine.cpu().state();
+    if (!middle && before.pc == setup_fault_pc) { middle.emplace(session.save()); }
+    const auto step = session.machine.cpu().step();
+    if (step.instruction_executed) {
+      ++session.counters.native;
+      ++session.actual_retirements;
+    }
+    if (step.interrupt_vector) {
+      require(*step.interrupt_vector == setup_vector ||
+                  *step.interrupt_vector == control_in_vector ||
+                  *step.interrupt_vector == control_out_vector,
+              "Only original descriptor control-transfer vectors may execute during discovery");
+      ++session.counters.entries;
+    }
+    if (step.instruction_executed && (before.pc == setup_return || before.pc == control_in_return ||
+                                      before.pc == control_out_return)) {
+      ++session.counters.returns;
+    }
+  }
+  require(session.machine.cpu().state().pc == main_resume,
+          "Every native descriptor callback/completion must return to actual foreground WAI");
+}
+
+void check_descriptors(const blofeld::UsbDeviceDescriptors &descriptors,
+                       const blofeld::Firmware &firmware) {
+  constexpr unsigned configuration_size = 101;
+  constexpr unsigned serial_number_index = 16;
+  const auto rom = std::span(firmware.mcu);
+  const auto original = rom.subspan(descriptor_source - flash_begin, device_descriptor_size);
+  for (unsigned byte = 0; byte < original.size(); ++byte) {
+    const auto expected = byte == serial_number_index ? 0U : original[byte];
+    require(descriptors.device()[byte] == expected,
+            "Captured device bytes match original ROM and its executed serial-suppression rule");
+  }
+  const auto configuration =
+      rom.subspan(descriptor_source + device_descriptor_size - flash_begin, configuration_size);
+  require(descriptors.device().size() == device_descriptor_size &&
+              std::ranges::equal(descriptors.configuration(), configuration) &&
+              descriptors.interface_count() == configuration[4],
+          "Only complete original ROM configuration bytes and interfaces qualify discovery");
+}
+
+void finish_probe(Session &session,
+                  blofeld::UsbDeviceProbe &probe,
+                  std::optional<Saved> &middle,
+                  std::optional<blofeld::UsbDeviceProbe> &saved_probe) {
+  constexpr unsigned maximum_polls = 1000;
+  for (unsigned poll = 0; poll < maximum_polls; ++poll) {
+    const auto cpu = session.machine.cpu().state();
+    const bool ready = probe.poll(session.machine.bus(), {.pc = cpu.pc, .ccr = cpu.ccr});
+    const bool capturing = !middle;
+    drain_discovery(session, middle);
+    if (capturing && middle) { saved_probe = probe; }
+    if (ready) { return; }
+  }
+  throw blofeld::Fault("Original descriptor probe exceeded its fixed host-poll bound");
+}
+
+void check_probe_paths(Session &session,
+                       const Saved &configured,
+                       const blofeld::Firmware &firmware) {
+  session.restore(configured);
+  session.counters = {};
+  blofeld::UsbDeviceProbe probe;
+  std::optional<Saved> middle;
+  std::optional<blofeld::UsbDeviceProbe> saved_probe;
+  finish_probe(session, probe, middle, saved_probe);
+  if (!middle || !saved_probe) {
+    throw blofeld::Fault(
+        "Successful discovery requires its actual pre-read native/host checkpoint");
+  }
+  check_descriptors(probe.descriptors(), firmware);
+  auto expected = session.outcome();
+  inspect_setup_payload(session, expected);
+  session.trace_ << "PROBE_COMPLETE 0 " << session.counters.native << ' '
+                 << session.counters.entries << ' ' << session.counters.returns << " 18 101\n";
+  for (unsigned replay = 1; replay < 3; ++replay) {
+    session.restore(*middle);
+    probe = *saved_probe;
+    auto retained = middle;
+    auto host = saved_probe;
+    finish_probe(session, probe, retained, host);
+    check_descriptors(probe.descriptors(), firmware);
+    auto actual = session.outcome();
+    inspect_setup_payload(session, actual);
+    require(actual == expected,
+            "Both joint pre-read restores reproduce all CPU/RAM/USB/payload/write state");
+    const auto cpu = session.machine.cpu().state();
+    require(probe.poll(session.machine.bus(), {.pc = cpu.pc, .ccr = cpu.ccr}),
+            "A completed descriptor probe remains ready without another transaction");
+    auto unchanged = session.outcome();
+    inspect_setup_payload(session, unchanged);
+    require(unchanged == actual, "Ready probe queries cannot mutate the completed original MCU");
+    session.trace_ << "PROBE_COMPLETE " << replay << ' ' << session.counters.native << ' '
+                   << session.counters.entries << ' ' << session.counters.returns << " 18 101\n";
+  }
+}
+
+void poll_discovery(Session &session,
+                    blofeld::UsbipRuntime &runtime,
+                    blofeld::UsbipRuntimeBoundary &boundary) {
+  ++boundary.ticks; // Host-operation reference; not emulated USB clock ticks.
+  const auto cpu = session.machine.cpu().state();
+  static_cast<void>(runtime.poll(session.machine.bus(), {.pc = cpu.pc, .ccr = cpu.ccr}, boundary));
+}
+
+void check_runtime_retirement(Session &session,
+                              blofeld::UsbipRuntime &runtime,
+                              blofeld::UsbipRuntimeBoundary &boundary,
+                              const Saved &middle) {
+  namespace tcp = blofeld::test::usbip_tcp;
+  auto pending = tcp::connect(runtime.port());
+  poll_discovery(session, runtime, boundary);
+  session.restore(middle);
+  auto expected = session.outcome();
+  inspect_setup_payload(session, expected);
+  const auto evidence = session.machine.bus().usb_host_evidence();
+  ++boundary.restore_revision;
+  bool retired = false;
+  try {
+    poll_discovery(session, runtime, boundary);
+  } catch (const blofeld::Fault &fault) {
+    const std::string_view reason(fault.what());
+    require(reason.contains("board owner/restore/time changed") &&
+                reason.contains("mcu-pc=0xbc3d ccr=0x90"),
+            "Restoring a real pre-read checkpoint retires the old transport with actual context");
+    retired = true;
+  }
+  tcp::Received closed;
+  constexpr unsigned maximum_close_polls = 64;
+  for (unsigned attempt = 0; !closed.eof && attempt < maximum_close_polls; ++attempt) {
+    tcp::read(pending, closed);
+    if (!closed.eof) {
+      pollfd ready{.fd = pending.get(), .events = POLLIN, .revents = 0};
+      static_cast<void>(::poll(&ready, 1, 1));
+    }
+  }
+  auto actual = session.outcome();
+  inspect_setup_payload(session, actual);
+  require(retired && runtime.faulted() && !runtime.published() && closed.eof &&
+              closed.bytes.empty() && actual == expected &&
+              session.machine.bus().usb_host_evidence() == evidence,
+          "Retirement closes the accepted idle TCP peer and preserves every restored guest bit");
+}
+
+void check_runtime_paths(Session &session,
+                         const Saved &configured,
+                         const blofeld::Firmware &firmware) {
+  std::optional<Outcome> expected;
+  for (unsigned replay = 0; replay < 3; ++replay) {
+    session.restore(configured);
+    session.counters = {};
+    const blofeld::UsbipRuntimeOptions options{
+        .tcp = {},
+        .location = {.path = "/blofeld-emu/usb/1-1", .busid = "1-1", .bus = 1, .device = 1},
+        .after_ticks = 0,
+        .period_ticks = 1,
+        .probe_timeout_ticks = instruction_limit};
+    blofeld::UsbipRuntime runtime(options);
+    blofeld::UsbipRuntimeBoundary boundary{.owner = std::make_shared<const int>(0),
+                                           .restore_revision = replay};
+    std::optional<Saved> middle;
+    constexpr unsigned maximum_polls = 1000;
+    while (!runtime.published() && boundary.ticks < maximum_polls) {
+      poll_discovery(session, runtime, boundary);
+      drain_discovery(session, middle);
+    }
+    require(runtime.published() && !runtime.faulted(),
+            "Only three completed original descriptor transfers may publish USB/IP metadata");
+    if (!middle) {
+      throw blofeld::Fault("Runtime discovery requires its actual pre-read checkpoint");
+    }
+    auto before = session.outcome();
+    inspect_setup_payload(session, before);
+    const auto reply = list_device(session, runtime, boundary);
+    require(reply == expected_list(firmware),
+            "Every real TCP DEVLIST byte matches independent USB/IP layout and original ROM");
+    auto after = session.outcome();
+    inspect_setup_payload(session, after);
+    require(after == before, "TCP discovery cannot mutate native CPU/RAM/USB/payload/write state");
+    if (expected) {
+      require(after == *expected, "Three fresh runtime discoveries reproduce full original state");
+    } else {
+      expected = after;
+    }
+    session.trace_ << "USBIP_RUNTIME_COMPLETE " << replay << ' ' << session.counters.native << ' '
+                   << session.counters.entries << ' ' << session.counters.returns << ' '
+                   << reply.size() << " 1\n";
+    check_runtime_retirement(session, runtime, boundary, *middle);
+  }
 }
 
 struct Inputs {
@@ -964,13 +1137,18 @@ void run(const Inputs &inputs) {
   session.finish_configuration();
   check_suspend_paths(session);
   session.reject_midi();
+  const auto configured = session.save();
   check_setup_paths(session, firmware);
-  std::cout << "Original cold MCU -> USB reset IRQ/configuration -> native RTI/main WAI verified; "
-               "three real poll profiles, two mid-ISR replays and unchanged NVM. Original MIDI "
-               "transactions still reject their reserved NISOF descriptor fields. Ordinary SETUP "
-               "keeps its post-ack invalid-USTB boundary; overrun paths first queue genuine device "
-               "descriptors and chain back to the same boundary. No full board, "
-               "physical USB timing, host USB or fuzzing claim.\n";
+  check_probe_paths(session, configured, firmware);
+  check_runtime_paths(session, configured, firmware);
+  trace << "NATIVE_RETIREMENTS " << session.actual_retirements << '\n';
+  std::cout
+      << "Original cold MCU -> USB reset IRQ/configuration -> native RTI/main WAI verified; "
+         "three real poll profiles, two mid-ISR replays and unchanged NVM. Original MIDI "
+         "transactions still reject their reserved NISOF descriptor fields. All ordinary/overrun "
+         "SETUP profiles execute retained-byte reads, real data/status ACK and native "
+         "completion IRQs/RTI/WAI. No full board, "
+         "physical USB timing, host USB or fuzzing claim.\n";
 }
 }
 

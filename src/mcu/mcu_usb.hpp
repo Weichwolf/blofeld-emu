@@ -171,7 +171,8 @@ private:
   std::uint16_t interrupt_mask_ = 0;
   std::uint16_t frame_ = 0;
   std::uint16_t configuration_status_ = 0;
-  std::array<std::uint8_t, 8> setup_{};
+  // Functional retained-latch model; only accepted application SETUP supplies bytes.
+  std::optional<std::array<std::uint8_t, 8>> setup_;
   std::array<Buffer, 4> buffers_data_{};
   std::array<std::uint16_t, 2> ique_controls_{};
   std::optional<PendingIn> pending_in_;
