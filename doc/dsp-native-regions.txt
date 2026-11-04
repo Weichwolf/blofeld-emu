@@ -27,6 +27,8 @@ nand_cell_board and nine data-window/owner groups plus reference NAND timing/sto
 pass ASan/UBSan and separately TSan. The CE reservation oracle checks actual
 native JMP retirement after three clocks split 1+2, with independent PC/SR/cycle
 expectations; the old caller fails that native-path assertion after state passes.
+REP validation clocks actual setup over 2+3 periods, executes three native bodies
+over 1+2 periods, and preserves the latched opcode/LC/PC after a P-word mutation.
 
 Original full boot, all instrument functions and real-time operation remain open.
 STOP/debug oscillator contracts and physical NAND characterization are not

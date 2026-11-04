@@ -1,9 +1,9 @@
 {
   "independent_dsp56300": {
     "source": "https://github.com/Weichwolf/dsp56300",
-    "revision": "d6291ac3fe8e95ee525a6e018247b5457545bd5a",
+    "revision": "055595387548361dae65e6a7a59a0f2018ea9c16",
     "license": "GPL-3.0-only",
-    "integration": "Pinned native core for the regular Board/headless runtime. Bounded execution uses guarded sparse RAM grants and causal native-region scheduling. State-only deferred IRQ admission supports WAIT and unknown foreground without vector reads during admission. The explicit empty external P-cache profile permits native execution with SR.CE unchanged; genuine control/vector fetches retain their owner. Complete original instrument operation, steady performance and remaining legacy test migration are incomplete."
+    "integration": "Pinned native core for the regular Board/headless runtime. Bounded execution includes retained native REP bodies, guarded sparse RAM grants and causal native-region scheduling. State-only deferred IRQ admission supports WAIT and unknown foreground without vector reads during admission. The explicit empty external P-cache profile permits native execution with SR.CE unchanged; genuine control/vector fetches retain their owner. Complete original instrument operation, steady performance and remaining legacy test migration are incomplete."
   },
   "zlib": {
     "version": "1.3.2",

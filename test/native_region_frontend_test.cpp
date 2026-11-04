@@ -264,6 +264,50 @@ void test_cache_enabled_empty_profile_keeps_native_reservation() {
           "An empty-cache profile executes the actually reserved JMP natively with CE set");
 }
 
+void test_native_repeat_horizons_retain_actual_body() {
+  // FM MOVEC #>value,LC and REP #3: setup costs2 and5, NOP bodies cost1.
+  constexpr unsigned seed_lc = 0x05f43f;
+  constexpr unsigned saved_lc = 0x357;
+  constexpr unsigned repeat_three = 0x0603a0;
+  constexpr unsigned body = 3;
+  constexpr unsigned mutated_target = 64;
+  constexpr std::array program{seed_lc, saved_lc, repeat_three, 0U, 0U};
+  Device device(program);
+  device.reach_ram_entry();
+  const auto seeded = advance(device, 2);
+  require(seeded && device.chip.cpu().registers().lc == saved_lc &&
+              device.chip.cpu().registers().pc == 2,
+          "Actual MOVEC seeds a known LC before entering the real REP setup");
+  const auto before = device.chip.cpu().progress();
+  const auto started = device.chip.clock().elapsed_ticks();
+  require(advance(device, 2).has_value() &&
+              device.chip.cpu().progress().instructions == before.instructions,
+          "REP cannot retire before all five authentic setup periods are clocked");
+  const auto setup = advance(device, 3);
+  require(setup && device.chip.cpu().registers().pc == body &&
+              device.chip.cpu().registers().lc == 3 &&
+              device.chip.cpu().progress().instructions == before.instructions + 1 &&
+              device.chip.cpu().progress().estimated_cycles == before.estimated_cycles + 5 &&
+              device.chip.clock().elapsed_ticks() == started + (5 * period),
+          "Split2+3 horizons retain the real five-cycle REP setup and LC/PC state");
+  const auto native = device.chip.cpu().jit_statistics().native_alu_instructions;
+  const auto first = advance(device);
+  require(first && device.chip.cpu().registers().pc == body &&
+              device.chip.cpu().registers().lc == 2,
+          "The first actual repeated body remains at its retained PC with two iterations left");
+  device.chip.bus().write(
+      {.space = blofeld::DspSpace::p, .address = body, .value = jump | mutated_target});
+  const auto last = advance(device, 2);
+  require(last && device.chip.cpu().registers().pc == body + 1 &&
+              device.chip.cpu().registers().lc == saved_lc &&
+              device.chip.cpu().progress().instructions == before.instructions + 4 &&
+              device.chip.cpu().progress().estimated_cycles == before.estimated_cycles + 8 &&
+              device.chip.clock().elapsed_ticks() == started + (8 * period),
+          "Two more original NOPs finish REP, restore saved LC and ignore the changed JMP body");
+  require(device.chip.cpu().jit_statistics().native_alu_instructions == native + 3,
+          "All three retained REP bodies execute natively across finite clock horizons");
+}
+
 void test_unknown_program_keeps_actual_fault() {
   Device device(std::span<const unsigned>{});
   device.reach_ram_entry();
@@ -286,6 +330,7 @@ int main() {
     test_reset_cancels_inflight_work();
     test_unknown_program_keeps_actual_fault();
     test_cache_enabled_empty_profile_keeps_native_reservation();
+    test_native_repeat_horizons_retain_actual_body();
     std::cout << "Native region machine ownership: " << assertions << " assertions passed\n";
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
