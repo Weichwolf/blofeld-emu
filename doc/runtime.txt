@@ -22,9 +22,11 @@ Manufacturer firmware, reconstructed reference ROM and storage images stay local
 replacement normal profile (device-identity.txt, mcu-flash-clock.txt).
 Bounded WAV export, traces, inspection and sample tools are development facilities.
 Original1.25 has reached its main WAI loop from actual reset with live stores,
-accepted MIDI note input and produced nonzero original DSP PCM. A later identity
-request exposed a USB register-model fault; complete normal operation remains
-unqualified. See original-a4-runtime-reference.json and coverage.txt for scope.
+accepted MIDI note input and produced nonzero original DSP PCM. After the USB
+size-register correction, the real original Identity response reaches aseqdump
+(15 bytes, original ASCII1.24 quirk retained). A valid program change then fails
+at DSP PC001f93 reading unmapped X011cc1. Complete normal operation remains
+unqualified. See original-midi-runtime-reference.json and coverage.txt for scope.
 
 Execution ownership
 One emulation owner advances MCU and DSP against the common board timeline.
@@ -58,7 +60,8 @@ With configured native output capture, HostMidiSession also delivers SCI bytes
 through the same port. --midi-port NAME selects it in the ordinary CLI, publishes
 the actual kernel address/grants, and requires one input route plus midi-output.
 The common-time midi-sci-timed route supports POR/WAI; see host-midi-session.txt.
-This reference-config integration does not qualify original-instrument replies
+One frozen original-runtime profile has produced a complete Identity reply
+(original-midi-runtime-reference.json). This does not qualify all SysEx replies
 or the pending normal-profile launcher.
 Separate MIDI port negotiation and refusal tests are in host-midi-port.txt.
 The normal instrument must expose bidirectional MIDI/SysEx; input acceptance

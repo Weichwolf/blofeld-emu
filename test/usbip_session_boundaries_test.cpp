@@ -171,8 +171,8 @@ void controller_failure_and_exclusive_import() {
               state.session.imported(),
           "A second connection cannot steal the imported controller");
   state.bus.write(test::endpoint_reset::control, test::endpoint_reset::mce_high);
-  constexpr unsigned reserved_nisof = 0x804000d1;
-  test::endpoint_reset::configure(state.bus, {.bank = 2, .value = reserved_nisof});
+  constexpr unsigned reserved_interrupt_nisof = 0x804000f1;
+  test::endpoint_reset::configure(state.bus, {.bank = 2, .value = reserved_interrupt_nisof});
   state.bus.write(test::endpoint_reset::control, test::endpoint_reset::men_high);
   state.session.receive(wire::submit(request(7, input_address, 1)));
   try {

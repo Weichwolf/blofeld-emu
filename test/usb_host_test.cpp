@@ -157,8 +157,8 @@ void test_cancel_snapshot_and_unknowns() {
               received(*peer, UsbBuffer::endpoint3, 3) ==
                   std::vector<std::uint8_t>(payload.begin(), payload.end()),
           "Joint queue/controller replay retains PID, prefix and independent endpoint bytes");
-  constexpr unsigned reserved_description = 0x804000d1;
-  test::endpoint_reset::configure(bus, {.bank = 2, .value = reserved_description});
+  constexpr unsigned reserved_interrupt_description = 0x804000f1;
+  test::endpoint_reset::configure(bus, {.bank = 2, .value = reserved_interrupt_description});
   queue.submit(request(3, input_address, 1));
   reject([&] { static_cast<void>(queue.poll(bus, context)); }, "NISOF");
   require(queue.faulted() && queue.pending() == 1,

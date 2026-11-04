@@ -27,5 +27,6 @@ Focused optimized gate:
 
 These are conditional untimed MCU fixtures. They do not establish common-clock
 enumeration, kernel attachment, bulk MIDI, Spectre, DSP audio or physical timing.
-Original bulk NISOF remains strict. No firmware patch or host-supplied descriptor
-replaces original execution; firmware/ROM assets and run traces remain local.
+The separate full-speed bulk hypothesis is documented in usb-bulk.txt. No
+firmware patch or host-supplied descriptor replaces original execution;
+firmware/ROM assets and run traces remain local.

@@ -58,14 +58,11 @@ def validate(text):
         raise ValueError("Missing actual zero-length status/ACK host completion or literal TFRC/TCIE")
     if re.search(r"^CONFIGURATION_.*FRONTIER", text, re.M):
         raise ValueError("The old unsupported configuration-status frontier must not remain")
-    frontiers = re.findall(r"^MIDI_FRONTIER (IN|OUT) (.+)$", text, re.M)
-    if len(frontiers) != 2 or {kind for kind, _ in frontiers} != {"IN", "OUT"}:
-        raise ValueError("Missing original MIDI descriptor failure evidence")
-    for kind, error in frontiers:
-        expected = "physical-endpoint=2 description=0x820008d1" if kind == "IN" else (
-            "physical-endpoint=3 description=0x820008c1")
-        if "Reserved USB local endpoint NISOF field " + expected != error:
-            raise ValueError("A different failure replaced the original NISOF boundary")
+    admissions = [(kind, int(size), int(vector), int(description, 16))
+                  for kind, size, vector, description in re.findall(
+                      r"^MIDI_ADMISSION (IN|OUT) (\d+) (\d+) (0x[0-9a-f]+)$", text, re.M)]
+    if admissions != [("OUT", 4, 0xffc8, 0x820008c1), ("IN", 0, 0xffca, 0x820008d1)]:
+        raise ValueError("Missing actual original bulk admission, literal descriptors or completion IRQs")
     if any(row[-1] <= 0 for row in resets + replays + configurations):
         raise ValueError("A genuine original instruction path is required")
     setup_cases = rows("SETUP_CASE")
@@ -119,7 +116,7 @@ def validate(text):
             "original_runtime_completions": len(runtime),
             "original_runtime_restore_retirements": sum(row[5] for row in runtime),
             "runtime_native_instructions": sum(row[1] for row in runtime),
-            "reserved_midi_failures": len(frontiers),
+            "original_bulk_packet_admissions": len(admissions),
             "original_delay_calls": sum(row[2] for row in resets),
             "native_instructions": int(retirements[0]),
             "native_instruction_scope": "Actual scenario retirements; shared conditional startup excluded"}
@@ -150,7 +147,7 @@ def main():
           "DATA1/ZLP/ACK host completion and two joint restores, "
           "eight original SETUP branches, seven conditional descriptor sizes and sixteen "
           "pre-read restores. Ordinary/chained SETUP completes with retained accepted bytes; "
-          "original MIDI endpoints retain their reserved NISOF failure. Three fresh production runtime "
+          "original bulk endpoints admit actual packets with real completion IRQs. Three fresh production runtime "
           "attempts return exact332-byte original-device TCP lists and retire on trusted restore. "
           "no successful MIDI, physical USB timing, full board boot or fuzzing claim.")
     return 0

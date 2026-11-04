@@ -1,8 +1,8 @@
 Original MCU USB reset, endpoint initialization and SETUP boundaries
 
-  cmake --preset strict
-  cmake --build --preset strict --target blofeld-original-usb-reset-test blofeld-usb-ique-control-test
-  ctest --test-dir build/strict -R '^(original_usb_reset|usb_ique_control)$' --output-on-failure
+  cmake --preset release
+  cmake --build --preset release --target blofeld-original-usb-reset-test blofeld-usb-ique-control-test
+  ctest --test-dir build/release -R '^(original_usb_reset|usb_ique_control)$' --output-on-failure
 
 The original test pins the official local 1.25 ZIP, complete MCU image and
 status/interrupt/initialization/delay spans before execution. Missing firmware
@@ -67,15 +67,13 @@ retention and repeated identical input are checked independently. These decoded
 observations do not qualify electrical suspend, clock gating or remote wakeup
 (usb-suspend.txt).
 
-The next original MIDI boundary is retained explicitly. Native initialization
-stores 0x820008d1 and 0x820008c1 for physical endpoints 2/3. Their NISOF field is 2;
-S12USB20D6E2FV1 table 3-10 specifies 0 for these endpoints. With all other declared
-post-decoder prerequisites satisfied, a valid four-byte Note On OUT and the
-primed IN request both reject before data transfer or MIDI IRQ. The diagnostic
-names the physical endpoint and full descriptor. Observable CPU/RAM/USB state
-and NVM remain unchanged. These are register facts and a manual/model conflict,
-not proof of defective firmware or of silicon behavior for reserved settings.
-The field is not masked, rewritten or treated as a successful transaction.
+Original full-speed bulk admission retains raw endpoint descriptions820008d1/
+820008c1 (NISOF=2), despite table3-10 requiring zero. The explicit functional
+model ignores this high-speed isochronous field only for full-speed bulk;
+nonzero interrupt fields still fail. The reset fixture independently admits a
+four-byte Note On OUT and the original primed IN ZLP, checks literal CSR values
+and actual original IRQ vectors, then restores complete pristine state. A
+separate native/TCP fixture executes the real bulk handlers (usb-bulk.txt).
 
 Retained SETUP compatibility model
 The guide guarantees USTB validity only while SETUP=1. Original1.25 acknowledges
@@ -108,7 +106,8 @@ Host polls occur between native WAI/no-IRQ boundaries; poll ticks count host
 operations, not calibrated USB/common-clock time. Actual instruction retirements
 are counted outside checkpoints; restored path counters include saved prefixes.
 
-Original bulk NISOF remains strict. Common-clock enumeration, kernel attachment,
+The bulk decoder hypothesis is qualified separately in usb-bulk.txt.
+Common-clock enumeration, kernel attachment,
 USB-MIDI/sample exchange, Spectre and physical timing remain unqualified. These
 conditional MCU fixtures do not replace the connected original MCU/DSP runtime.
 No fuzzing or physical traffic is part of this gate.

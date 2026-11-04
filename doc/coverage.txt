@@ -11,13 +11,14 @@ in function-acceptance.tsv; its pending entries are not waived by component test
 Reference manifests pin specific source/input/test scopes, not an assertion that
 all functions or every current binary have passed.
 
-A frozen c607/Corebd79 original reset reaches genuine main WAI and A001/Init.
-Actual aplaymidi note-on/off produces native stereo PCM with 11842 nonzero frames
-and a descriptive 439.916Hz peak after a silent319014-frame prefix. The subsequent
-Identity Request reaches an unconfigured USB RXTXSIZ write at0319/PCb65b and stops
-before any host reply. The register fix passes focused native/field checks;
-fresh complete replay, SL, polyphony, host audio and realtime remain open.
-See original-a4-runtime-reference.json; this is one recorded reference profile.
+A frozen original reset with the qualified USB size-register correction and
+Corebd79 reaches genuine main WAI/A001 Init. All MCU registers and5120 RAM bytes
+match the prior reference. Actual aplaymidi on/off yields11642 nonzero stereo
+frames; aseqdump receives the original15-byte Identity reply, including its
+ASCII1.24 version quirk. A subsequent valid C0 01 program change is admitted but
+fails at DSP PC001f93 on unmapped X011cc1. Program selection, SL, polyphony,
+host audio and realtime remain open. See original-midi-runtime-reference.json;
+the older0319 failure remains historical in original-a4-runtime-reference.json.
 
 The bounded optimized original-reset measurement in instrument-performance.txt
 reaches 3M MCU operations and 393 original DSP PCM frames at RTF 0.0021272 with
@@ -303,6 +304,9 @@ See hardware/sources.json, nand-board.txt and dsp-gpio-write-decoder.txt.
 USB/controller/endpoint/transport components and original-routine fixtures exist.
 Complete original enumeration and bidirectional host-visible USB-MIDI through
 normal device operation remain open. A separate ALSA port is not that proof.
+Conditional original USB/TCP discovery/import and two bulk OUT notes now execute
+real MCU handlers and forward six GPIO MIDI bytes; initial IN ZLP/ACK executes
+its real IRQ. This is not kernel attachment or coupled DSP synthesis (usb-bulk.txt).
 No USB audio function is part of the Blofeld profile. See usb-runtime.txt.
 
 9. Normal standalone instrument — pending

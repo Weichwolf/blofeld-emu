@@ -166,7 +166,7 @@ struct Session {
   }
 
   void finish_configuration();
-  void reject_midi();
+  void check_bulk_admission();
 
   void report(std::string_view kind) const {
     trace_ << kind << ' ' << profile.id << ' ' << counters.polls << ' ' << counters.delays << ' '
@@ -390,31 +390,64 @@ void Session::finish_configuration() {
   }
 }
 
-void Session::reject_midi() {
+void Session::check_bulk_admission() {
+  const auto pristine = save();
   const auto before = outcome();
-  const std::array<std::uint8_t, 4> note_on{9, 0x90, 64, 127};
+  constexpr std::array<std::uint8_t, 4> note_on{9, 0x90, 64, 127};
+  constexpr unsigned midi_in_vector = 0xffca;
+  constexpr unsigned midi_out_vector = 0xffc8;
+  constexpr unsigned input_control = 0x318;
+  constexpr unsigned output_control = 0x31a;
+  constexpr unsigned local_window = 0x380;
+  constexpr unsigned local_select = 0x30f;
+  constexpr unsigned completed_input = 0x3000;
+  constexpr unsigned received_output = 0x7004;
   for (const bool input : {false, true}) {
-    bool rejected = false;
-    try {
-      if (input) {
-        static_cast<void>(machine.bus().request_usb_in(blofeld::UsbBuffer::endpoint2));
-      } else {
-        static_cast<void>(machine.bus().receive_usb_out(
-            {.buffer = blofeld::UsbBuffer::endpoint3, .data = std::span{note_on}}));
+    restore(pristine);
+    const auto endpoint = machine.bus().usb_host_endpoint(input ? 0x81 : 1);
+    require(endpoint.type == 2 && endpoint.maximum_packet == 64 && endpoint.data1 == false,
+            "Original full-speed bulk descriptors retain their actual initial DATA0 phase");
+    if (input) {
+      const auto packet = machine.bus().request_usb_in(blofeld::UsbBuffer::endpoint2);
+      require(packet.response == blofeld::UsbResponse::data && packet.size == 0 && !packet.data1,
+              "Original initialization primes its genuine MIDI-IN zero-length DATA0 packet");
+      machine.bus().finish_usb_in(true);
+      require(word(input_control) == completed_input,
+              "Only actual host ACK clears original DVALID and sets TFRC while retaining TCIE");
+    } else {
+      require(machine.bus().receive_usb_out(
+                  {.buffer = blofeld::UsbBuffer::endpoint3, .data = std::span{note_on}}) ==
+                      blofeld::UsbResponse::ack &&
+                  word(output_control) == received_output,
+              "Actual DATA0 copies four USB-MIDI bytes and sets literal DVALID/TFRC/TCIE/size");
+      auto copy = machine.bus().clone();
+      copy->write(local_select, 3);
+      for (unsigned byte = 0; byte < note_on.size(); ++byte) {
+        require(copy->read(static_cast<std::uint16_t>(local_window + byte)) == note_on[byte],
+                "Every admitted byte matches the independent actual host packet");
       }
-    } catch (const blofeld::Fault &fault) {
-      const std::string_view text(fault.what());
-      require(text.contains("Reserved USB local endpoint NISOF field") &&
-                  text.contains(input ? "physical-endpoint=2" : "physical-endpoint=3") &&
-                  text.contains(blofeld::hex(input ? in_description : out_description, 8)),
-              "Original MIDI endpoint descriptors retain the documented NISOF failure");
-      trace_ << "MIDI_FRONTIER " << (input ? "IN " : "OUT ") << text << '\n';
-      rejected = true;
     }
-    require(
-        rejected && outcome() == before && !machine.cpu().pending_interrupt(),
-        "Rejected decoded MIDI transactions cannot mutate CPU/RAM/USB/NVM or invent completion");
+    const auto pending = machine.cpu().pending_interrupt();
+    if (!pending) {
+      throw blofeld::Fault("Original bulk admission requires its real completion IRQ");
+    }
+    require(pending->vector == (input ? midi_in_vector : midi_out_vector) &&
+                registers(machine.cpu().state()) == before.cpu && machine.cpu().waiting(),
+            "Real bulk completion asserts its original IRQ without fabricating CPU execution");
+    auto copy = machine.bus().clone();
+    copy->write(select, static_cast<std::uint8_t>(input ? 2 : 3));
+    const auto description =
+        (static_cast<std::uint32_t>(copy->read_memory({.address = config_data, .size = 2}))
+         << 16U) |
+        static_cast<std::uint32_t>(copy->read_memory({.address = config_data + 2, .size = 2}));
+    require(description == (input ? in_description : out_description),
+            "Actual transfers cannot rewrite the original raw NISOF descriptor bits");
+    check_flash();
+    trace_ << "MIDI_ADMISSION " << (input ? "IN " : "OUT ") << (input ? 0 : note_on.size()) << ' '
+           << pending->vector << ' ' << blofeld::hex(description, 8) << '\n';
   }
+  restore(pristine);
+  require(outcome() == before, "Packet admission restores the complete pristine fixture state");
 }
 
 constexpr unsigned setup_vector = 0xffd2;
@@ -1136,7 +1169,7 @@ void run(const Inputs &inputs) {
   session.restore(*delayed);
   session.finish_configuration();
   check_suspend_paths(session);
-  session.reject_midi();
+  session.check_bulk_admission();
   const auto configured = session.save();
   check_setup_paths(session, firmware);
   check_probe_paths(session, configured, firmware);
@@ -1144,8 +1177,8 @@ void run(const Inputs &inputs) {
   trace << "NATIVE_RETIREMENTS " << session.actual_retirements << '\n';
   std::cout
       << "Original cold MCU -> USB reset IRQ/configuration -> native RTI/main WAI verified; "
-         "three real poll profiles, two mid-ISR replays and unchanged NVM. Original MIDI "
-         "transactions still reject their reserved NISOF descriptor fields. All ordinary/overrun "
+         "three real poll profiles, two mid-ISR replays and unchanged NVM. Original bulk MIDI "
+         "packet admission retains raw NISOF and raises real completion IRQs. All ordinary/overrun "
          "SETUP profiles execute retained-byte reads, real data/status ACK and native "
          "completion IRQs/RTI/WAI. No full board, "
          "physical USB timing, host USB or fuzzing claim.\n";

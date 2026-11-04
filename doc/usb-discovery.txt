@@ -43,8 +43,8 @@ export after reset, descriptor/configuration changes or loss of qualified state.
 A nonblocking loopback listener/session is described in usbip-session.txt.
 Runtime CLI binding, kernel attachment, host class binding, original enumeration,
 original MIDI/sample exchange and Spectre communication remain unqualified. Import success here reserves an existing qualified export; it is not a
-simulated successful device reset or proof of host attachment. Retained application USTB is an explicit functional hypothesis; original bulk
-NISOF remains strict. Full objective and gaps: objective.txt and
+simulated successful device reset or proof of host attachment. Retained application USTB and full-speed bulk NISOF use explicit functional hypotheses
+(usb-setup-latch.txt, usb-bulk.txt). Full objective and gaps: objective.txt and
 coverage.txt. No fuzzing, physical traffic, modules or system routing are used.
 
 Deterministic gates:
@@ -68,4 +68,5 @@ restores reproduce complete CPU/RAM/USB/payload/write state and NVM; three fresh
 production runtimes return exact332-byte original-device TCP lists. Trusted
 restore retires their accepted peers before any stale export or guest mutation.
 This retained-USTB functional model is not common-clock/physical qualification;
-original bulk NISOF remains strict. See usb-reset.txt and usb-setup-latch.txt.
+a separate original bulk fixture also exercises TCP IMPORT and real MCU
+OUT/IN IRQs (usb-bulk.txt). See usb-reset.txt and usb-setup-latch.txt.

@@ -1,5 +1,5 @@
 {
-  "qualification": "Conditional untimed original1.25 MCU startup/reset/configuration, genuine IRQ/RTI/WAI, complete architectural CPU/RAM/USB/payload/write-prefix replay and unchanged MCU NVM. Explicit retained accepted USTB hypothesis permits post-W1C original reads; unknown/reset bytes still fail. Eight ordinary/overrun length profiles, independent clamp/copy/serial-field/load-flags, actual data/status ACK and completion IRQs, sixteen pre-read restores. Full device/header/configuration probe plus two joint native-host restores; three fresh production runtimes return exact332-byte ROM-derived TCP DEVLIST and retire accepted peers on trusted restore without guest mutation. Existing three reset profiles, two mid-reset replays, three configuration/status suffixes, four suspend/resume changes and eight restores remain. Original bulk NISOF stays strict. No common-clock enumeration, kernel attachment, MIDI/audio, Spectre, physical timing or complete instrument claim.",
+  "qualification": "Conditional untimed original1.25 MCU startup/reset/configuration, genuine IRQ/RTI/WAI, complete architectural CPU/RAM/USB/payload/write-prefix replay and unchanged MCU NVM. Explicit retained accepted USTB hypothesis permits post-W1C original reads; unknown/reset bytes still fail. Eight ordinary/overrun length profiles, independent clamp/copy/serial-field/load-flags, actual data/status ACK and completion IRQs, sixteen pre-read restores. Full device/header/configuration probe plus two joint native-host restores; three fresh production runtimes return exact332-byte ROM-derived TCP DEVLIST and retire accepted peers on trusted restore without guest mutation. Existing three reset profiles, two mid-reset replays, three configuration/status suffixes, four suspend/resume changes and eight restores remain. Original bulk admission retains raw NISOF under the explicit full-speed decoder hypothesis; actual OUT/IN packet ACKs assert original vectors without CPU execution. No common-clock enumeration, kernel attachment, MIDI/audio, Spectre, physical timing or complete instrument claim.",
   "source_review": {
     "repository": "https://github.com/Weichwolf/blofeld-src",
     "commit": "ac6c3362420db5bee7f1fadf31734a6962a2d49e",
@@ -120,5 +120,18 @@
     "descriptor_probe_restores": 2,
     "SETUP_pre_read_restores": 16,
     "instruction_accounting": "Actual scenario retirements counted outside checkpoints; shared conditional startup excluded"
+  },
+  "bulk_admission_model": {
+    "contract": "Full-speed bulk ignores retained high-speed isochronous field; nonzero interrupt fields remain unsupported",
+    "raw_original_descriptions": [
+      "0x820008d1",
+      "0x820008c1"
+    ],
+    "OUT_bytes": 4,
+    "IN_ZLP_bytes": 0,
+    "OUT_vector": 65480,
+    "IN_vector": 65482,
+    "guest_instructions_added": 0,
+    "reference": "usb-bulk-reference.json"
   }
 }

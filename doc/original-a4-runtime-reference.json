@@ -53,7 +53,7 @@
       "memory_usb"
     ],
     "previous_archive_native_STD_control": "Fails at0319/PC8003; same test passes with correction",
-    "fresh_instrument_replay": "Pending"
+    "fresh_instrument_replay": "Original Main/A4 and15-byte Identity reply recorded; later valid Program Change fails on DSP X011cc1. See original-midi-runtime-reference.json"
   },
   "private_evidence": "doc/local/pm3-original-boot-r1/boot-midi-r0/main-midi-audio-qualification.json",
   "fuzz": false

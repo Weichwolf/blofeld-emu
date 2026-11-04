@@ -1,0 +1,53 @@
+{
+  "native_ELF_sha256": "d112decd1ea32eb71842df19f05a9b5b1dd6e9f4191be73d0e82fcea45ffc526",
+  "source_snapshot_sha256": "f3ded30111c0928d1da0ade91f94a01a674e53eeac08d603e831e8b99b7d976b",
+  "archive_manifest_sha256": "806f985d6b93d404f640338274c4df77144486ef8c65e0efd0a544b420aca467",
+  "Core_revision": "bd79f96ef38729b25303f23829fb847574790ae7",
+  "source_base": "03f0d74409b777e529a2b41e839cf5a7d4a451ad",
+  "applied_IO_fix": "b411d48f305ccab57c36a97a87409a88a9d7f80c",
+  "new_typed_Core_82467_runtime": false,
+  "main_MCU_instructions": 88693663,
+  "main_MCU_IRQs": 10725,
+  "main_registers_and_5120RAM_match_prior_reference": true,
+  "baseline_frames": 319027,
+  "voice_WAV_sha256": "899738e4bb453e991599bc0f7b448c04969903f4f826376ab23c15b4e009b3df",
+  "voice_capture_frames": 330955,
+  "voice_nonzero_per_channel": [
+    11642,
+    11642
+  ],
+  "descriptive_peak_Hz": 439.9141720167947,
+  "native_PCM_excerpt_sha256": "d13686ca79f8b74a32e7f14a717a25c0a90b41dc392090f69869fb566fb80bcb",
+  "native_PCM_excerpt_frames": 11928,
+  "valid_input_MIDI_bytes": 12,
+  "actual_native_output_bytes": 15,
+  "identity_reply_hex": "f0 7e 00 06 02 3e 13 00 00 00 31 2e 32 34 f7",
+  "aseq_dump_sha256": "9bcd80f84fe514eb8f6b25c46151edf8879bed83d9018055332b3731d7c5bf99",
+  "identity_capture": {
+    "operations": 96325632,
+    "ticks": 4947169459176,
+    "frames": 331910,
+    "midi_input_bytes": 12,
+    "midi_output_bytes": 15
+  },
+  "fuzz": false,
+  "qualification": "Actual original1.25 reset/Main, A4 via aplaymidi, native original DSP PCM and universal Identity response via actual SCI/MIDI output and owned aseqdump. No firmware patch/checkpoint replay/host synthesizer; not full instrument, SL, physical pitch, kernel USB, realtime or host audio qualification.",
+  "private_evidence": "doc/local/native-restart-r1/boot-midi-r0/midi-runtime-qualification.json",
+  "identity_version_quirk": "Original1.25 replies with ASCII1.24; bytes retained unchanged",
+  "terminal": {
+    "actual_exit": 2,
+    "trigger_MIDI_hex": "c0 01",
+    "operations": 134200792,
+    "MCU_instructions": 92334096,
+    "MCU_IRQs": 13315,
+    "DSP_steps": 908922711,
+    "PCM_frames": 396447,
+    "DSP_PC": "0x001f93",
+    "access": "Unmapped DSP X read0x011cc1",
+    "MCU_context_PC": "0xbbe7",
+    "MIDI_input_bytes": 14,
+    "MIDI_output_bytes": 15,
+    "program_selection_qualified": false
+  },
+  "qualification_sha256": "459e99eda03bcf44d646a62545ab099c711f644b1298cb0ef06b1f400195183d"
+}

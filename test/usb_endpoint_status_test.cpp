@@ -212,10 +212,10 @@ unsigned guards() {
             "Unimplemented USB endpoint halt status physical-endpoint=");
     ++cases;
   }
-  constexpr unsigned reserved_description = 0x820000d1;
+  constexpr unsigned reserved_interrupt_description = 0x820000f1;
   constexpr unsigned duplicate_description = 0x020000d1;
   auto reserved = configured();
-  describe(reserved, {.bank = 2, .value = reserved_description});
+  describe(reserved, {.bank = 2, .value = reserved_interrupt_description});
   rejects([&] { query(reserved, input_address, false); }, "Reserved USB local endpoint NISOF");
   ++cases;
   auto ambiguous = configured();

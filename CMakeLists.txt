@@ -2225,6 +2225,18 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-usb-reset.trace")
   set_tests_properties(original_usb_reset PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+  add_executable(blofeld-usb-bulk-fields-test test/usb_bulk_fields_test.cpp)
+  target_link_libraries(blofeld-usb-bulk-fields-test PRIVATE blofeld_mcu)
+  add_test(NAME usb_bulk_fields COMMAND blofeld-usb-bulk-fields-test)
+  add_executable(blofeld-original-usb-bulk-test test/original_usb_bulk_test.cpp)
+  target_include_directories(blofeld-original-usb-bulk-test PRIVATE src)
+  target_link_libraries(blofeld-original-usb-bulk-test PRIVATE blofeld_application_fixture blofeld_usbip_tcp)
+  add_test(NAME original_usb_bulk COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_usb_bulk.py"
+    $<TARGET_FILE:blofeld-original-usb-bulk-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-usb-bulk.trace")
+  set_tests_properties(original_usb_bulk PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
   add_executable(blofeld-original-host-midi-test test/original_host_midi_test.cpp)
   target_link_libraries(blofeld-original-host-midi-test PRIVATE
     blofeld_application_fixture blofeld_mcu_midi blofeld_host_midi)
@@ -3437,6 +3449,7 @@ add_custom_target(quality
     blofeld-usb-ique-control-test
     blofeld-usb-endpoint-reset-test
     blofeld-original-usb-reset-test
+    blofeld-usb-bulk-fields-test blofeld-original-usb-bulk-test
     blofeld-original-application-test
     blofeld-wai-test
     blofeld-st7565-test blofeld-lcd-image-test blofeld-lcd-export-test

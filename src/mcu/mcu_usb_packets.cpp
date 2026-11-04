@@ -29,11 +29,14 @@ unsigned McuUsb::maximum_packet(const unsigned index) const {
     }
   } else {
     constexpr unsigned isochronous_shift = 30;
-    if ((description >> isochronous_shift) != 0) {
+    constexpr unsigned bulk_transfer = 2;
+    const auto type = (description >> 5U) & 3U;
+    // Full-speed bulk compatibility model: retain the raw high-speed isochronous
+    // field without applying it to bulk packets. Other nonzero modes stay unknown.
+    if ((description >> isochronous_shift) != 0 && type != bulk_transfer) {
       throw Fault("Reserved USB local endpoint NISOF field physical-endpoint=" +
                   std::to_string(index) + " description=" + hex(description, 8));
     }
-    const auto type = (description >> 5U) & 3U;
     const auto configuration = (description >> 7U) & usb::nibble_mask;
     const auto interface = (description >> 11U) & usb::nibble_mask;
     const auto alternate = (description >> 15U) & usb::nibble_mask;
