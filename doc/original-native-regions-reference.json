@@ -87,5 +87,25 @@
     "actual_exit": 0,
     "model_refusal_pc": "0x001a39",
     "qualification_sha256": "79ecb6c0d76e8985e93c0fe1e1c5b6c475cf49f6ddea46f839ebffec050d9a1e"
+  },
+  "early_transfer_diagnostic": {
+    "operation_budget": 4600000,
+    "actual_exit": 2,
+    "reaped": true,
+    "budget_reached": true,
+    "same_observer_executable": true,
+    "first_call_sha256": "548bb6caa42c1fed729e8ee32de87ac3709d961b11a893e65245462cf5b47e3b",
+    "first_entry_sha256": "ac359fbf69f7994e6e3ceaf4085fef3658d38430e282e13aa443d4c374fd33ef",
+    "call_and_entry_identical_to_earlier_correct_reference": true,
+    "first_return_overlay_different_bytes": 476,
+    "original_overlay_entry_observed": false,
+    "logo_RAM_nonzero_bytes": 0,
+    "DSP_X_2800_at_budget": {
+      "known_bytes": 528,
+      "source_sha256": "ddf911499d0b95faf2947926fbd787e0faecf0da548df6aa8fe363dd10552159",
+      "matches_original_page15": true
+    },
+    "qualification_sha256": "75e7baad20cd947e67eba51c0f11b4d99d98e8d45cd5a7cf229e59b45ee493b3",
+    "scope": "Early transfer regression precedes the later status refusal; data at every producer/consumer event still needs tracing"
   }
 }

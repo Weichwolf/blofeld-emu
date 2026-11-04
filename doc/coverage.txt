@@ -69,6 +69,11 @@ model matches 63,968 aligned frames with its explicit two-frame onset difference
 Both persistent images remain byte-identical. This does not establish normal
 boot, completed programming/erase, live audio/MIDI or real-time behavior. See
 original-native-regions-reference.json.
+A bounded early-transfer diagnostic retains byte-identical MCU call/entry
+snapshots from the earlier correct reference. At first return, 476 overlay
+bytes differ and the decoder is not entered. At the stopped budget boundary,
+DSP X:2800 contains all 528 expected page bytes. The transfer needs repair and
+requalification before selecting a model for the later NAND status access.
 The VSL component test now excludes the former interpreter/assembler and passes
 its 9,216 independent numeric/address cases, native REP/modulo and contextual
 refusals under both sanitizer profiles. This preserves useful legacy coverage;
