@@ -1,9 +1,9 @@
 {
   "independent_dsp56300": {
     "source": "https://github.com/Weichwolf/dsp56300",
-    "revision": "feb66969a12813d9bb6852b5ff1d55ecfec5f3ed",
+    "revision": "8561bdf62cb8a8dbc36871f266b826ec9cd40737",
     "license": "GPL-3.0-only",
-    "integration": "Pinned native core for the regular Board/headless runtime. Includes retained native REP bodies, sparse RAM grants, causal native-region scheduling, state-only deferred IRQ admission and the explicit empty external P-cache profile with SR.CE unchanged. Fused rounded products now retain final widened V/L semantics without additional native helpers; the retained saturation target uses the independent core. Complete original Desktop/Keyboard instrument operation, steady performance and remaining legacy test migration are incomplete. Read-only owned-effect dispatch borrows stored payloads and resumes from the immutable accepted ledger; public SDK and checkpoint fields are unchanged. Captured PCU CPU-result planning now preserves SR.CE while avoiding replay when the architectural cache interval is empty; real cache activation still ends the plan at the next unaccepted effect."
+    "integration": "Pinned independent execution core for the regular Board/headless runtime, with retained native REP, bounded memory grants and explicit instruction-publication/checkpoint interfaces. Ordinary scalar X/Y stores from accumulator parts now execute natively; general JIT coverage remains incomplete (see the core jit-helper-coverage record). The six public SDK headers are unchanged. Current changes use focused Release qualification; extensive quality campaigns are deferred until firmware realtime. Complete original Desktop/Keyboard instrument operation, steady performance and remaining legacy test migration are incomplete."
   },
   "zlib": {
     "version": "1.3.2",

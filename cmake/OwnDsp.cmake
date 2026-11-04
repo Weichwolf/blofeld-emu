@@ -8,7 +8,7 @@ endif()
 execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${BLOFELD_OWN_DSP_ROOT}" rev-parse HEAD
   OUTPUT_VARIABLE BLOFELD_OWN_DSP_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE
   COMMAND_ERROR_IS_FATAL ANY)
-if(NOT BLOFELD_OWN_DSP_REVISION STREQUAL "feb66969a12813d9bb6852b5ff1d55ecfec5f3ed")
+if(NOT BLOFELD_OWN_DSP_REVISION STREQUAL "8561bdf62cb8a8dbc36871f266b826ec9cd40737")
   message(FATAL_ERROR "BLOFELD_OWN_DSP_ROOT must contain the revision pinned in doc/dependencies.json")
 endif()
 execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${BLOFELD_OWN_DSP_ROOT}" diff --exit-code HEAD -- src include cmake CMakeLists.txt
