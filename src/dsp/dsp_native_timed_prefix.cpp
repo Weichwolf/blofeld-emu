@@ -83,6 +83,7 @@ unsigned DspNativeTimedExecution::plan(const dsp56300::Core &cpu,
                                        const dsp56300::BoundedRunResult &preview,
                                        const dsp56300::RunBudget budget) {
   prefix_.clear();
+  if (control_delay_ != 0) { return 0; }
   const auto fetch = cpu.instruction_fetch();
   if (!preview.next || fetch.exception_vector) { return 0; }
   const auto registers = cpu.registers();
@@ -146,6 +147,18 @@ void DspNativeTimedExecution::accept(const dsp56300::Core &cpu,
   }
   history_ = history;
   expected_ = after;
+  if (retired != 0) {
+    const auto &last = prefix_.at(retired - 1).words;
+    control_delay_ = 0;
+    if (conditional(last.opcode)) {
+      const auto outcome = cpu.instruction_outcome();
+      if (!outcome || outcome->instructions != after.instructions ||
+          outcome->address != last.address || outcome->opcode != last.opcode) {
+        throw Fault("DSP conditional prefix lacks its actual control-flow receipt");
+      }
+      control_delay_ = outcome->control_transfer ? 0U : 1U;
+    }
+  }
 }
 
 dsp56300::BoundedRunResult DspNativeTimedExecution::run(dsp56300::Core &cpu,

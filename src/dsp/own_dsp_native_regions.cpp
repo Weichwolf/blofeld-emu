@@ -74,6 +74,11 @@ void OwnDspTimeline::publish_native_boundary() {
 }
 
 void OwnDspTimeline::native_time(const unsigned cycles, DspDmaInputs inputs) {
+  native_time(DspClockUnits{.native = cycles}, inputs);
+}
+
+void OwnDspTimeline::native_time(const DspClockUnits units, DspDmaInputs inputs) {
+  const auto cycles = units.native + units.interlocks;
   const auto previous = machine_.bus_.last_dma_cycle();
   if (previous && cycles > std::numeric_limits<std::uint64_t>::max() - *previous) {
     throw Fault("DSP native region exhausted its DMA cursor");
@@ -82,16 +87,16 @@ void OwnDspTimeline::native_time(const unsigned cycles, DspDmaInputs inputs) {
   const auto regs = machine_.cpu_.registers();
   machine_.clock_.begin_step(machine_.bus_, {.pc = regs.pc, .omr = regs.omr});
   if (machine_.bus_.native_dma_quiescent(inputs)) {
-    machine_.clock_.finish_native_region(machine_.bus_, cycles, inputs);
+    machine_.clock_.finish_native_region(machine_.bus_, units, inputs);
   } else {
     if (cycles != 1) { throw Fault("Active DMA requires its actual next native cycle"); }
-    static_cast<void>(machine_.clock_.finish_native_cycle(machine_.bus_, inputs));
+    static_cast<void>(machine_.clock_.finish_native_cycle(machine_.bus_, inputs, units));
   }
   publish_native_boundary();
 }
 
 void OwnDspTimeline::reserve_native(const dsp56300::BoundedRunResult &preview) {
-  if (preview.stop == dsp56300::RunStop::unknown_code) {
+  if (preview.stop == dsp56300::RunStop::unknown_code || !preview.next) {
     auto fetched = machine_.cpu_.begin_fetch(dsp56300::InstructionPublication::pcu_updates);
     for (unsigned index = 0; index < maximum_effects && fetched.pending; ++index) {
       const auto effect = fetched.pending->effect;
@@ -113,6 +118,10 @@ void OwnDspTimeline::reserve_native(const dsp56300::BoundedRunResult &preview) {
   native_words_ = preview.next;
   native_cost_ = *preview.next_cycles;
   native_remaining_ = native_cost_;
+  const auto instruction =
+      native_history_.prepare_owner(machine_.cpu_, *native_words_, native_cost_);
+  native_dependencies_ = instruction.dependency_units;
+  native_dependency_remaining_ = native_dependencies_;
   // The fixed machine profile has no cacheable external P interval. Core
   // control/vector ownership still requires its genuine captured fetch path.
   native_staged_ = preview.stop == dsp56300::RunStop::control_event ||
@@ -155,14 +164,14 @@ void OwnDspTimeline::advance_native_effects() {
 }
 
 void OwnDspTimeline::finish_native_reservation() {
-  if (!native_words_ || native_remaining_ != 0) {
+  if (!native_words_ || native_remaining_ != 0 || native_dependency_remaining_ != 0) {
     throw Fault("DSP native completion requires a fully clocked reservation");
   }
   if (!native_staged_) {
     const auto preview = machine_.cpu_.run(dsp56300::RunBudget{});
-    if (preview.next && same_words(*preview.next, *native_words_)) {
-      const auto native =
-          machine_.cpu_.run(dsp56300::RunBudget{.instructions = 1, .cycles = native_cost_});
+    if (native_dependencies_ == 0 && preview.next && same_words(*preview.next, *native_words_)) {
+      const auto native = native_history_.run(
+          machine_.cpu_, machine_.io_, {.instructions = 1, .cycles = native_cost_});
       if (native.execution.fault.kind != dsp56300::FaultKind::none) { return; }
       if (native.execution.dispatches == 1) {
         if (native.cycles != native_cost_) {
@@ -184,6 +193,10 @@ void OwnDspTimeline::finish_native_reservation() {
   }
   advance_native_effects();
   if (machine_.cpu_.fault().kind == dsp56300::FaultKind::none) {
+    native_history_.complete_owner(machine_.cpu_,
+                                   {.words = *native_words_,
+                                    .base_units = native_cost_,
+                                    .dependency_units = native_dependencies_});
     machine_.bus_.observe_omr(machine_.cpu_.registers().omr);
     native_words_.reset();
     native_staged_ = false;
@@ -209,8 +222,10 @@ dsp56300::RunResult OwnDspTimeline::execute_native_region(const NativeSlice &sli
   }
   if (!native_words_) {
     const bool idle_dma = machine_.bus_.native_dma_quiescent(slice.inputs);
-    const auto result = machine_.cpu_.run(dsp56300::RunBudget{
-        .instructions = idle_dma ? slice.capacity : 0, .cycles = idle_dma ? slice.capacity : 0});
+    const auto result = native_history_.run(
+        machine_.cpu_,
+        machine_.io_,
+        {.instructions = idle_dma ? slice.capacity : 0, .cycles = idle_dma ? slice.capacity : 0});
     if (result.cycles != 0) {
       native_time(static_cast<unsigned>(result.cycles), slice.inputs);
       machine_.bus_.observe_omr(machine_.cpu_.registers().omr);
@@ -219,6 +234,7 @@ dsp56300::RunResult OwnDspTimeline::execute_native_region(const NativeSlice &sli
     if (result.execution.fault.kind != dsp56300::FaultKind::none) { return result.execution; }
     if (result.execution.state == dsp56300::ProcessingState::waiting) {
       native_time(slice.capacity, slice.inputs);
+      native_history_.idle(machine_.cpu_, slice.capacity);
       return native_snapshot(before);
     }
     if (result.execution.state != dsp56300::ProcessingState::running) {
@@ -227,16 +243,26 @@ dsp56300::RunResult OwnDspTimeline::execute_native_region(const NativeSlice &sli
     }
     reserve_native(result);
   }
-  if (machine_.cpu_.fault().kind == dsp56300::FaultKind::none) {
-    auto available = native_capacity(slice.horizon, slice.boundary, slice.maximum_cycles);
-    if (!machine_.bus_.native_dma_quiescent(slice.inputs)) { available = std::min(available, 1U); }
-    const auto consumed = std::min(available, native_remaining_);
-    if (consumed == 0) { throw Fault("DSP native reservation lost its positive clock capacity"); }
-    native_time(consumed, slice.inputs);
-    native_remaining_ -= consumed;
-    if (native_remaining_ == 0) { finish_native_reservation(); }
-  }
+  consume_native_reservation(slice);
   return native_snapshot(before);
+}
+
+void OwnDspTimeline::consume_native_reservation(const NativeSlice &slice) {
+  if (machine_.cpu_.fault().kind != dsp56300::FaultKind::none) { return; }
+  auto available = native_capacity(slice.horizon, slice.boundary, slice.maximum_cycles);
+  if (!machine_.bus_.native_dma_quiescent(slice.inputs)) { available = std::min(available, 1U); }
+  if (native_dependency_remaining_ != 0) {
+    const auto consumed = std::min(available, native_dependency_remaining_);
+    if (consumed == 0) { throw Fault("DSP dependency reservation lost its clock capacity"); }
+    native_time(DspClockUnits{.interlocks = consumed}, slice.inputs);
+    native_dependency_remaining_ -= consumed;
+    return;
+  }
+  const auto consumed = std::min(available, native_remaining_);
+  if (consumed == 0) { throw Fault("DSP native reservation lost its positive clock capacity"); }
+  native_time(consumed, slice.inputs);
+  native_remaining_ -= consumed;
+  if (native_remaining_ == 0) { finish_native_reservation(); }
 }
 
 std::optional<OwnDspRegionResult>

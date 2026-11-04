@@ -216,7 +216,7 @@ void McuDspRuntime::consumed() const {
 }
 
 std::uint64_t McuDspRuntime::completed_cycles() const {
-  return dsp_.clock().native_cycle_units();
+  return dsp_.clock().elapsed_cycle_units();
 }
 
 std::uint64_t McuDspRuntime::deadline() const {

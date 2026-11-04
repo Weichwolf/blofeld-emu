@@ -404,3 +404,14 @@ its retained core version and overlapping inclusive stacks are recorded in
 mcu-gpio-sampling-reference.json. Extensive quality campaigns remain deferred
 until original firmware real-time operation; complete instrument acceptance
 is still open.
+
+Clocked native instruction dependencies
+--------------------------------------
+The Board timeline now charges selected dependencies before genuine retirement,
+including PCU false-condition holes, P-memory ports and L-store limiting/status.
+Checkpoint/reset and finite MCU budgets retain both clock domains. Focused Release
+checks: 785 timeline, 178 prefix, 43 MCU. Original 1.25 passes first-stage SPI/NAND
+loading into DSP main initialization, then stops at an unsupported register bit
+branch. Full boot, 528-byte overlay reception, IRQ latency, MIDI/audio and the
+complete instrument remain open. Broader sanitizer/regression work is deferred
+until real-time firmware; no physical-hardware or instrument-speed claim.

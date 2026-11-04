@@ -104,4 +104,15 @@ unsigned DspInterlocks::complete(const unsigned native_units) {
 void DspInterlocks::reset() noexcept {
   *this = DspInterlocks{};
 }
+
+void DspInterlocks::elapse_idle(const unsigned units) {
+  if (prepared_ || units == 0) {
+    throw Fault("DSP dependency idle time needs an inactive history");
+  }
+  for (auto &remaining : agu_) { age(remaining, units); }
+  for (auto &remaining : arithmetic_) { age(remaining, units); }
+  for (auto &remaining : transfer_) { age(remaining, units); }
+  age(status_, units);
+  age(uncertain_status_, units);
+}
 }

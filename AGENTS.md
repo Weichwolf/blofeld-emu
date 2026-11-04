@@ -15,6 +15,11 @@
 
 # Quality gates
 
+- Use the fastest optimized Release build for functional experiments, original
+  firmware runs and performance measurements. Until the firmware runs in real
+  time, prioritize focused Release correctness/path checks and runtime progress;
+  defer extensive sanitizer matrices and broad regression campaigns until then.
+  Keep compiler diagnostics and existing checks intact; record deferred scope.
 - Apply the strict quality practices of `~/Git/octa-capture`: warnings as errors, strict compiler/linker flags, clang-format, clang-tidy with zero findings, and a maximum 120 lines per function.
 - Use C++23, CMake/Ninja and LLVM 19. Instrument our code and native dependencies with ASan/UBSan; run TSan separately once concurrent code exists.
 - Never weaken checks, add diagnostic baselines or add NOLINT markers to hide findings. Third-party source retains its notices and is analyzed separately from project-owned code.

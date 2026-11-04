@@ -37,6 +37,7 @@ public:
   // The external clock owner executes the captured instruction through genuine
   // staged Core effects, then supplies its actually accounted dependency clocks.
   void complete_owner(const dsp56300::Core &cpu, DspTimedInstruction accounted);
+  void idle(const dsp56300::Core &cpu, unsigned units);
   void reset(dsp56300::Progress actual);
 
 private:
@@ -76,6 +77,9 @@ private:
                                                         unsigned units);
   [[nodiscard]] static std::optional<DspInterlockInstruction> describe(dsp56300::Word opcode,
                                                                        unsigned units);
+  [[nodiscard]] static std::optional<DspInterlockInstruction> control(dsp56300::Word opcode,
+                                                                      unsigned units);
+  [[nodiscard]] static bool conditional(dsp56300::Word opcode);
   [[nodiscard]] std::optional<Entry>
   inspect(const Cursor &cursor, const DspInterlocks &history, std::uint64_t available) const;
   [[nodiscard]] unsigned plan(const dsp56300::Core &cpu,
@@ -84,6 +88,7 @@ private:
                               dsp56300::RunBudget budget);
   void accept(const dsp56300::Core &cpu, const dsp56300::BoundedRunResult &actual);
   dsp56300::Progress expected_;
+  unsigned control_delay_ = 0;
   DspInterlocks history_;
   std::optional<Offered> offered_;
   std::array<Cost, cost_slots> costs_{};

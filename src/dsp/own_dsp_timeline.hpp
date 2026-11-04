@@ -2,6 +2,8 @@
 #pragma once
 
 #include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_native_timed_execution.hpp"
+#include "dsp/dsp_run_clock.hpp"
 #include "dsp/own_dsp_fetch.hpp"
 #include "dsp/own_dsp_machine.hpp"
 
@@ -88,12 +90,14 @@ private:
   };
 
   [[nodiscard]] dsp56300::RunResult execute_native_region(const NativeSlice &slice);
+  void consume_native_reservation(const NativeSlice &slice);
   void check_owner() const;
   [[nodiscard]] std::uint64_t cycle_deadline() const;
   void start_reset(OwnDspResetInputs inputs);
   [[nodiscard]] unsigned
   native_capacity(std::uint64_t horizon, OwnDspBoundary boundary, unsigned maximum_cycles) const;
   void native_time(unsigned cycles, DspDmaInputs inputs);
+  void native_time(DspClockUnits units, DspDmaInputs inputs);
   void reserve_native(const dsp56300::BoundedRunResult &preview);
   void finish_native_reservation();
   void advance_native_effects();
@@ -110,9 +114,12 @@ private:
   std::optional<std::uint64_t> expected_dma_;
   std::uint64_t horizon_;
   OwnDspBoundary boundary_ = OwnDspBoundary::before;
+  DspNativeTimedExecution native_history_;
   std::optional<dsp56300::InstructionWords> native_words_;
   unsigned native_cost_ = 0;
   unsigned native_remaining_ = 0;
+  unsigned native_dependencies_ = 0;
+  unsigned native_dependency_remaining_ = 0;
   bool native_staged_ = false;
   bool faulted_ = false;
 };

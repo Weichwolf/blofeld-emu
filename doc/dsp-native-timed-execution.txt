@@ -1,7 +1,9 @@
 Timed native DSP prefixes
 
-  cmake --build build/strict --target blofeld-dsp-native-timed-test
-  ctest --test-dir build/strict -R '^dsp_native_timed$' --output-on-failure
+  cmake --build build/release --target blofeld-dsp-native-timed-test \
+    blofeld-native-dependency-timeline-test blofeld-native-region-mcu-test
+  ctest --test-dir build/release --output-on-failure \
+    -R '^(dsp_native_timed|native_dependency_timeline|native_region_mcu)$'
 
 Costs come from actual Core previews. Only completed CPU prefixes commit history;
 unknown costs/dependencies stop planning. Control and DO endpoints terminate the
@@ -10,6 +12,18 @@ Owner completion requires the offered opcode/extension/base cost and a genuine
 staged retirement; changing a host-supplied word cannot replace that offer.
 
 Own normal-NXP timing windows accompany real CPU/register/peripheral assertions,
-checkpoint/mutation, REP/DO, native-control and ownership controls. This component
-is not yet bound to the Board timeline/PLL/DMA clock or original IRQ entry.
-Complete original reset/528-byte reception and instrument operation remain open.
+checkpoint/mutation, REP/DO, native-control and ownership controls. The Board
+native timeline clocks qualified dependencies before retirement; MCU
+finite budgets charge native and interlock periods. Paired checkpoints preserve
+captured words and remaining periods; reset discards pending execution.
+
+Selected literal/effective calls, DOR and P-memory transfers retain genuine Core
+stack, memory and code-invalidation effects. False conditional outcomes delay the
+next instruction by one period (FM A.2.6.3), using the actual Core flow receipt
+including equal taken/fallthrough PCs. Unknown descriptions still fail visibly.
+
+Focused Release consumers pass 178 prefix, 785 timeline and 43 MCU checks. Original
+reset passes SPI boot and reaches DSP main initialization; complete boot, original
+528-byte reception, IRQ entry timing and instrument operation remain unqualified.
+Extensive sanitizer/regression campaigns are deferred until real-time firmware
+under the current project workflow; compiler diagnostics remain enforced.

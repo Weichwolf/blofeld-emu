@@ -26,7 +26,8 @@ OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine,
       expected_ticks_(machine.clock().elapsed_ticks()),
       expected_epoch_(machine.clock().native_epoch()),
       expected_dma_(machine.bus().last_dma_cycle()),
-      horizon_(epoch_ticks) {
+      horizon_(epoch_ticks),
+      native_history_(machine.cpu().progress()) {
   const auto clock_mode = machine_.clock_inputs_.switch_timing;
   const bool native = native_regions() && clock_mode == DspClockSwitch::functional_region_boundary;
   const bool diagnostic =
@@ -87,6 +88,9 @@ void OwnDspTimeline::start_reset(const OwnDspResetInputs inputs) {
     native_words_.reset();
     native_cost_ = 0;
     native_remaining_ = 0;
+    native_dependencies_ = 0;
+    native_dependency_remaining_ = 0;
+    native_history_.reset(machine_.cpu_.progress());
     native_staged_ = false;
     fetch_.reset();
     reset_identity_ = identity;

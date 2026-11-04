@@ -5,11 +5,12 @@
 #include "dsp/dsp_interlocks.hpp"
 #include "dsp/dsp_native_dependencies.hpp"
 #include "dsp56300/core.hpp"
-#include "dsp56300/instruction.hpp"
 
+#include <algorithm>
 #include <optional>
 
 namespace blofeld {
+
 DspNativeTimedExecution::DspNativeTimedExecution(const dsp56300::Progress initial)
     : expected_(initial) {
   prefix_.reserve(maximum_prefix);
@@ -17,6 +18,7 @@ DspNativeTimedExecution::DspNativeTimedExecution(const dsp56300::Progress initia
 
 DspNativeTimedExecution::DspNativeTimedExecution(const DspNativeTimedExecution &other)
     : expected_(other.expected_),
+      control_delay_(other.control_delay_),
       history_(other.history_),
       offered_(other.offered_),
       costs_(other.costs_) {
@@ -26,6 +28,7 @@ DspNativeTimedExecution::DspNativeTimedExecution(const DspNativeTimedExecution &
 DspNativeTimedExecution &DspNativeTimedExecution::operator=(const DspNativeTimedExecution &other) {
   if (this != &other) {
     expected_ = other.expected_;
+    control_delay_ = other.control_delay_;
     history_ = other.history_;
     offered_ = other.offered_;
     costs_ = other.costs_;
@@ -75,12 +78,7 @@ void DspNativeTimedExecution::check_offer(const dsp56300::InstructionWords words
 
 std::optional<DspInterlockInstruction>
 DspNativeTimedExecution::describe(const dsp56300::Word opcode, const unsigned units) {
-  const auto shape = dsp56300::inspect_instruction(opcode);
-  if (shape && shape->kind == dsp56300::InstructionKind::jump_short) {
-    // Short absolute JMP has no Data ALU or AGU operand. Its actual Core base
-    // cost ages earlier dependencies; the control opcode always ends the plan.
-    return DspInterlockInstruction{.opcode = opcode, .native_units = units};
-  }
+  if (const auto result = control(opcode, units)) { return result; }
   return inspect_native_dependencies(opcode, units);
 }
 
@@ -101,7 +99,8 @@ DspTimedInstruction DspNativeTimedExecution::prepare_owner(const dsp56300::Core 
   check_offer(words, base_units);
   return {.words = words,
           .base_units = base_units,
-          .dependency_units = history_.preview(required(words, base_units))};
+          .dependency_units =
+              std::max(history_.preview(required(words, base_units)), control_delay_)};
 }
 
 void DspNativeTimedExecution::complete_owner(const dsp56300::Core &cpu,
@@ -122,20 +121,31 @@ void DspNativeTimedExecution::complete_owner(const dsp56300::Core &cpu,
                 hex(words.address, 6));
   }
   const auto decoded = required(words, base_units);
-  if (history_.preview(decoded) != accounted.dependency_units) {
+  if (std::max(history_.preview(decoded), control_delay_) != accounted.dependency_units) {
     throw Fault("DSP owner clocked a different dependency delay pc=" + hex(words.address, 6));
   }
+  if (control_delay_ != 0) { history_.elapse_idle(control_delay_); }
   history_.prepare(decoded);
   history_.observe_opcode(words.opcode);
   static_cast<void>(history_.complete(base_units));
   expected_ = after;
   offered_.reset();
+  control_delay_ = conditional(words.opcode) && !outcome->control_transfer ? 1U : 0U;
 }
 
 void DspNativeTimedExecution::reset(const dsp56300::Progress actual) {
   history_.reset();
   expected_ = actual;
   offered_.reset();
+  control_delay_ = 0;
   prefix_.clear();
+}
+
+void DspNativeTimedExecution::idle(const dsp56300::Core &cpu, const unsigned units) {
+  check_progress(cpu);
+  if (cpu.processing_state() != dsp56300::ProcessingState::waiting || control_delay_ != 0) {
+    throw Fault("DSP dependency idle clocks require the real waiting CPU");
+  }
+  history_.elapse_idle(units);
 }
 }

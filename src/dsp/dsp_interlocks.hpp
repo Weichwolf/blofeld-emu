@@ -41,6 +41,7 @@ public:
   void prepare(const DspInterlockInstruction &instruction);
   void observe_opcode(std::uint32_t opcode);
   [[nodiscard]] unsigned complete(unsigned native_units);
+  void elapse_idle(unsigned units);
   void reset() noexcept;
 
 private:

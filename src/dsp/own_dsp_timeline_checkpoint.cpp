@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "dsp/dsp_native_timed_execution.hpp"
 #include "dsp/own_dsp_fetch.hpp"
 #include "dsp/own_dsp_machine.hpp"
 #include "dsp/own_dsp_timeline.hpp"
@@ -21,9 +22,12 @@ struct OwnDspTimelineCheckpoint::Storage {
   std::optional<std::uint64_t> expected_dma;
   std::uint64_t horizon;
   OwnDspBoundary boundary;
+  DspNativeTimedExecution native_history;
   std::optional<dsp56300::InstructionWords> native_words;
   unsigned native_cost;
   unsigned native_remaining;
+  unsigned native_dependencies;
+  unsigned native_dependency_remaining;
   bool native_staged;
 };
 
@@ -51,9 +55,12 @@ OwnDspTimelineCheckpoint OwnDspTimeline::checkpoint() const {
           .expected_dma = expected_dma_,
           .horizon = horizon_,
           .boundary = boundary_,
+          .native_history = native_history_,
           .native_words = native_words_,
           .native_cost = native_cost_,
           .native_remaining = native_remaining_,
+          .native_dependencies = native_dependencies_,
+          .native_dependency_remaining = native_dependency_remaining_,
           .native_staged = native_staged_}));
 }
 
@@ -66,9 +73,12 @@ OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine, const OwnDspTimelineCheck
       expected_dma_(saved_state(checkpoint).expected_dma),
       horizon_(saved_state(checkpoint).horizon),
       boundary_(saved_state(checkpoint).boundary),
+      native_history_(saved_state(checkpoint).native_history),
       native_words_(saved_state(checkpoint).native_words),
       native_cost_(saved_state(checkpoint).native_cost),
       native_remaining_(saved_state(checkpoint).native_remaining),
+      native_dependencies_(saved_state(checkpoint).native_dependencies),
+      native_dependency_remaining_(saved_state(checkpoint).native_dependency_remaining),
       native_staged_(saved_state(checkpoint).native_staged) {
   const auto &state = saved_state(checkpoint);
   cycle_identity_ = std::make_shared<const bool>(true);

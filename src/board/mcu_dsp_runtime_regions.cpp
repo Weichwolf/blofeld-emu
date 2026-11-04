@@ -74,14 +74,14 @@ bool McuDspRuntime::advance_native_region(const std::uint64_t horizon,
   if (detail::mcu_integrity(mcu_) != before || dsp_.cpu().registers() != registers) {
     throw Fault("Native DSP region input changed CPU state");
   }
-  const auto cycles = dsp_.clock().native_cycle_units();
+  const auto cycles = dsp_.clock().elapsed_cycle_units();
   const auto result = timeline_->advance_native_region(
       horizon, boundary, request, inputs_.maximum_cycles_per_period - period_cycles_, effects);
   if (!result) { return false; }
   if (result->execution.fault.kind != dsp56300::FaultKind::none) {
     reject_native(result->execution.fault);
   }
-  const auto elapsed = dsp_.clock().native_cycle_units() - cycles;
+  const auto elapsed = dsp_.clock().elapsed_cycle_units() - cycles;
   if (elapsed == 0 || elapsed > inputs_.maximum_cycles_per_period - period_cycles_) {
     throw Fault("Native DSP region lost its actual finite cycle budget");
   }

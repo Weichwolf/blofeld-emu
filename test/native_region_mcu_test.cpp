@@ -93,17 +93,29 @@ struct Device {
   std::uint64_t input_ticks = 0, bit_ticks = 0, reset_ticks = 0;
   std::string events;
 
-  explicit Device(const bool external_peer, const bool peripheral_program) : peer(external_peer) {
+  explicit Device(const bool external_peer,
+                  const bool peripheral_program,
+                  const bool dependency_program = false)
+      : peer(external_peer) {
     std::array<std::uint32_t, 128> rom{};
     if (peripheral_program) {
       rom[bit_pc - boot] = set_timer_enable;
       rom[reset_pc - boot] = reset_peripherals;
     }
+    if (dependency_program) {
+      // Independently assembled short MOVE #$80,R0; MOVE X:(R0),X0.
+      constexpr unsigned write_r0 = 0x308000;
+      constexpr unsigned read_r0 = 0x44e000;
+      rom.front() = write_r0;
+      rom.at(1) = read_r0;
+    }
     dsp.bus().install_rom({.start = boot, .words = rom});
     mcu.bus().set_pin_drive(McuPort::e, {.mask = 3, .levels = 3});
     mcu.bus().write(hc12::portb, 0);
     mcu.bus().write(hc12::ddrb, all_pins);
-    runtime = std::make_unique<McuDspRuntime>(runtime_inputs(), mcu, dsp, external());
+    auto contract = runtime_inputs();
+    if (dependency_program) { contract.maximum_cycles_per_period = 2; }
+    runtime = std::make_unique<McuDspRuntime>(contract, mcu, dsp, external());
     require(runtime->end_ticks() == mcu_reset_ticks &&
                 dsp.clock().elapsed_ticks() == mcu_reset_ticks,
             "The genuine MCU reset-vector sequence supplies five initial IPBus periods");
@@ -261,12 +273,40 @@ void test_real_bit_reset_and_pending_paired_restore() {
   std::cout << "ACTUAL_GUEST_RESET bit-tick=" << original.bit_ticks
             << " reset-tick=" << original.reset_ticks << " paired-restore=1\n";
 }
+
+void test_dependency_periods_debit_the_real_mcu_slice() {
+  Device device(false, false, true);
+  device.release();
+  constexpr unsigned source = 0x80;
+  constexpr unsigned sample = 0x123456;
+  device.dsp.bus().write({.space = DspSpace::x, .address = source, .value = sample});
+  device.step();
+  require(device.dsp.cpu().progress().instructions == 1 &&
+              device.dsp.clock().native_cycle_units() == 1 &&
+              device.dsp.clock().interlock_cycle_units() == 1 &&
+              device.runtime->completed_cycles() == 2,
+          "A real MCU store slice admits one writer and one stall within its two-period budget");
+  device.step();
+  require(device.dsp.cpu().progress().instructions == 1 &&
+              device.dsp.clock().native_cycle_units() == 1 &&
+              device.dsp.clock().interlock_cycle_units() == 3 &&
+              device.runtime->completed_cycles() == 4 && !device.runtime->faulted(),
+          "The next actual MCU NOP consumes two dependency periods with no phantom DSP progress");
+  device.step();
+  require((device.dsp.cpu().registers().x & dsp56300::word_mask) == sample &&
+              device.dsp.cpu().progress().instructions == 3 &&
+              device.dsp.clock().native_cycle_units() == 3 &&
+              device.dsp.clock().interlock_cycle_units() == 3 &&
+              device.runtime->completed_cycles() == 6 && !device.runtime->faulted(),
+          "The captured real RAM consumer retires only after all three AGU dependency periods");
+}
 }
 
 int main() {
   try {
     test_real_mcu_store_and_peer_tie();
     test_real_bit_reset_and_pending_paired_restore();
+    test_dependency_periods_debit_the_real_mcu_slice();
     std::cout << "Native region MCU integration: " << assertions << " assertions passed\n";
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
