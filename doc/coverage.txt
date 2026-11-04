@@ -12,6 +12,12 @@ core 3903224. Profiler-on/off outputs match exactly, including the earlier
 original-reset waveform prefix. This is cold-start-prefix evidence, not normal
 boot, playable sound, steady-state throughput or any instrument milestone.
 
+HC12 internal register/temporary storage now uses a direct array with the original
+sparse fallback. Focused optimized Release byte/CCR/checkpoint checks pass. One
+CPU-only loop comparison improves throughput by about 18.1%; connected runtime
+and real-time instrument gains remain unmeasured. See mcu-storage.txt and
+mcu-storage-reference.json. Broad qualification is deferred until real-time.
+
 1. Local references — partial
 Official 1.25 firmware, manuals, images and sample references are private inputs.
 Downloads and primary-source hashes are in downloads.json, dependencies.json,

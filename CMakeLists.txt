@@ -1298,6 +1298,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-hc12-ccr-test test/hc12_ccr_test.cpp)
   target_link_libraries(blofeld-hc12-ccr-test PRIVATE blofeld_core)
   add_test(NAME hc12_ccr COMMAND blofeld-hc12-ccr-test)
+  add_executable(blofeld-pcode-storage-test test/pcode_storage_test.cpp)
+  target_link_libraries(blofeld-pcode-storage-test PRIVATE blofeld_sleigh blofeld_firmware)
+  add_test(NAME pcode_storage COMMAND blofeld-pcode-storage-test)
   add_executable(blofeld-original-usb-midi-test test/original_usb_midi_test.cpp test/usb_endpoint_reset_fixture.cpp)
   target_link_libraries(blofeld-original-usb-midi-test PRIVATE blofeld_core)
   add_test(NAME original_usb_midi COMMAND ${Python3_EXECUTABLE}
@@ -3188,6 +3191,7 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS blofeld-native-dependency-timeline-test
+    blofeld-pcode-storage-test
     blofeld-dsp-native-timed-test blofeld-dsp-native-dependencies-test
     blofeld-native-region-clock-test blofeld-native-region-frontend-test
     blofeld-native-region-events-test blofeld-native-deferred-irq-test
@@ -4499,6 +4503,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-mcu-boundary-benchmark EXCLUDE_FROM_ALL test/mcu_boundary_benchmark.cpp)
   target_link_libraries(blofeld-mcu-boundary-benchmark PRIVATE blofeld_mcu_dsp_runtime)
   add_dependencies(quality blofeld-mcu-boundary-benchmark)
+  add_executable(blofeld-mcu-execution-benchmark EXCLUDE_FROM_ALL test/mcu_execution_benchmark.cpp)
+  target_link_libraries(blofeld-mcu-execution-benchmark PRIVATE blofeld_core)
+  add_dependencies(quality blofeld-mcu-execution-benchmark)
 endif()
 
 if(TARGET blofeld-dma-callback-allocation-test)

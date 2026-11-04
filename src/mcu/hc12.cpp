@@ -10,6 +10,7 @@
 #include "loadimage.hh"
 #include "mcu/hc12_decimal.hpp"
 #include "mcu/hc12_registers.hpp"
+#include "mcu/pcode_storage.hpp"
 #include "memstate.hh"
 #include "opbehavior.hh"
 #include "pcoderaw.hh"
@@ -459,10 +460,16 @@ public:
     translator.initialize(documents);
     layout = register_layout(translator);
     ram = std::make_unique<BusBank>(translator.getDefaultCodeSpace(), bus);
-    registers = std::make_unique<ghidra::MemoryHashOverlay>(
-        translator.getSpaceByName("register"), 8, 256, 1024, nullptr);
-    temporaries = std::make_unique<ghidra::MemoryHashOverlay>(
-        translator.getUniqueSpace(), 8, 4096, 4096, nullptr);
+    registers = std::make_unique<PcodeStorage>(
+        PcodeStorageLayout{.space = translator.getSpaceByName("register"),
+                           .page_bytes = 256,
+                           .overflow_words = 1024,
+                           .dense_words = 32});
+    temporaries =
+        std::make_unique<PcodeStorage>(PcodeStorageLayout{.space = translator.getUniqueSpace(),
+                                                          .page_bytes = 4096,
+                                                          .overflow_words = 4096,
+                                                          .dense_words = 4096});
     memory.setMemoryBank(ram.get());
     memory.setMemoryBank(registers.get());
     memory.setMemoryBank(temporaries.get());

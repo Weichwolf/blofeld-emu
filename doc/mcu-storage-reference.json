@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "scope": "HC12 internal SLEIGH storage replacement and one CPU-only performance pair; no instrument acceptance claim",
+  "parent_revision": "c6072b306ff74792ff0b4ba4a7f6d0996871ca24",
+  "source_sha256": {
+    "src/mcu/hc12.cpp": "562bcb86d1d18a159716c9c4d1c168b7e85c179bbcb7fa988b2c580e08bf05f8",
+    "src/mcu/pcode_storage.hpp": "18a7c94d475cff08b10080fb16bd987e685aefafd1c480977e1f425c2d6b1a8c",
+    "test/pcode_storage_test.cpp": "e52ed07b261fa9f2bfdaa5fef1248b636fea94c669526405b7b388de13d11cd1",
+    "test/mcu_execution_benchmark.cpp": "fdec4673330526b34c1ae7cf7e366c829ee08f084889b3c74b7db9b05744589a",
+    "test/hc12_ccr_test.cpp": "c03fa36c4f7cde20a98b8b210d4a4d1e9c4115f97563dd9850a82d08547ad9a1",
+    "test/mcu_checkpoint_test.cpp": "8013b1487c1a4fbe823316c55c70ad3b9cf661d7538890682340bdfe6f8e817e",
+    "test/mcu_checkpoint_peripherals.cpp": "e77237ae0614feee287e18bad4332dd23da41cc16ade441e31b36a2ccd58ac2b",
+    "test/mcu_checkpoint_flash.cpp": "c9f47f0dcbef2a689d716fbe2a83e78cbea06e0a32ca9f890dd0fb9b38afdaca"
+  },
+  "qualification": {
+    "profile": "Release O3 march=native ThinLTO; LLVM19; compiler warnings as errors; clang-tidy zero findings",
+    "tests": {
+      "storage-2": {
+        "pid": 2032764,
+        "actual_exit": 0,
+        "reaped": true,
+        "actual_executable_sha256": "bb413cef4910f43af10fd5a3c4fff6cc1104a4c16118d3f615746fe24162f412",
+        "log_sha256": "2734d920d67d5b0a1a8a5f739557ee44aecba318e7cf377ad9dd04cd440d9584",
+        "output": "Verified independent LE/BE scratch bytes, aliases, cache overflow and checkpoints."
+      },
+      "ccr-1": {
+        "pid": 2032767,
+        "actual_exit": 0,
+        "reaped": true,
+        "actual_executable_sha256": "0be63d00722fb1e0ccfafb9811e740b0be542da173bd12c647cc0ab5e501e9bf",
+        "log_sha256": "7b9e5baa21de60d207fcae6fce3e2b580d58875d376911d5d701c9a2cdf8bac1",
+        "output": "PULC cases=65536 mismatches=0\nRTI cases=65536 mismatches=0\nTAP cases=65536 mismatches=0\nTFR B,CCR cases=65536 mismatches=0\nEXG A,CCR cases=65536 mismatches=0\nEXG CCR,A cases=65536 mismatches=0\nVerified 393216 independent CCR cases and actual XIRQ/reset exceptions."
+      },
+      "checkpoint-2": {
+        "pid": 2032800,
+        "actual_exit": 0,
+        "reaped": true,
+        "actual_executable_sha256": "f49d8dec103c2b1bbce29290dd9f3e3ff7d9b412e85b567146b4dd853811bdf4",
+        "log_sha256": "655f2ac52e8d8190578a3521750806b677f56e169eb64e2c3c8c55d246af7d50",
+        "output": "MCU in-process checkpoints, native replay, isolation and failure guards passed"
+      }
+    },
+    "extensive_sanitizers_and_regressions": "Deferred until original firmware real-time operation, per user instruction",
+    "fuzz": false
+  },
+  "measurement": {
+    "baseline-1": {
+      "pid": 2030695,
+      "ELF_sha256": "e1efba9cc0a3ce7e30f1fb9c06fd5540c301eafe9dd04fa5752dd77820868aa0",
+      "instructions": 2000000,
+      "host_nanoseconds": 2098515551,
+      "d": 8192,
+      "writes": 500000
+    },
+    "candidate-1": {
+      "pid": 2032803,
+      "ELF_sha256": "c3d24cacc44a636a84ef4f29be8d0ac1568f60042a80e1dcab3a986dfc4892b7",
+      "instructions": 2000000,
+      "host_nanoseconds": 1776456769,
+      "d": 8192,
+      "writes": 500000
+    },
+    "later_worker_began_after_pair_completed": true,
+    "instructions_per_second_ratio": 1.1812927776347142,
+    "baseline_relinked_with_current_other_libraries_byte_identical": true
+  },
+  "libraries": {
+    "libblofeld_core.a": "4412a7f8c8f55e0204831b9076be12c099600c8e5df32af524052d7f4aec823c",
+    "libblofeld_sleigh.a": "f64fe64a40789afbb5e736c0ee98e6904e1d1209542f1bc3d9226d5b80e45601",
+    "blofeld-headless": "f8b311b59995d66b668cb21d93967852ae14e19cd9c62f1405bf6c149bd88c29",
+    "share/HC12.sla": "b42ab86cb4c230e49c21e73c4295fc009caa2b2f31662e8f29d8dd65f699bce8"
+  },
+  "limits": [
+    "No controller JIT introduced",
+    "Hardware bus, clock and interrupt algorithms unchanged",
+    "Original boot/MIDI/audio and whole-instrument real-time are not established by these checks",
+    "Only width-bounded scalar writes and aligned checkpoint chunks are covered; inherited bank algorithms are unchanged",
+    "Additional measurement samples overlapped another original-reset worker and are excluded"
+  ],
+  "archive_members": {
+    "hc12.cpp.o": {
+      "before": "dc5e64b8698f95925bac20872a9a858d621ff13a4c6f2fd20d25e0bbd4260ddd",
+      "after": "def67c6386490ab15eb7e28a7abf4e008a33f0af2661a6e54abc46150d9a4009"
+    },
+    "hc12_decimal.cpp.o": {
+      "before": "a651997875b3481382ef646c7fc673efe4e71455deaa0eefc59edaeb3b7e770c",
+      "after": "a651997875b3481382ef646c7fc673efe4e71455deaa0eefc59edaeb3b7e770c"
+    },
+    "mcu_machine.cpp.o": {
+      "before": "838c8649616388995233addb4b2fed75eae0985338be30aa4c86ebfc25462ece",
+      "after": "838c8649616388995233addb4b2fed75eae0985338be30aa4c86ebfc25462ece"
+    }
+  }
+}
