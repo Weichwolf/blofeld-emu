@@ -1,7 +1,12 @@
 Current acceptance coverage
 
+Active scope: one Blofeld Desktop with active SL, MIDI <-> emulator -> audio.
+The user removed Keyboard/HCS08 and all model-selection modes. Historical
+Keyboard evidence below is retained research, outside active acceptance. SL
+factory-state provisioning and original sample operation remain unqualified.
+
 The objective in objective.txt is not complete. The requirement numbers below
-refer to that file. Documented Desktop/Keyboard functions are tracked individually
+refer to that file. Documented Desktop SL functions are tracked individually
 in function-acceptance.tsv; its pending entries are not waived by component tests.
 Reference manifests pin specific source/input/test scopes, not an assertion that
 all functions or every current binary have passed.
@@ -42,7 +47,7 @@ The regular Board/headless runtime uses the independent dsp56300 core pinned in
 dependencies.json. It connects actual reset, MCU SPI download, DSP execution,
 GPIO communication, timed NAND, timers, MIDI input and original DSP/ESAI output.
 The original firmware has produced MIDI-driven PCM through the normal CLI with
-live MCU/NAND stores. Both complete device profiles and normal standalone startup
+live MCU/NAND stores. Complete Desktop SL behavior and normal standalone startup
 remain unqualified. Legacy test migration/dependency removal and subsequent
 OwnDsp naming cleanup remain open. See own-dsp-integration.txt, runtime.txt and
 nand-read-handoff-reference.json.

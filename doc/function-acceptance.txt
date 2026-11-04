@@ -17,25 +17,21 @@ official downloads by URL, size and SHA-256. Manufacturer assets stay local.
 F-D and F-K mean the Desktop and Keyboard FAQ snapshots whose URLs, sizes,
 hashes and ignored local paths are in function-references.json. Changing online
 FAQs cannot silently replace the reference used for a comparison.
-KBC means README.txt in the pinned BlofeldKBC14.zip from downloads.json. Its
-1181 bytes have SHA-256
-f86f70f9522c0f443ffbebbde00708d5fd4f3d9a1594c8fd3cfe4e65ae085773.
-It distinguishes pre-2015 keybed-controller updates from newer keyboards and
-does not offer a host-queryable success indication. The separate controller's
-image/completeness, native execution and recovery remain unqualified.
 
-The inventory covers the manual's operation, menu, synthesis, global, utility,
-update and controller sections, plus the documented Spectre/device workflow.
+The active inventory covers Desktop operation, menus, synthesis, globals,
+utilities, updates and MIDI controllers, plus the Spectre/device workflow.
+Keyboard-only physical controls and their separate controller update are outside
+the user-selected scope. SL-capable Desktop sample functions remain required.
 Safety, shipping, acoustic examples and glossary explanations do not introduce
 separate software features. Electrical output behavior still needs board and
 hardware evidence. The old manual is not an exhaustive specification of 1.25;
 new firmware/FAQ functions extend this inventory rather than redefine success.
 
 Execution and expansion
-Run each D,K row separately on Desktop and Keyboard. K-only rows require the
-actual keyboard scanner/controller and controls; an external note source does
-not prove their operation. Desktop sample cases require an established licensed
-profile and authentic reference contents. Missing licenses/data stay explicit.
+Run every active row on the fixed Desktop instrument with active SL sample
+capability. Keyboard-only rows were removed at the user's explicit request,
+not counted as passing. There are no model-selection modes. Sample cases require
+qualified licensed-unit storage and authentic reference contents. Missing licenses/data stay explicit.
 Do not synthesize authorization or claim physical hardware variants identified.
 
 Expand named instances: every oscillator, filter, envelope, LFO, matrix slot,
@@ -50,7 +46,7 @@ and overlapping arpeggiator notes. A grouped row passes only when its expanded
 cases pass; one representative sound cannot qualify the entire group.
 
 Start through the original cold-boot path with unchanged 1.25 firmware and the
-selected profile. Feed user actions through modeled panel/keyboard inputs and
+fixed Desktop SL identity. Feed user actions through modeled Desktop panel inputs and
 MIDI through qualified DIN/USB paths. Exercise both transports where applicable,
 all channel selections and relevant local-input differences. Original firmware
 must own parameter changes, replies, synthesis and nonvolatile writes. Isolated

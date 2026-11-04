@@ -11,7 +11,7 @@ EMU followed by nine Crockford base32 characters; the ASCII serial and terminato
 are stored in that private MCU image before any CPU execution. The source update
 stays immutable. Only known, erased serial storage can be provisioned; existing
 unit data cannot be replaced through the factory API. There is no default state
-location or normal Keyboard/Desktop runtime integration yet (runtime.txt).
+location or normal fixed Desktop SL runtime integration yet (runtime.txt).
 
 Subsequent processes restore the complete persisted bytes, knowledge and erase
 history. Existing corrupted files fail visibly. Damaged or unknown identity

@@ -4,8 +4,9 @@ License: GPL-3.0-only. Dependency notices are in THIRD_PARTY.txt. Manufacturer
 firmware and reference assets are separate local inputs and are not included.
 
 Objective
-Execute original firmware 1.25 for Desktop and Keyboard, with functional board
-models, MIDI/audio and reproducible firmware-development tests. Correctness means
+Execute original firmware 1.25 as one Blofeld Desktop with active SL sample
+capability: MIDI <-> emulator -> audio, with bidirectional USB-MIDI. There are
+no Keyboard/Desktop modes. Correctness means
 instrument behavior: original sound, musical timing, MIDI, controls, storage and
 updates. Internal bootstrap, bus/pipeline timing and peripheral mechanisms may
 be simplified when those observable functions remain correct. The complete
@@ -23,7 +24,6 @@ relative to that root, for example "dsp/dsp_bus.hpp". The areas are:
   common/    Shared bus interfaces and diagnostics
   dsp/       DSP core, pipeline, memory and DSP peripherals
   mcu/       HC12 main CPU, memory and peripherals
-  keyboard/  HCS08 keyboard controller and peripherals
   firmware/  Firmware archive, MIDI container and input decoding
   storage/   Flash, NAND, persistence and device identity
   samples/   Sample libraries, formats and conversion

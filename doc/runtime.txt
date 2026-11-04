@@ -67,12 +67,14 @@ Normal profile wiring, sustained playback and complete overload/disconnect behav
 remain open. Host buffering must adapt independently of device clocks and MIDI.
 
 Required normal operation
-Launching without profile arguments must select Blofeld Keyboard; --desktop
-selects Desktop. No separate blofeld-cli or --keyboard interface is intended.
-The normal process runs as an instrument, presenting MIDI and host audio without
-an interactive development CLI or exclusive ALSA hardware ownership.
-Both profiles must execute unchanged original1.25 and their required peripherals,
-including controls, storage, samples, updates, reset and visible failures.
+The product is one Blofeld Desktop with active SL sample capability. It has no
+Keyboard/Desktop selection modes. Its instrument interface is MIDI <-> emulator
+-> audio, including bidirectional USB-MIDI and normal host audio output.
+There is no internal keyboard scanner/HCS08 requirement. Original firmware owns
+SL sample behavior; qualified factory storage, not a host license-success
+response or firmware patch, must establish the virtual unit's sample capability.
+A separate end-user CLI and exclusive ALSA hardware ownership are not required.
+Complete normal Desktop SL initialization remains unqualified.
 
 USB is MIDI-only; it must not expose USB Audio endpoints or a virtual sound card.
 Normal host-visible USB-MIDI enumeration and bidirectional original transfers

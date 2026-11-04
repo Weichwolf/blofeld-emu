@@ -1,17 +1,19 @@
 # Project context
 
 - Speak German with the user. Code, comments, documentation and commit messages are English.
-- The primary objective is a complete Blofeld Desktop and Keyboard instrument emulator, initially headless and standalone. Unmodified original 1.25 firmware is the known-working compatibility reference; tests verify our emulator, not the manufacturer's firmware.
+- The primary objective is a complete Blofeld Desktop instrument emulator with active SL sample capability, initially headless and standalone. Unmodified original 1.25 firmware is the known-working compatibility reference; tests verify our emulator, not the manufacturer's firmware.
 - The original firmware is known to run on the real device, not assumed bug-free. Its executed accesses constrain the hardware model but do not prove that every access is intentional or selects a device. Resolve documentation/firmware conflicts through explicit decoder, timing and chip-profile hypotheses, retaining firmware quirks and checking multiple connected paths.
 - Correctness means equivalent instrument behavior: original DSP sound, MIDI/SysEx, voice management, musical timing, controls, storage and updates. Functional bootstrap/peripheral models and coarser internal scheduling are allowed; identical electrical wiring, bus phases and silicon pipeline timing are not acceptance requirements. Preserve instrument-visible effects and document each simplification and its tests.
 - Implement the connected device from actual reset through normal instrument operation with original DSP audio, MIDI and persistent storage. Isolated routine fixtures are supporting evidence, never a substitute for that runtime. Alternative-firmware development is a secondary future use.
-- Physical disassembly and measurement are unavailable and are not acceptance prerequisites. Independently reconstruct missing hardware through documented constraints and reproducible offline hypotheses/experiments without a preset attempt limit. Missing information remains a research task; completion requires correctly running original firmware and every documented function on both profiles.
+- Physical disassembly and measurement are unavailable and are not acceptance prerequisites. Independently reconstruct missing hardware through documented constraints and reproducible offline hypotheses/experiments without a preset attempt limit. Missing information remains a research task; completion requires correctly running original firmware and every documented Desktop function.
 - Execute the original Blofeld firmware and its DSP synthesis. Do not substitute a host synthesizer, patch the firmware, skip its routines or fabricate successful instrument results. Chip-internal bootstrap and peripheral functions may use explicit, tested functional models.
 - Unknown or unsupported hardware accesses must fail visibly with address, operation, PC and execution context. Keep observed behavior, hypotheses and hardware-verified facts distinct.
 - Device detection is not hardware validation. Hardware update/programming tests require a separately established recovery procedure; never flash experimental firmware as a routine test.
 - Keep the emulator, board model, transport and time-critical audio processing separate. Run as a regular user.
 - After removing the foreign DSP backend, replace transitional OwnDsp/own_dsp names in classes, files, build targets, configuration and documentation with normal DSP names. Do not retain a permanent "own" backend label.
 - Query audio and MIDI host capabilities independently and read back actual settings and buffer/pool grants. Adapt bounded buffering and packetization to those limits; report unsupported configurations, overload and disconnects. Development-host limits are not global hardware limits, and host differences must not change emulated clocks.
+
+- The product has one fixed Desktop-with-SL identity and no Keyboard/Desktop selection modes. Its external instrument path is MIDI <-> emulator -> audio. HCS08/keybed-controller emulation is outside the active objective. Reconstruct actual SL-capable factory storage; do not patch the firmware or substitute host license-success responses.
 
 # Quality gates
 

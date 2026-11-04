@@ -1,9 +1,9 @@
 Complete acceptance objective
 
-Build a complete Blofeld Desktop and Keyboard instrument emulator, initially
-headless and standalone. Unmodified original 1.25 firmware is the known-working
+Build a complete Blofeld Desktop instrument emulator with active SL sample
+capability, initially headless and standalone. Unmodified original 1.25 firmware is the known-working
 compatibility reference: tests verify and correct our emulator, not the
-manufacturer's firmware. Emulate the MCU, DSP, Keyboard controller, ROM/RAM/
+manufacturer's firmware. Emulate the MCU, DSP, ROM/RAM/
 flash/NAND, clocks, interrupts, buses and required peripherals so that actual
 reset, loading and initialization lead to normal instrument operation with
 original DSP audio, bidirectional MIDI and complete persistent device state.
@@ -70,8 +70,8 @@ MIDI, peripheral side effects and emulated clocks. Keep slow reference and
 instrumented paths explicit diagnostic choices. Measure native/helper counts
 and whole-emulator throughput; isolated JIT benchmark speed does not establish
 that the instrument uses the JIT. Keep integration as simple as constructing
-a CPU with memory/peripherals and running to an event budget. MCU, DSP and
-keyboard-controller data exchange uses direct storage, registers and bounded
+a CPU with memory/peripherals and running to an event budget. MCU and DSP data
+exchange uses direct storage, registers and bounded
 serial/FIFO state; avoid unnecessary abstraction and per-cycle bookkeeping in
 the hot path. This priority does not waive the migration,
 unmodified firmware or full instrument acceptance requirements.
@@ -92,7 +92,7 @@ Milestone 2: whole-device real-time factor >= 10 and playable-instrument score >
 Milestone 3: whole-device real-time factor >= 100 and playable-instrument score >= 99.99%.
 These scores concern the playable instrument: original DSP sound, MIDI/USB-MIDI,
 voice behavior, musical timing, effects, controls/display, persistence and the
-other documented instrument functions on both profiles. They do not measure
+other documented instrument functions on the Desktop instrument. They do not measure
 internal wiring fidelity, instruction-test pass rates or electrical similarity.
 Each milestone requires an actually playable instrument; a boot screen or a
 large set of passing component tests cannot substitute for that requirement.
@@ -119,6 +119,15 @@ formatting or allocation to instruction/audio hot paths. Sanitizers remain
 separate compile-time build configurations. Required emulation, correctness
 checks and contextual unsupported-access failures are not optional telemetry.
 
+The user explicitly removed the Keyboard instrument and its HCS08/keybed
+controller from the active objective. External instrument flow is MIDI <->
+blofeld-emu -> audio, including bidirectional USB-MIDI. Historical Keyboard
+fixtures do not create an acceptance requirement or an alternate product mode.
+SL-capable factory storage and original sample behavior must be reconstructed;
+no firmware patch or host-provided license-success response substitutes for it.
+The independent CPU12/HC12 native JIT core is developed in the private cpu12
+repository; board peripherals and original manufacturer programs stay here.
+
 Acceptance requirements (current evidence and gaps: coverage.txt):
 Instrument-visible results and musical timing, including USB, storage, update
 and recovery behavior, are the accuracy criteria. Internal abstractions must
@@ -132,8 +141,7 @@ gates merely because they differ from a possible physical implementation.
    publishing proprietary assets. Establish required wavetables, internal ROM
    and external flash contents from actual firmware accesses; identify missing
    data explicitly rather than supplying guessed values.
-2. Implement correct CPU/DSP execution, functional memory/peripherals and both
-   device profiles. Separate cores, board model, host transport and time-critical audio.
+2. Implement correct CPU/DSP execution, functional memory/peripherals for the Desktop SL instrument. Separate cores, board model, host transport and time-critical audio.
    Unknown/unsupported accesses fail with address, operation, PC and context;
    observed behavior, hypotheses and hardware-proven facts remain distinct.
    Reconstruct the behavior needed by the firmware from its accesses and available
@@ -162,7 +170,7 @@ gates merely because they differ from a possible physical implementation.
 7. Establish expected behavior through independent ISA/peripheral models,
    primary specifications and constraints from the unchanged known-working
    firmware. Test hypotheses against connected reset-to-instrument execution
-   and every documented function on both modeled profiles. Physical comparisons
+   and every documented function on the Desktop instrument. Physical comparisons
    are additional evidence if available, not an acceptance prerequisite. Do not
    claim measured hardware equivalence or physical flash safety from simulation.
    Physical programming would still require a separately established recovery
@@ -180,11 +188,13 @@ gates merely because they differ from a possible physical implementation.
    from the board model and original firmware; never fabricate enumeration or
    transfer success to bypass unsupported peripheral/firmware behavior.
 
-9. Provide a standalone normal runtime: Keyboard is the default profile and
-   --desktop is the only profile-selection option. A separate end-user CLI is
+9. Provide a standalone normal runtime for one fixed Blofeld Desktop with active
+   SL sample capability. There are no model-selection modes or profile switches. A separate end-user CLI
+   is
    not part of the product; do not add a blofeld-cli companion. The running
    emulator communicates through MIDI and/or its actual host-visible USB-MIDI
-   device, with the behavior of the selected stock hardware profile. Send original DSP audio to the session's normal audio host
+   device, with the behavior of that fixed instrument. Send original DSP audio to
+   the session's normal audio host
    and default output, as an ordinary audio application (for example PipeWire).
    Host audio transport is separate from emulated hardware; exclusive direct
    ALSA hardware access is not a requirement. Do not add a USB Audio function:
@@ -205,14 +215,14 @@ gates merely because they differ from a possible physical implementation.
     hardware display timing or realtime audio/board equivalence.
 
 Functional acceptance includes every documented Blofeld function on both
-profiles, exercised through unmodified firmware with observable MIDI, audio,
+scope, exercised through unmodified firmware with observable MIDI, audio,
 display and persistent-state results. Track feature coverage against the manual
 in function-acceptance.tsv under the evidence rules in function-acceptance.txt;
 isolated helper execution does not establish a complete instrument function.
 
-Completion requires evidence for the whole emulator and both profiles, original
+Completion requires evidence for the whole Desktop SL emulator, original
 MIDI/audio, full update/recovery behavior, reproducible failure/performance tests
-and every documented function on both modeled profiles. Physical access is not
+and every documented function on the Desktop instrument. Physical access is not
 a prerequisite for completion. The current component/reference fixtures remain
 partial; coverage.txt names the missing requirements without treating them as
 successful boot, real-time operation or device equivalence.
