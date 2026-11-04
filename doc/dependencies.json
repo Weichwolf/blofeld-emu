@@ -1,9 +1,16 @@
 {
   "independent_dsp56300": {
     "source": "https://github.com/Weichwolf/dsp56300",
-    "revision": "0c201ba6a9354064e4821ed74f31187d010eaa85",
+    "revision": "46dc05f38c79199b940c327913874e55f9ae674d",
     "license": "GPL-3.0-only",
-    "integration": "Pinned independent execution core for the regular Board/headless runtime, with retained native REP, bounded memory grants and explicit instruction-publication/checkpoint interfaces. Ordinary scalar accumulator-part stores and all eight L: store source views now execute native guarded RAM transfers, including sparse windows and one shared L: AGU update. Focused Release checks cover state, flags, REP, aliases and real I/O faults; shared component streams improve 5.75-6.35x for L: stores, without a whole-instrument speed claim. General JIT coverage remains incomplete (see the core jit-helper-coverage record). The six public SDK headers are unchanged; private core transfer users were rebuilt coherently. Extensive quality campaigns are deferred until firmware realtime. Complete Desktop/Keyboard instrument operation and remaining legacy test migration are incomplete."
+    "integration": "Pinned independent execution core for the regular Board/headless runtime, with native REP, bounded memory grants and instruction-publication/checkpoint interfaces. Ordinary scalar accumulator-part stores and all eight L: RAM store/load views now have native guarded transfers, including sparse windows and one shared L: AGU update. Focused Release checks pass 2872 new long-load and 3458 retained long-store assertions; the newly linked Blofeld timing consumers pass 197 prefix and 13172 timeline checks. The six public SDK headers are unchanged. The device timeline still conservatively stages long loads without dependency metadata, so this core increment does not establish a connected-instrument speed gain. General native ISA coverage, complete Desktop/Keyboard operation and remaining legacy test migration are incomplete. Extensive quality campaigns remain deferred until original-firmware realtime.",
+    "release_integration": {
+      "core_archive_sha256": "d7f4c17711cb075824a75b3d2ddc555a85e67af1bc26871bed74d15f14bfbb05",
+      "unchanged_public_headers": 6,
+      "retained_root_source_base": "3f75847c43518f4363b425e31dd3b5a4a8babc1c",
+      "link_manifest_sha256": "a9216c450b696f304a8ee3f8d9f888722f137d0514da1cfb6565f0a399a90282",
+      "qualification": "Focused timing consumers only; no repeated cold boot or instrument-speed claim"
+    }
   },
   "zlib": {
     "version": "1.3.2",
