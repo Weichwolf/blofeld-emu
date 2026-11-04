@@ -296,9 +296,18 @@ struct NandPeer::Impl {
       drive.unknown = data_mask;
     } else if (*output.driven) {
       drive.floating &= ~data_mask;
-      drive.mask = output.data.known;
+      const bool functional_status =
+          state_->device.device().status_mode() &&
+          state_->timing == NandTiming::functional_protocol &&
+          state_->decoder.contract() == NandBusContract::functional_transactions;
+      // Explicit reference-pad choice for datasheet-unused status1..5 only.
+      // The protocol/timing retain canonical C1 masks and computed fail0 knowledge.
+      constexpr unsigned unused_status_pads = 0x3e;
+      const auto known =
+          static_cast<unsigned>(output.data.known) | (functional_status ? unused_status_pads : 0U);
+      drive.mask = known;
       drive.levels = output.data.value;
-      drive.unknown = data_mask & ~static_cast<unsigned>(output.data.known);
+      drive.unknown = data_mask & ~known;
     }
     state_->drive = drive;
   }
@@ -345,7 +354,17 @@ struct NandPeer::Impl {
       throw Fault("Unqualified NAND shared-bus owner operation=observe: partial GPIO output mask=" +
                   hex(outputs, 3));
     }
-    return state_->decoder.observe(controls, outputs == data_mask);
+    const auto logical = state_->decoder.observe(controls, outputs == data_mask);
+    // Functional reference: a committed status70 transaction gates the
+    // retained command qualifier off during its read pulse. Raw GPIO is kept.
+    constexpr unsigned status_read_controls = 0x600;
+    constexpr unsigned data_read_controls = 0x200;
+    const bool functional = state_->timing == NandTiming::functional_protocol &&
+                            state_->decoder.contract() == NandBusContract::functional_transactions;
+    if (functional && state_->device.device().status_mode() && logical == status_read_controls) {
+      return data_read_controls;
+    }
+    return logical;
   }
 
   void observe(const std::uint64_t ticks) {

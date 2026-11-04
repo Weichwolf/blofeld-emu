@@ -139,6 +139,12 @@ state with fresh owners. Both sanitizer profiles pass all22 affected groups;
 cold/live configuration and durability guards remain covered. This does not
 qualify original startup under the new policy or supply a missing cell-write
 contract. See nand-functional-timing-reference.json and nand-board.txt.
+The explicit functional status70 decoder/reference-pad choice passes eight
+original-reader cases and five native/NAND restores after the actual read edge.
+Program/erase pass and fail have independent cell/status expectations; undefined
+fail0, ordered controls and candidate timing still refuse. An unchanged original
+reset trace establishes the preceding erase completion, not complete startup
+with the new model. See nand-functional-status-reference.json.
 An original POR with that explicit policy now passes the former pulse refusal
 and completes the real five-microsecond NAND reset. All 107 boot pages and the
 72-byte Global read match known input bytes. Four MIDI wire frames are delivered;

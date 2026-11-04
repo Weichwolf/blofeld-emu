@@ -1,0 +1,54 @@
+{
+  "scope": "Functional shared-bus status70 decoding and explicit unused-pad choice; original native reader with cell-derived results. Not physical wiring or complete instrument qualification.",
+  "firmware_zip_sha256": "095c760a576dcb04fe3e379bed1b95a0360002295ab42b29e3335a39514f0c72",
+  "original_status_slice": {
+    "begin": 6697,
+    "end": 6724,
+    "bytes": 81,
+    "sha256": "47c61ff2b56c5e5ac090e198f5d199bf78e1f3537ae75b4993275a34f6fb724b"
+  },
+  "primary_reference": {
+    "file": "hardware/K9F1208U0C.pdf",
+    "sha256": "bf9217e55bdad1d3c1e3eb9462fcdafb02c2a77231f89261c3f3927c3fde226f",
+    "printed_pages": [
+      11,
+      21,
+      33
+    ]
+  },
+  "policy": {
+    "requires": [
+      "functional_transactions",
+      "functional_protocol",
+      "actual committed status70"
+    ],
+    "controls": "Raw600 becomes logical200 only; raw GPIO is unchanged. This is a functional transaction decoder, not a claim about CLE wiring.",
+    "unused_status_pads": "I/O1..5 choose zero at the pad driver only. Protocol/timing retain canonical C1 masks; actual fail0/Ready/WP knowledge is preserved.",
+    "undefined_fail0": "Full reads still fail; no write result is synthesized."
+  },
+  "cases": [
+    "program-pass",
+    "program-fail",
+    "erase-pass",
+    "erase-fail",
+    "reset",
+    "undefined-fail-refuses",
+    "ordered-CLE-refuses",
+    "candidate-CLE-refuses"
+  ],
+  "qualification": {
+    "native_Release_cases": 8,
+    "compiler_tidy": "zero findings",
+    "sanitizer_matrix": "deferred until original firmware runs in real time, per AGENTS.md",
+    "physical_wiring": false,
+    "complete_instrument": false,
+    "fuzz": false,
+    "native_NAND_mid_status_restores": 5,
+    "current_optimized_core": "46dc05f38c79199b940c327913874e55f9ae674d"
+  },
+  "local_evidence": {
+    "doc/local/native-nand-status-r1/hypothesis-r1/qualification.json": "b27670a761850a9a849027728a425587953bea9c32fa4e3d3dc8dd904c93d1ab",
+    "doc/local/native-nand-status-r1/original-r0/qualification.json": "ff3903d7b697435b22c28991309dc77b39a697c3a7a4bf76fdc295a8e02d82fb",
+    "doc/local/native-nand-status-r1/public-qualified.json": "daec1e32359b570540e887f40f4787179ffd91e1809b2b1a7a9b6382cd60f5a0"
+  }
+}

@@ -246,3 +246,24 @@ not establish the normal instrument UI, healthy firmware identity exchange or
 complete startup. Those and full function/storage/update/recovery acceptance
 remain open. Detailed analysis and recordings stay local;
 nand-read-handoff-reference.json pins the scoped evidence.
+
+Functional status70 transactions
+
+Only functional_transactions plus functional-protocol decode retained raw600
+as logical200 after a real status70 command. Raw GPIO is unchanged. The
+reference pad model chooses zero for datasheet-unused status1..5; protocol
+and timing keep their canonical C1 masks. Fail0, Ready and WP retain actual
+operation/cell-derived knowledge. Undefined fail0 still rejects full reads.
+Ordered pins and candidate timing retain the existing CLE refusal. This is
+a functional decoder/reference-pad choice, not established electrical wiring.
+
+  cmake --preset release -DBUILD_TESTING=ON -DBLOFELD_FUZZING=OFF
+  cmake --build --preset release --target blofeld-original-nand-status-test
+  ctest --test-dir build/release -R '^original_nand_status$' --output-on-failure
+
+The hash-pinned original reader is supplied locally, never embedded. Eight
+native paths check real program/erase pass and fail, reset, undefined fail0
+and both unchanged strict refusals. Cell contents have independent literal
+expectations; five mid-status native/NAND restores repeat those expectations.
+See nand-functional-status-reference.json. Full original boot,
+physical status-pad values and complete instrument acceptance remain open.
