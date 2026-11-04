@@ -72,6 +72,40 @@ bool describe_move(DspInterlockInstruction &result, const dsp56300::EncodedTrans
   }
   return true;
 }
+
+bool scalar_alu(const dsp56300::InstructionKind kind) {
+  using Kind = dsp56300::InstructionKind;
+  return kind == Kind::immediate_alu || kind == Kind::arithmetic_shift_immediate ||
+         kind == Kind::arithmetic_shift_register || kind == Kind::logical_shift_immediate ||
+         kind == Kind::logical_shift_register || kind == Kind::bit_field_insert;
+}
+
+std::optional<DspInterlockInstruction> describe_scalar(DspInterlockInstruction result,
+                                                       const dsp56300::InstructionKind kind) {
+  using Kind = dsp56300::InstructionKind;
+  const auto opcode = result.opcode;
+  if (kind == Kind::immediate_alu) {
+    const auto function = opcode & 7U;
+    constexpr unsigned compare = 5;
+    if (function == 1 || function == 7) { return std::nullopt; }
+    if (function != compare) { result.arithmetic_writes = (opcode & 8U) != 0 ? 2U : 1U; }
+  } else {
+    const bool register_shift =
+        kind == Kind::arithmetic_shift_register || kind == Kind::logical_shift_register;
+    // Count selectors 0/1 are reserved; a zero immediate still uses the DALU.
+    const auto selector = (opcode >> 1) & 7U;
+    if (register_shift && selector < 2) { return std::nullopt; }
+    constexpr unsigned accumulator_bits = 56;
+    constexpr unsigned count_mask = 63;
+    if (kind == Kind::arithmetic_shift_immediate &&
+        ((opcode >> 1) & count_mask) >= accumulator_bits) {
+      return std::nullopt;
+    }
+    result.arithmetic_writes = (opcode & 1U) != 0 ? 2U : 1U;
+  }
+  result.status_write = true;
+  return result;
+}
 }
 
 std::optional<DspInterlockInstruction> inspect_native_dependencies(const std::uint32_t opcode,
@@ -81,11 +115,7 @@ std::optional<DspInterlockInstruction> inspect_native_dependencies(const std::ui
   const auto shape = dsp56300::inspect_instruction(opcode);
   if (!shape) { return std::nullopt; }
   DspInterlockInstruction result{.opcode = opcode, .native_units = native_units};
-  if (shape->kind == dsp56300::InstructionKind::bit_field_insert) {
-    result.arithmetic_writes = (opcode & 1U) != 0 ? 2U : 1U;
-    result.status_write = true;
-    return result;
-  }
+  if (scalar_alu(shape->kind)) { return describe_scalar(result, shape->kind); }
   const auto transfers = dsp56300::inspect_transfers(opcode);
   if (!transfers || transfers->address_update) { return std::nullopt; }
   if (transfers->instruction.kind == dsp56300::InstructionKind::parallel) {

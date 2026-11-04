@@ -346,3 +346,15 @@ Typed dependency-only clock periods separately pass 75 assertions per sanitizer
 profile: timer phase/IRQ, PLL, actual DMA and event/budget refusals. See
 dsp-native-dependency-clock-reference.json. The native machine consumer retains
 84 assertions per profile. Board timing enablement remains open.
+
+Scalar immediate and shift dependency descriptions
+-------------------------------------------------
+Immediate ADD/SUB/OR/EOR/AND/CMP and immediate/register ASL/ASR/LSL/LSR have
+encoded dependency descriptions. CMP produces status without an accumulator
+write; zero-count shifts still carry the matching-move hazard. Valid register
+count selectors are 2..7; 0/1 and arithmetic immediate counts 56..63 refuse.
+Independent NXP observations cover 320 quiet-anchor/control windows, including
+changed A1/B1 counts. Both sanitizer profiles pass 27,789 checks with all prior
+inputs retained; invalid arithmetic counts now have explicit refusal checks.
+See dsp-native-scalar-dependencies-reference.json. Normal timeline/IRQ promotion,
+the connected original transfer and complete instrument acceptance remain open.
