@@ -7,9 +7,13 @@
 #include "mcu/mcu_run_clock.hpp"
 
 #include <array>
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <iomanip>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <string_view>
 
@@ -233,16 +237,106 @@ void clone_pad_binding() {
   require(copy->read(hc12::ptq) == final_value && source_calls == before,
           "Later copied edges sample only the clone's physical provider");
 }
+
+void atomic_port_sampling() {
+  constexpr std::uint16_t t_input = hc12::ptt + 1;
+  McuGpio gpio;
+  bool fail = false;
+  bool observe = false;
+  unsigned observed = 0;
+  std::uint32_t physical = 0;
+  gpio.attach_pad_source(McuPort::t, [&](const std::uint32_t mask) {
+    return GpioPadSample{.known = mask, .levels = physical & mask};
+  });
+  gpio.attach_pad_source(McuPort::u, [&](const std::uint32_t mask) {
+    if (observe) { observed = gpio.read(t_input); }
+    if (fail) { throw Fault("Authored late-port sampling failure"); }
+    return GpioPadSample{.known = mask, .levels = 0};
+  });
+  gpio.advance_inputs();
+  gpio.advance_inputs();
+  require(gpio.read(t_input) == 0, "Two known low edges establish the input history");
+  physical = 1;
+  gpio.advance_inputs();
+  observe = true;
+  fail = true;
+  require(rejects([&] { gpio.advance_inputs(); }).contains("late-port") && observed == 0 &&
+              gpio.read(t_input) == 0,
+          "A late failing pad provider cannot publish an earlier port or alter its pipeline");
+  physical = 0;
+  fail = false;
+  gpio.advance_inputs();
+  require(observed == 0 && gpio.read(t_input) == 1,
+          "Successful providers observe the previous edge until all sampling has completed");
+  gpio.advance_inputs();
+  require(observed == 1 && gpio.read(t_input) == 0,
+          "A failed edge contributes no sample and the two-stage sequence remains exact");
 }
 
-int main() {
+void sampling_benchmark(const unsigned providers) {
+  constexpr unsigned cycles = 1000000;
+  constexpr std::array ports{McuPort::t,
+                             McuPort::m,
+                             McuPort::j,
+                             McuPort::p,
+                             McuPort::q,
+                             McuPort::r,
+                             McuPort::s,
+                             McuPort::u};
+  constexpr std::array<std::uint8_t, 8> masks{0x0f, 0x3f, 7, 0xff, 0xff, 0xff, 0xff, 0x3f};
+  McuGpio gpio;
+  std::uint32_t physical = 0;
+  unsigned calls = 0;
+  for (std::size_t index = 0; index < ports.size(); ++index) {
+    const auto port = ports[index];
+    const bool resolved = providers == ports.size() || (providers == 1 && port == McuPort::q);
+    if (resolved) {
+      gpio.attach_pad_source(port, [&](const std::uint32_t mask) {
+        ++calls;
+        return GpioPadSample{.known = mask, .levels = physical & mask};
+      });
+    } else {
+      gpio.set_drive(port, {.mask = masks[index], .levels = 0});
+    }
+  }
+  gpio.advance_inputs();
+  gpio.advance_inputs();
+  calls = 0;
+  unsigned checksum = 0;
+  const auto began = std::chrono::steady_clock::now();
+  for (unsigned edge = 0; edge < cycles; ++edge) {
+    physical = edge & 1U;
+    if (providers == 0) {
+      gpio.set_drive(McuPort::q, {.mask = all_bits, .levels = static_cast<std::uint8_t>(physical)});
+    }
+    gpio.advance_inputs();
+    checksum += gpio.read(q_input);
+  }
+  const auto seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - began);
+  require(checksum == cycles / 2 - 1 && gpio.read(q_input) == 0 && calls == cycles * providers,
+          "Sampling benchmark checks exact edge delay, every provider call and independent data");
+  std::cout << "sampling providers=" << providers << " cycles=" << cycles
+            << " checksum=" << checksum << " calls=" << calls
+            << " seconds=" << std::setprecision(std::numeric_limits<double>::max_digits10)
+            << seconds.count() << '\n';
+}
+}
+
+int main(const int count, char **arguments) {
   try {
+    if (count != 1 && (count != 2 || std::string_view(arguments[1]) != "--benchmark")) {
+      throw Fault("Expected optional --benchmark");
+    }
     actual_bus_edges_and_reads();
     output_latch_and_direction();
     masks_unknown_and_conflicts();
     native_wait_and_clock_switch();
     clone_and_reset();
     clone_pad_binding();
+    atomic_port_sampling();
+    if (count == 2) {
+      for (const unsigned providers : {0U, 1U, 8U}) { sampling_benchmark(providers); }
+    }
     std::cout << "PIM integration: native bus "
                  "edges/registers/masks/direction/WAI/clock/reset/clone passed\n";
     return 0;

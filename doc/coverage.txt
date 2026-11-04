@@ -390,3 +390,17 @@ observations each. The static census gains 123 descriptions (3,690 to 3,813).
 See dsp-native-address-dependencies-reference.json. These component results
 do not qualify the connected original firmware or complete instrument; the
 separately modified timeline/history classes still require coherent rebuilds.
+
+MCU PIM input sampling: collect all physical inputs before noexcept pipeline
+publication, avoiding full pipeline-array rollback copies without skipping
+a provider or changing an emulated edge. Focused Release checks late-provider
+failure, callback visibility, exact edge latency and existing clock/wait/clone/
+reset behavior. Shared old/new benchmark fixtures differ only in the GPIO
+archive member; five isolated pairs measure median ratios of 1.02/1.08/1.14
+for zero/one/eight pad providers, with overlapping sample ranges. This is a
+component result, not connected instrument speed. The connected user-only CPU
+profile identifies cycle coordination and peripheral queries as further work;
+its retained core version and overlapping inclusive stacks are recorded in
+mcu-gpio-sampling-reference.json. Extensive quality campaigns remain deferred
+until original firmware real-time operation; complete instrument acceptance
+is still open.

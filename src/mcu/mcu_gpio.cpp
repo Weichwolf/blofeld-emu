@@ -97,14 +97,18 @@ void McuGpio::reset() {
 }
 
 void McuGpio::advance_inputs() {
-  auto pending = inputs_;
+  std::array<GpioPadSample, port_count> physical{};
   for (auto index = static_cast<std::size_t>(McuPort::t); index < ports_.size(); ++index) {
-    const auto physical =
+    const auto sample =
         resolve(static_cast<McuPort>(index), static_cast<std::uint8_t>(specs[index].valid));
-    pending[index].advance(
-        {.known = physical.known, .levels = physical.levels, .conflicts = physical.conflicts});
+    physical[index] = {
+        .known = sample.known, .levels = sample.levels, .conflicts = sample.conflicts};
   }
-  inputs_ = pending;
+  // Resolve every potentially failing provider before advancing any register.
+  // The pipeline updates themselves cannot throw and need no rollback copy.
+  for (auto index = static_cast<std::size_t>(McuPort::t); index < ports_.size(); ++index) {
+    inputs_[index].advance(physical[index]);
+  }
   input_clocked_ = true;
 }
 
