@@ -81,7 +81,7 @@ void prepare(McuBus &bus) {
   constexpr unsigned control_description = 0x02000000;
   constexpr unsigned input_description = 0x020000d1;
   constexpr unsigned output_description = 0x020000c2;
-  constexpr unsigned counts = 0x11;
+  constexpr unsigned counts = 0x01; // Only interface zero.
   constexpr unsigned alternates = 0x1111;
   bus.write(control, module_clock);
   bus.write(control + 1, 8);

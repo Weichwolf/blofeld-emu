@@ -65,7 +65,7 @@ inline void prefix(McuBus &bus, UsbDeviceProbe &probe) {
 inline void prepare_device(McuBus &bus) {
   prepare(bus);
   bus.write(endpoint_reset::control, endpoint_reset::mce_high);
-  constexpr unsigned counts = 0x21;       // One configuration with two interfaces.
+  constexpr unsigned counts = 0x11;       // NINTC1=1: interfaces zero and one.
   constexpr unsigned alternatives = 0x21; // Interface0: one alt; interface1: two.
   endpoint_reset::configure(bus, {.bank = 8, .value = counts});
   endpoint_reset::configure(bus, {.bank = 9, .value = alternatives});

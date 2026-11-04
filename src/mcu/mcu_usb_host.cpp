@@ -63,8 +63,10 @@ UsbConfigurationInfo McuUsb::host_configuration() const {
     constexpr unsigned counts_index = 5;
     constexpr unsigned second_configuration_shift = 8;
     const auto shift = configuration == 1 ? 4U : second_configuration_shift;
-    count = (configuration_[counts_index] >> shift) & 7U;
-    if (count == 0 || count > alternate_.size()) {
+    // USB20D6E2F 3.1.8.2 accepts interface numbers through NINTC inclusively.
+    const auto maximum_interface = (configuration_[counts_index] >> shift) & 7U;
+    count = maximum_interface + 1;
+    if (count > alternate_.size()) {
       throw Fault("Unsupported or ambiguous USB active interface count");
     }
   }

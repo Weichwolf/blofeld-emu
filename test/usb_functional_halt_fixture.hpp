@@ -52,9 +52,9 @@ inline McuUsb configured(const Profile profile = {}) {
   constexpr unsigned input_interrupt = 0x020000f1;
   constexpr unsigned output = 0x020000c2;
   constexpr unsigned output_interrupt = 0x020000e2;
-  constexpr unsigned counts = 0x11;
+  constexpr unsigned counts = 0x01; // Only interface zero.
   constexpr unsigned alternates = 0x1111;
-  constexpr unsigned two_interfaces = 0x21;
+  constexpr unsigned two_interfaces = 0x11;
   constexpr unsigned second_interface = 0x800;
   for (const auto description :
        {Description{.bank = 1, .value = control},

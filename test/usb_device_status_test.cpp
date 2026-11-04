@@ -73,7 +73,7 @@ struct Profile {
 McuUsb start(const Profile profile) {
   McuUsb usb;
   constexpr unsigned default_endpoint = 0x02000000;
-  constexpr unsigned counts = 0x442;
+  constexpr unsigned counts = 0x332; // Four interface indices in each configuration.
   constexpr unsigned alternates = 0x33333333;
   config(usb, {.bank = 1, .value = default_endpoint});
   config(usb, {.bank = 8, .value = counts});

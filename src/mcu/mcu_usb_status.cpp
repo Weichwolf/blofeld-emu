@@ -130,9 +130,9 @@ void McuUsb::observe_configuration(const UsbConfigurationRequest request) {
       throw Fault("Unsupported USB interface request");
     }
     const auto count_shift = request.configuration == 1 ? 4U : 8U;
-    const auto count = (configuration_[counts_index] >> count_shift) & 7U;
-    if (interface > count || (interface == count && count != 0)) {
-      throw Fault("Unsupported or unverified USB interface-count boundary");
+    const auto maximum_interface = (configuration_[counts_index] >> count_shift) & 7U;
+    if (interface > maximum_interface) {
+      throw Fault("Unsupported USB interface index beyond NINTC");
     }
     const auto alternate_shift = ((request.configuration - 1U) * 16) + (interface * 4U);
     const auto count_alternates =

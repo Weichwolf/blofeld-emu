@@ -224,6 +224,10 @@ void test_unknown_observations_and_location() {
          "mcu-pc=0x8123");
   McuBus different_counts(descriptor_flash);
   prepare(different_counts);
+  different_counts.write(test::endpoint_reset::control, test::endpoint_reset::mce_high);
+  constexpr unsigned only_interface_zero = 0x01;
+  test::endpoint_reset::configure(different_counts, {.bank = 8, .value = only_interface_zero});
+  different_counts.write(test::endpoint_reset::control, test::endpoint_reset::men_high);
   reject([&] { const UsbipExport unused(descriptors, location(), different_counts, context); },
          "observations disagree");
   for (const auto &where : std::array<UsbipLocation, 6>{

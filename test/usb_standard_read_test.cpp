@@ -19,7 +19,7 @@ constexpr unsigned valid = 0x4000, complete = 0x2000, interrupt = 0x1000;
 constexpr unsigned payload_sentinel = 0x91;
 constexpr unsigned decoded_address = 42;
 constexpr unsigned module_control = 0xc000, setup_configuration_enable = 0x2003;
-constexpr unsigned configuration_counts = 0x442;
+constexpr unsigned configuration_counts = 0x332; // Four interfaces in each configuration.
 constexpr std::array<std::uint8_t, 8> get_configuration{0x80, 8, 0, 0, 0, 0, 1, 0};
 constexpr std::array<std::uint8_t, 8> get_interface{0x81, 10, 0, 0, 0, 0, 1, 0};
 constexpr std::array<std::uint8_t, 8> vendor{0x40, 0x1f, 0, 0, 0, 0, 0, 0};
@@ -351,22 +351,45 @@ unsigned interface_counts() {
         auto usb = initial;
         auto request = get_interface;
         request[4] = static_cast<std::uint8_t>(interface);
-        if (count == 0 || interface == count) {
-          rejects([&] { static_cast<void>(usb.receive_setup(request)); });
-          require(usb.interrupt_sources() == 0,
-                  "Ambiguous interface counts cannot manufacture data,STALL or firmware IRQ");
+        require(usb.receive_setup(request) == UsbResponse::ack, "Qualified interface request");
+        if (interface <= count) {
+          data(usb, 0);
         } else {
-          require(usb.receive_setup(request) == UsbResponse::ack, "Qualified interface request");
-          if (interface < count) {
-            data(usb, 0);
-          } else {
-            require(usb.request_in(UsbBuffer::control_in).response == UsbResponse::stall,
-                    "Indices above either interpretation of the count are invalid interfaces");
-          }
+          require(usb.request_in(UsbBuffer::control_in).response == UsbResponse::stall,
+                  "An interface index beyond inclusive NINTC produces Request Error");
         }
         ++cases;
       }
     }
+  }
+  return cases;
+}
+
+unsigned host_interface_counts() {
+  // Independent totals for NINTC maximum indices 0,1,2,3, in either configuration.
+  constexpr std::array<unsigned, 4> totals{1, 2, 3, 4};
+  unsigned cases = 0;
+  for (const unsigned configuration : {1U, 2U}) {
+    for (unsigned maximum = 0; maximum < totals.size(); ++maximum) {
+      auto usb = start(2U | (maximum << 4U) | (maximum << 8U));
+      select(usb, configuration);
+      const auto actual = usb.host_configuration();
+      require(actual.configuration == configuration && actual.interfaces == totals[maximum],
+              "Host metadata includes every interface index from zero through NINTC");
+      ++cases;
+    }
+    constexpr unsigned five_interfaces = 0x442;
+    auto unsupported = start(five_interfaces);
+    select(unsupported, configuration);
+    rejects([&] { static_cast<void>(unsupported.host_configuration()); });
+    ++cases;
+  }
+  for (unsigned maximum = 0; maximum <= 4; ++maximum) {
+    const auto usb = start(2U | (maximum << 4U) | (maximum << 8U));
+    const auto actual = usb.host_configuration();
+    require(actual.configuration == 0 && actual.interfaces == 0,
+            "No interfaces become active before a configuration is selected");
+    ++cases;
   }
   return cases;
 }
@@ -491,14 +514,15 @@ int main() {
     const auto error_cases = request_errors();
     const auto address_errors = address_refusals();
     const auto count_cases = interface_counts();
+    const auto metadata_cases = host_interface_counts();
     const auto cut_cases = address_cuts();
     const auto class_cases = class_vendor();
     cancellation();
     std::cout << cases << " automatic USB read cases, " << refusals << " malformed fields, "
               << address_cases << " address cases, " << error_cases << " request errors, "
               << address_errors << " address refusals, " << count_cases
-              << " interface-count cases, " << cut_cases << " address cuts, " << class_cases
-              << " class/vendor requests passed\n";
+              << " interface-count cases, " << metadata_cases << " host metadata cases, "
+              << cut_cases << " address cuts, " << class_cases << " class/vendor requests passed\n";
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
     return 1;

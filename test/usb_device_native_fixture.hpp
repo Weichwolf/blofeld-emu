@@ -119,7 +119,7 @@ inline void interrupt(Hc12 &cpu, const InterruptRequest expected, const unsigned
 inline void prepare_native(McuBus &bus) {
   prepare(bus, full_speed_maximum);
   bus.write(test::endpoint_reset::control, test::endpoint_reset::mce_high);
-  constexpr unsigned counts = 0x21;
+  constexpr unsigned counts = 0x11; // NINTC1=1: interfaces zero and one.
   test::endpoint_reset::configure(bus, {.bank = 8, .value = counts});
   bus.write(test::endpoint_reset::control, test::endpoint_reset::men_high);
   bus.write(mask + 1, 1);

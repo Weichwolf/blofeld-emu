@@ -368,7 +368,7 @@ void test_configuration_setup_nonzero_interface_and_alternate() {
   blofeld::McuUsb usb;
   start(usb);
   usb.set_control(0);
-  constexpr unsigned two_configurations_two_interfaces = 0x222;
+  constexpr unsigned two_configurations_two_interfaces = 0x112;
   constexpr unsigned three_alternates = 0x33333333;
   configure(usb, {.select = 8, .value = two_configurations_two_interfaces});
   configure(usb, {.select = 9, .value = three_alternates});
@@ -393,7 +393,7 @@ void test_configuration_setup_nonzero_interface_and_alternate() {
       {{1, 11, 3, 0, 1, 0, 0, 0}, {1, 11, 2, 0, 2, 0, 0, 0}, {1, 11, 2, 0, 1, 1, 0, 0}}};
   for (const auto &request : unsupported_interface) {
     reject([&usb, &request] { static_cast<void>(usb.receive_setup(request)); },
-           "Alternate limit, ambiguous interface boundary and full-width index fail visibly");
+           "Alternate limit, interface above NINTC and full-width index fail visibly");
     require(word(usb, configuration_status) == completed_interface,
             "Rejected SET_INTERFACE preserves independently checked selected fields");
   }

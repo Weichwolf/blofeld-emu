@@ -1,0 +1,25 @@
+{
+  "qualification": "Document-derived NINTC metadata, GET_INTERFACE and SET_INTERFACE bounds; own descriptor/native/TCP fixtures. No original enumeration, kernel USB-MIDI, physical timing or complete instrument qualification.",
+  "primary": {
+    "manifest": "hardware/sources.json",
+    "archive": "9S12UF32_ZIP.zip",
+    "member": "S12USB20D6E2FV1.pdf",
+    "sha256": "70e54dad39c8abec4ce107d354f124dab722d079eb95e8bc025e9b23986f347c",
+    "section": "3.1.8.2",
+    "printed_page": 30
+  },
+  "maximum_interface_indices": [0, 1, 2, 3],
+  "active_interface_totals": [1, 2, 3, 4],
+  "unconfigured_interface_total": 0,
+  "unsupported_active_interface_total": 5,
+  "read_boundary_cases": 40,
+  "host_metadata_cases": 15,
+  "validation": {
+    "build": "LLVM19 C++23 optimized Release; strict diagnostics and clang-tidy",
+    "native_executables": 11,
+    "own_headless_usbip_cli_cases": 4,
+    "sanitizers": "Deferred during realtime bring-up",
+    "fuzz": false
+  },
+  "unchanged_frontiers": ["Original post-W1C USTB validity", "Original bulk NISOF=2", "UNASR alternate-setting behavior", "Kernel USB-MIDI and Spectre", "Complete original instrument"]
+}

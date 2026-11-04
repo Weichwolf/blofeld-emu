@@ -59,7 +59,9 @@ def own_image():
     # Own LDS; enable MCE, clear DISC while MEN=0, allow the declared PHY input.
     code = operand(0xcf, 0x2000) + store_byte(0x300, 0x40) + store_byte(0x301, 8)
     code += b"\xa7" * 100  # Own NOP delay, no host-supplied USB readiness.
-    for bank, value in ((1, 0x02000000), (2, 0x020000d1), (3, 0x020000c2), (8, 0x21)):
+    interface_configuration = 0x11  # NCFG=1, NINTC1=1: interfaces zero and one.
+    for bank, value in ((1, 0x02000000), (2, 0x020000d1), (3, 0x020000c2),
+                       (8, interface_configuration)):
         code += store_byte(0x30e, bank)
         code += store_word(0x310, value >> 16) + store_word(0x312, value & 0xffff)
     for address in (0x314, 0x316, 0x318, 0x31a):

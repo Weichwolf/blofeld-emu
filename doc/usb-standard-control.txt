@@ -16,9 +16,17 @@ the device address; endpoint-only reset cancels its phase, retaining address.
 
 GET_CONFIGURATION requires addressed/configured state and returns the retained
 selection. GET_INTERFACE returns the selected alternate; missing/unconfigured
-interfaces ACK SETUP then STALL data/status as Request Error. Malformed fields,
-unresolved interface-count boundaries and pending firmware SETUP/configuration
-overlap fail. Class/vendor numbers still reach firmware unchanged.
+interfaces ACK SETUP then STALL data/status as Request Error. Malformed fields
+and pending firmware SETUP/configuration overlap fail. Class/vendor numbers
+still reach firmware unchanged.
+
+USB20D6E2F 3.1.8.2 defines NINTC1/NINTC2 as inclusive interface-index bounds.
+An active configuration therefore exposes NINTC+1 interfaces: UNCIR=0x11 has
+interfaces0 and1. GET_INTERFACE and SET_INTERFACE accept the last index;
+UNASR retains its separate strict-less-than alternate-setting bound. Five
+active interfaces exceed the implementation's four-interface limit and fail
+visibly. Unconfigured metadata reports zero active interfaces. See
+usb-interface-count-reference.json.
 
 Read responses use one DATA1 byte independently of FIFO bytes/DVALID/TXSIZ.
 Lost ACKs and other tokens retain the response. Only ACK advances to status
@@ -29,7 +37,8 @@ effects and timing remain unverified.
 
 Independent model cases cover648 read combinations,2550 malformed fields,
 254 address cases,760 request errors and1404 address refusals with trusted
-copies. Forty count cases retain the unresolved interface-count boundary;
+copies. Forty count cases check inclusive interface-index boundaries;
+fifteen independent metadata cases check totals, unsupported bounds and defaults.
 23 address cuts distinguish reset domains, new SETUP and suspend/resume.
 Eight class/vendor cases retain firmware ownership of request numbers8/10.
 The native own fixture composes address status, configuration read

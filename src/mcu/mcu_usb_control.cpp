@@ -76,10 +76,6 @@ McuUsb::AutomaticRead McuUsb::interface_selection(const std::uint8_t index,
                                                   const std::string_view operation) const {
   static_cast<void>(current_configuration(operation));
   const auto configuration = host_configuration();
-  if (configuration.configuration != 0 && index == configuration.interfaces &&
-      configuration.interfaces < configuration.alternatives.size()) {
-    throw Fault("Unqualified USB " + std::string(operation) + " interface-count boundary");
-  }
   if (configuration.configuration == 0 || index >= configuration.interfaces) {
     return AutomaticRead{.error = true};
   }
