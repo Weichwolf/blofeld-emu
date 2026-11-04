@@ -8,6 +8,7 @@
 #include "dsp56300/instruction.hpp"
 
 #include <algorithm>
+#include <array>
 #include <optional>
 
 namespace blofeld {
@@ -90,8 +91,22 @@ void DspNativeTimedExecution::check_offer(const dsp56300::InstructionWords words
 
 std::optional<DspInterlockInstruction>
 DspNativeTimedExecution::describe(const dsp56300::Word opcode, const unsigned units) {
-  if (const auto result = control(opcode, units)) { return result; }
-  return inspect_native_dependencies(opcode, units);
+  struct Description {
+    dsp56300::Word opcode = dsp56300::word_mask + 1;
+    unsigned units = 0;
+    std::optional<DspInterlockInstruction> instruction;
+  };
+
+  // Only immutable opcode/base-cost metadata is shared on this execution thread.
+  // CPU state, extensions, observed costs and dependency history remain owned.
+  static constinit thread_local std::array<Description, cost_slots> descriptions{};
+  auto &entry = descriptions.at(slot(opcode));
+  if (entry.opcode != opcode || entry.units != units) {
+    auto result = control(opcode, units);
+    if (!result) { result = inspect_native_dependencies(opcode, units); }
+    entry = {.opcode = opcode, .units = units, .instruction = result};
+  }
+  return entry.instruction;
 }
 
 DspInterlockInstruction DspNativeTimedExecution::required(const dsp56300::InstructionWords words,

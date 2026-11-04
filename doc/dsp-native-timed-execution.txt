@@ -9,6 +9,9 @@ Timed native DSP prefixes
 Costs come from actual Core previews. Only completed CPU prefixes commit history;
 unknown costs/dependencies stop native prefix planning. Control and DO endpoints
 terminate the plan. REP retains the real Core latch. Native execution remains enabled.
+Pure resource descriptions, including unavailable descriptions, use a fixed
+per-thread cache keyed by the complete opcode and base cost. CPU state, extension
+words, actual cost observations, dependency history and bus effects are not cached.
 Owner completion requires the offered opcode/extension/base cost and genuine
 Core retirement. Staged completion retains its actual Core flow receipt;
 changing a host-supplied word cannot replace that offer.
