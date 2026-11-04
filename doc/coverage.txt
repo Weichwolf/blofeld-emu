@@ -320,3 +320,15 @@ registers, exact base costs, tampered observation isolation and refusal context.
 ASan/UBSan and separate TSan qualify that adapter closure, not the full clocked
 machine or instrument. See dsp-cacheless-plan-reference.json; connected reset,
 transfer alignment, MIDI/audio/storage/USB/update and realtime remain open.
+
+Selected binary ALU dependency descriptions
+------------------------------------------
+Parallel data-word ADD/SUB/OR/EOR/AND now describe their accumulator and status
+writers for X0/Y0/X1/Y1 to A/B, retaining the existing transfer/address guards.
+Independent NXP assembly verifies 40 encodings; 60 normal-model quiet-anchor
+windows qualify matching/other accumulator and SR-read gaps. The shared history
+keeps its existing layout and clock rules. Both sanitizer profiles pass 2757
+checks, including all 992 previous cases and 120 full-state Core observations.
+See dsp-native-alu-dependencies-reference.json for evidence and scope. This
+extends metadata for the timing integration; the connected original transfer,
+IRQ timing and complete instrument acceptance remain unqualified.

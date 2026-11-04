@@ -94,7 +94,12 @@ std::optional<DspInterlockInstruction> inspect_native_dependencies(const std::ui
     constexpr unsigned destination_b = 8;
     constexpr unsigned product = 0x80;
     if (alu != 0) {
-      if (alu != clear_a && alu != (clear_a | destination_b) && (alu & product) == 0) {
+      // FM parallel data-register ADD/SUB/OR/EOR/AND: JJJ selects X0/Y0/X1/Y1.
+      const auto source = (alu >> 4) & 7U;
+      const auto operation = alu & 7U;
+      const bool binary = source >= 4 && (operation == 0 || operation == 2 || operation == 3 ||
+                                          operation == 4 || operation == 6);
+      if (alu != clear_a && alu != (clear_a | destination_b) && (alu & product) == 0 && !binary) {
         return std::nullopt;
       }
       result.arithmetic_writes = (alu & destination_b) != 0 ? 2U : 1U;
