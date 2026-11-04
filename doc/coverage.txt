@@ -22,6 +22,10 @@ the older0319 failure remains historical in original-a4-runtime-reference.json.
 The separate vacant-data decoder hypothesis preserves selected-memory guards
 and the actual Reverb X access (dsp-vacant-data-read.txt). Fresh complete-reset
 program-selection/audio replay remains required.
+The original Reverb callback now has a separate48-clear/two-ready regression:
+18 scenes,864 clears and900 actual RTS returns; the real16000 input cursor and
+first unselected store remain intact. Independent NXP software AGU observations
+corroborate this profile, not physical silicon (dsp-reverb-clear.txt).
 
 The bounded optimized original-reset measurement in instrument-performance.txt
 reaches 3M MCU operations and 393 original DSP PCM frames at RTF 0.0021272 with

@@ -1,0 +1,64 @@
+{
+  "qualification": "Conditional original initializer ->48native firmware-pointer clear calls ->2ready callbacks. No host cursor normalization; declared no-interference inputs and nominal instruction-unit switch delays. Not connected complete instrument, MIDI/program-selection, DSP56371 physical invalid-domain AGU, timing or hardware audio qualification.",
+  "production_revision": "0b18bbaf64bcf5e5bb8ece59d7d4d5522c263122",
+  "Core_revision": "82467d22bd93470fbf0c47971b9dc6d04317025e",
+  "Core_archive_sha256": "7bbf2e6e27c80ffab5cf2898cb1dd3ca720259fb4f4a4fe01f33c8380cefd434",
+  "firmware_zip_sha256": "095c760a576dcb04fe3e379bed1b95a0360002295ab42b29e3335a39514f0c72",
+  "runtime_reference_sha256": "edcfacf65e2092be4d793f4b86d8cd8dab48f48671dc472b52f35c0f3def9ee9",
+  "original_cases": {
+    "scenes": 18,
+    "native_instructions": 549225,
+    "clear_calls": 864,
+    "callback_RTS_returns": 900,
+    "vacant_X_reads": 432,
+    "first_filtered_word": 2067
+  },
+  "actual_native": {
+    "ELF_sha256": "5b384c517d85db82a8bf8d23f3c90aac020243cba3d79ec5d48de5dfe99da375",
+    "actual_exit": 0,
+    "trace_sha256": "6e677ba7a3de6f330be4e5909f25d89648ee48a5333a51a1d144a00fda0fb449",
+    "qualification_sha256": "81ded6350c71381c413b403eebfd58dcfe8838e32daa9a62f78beaf8b2565c25"
+  },
+  "checks": [
+    "Exact512-word clear growth and retained tagged suffix after each of48 callbacks",
+    "Only actual callback48 installs ready and leaves cursor16000",
+    "All50 indirect calls return through actual native RTS; outer DO unwinds",
+    "First actual Y store16000 is unselected, following31 stores10001..1001f select RAM",
+    "First stored2067 agrees with independent original filter coefficient/input calculation",
+    "Full final architecture, mapped P/X/Y words/knowledge and32 observed stores invariant across read words0/A55AA5/FFFFFF",
+    "Every ordered original P word unchanged"
+  ],
+  "vendor_reference": {
+    "scope": "Unmodified NXP DSP56300 processor software model; not DSP56371 silicon or physical timing/decoder truth",
+    "processor_libraries": {
+      "libdsp56300simapi.dll": "602d93d794acb835a5f6b335b47cedb59f8edbf0e02bf63330dce5620bff2ce5",
+      "libdsp56300.dll": "9f3c1393ec89aaf6f64b29f7aebf3ffa50f3d4c0108ccf635a8b4b47fdbd6e23"
+    },
+    "transport_sha256": "325e9c9dc34079ba30a9020572edb997949ba8fef88c850121dddc53e8cbf96c",
+    "transport_correction": "Existing two Boolean-success branch corrections only; processor DLLs unchanged",
+    "observations": {
+      "loads": {
+        "cases": 5,
+        "agrees": true,
+        "result_sha256": "240b57ce3e74e8f269a87fa452d7cd354051cf41cf109fb3c186c35b20033d92",
+        "private_evidence": "doc/local/reverb-agu-vendor-r1/result.json"
+      },
+      "stores": {
+        "cases": 2,
+        "agrees": true,
+        "result_sha256": "ce6ebc21fa1a4bb0a0bd1a89e7bef5a8b176ccd83f49e8ab8d218dcabd7a7410",
+        "private_evidence": "doc/local/reverb-agu-vendor-store-r1/result.json"
+      }
+    },
+    "evidence_audit_sha256": "ae01ef3d16a6342a64d5b1b6b1e33e1643c07f694610dc8ad3cf1eb8714c95a7",
+    "private_evidence_audit": "doc/local/reverb-clear-integration-r1/vendor-audit.json",
+    "log_scope": "91 monotonic processor instruction anchors; original hashed stdout prefixes retained, late Wine output pinned in final copied logs"
+  },
+  "private_evidence": "doc/local/reverb-clear-integration-r1/qualification.json",
+  "source_sha256": {
+    "test/original_dsp_reverb_clear_test.cpp": "45acc8fb9c73f6b2deecaea413421da6ba1f1a4c74d0e1939f915fd9d66b6060",
+    "test/original_dsp_reverb_clear.py": "8e9f0200433eebdd475627c8e8a20bdddb3c5dc1a490fc460facdb12c35261ce"
+  },
+  "fuzz": false,
+  "build_profile": "Strict optimized LLVM19/C++23 Release, warnings-as-errors/tidy0/format0 and PIE/fullRELRO/NX/noTEXTREL; extensive sanitizer matrices deferred during realtime bring-up"
+}

@@ -3217,6 +3217,7 @@ add_custom_target(quality
     blofeld-dsp-reserved-write-decoder-test
     blofeld-reserved-read-decoder-test
     blofeld-vacant-read-decoder-test
+    blofeld-original-reverb-clear-test
     blofeld-dsp-independent-io-fetch-test
     blofeld-dsp-ram-rmw-test
     blofeld-dsp-gpio-write-decoder-test

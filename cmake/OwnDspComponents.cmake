@@ -199,6 +199,15 @@ if(BUILD_TESTING)
     blofeld_dma_fixture blofeld_own_dsp_fetch)
   add_test(NAME dsp_vacant_read_decoder COMMAND blofeld-vacant-read-decoder-test)
   set_tests_properties(dsp_vacant_read_decoder PROPERTIES TIMEOUT 60)
+  add_executable(blofeld-original-reverb-clear-test test/original_dsp_reverb_clear_test.cpp)
+  target_link_libraries(blofeld-original-reverb-clear-test PRIVATE
+    blofeld_dma_fixture blofeld_own_dsp_fetch blofeld_firmware)
+  add_test(NAME original_dsp_reverb_clear COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_reverb_clear.py"
+    $<TARGET_FILE:blofeld-original-reverb-clear-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-reverb-clear.trace")
+  set_tests_properties(original_dsp_reverb_clear PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
   add_executable(blofeld-dsp-gpio-write-decoder-test test/dsp_gpio_write_decoder_test.cpp)
   target_link_libraries(blofeld-dsp-gpio-write-decoder-test PRIVATE blofeld_dma_fixture blofeld_own_dsp_fetch)
   add_test(NAME dsp_gpio_write_decoder COMMAND blofeld-dsp-gpio-write-decoder-test)

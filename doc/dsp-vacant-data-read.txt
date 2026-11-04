@@ -42,6 +42,8 @@ registers and all mapped P/X/Y words/knowledge match within each word-variant
 group; every original P word stays unchanged. Ring contents are declared known,
 and the initializer's scheduled clear is not dispatched. This does not establish
 the normal clear-to-ready lifecycle or coupled original MIDI/audio operation.
+The subsequent firmware-pointer/48-clear lifecycle regression and independent
+vendor software AGU observations are qualified separately in dsp-reverb-clear.txt.
 
 Focused gate:
   cmake --build --preset release --target blofeld-vacant-read-decoder-test blofeld-reserved-read-decoder-test blofeld-dsp-memory-map-test

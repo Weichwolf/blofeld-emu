@@ -56,5 +56,6 @@
     "doc/local/reverb-vacant-callback-r1/qualification.json",
     "doc/local/dsp-vacant-read-integration-r1/qualification.json"
   ],
-  "fuzz": false
+  "fuzz": false,
+  "subsequent_clear_to_ready_reference": "dsp-reverb-clear-reference.json"
 }
