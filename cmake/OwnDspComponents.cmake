@@ -364,3 +364,15 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-own-dsp-timeline-checkpoint-test PRIVATE blofeld_own_dsp_fetch)
   add_test(NAME own_dsp_timeline_checkpoint COMMAND blofeld-own-dsp-timeline-checkpoint-test)
 endif()
+
+# Shared dependency history and independent encoded-transfer metadata.
+add_library(blofeld_dsp_dependencies STATIC EXCLUDE_FROM_ALL
+  src/dsp/dsp_interlocks.cpp src/dsp/dsp_native_dependencies.cpp)
+target_include_directories(blofeld_dsp_dependencies PUBLIC src)
+target_link_libraries(blofeld_dsp_dependencies PUBLIC blofeld_quality dsp56300::core)
+if(BUILD_TESTING)
+  add_executable(blofeld-dsp-native-dependencies-test test/dsp_native_dependencies_test.cpp
+    test/dsp_native_dependency_operands.cpp)
+  target_link_libraries(blofeld-dsp-native-dependencies-test PRIVATE blofeld_dsp_dependencies)
+  add_test(NAME dsp_native_dependencies COMMAND blofeld-dsp-native-dependencies-test)
+endif()

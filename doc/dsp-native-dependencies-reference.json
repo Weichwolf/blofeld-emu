@@ -1,0 +1,28 @@
+{
+  "scope": "Pure metadata/history only; no native runtime timing promotion or original boot claim",
+  "core_revision": "c3bb2011ef7f7059484f5bef58fd9ac5f8d6bd6d",
+  "checks_per_sanitizer_profile": 992,
+  "sanitizers": [
+    "ASan/UBSan",
+    "TSan"
+  ],
+  "authored_reference_program_instructions": 97,
+  "independently_assembled_operand_cases": 53,
+  "reference_windows_common_with": "native-gpio-transfer-reference.json",
+  "qualification_sha256": "51b5b7f3f802fd98a14e805c870ad7f40ebf7006eb2a10096c080fe87b7b84df",
+  "source_sha256": {
+    "src/dsp/dsp_interlocks.hpp": "9e666ec2e19595cc5593008f6f1cd692a83c97834a7c94df2fe61afc4372231e",
+    "src/dsp/dsp_interlocks.cpp": "f3df59fa68d43654b01ecac4b25544e15e39a75d7b34b021bc97b95b35e3240c",
+    "src/dsp/dsp_native_dependencies.hpp": "99bd9cab38ef03ee537619a242b3adc113512ba55e49f62ce6532ba739344a79",
+    "src/dsp/dsp_native_dependencies.cpp": "56dbf3d482837fd4e5fbcc0d90240e1051324cac70361f549b788929716931de",
+    "test/dsp_native_dependencies_test.cpp": "9dd049ff2c9854936a23c34847c2873d1a01a67d24222c581e007001960e962d",
+    "test/dsp_native_dependency_operands.cpp": "97459fb59bcbdbb5250857979b89074b8ed00bd984ed19c66321705610095d07",
+    "test/dsp_native_dependency_operands.hpp": "e5c4a7a0af30f9cb77ca5039eb0f0c7380761c33ea34132d326ba2de2442756d"
+  },
+  "regular_and_independent_build_registration": true,
+  "regular_and_independent_compile_commands_identical": true,
+  "runtime_integration": false,
+  "fuzz": false,
+  "full_instrument": false,
+  "legacy_decoder_and_clocked_consumer_compile": true
+}

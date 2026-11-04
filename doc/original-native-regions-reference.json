@@ -107,5 +107,17 @@
     },
     "qualification_sha256": "75e7baad20cd947e67eba51c0f11b4d99d98e8d45cd5a7cf229e59b45ee493b3",
     "scope": "Earlier transfer failure; timestamped producer/receiver and independent dependency evidence in native-gpio-transfer-reference.json"
+  },
+  "regular_entrypoint_run": {
+    "binary_sha256": "892517e32d90d1114b44ea3553d29356bd0b88bd6c52de59e074f7291dd8dfc6",
+    "actual_exit": 2,
+    "reaped": true,
+    "operations": 20309916,
+    "PCM_frames": 63970,
+    "failure_DSP_pc": "0x001a39",
+    "stores_unchanged": true,
+    "full_instrument": false,
+    "core_revision": "c3bb2011ef7f7059484f5bef58fd9ac5f8d6bd6d",
+    "qualification_sha256": "a05d7f6cca40a1ff30c654c8d7fe8472d09aaebd1ffe7d4cb5542098cae7c30b"
   }
 }

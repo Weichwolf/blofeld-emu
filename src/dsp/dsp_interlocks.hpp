@@ -29,8 +29,16 @@ struct DspInterlockInstruction {
 
 class DspInterlocks {
 public:
-  [[nodiscard]] unsigned preview(std::uint32_t opcode, unsigned native_units) const;
-  void prepare(std::uint32_t opcode, unsigned native_units);
+  [[nodiscard]] unsigned preview(std::uint32_t opcode, unsigned native_units) const {
+    return preview(decode_interlock_instruction(opcode, native_units));
+  }
+
+  void prepare(std::uint32_t opcode, unsigned native_units) {
+    prepare(decode_interlock_instruction(opcode, native_units));
+  }
+
+  [[nodiscard]] unsigned preview(const DspInterlockInstruction &instruction) const;
+  void prepare(const DspInterlockInstruction &instruction);
   void observe_opcode(std::uint32_t opcode);
   [[nodiscard]] unsigned complete(unsigned native_units);
   void reset() noexcept;

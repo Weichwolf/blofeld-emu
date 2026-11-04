@@ -35,15 +35,24 @@ unsigned DspInterlocks::delay(const DspInterlockInstruction &instruction) const 
   return result;
 }
 
-unsigned DspInterlocks::preview(const std::uint32_t opcode, const unsigned native_units) const {
+unsigned DspInterlocks::preview(const DspInterlockInstruction &instruction) const {
   if (prepared_) { throw Fault("DSP interlock preview requires a completed instruction"); }
-  return delay(decode_interlock_instruction(opcode, native_units));
+  constexpr unsigned maximum_units = 1048576;
+  constexpr unsigned agu_mask = 255;
+  constexpr unsigned accumulator_mask = 3;
+  if (instruction.native_units == 0 || instruction.native_units > maximum_units ||
+      ((instruction.agu_reads | instruction.agu_writes) & ~agu_mask) != 0 ||
+      ((instruction.move_reads | instruction.move_writes | instruction.arithmetic_writes) &
+       ~accumulator_mask) != 0 ||
+      instruction.agu_write_delay > 3 || instruction.transfer_write_delay > 1 ||
+      instruction.move_read_advance > 1) {
+    throw Fault("Invalid explicit DSP dependency description");
+  }
+  return delay(instruction);
 }
 
-void DspInterlocks::prepare(const std::uint32_t opcode, const unsigned native_units) {
-  if (prepared_) { throw Fault("DSP interlock instruction is already prepared"); }
-  const auto instruction = decode_interlock_instruction(opcode, native_units);
-  const auto stalls = delay(instruction);
+void DspInterlocks::prepare(const DspInterlockInstruction &instruction) {
+  const auto stalls = preview(instruction);
   prepared_ = instruction;
   prepared_stalls_ = stalls;
   fetched_ = false;
@@ -57,7 +66,9 @@ void DspInterlocks::observe_opcode(const std::uint32_t opcode) {
 }
 
 void DspInterlocks::commit(const DspInterlockInstruction &instruction, const unsigned stalls) {
-  const auto elapsed = instruction.native_units + stalls; // Decoder bounds each input to <=3.
+  const auto elapsed =
+      instruction.native_units +
+      stalls; // Native units are bounded; at most three dependency clocks are added.
   for (auto &remaining : agu_) { age(remaining, elapsed); }
   for (auto &remaining : arithmetic_) { age(remaining, elapsed); }
   for (auto &remaining : transfer_) { age(remaining, elapsed); }

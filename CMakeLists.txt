@@ -282,12 +282,13 @@ if(BUILD_TESTING OR BLOFELD_FUZZING)
     src/dsp/dsp_fetch_schedule_events.cpp src/dsp/dsp_fetch_peripheral_events.cpp
     src/dsp/dsp_pipeline.cpp src/dsp/dsp_pipeline_decode.cpp src/dsp/dsp_pipeline_transfer.cpp
     src/dsp/dsp_pipeline_loop.cpp src/dsp/dsp_pipeline_program.cpp src/dsp/dsp_pipeline_control.cpp src/dsp/dsp_loop_source.cpp
-    src/dsp/dsp_pipeline_execute.cpp src/dsp/dsp_interlocks.cpp src/dsp/dsp_interlock_decode.cpp
+    src/dsp/dsp_pipeline_execute.cpp src/dsp/dsp_interlock_decode.cpp
     src/dsp/dsp_interrupt_timing.cpp src/dsp/dsp_machine.cpp src/dsp/dsp_scheduled_run.cpp
     src/dsp/dsp_scheduled_events.cpp src/dsp/dsp_agu_interlocks.cpp src/dsp/dsp_machine_reference_dma.cpp
     src/dsp/dsp_scheduled_reset.cpp src/dsp/dsp_peripheral_read.cpp)
   target_include_directories(blofeld_dsp PUBLIC src)
   target_link_libraries(blofeld_dsp PUBLIC blofeld_dsp_peripherals blofeld_dsp_peripheral_calendar
+    blofeld_dsp_dependencies
     PRIVATE "$<LINK_ONLY:blofeld_dsp_branch_decode>" "$<LINK_ONLY:blofeld_dsp_control_decode>"
     "$<LINK_ONLY:blofeld_dsp_address_decode>"
     "$<LINK_ONLY:blofeld_dsp_peripheral_decode>"
@@ -3185,7 +3186,8 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS blofeld-native-region-clock-test blofeld-native-region-frontend-test
+  DEPENDS blofeld-dsp-native-dependencies-test
+    blofeld-native-region-clock-test blofeld-native-region-frontend-test
     blofeld-native-region-events-test blofeld-native-deferred-irq-test
     blofeld-native-region-mcu-test
     blofeld-dsp-rom-program-test blofeld-reference-original-midi-rom
