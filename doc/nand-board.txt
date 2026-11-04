@@ -267,3 +267,11 @@ and both unchanged strict refusals. Cell contents have independent literal
 expectations; five mid-status native/NAND restores repeat those expectations.
 See nand-functional-status-reference.json. Full original boot,
 physical status-pad values and complete instrument acceptance remain open.
+
+An actual original 1.25 reset with this correction passes the former status
+refusal and persists 72 known Global bytes on page 4576. CRC, cell knowledge and
+block flags are independently checked; MCU flash is unchanged. The 50M-operation
+host budget ends without a model fault during the original startup hold:
+400,206,090 DSP retirements and 173,151 silent stereo frames, with no MIDI sent.
+Main WAI, playable audio and complete startup remain unqualified. This run uses
+the frozen pre-c952 runtime closure; it does not qualify later DSP increments.
