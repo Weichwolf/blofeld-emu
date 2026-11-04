@@ -3,13 +3,17 @@
     "source": "https://github.com/Weichwolf/dsp56300",
     "revision": "46dc05f38c79199b940c327913874e55f9ae674d",
     "license": "GPL-3.0-only",
-    "integration": "Pinned independent execution core for the regular Board/headless runtime, with native REP, bounded memory grants and instruction-publication/checkpoint interfaces. Ordinary scalar accumulator-part stores and all eight L: RAM store/load views now have native guarded transfers, including sparse windows and one shared L: AGU update. Focused Release checks pass 2872 new long-load and 3458 retained long-store assertions; the newly linked Blofeld timing consumers pass 197 prefix and 13172 timeline checks. The six public SDK headers are unchanged. The device timeline still conservatively stages long loads without dependency metadata, so this core increment does not establish a connected-instrument speed gain. General native ISA coverage, complete Desktop/Keyboard operation and remaining legacy test migration are incomplete. Extensive quality campaigns remain deferred until original-firmware realtime.",
+    "integration": "Pinned independent execution core for the regular Board/headless runtime, with native REP, bounded RAM grants and instruction-publication/checkpoint interfaces. All eight L: RAM store/load views have native guarded transfers, including sparse windows and one shared AGU update. The device timeline now attempts one genuine bounded parallel/NOP retirement after its complete reserved dependency delay, including conservative L: loads; actual CPU progress and captured words/cost/revision are checked, with real staged fallback for I/O, changed code or refused grants. Focused Release consumers pass 56 bounded-owner, 197 prefix, 13199 timeline and 43 MCU assertions. The six public Core SDK headers are unchanged. Connected original-firmware acceptance, a whole-instrument speed gain, complete native ISA coverage and remaining legacy test migration are incomplete. Extensive quality campaigns remain deferred until original-firmware realtime.",
     "release_integration": {
       "core_archive_sha256": "d7f4c17711cb075824a75b3d2ddc555a85e67af1bc26871bed74d15f14bfbb05",
       "unchanged_public_headers": 6,
       "retained_root_source_base": "3f75847c43518f4363b425e31dd3b5a4a8babc1c",
       "link_manifest_sha256": "a9216c450b696f304a8ee3f8d9f888722f137d0514da1cfb6565f0a399a90282",
-      "qualification": "Focused timing consumers only; no repeated cold boot or instrument-speed claim"
+      "qualification": "Baseline Core revision adoption before bounded-owner integration; current focused execution consumers are recorded by execution_integration. No repeated cold boot or instrument-speed claim."
+    },
+    "execution_integration": {
+      "reference": "doc/dsp-native-owner-reference.json",
+      "scope": "Clocked bounded owners and preserved genuine staged fallbacks; no new original cold boot or instrument-throughput claim"
     }
   },
   "zlib": {

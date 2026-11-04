@@ -886,6 +886,66 @@ void test_conservative_timeline_checkpoint_and_reset() {
           " extra=" + std::to_string(reset_clone.clock().epoch_interlock_cycle_units()));
 }
 
+void test_clocked_native_long_load_checkpoint() {
+  constexpr unsigned move_r0 = 0x308000;
+  constexpr unsigned load_long_a10 = 0x40d800;
+  constexpr unsigned store_a0_gpio = 0x04c8dd;
+  constexpr unsigned low_word = 1;
+  constexpr std::uint64_t serialization = 3;
+  constexpr std::array program{move_r0, load_long_a10, store_a0_gpio, 0U};
+  Device device(program, true, blofeld::DspDependencyPolicy::conservative);
+  device.chip.bus().write({.space = blofeld::DspSpace::y, .address = source, .value = low_word});
+  device.retire_until(2);
+  const auto before = device.chip.cpu().jit_statistics();
+  advance(device.chip, *device.timeline);
+  const auto captured = device.timeline->checkpoint();
+  require(device.chip.cpu().progress().instructions == 2 && device.output() == 0 &&
+              device.chip.clock().interlock_cycle_units() == 1,
+          "A reserved long RAM transfer retains its first pre-gap and pending original opcode");
+  for (unsigned cycle = 0; cycle < serialization; ++cycle) {
+    advance(device.chip, *device.timeline);
+  }
+  constexpr unsigned word_bits = 24;
+  const auto expected = (std::uint64_t{sample} << word_bits) | low_word;
+  require(device.chip.cpu().progress().instructions == 3 &&
+              device.chip.cpu().registers().a == expected &&
+              device.chip.cpu().registers().r[0] == source + 1 && device.output() == 0 &&
+              device.chip.clock().interlock_cycle_units() == serialization &&
+              device.chip.cpu().jit_statistics().native_move_instructions ==
+                  before.native_move_instructions + 1,
+          "Clocked A10 RAM load actually executes natively after the full gap with one AGU update");
+  blofeld::OwnDspMachine pre_clone(clocks);
+  blofeld::OwnDspTimeline pre_restored(pre_clone, captured);
+  for (unsigned cycle = 0; cycle < serialization; ++cycle) { advance(pre_clone, pre_restored); }
+  require(pre_clone.cpu().registers() == device.chip.cpu().registers() &&
+              pre_clone.cpu().progress() == device.chip.cpu().progress() &&
+              pre_clone.clock().elapsed_ticks() == device.chip.clock().elapsed_ticks(),
+          "Paired checkpoint restores the captured native transfer and remaining exact clocks");
+  advance(device.chip, *device.timeline);
+  const auto post_gap = device.timeline->checkpoint();
+  require(device.chip.cpu().progress().instructions == 3 && device.output() == 0 &&
+              device.chip.clock().interlock_cycle_units() == serialization + 1,
+          "Native retirement preserves the delayed genuine GPIO output and pending post-gap");
+  for (unsigned cycle = 0; cycle < serialization; ++cycle) {
+    advance(device.chip, *device.timeline);
+  }
+  constexpr std::uint64_t native_periods = 6;
+  require(device.output() == low_word && device.chip.cpu().progress().instructions == 4 &&
+              device.chip.clock().native_cycle_units() == native_periods &&
+              device.chip.clock().interlock_cycle_units() == 2 * serialization &&
+              device.chip.clock().elapsed_ticks() ==
+                  reset_ticks + (native_periods + 2 * serialization) * period,
+          "The actual peripheral effect follows the unchanged native/pre/post clock sequence");
+  blofeld::OwnDspMachine post_clone(clocks);
+  blofeld::OwnDspTimeline post_restored(post_clone, post_gap);
+  for (unsigned cycle = 0; cycle < serialization; ++cycle) { advance(post_clone, post_restored); }
+  require(post_clone.cpu().registers() == device.chip.cpu().registers() &&
+              post_clone.cpu().progress() == device.chip.cpu().progress() &&
+              post_clone.clock().elapsed_ticks() == device.chip.clock().elapsed_ticks() &&
+              post_clone.bus().gpio(blofeld::DspPort::c).outputs().levels == low_word,
+          "Post-gap restoration retains the real RAM result and GPIO publication boundary");
+}
+
 void test_conservative_timeline_keeps_real_bus_fault() {
   constexpr unsigned move_r0 = 0x308000;
   constexpr unsigned load_long_a10 = 0x40e000;
@@ -978,6 +1038,7 @@ int main() {
     test_real_register_bit_control();
     test_real_accumulator_loop_counters();
     test_conservative_timeline_checkpoint_and_reset();
+    test_clocked_native_long_load_checkpoint();
     test_conservative_timeline_keeps_real_bus_fault();
     std::cout << "Native dependency timeline: " << assertions << " assertions passed\n";
     return 0;

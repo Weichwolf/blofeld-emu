@@ -1,15 +1,17 @@
 Timed native DSP prefixes
 
   cmake --build build/release --target blofeld-dsp-native-timed-test \
-    blofeld-native-dependency-timeline-test blofeld-native-region-mcu-test
+    blofeld-dsp-native-owner-test blofeld-native-dependency-timeline-test \
+    blofeld-native-region-mcu-test
   ctest --test-dir build/release --output-on-failure \
-    -R '^(dsp_native_timed|native_dependency_timeline|native_region_mcu)$'
+    -R '^(dsp_native_timed|dsp_native_owner|native_dependency_timeline|native_region_mcu)$'
 
 Costs come from actual Core previews. Only completed CPU prefixes commit history;
 unknown costs/dependencies stop native prefix planning. Control and DO endpoints
 terminate the plan. REP retains the real Core latch. Native execution remains enabled.
-Owner completion requires the offered opcode/extension/base cost and a genuine
-staged retirement; changing a host-supplied word cannot replace that offer.
+Owner completion requires the offered opcode/extension/base cost and genuine
+Core retirement. Staged completion retains its actual Core flow receipt;
+changing a host-supplied word cannot replace that offer.
 
 Own normal-NXP timing windows accompany real CPU/register/peripheral assertions,
 checkpoint/mutation, REP/DO, native-control and ownership controls. The Board
@@ -24,7 +26,7 @@ including equal taken/fallthrough PCs.
 
 The raw timing kernel defaults to qualified dependency descriptions. The device
 timeline defaults to conservative execution: a valid Core instruction without a
-dependency description executes through genuine staged Core effects, with three
+dependency description executes through genuine Core effects, with three
 functional serialization clocks before and after it. Adjacent barriers overlap;
 base instruction costs still come from the Core. These clocks cover pending
 resources in the current model; they are not measured hardware instruction or bus
@@ -35,12 +37,27 @@ resource description or CPU result is fabricated. Checkpoint/copy preserve polic
 and pending barriers; reset preserves policy and clears pending work. Negative fixtures explicitly
 select qualified mode. See dsp-conservative-execution-reference.json.
 
+After the complete reserved delay has elapsed, a parallel/NOP instruction may
+retire through exactly one bounded Core call. Matching captured words (including
+extensions), actual preview cost, unchanged code/mapping revision and actual
+single-instruction progress are required. This activates native RAM transfers
+after a dependency delay, including conservative L: loads. The three-clock
+serialization policy and all previously described delays remain unchanged.
+Refused native grants, real peripherals, changed code and other instruction
+families retain the captured staged path. Conditional flow still requires its
+actual staged receipt; no InstructionOutcome or peripheral response is invented.
+See dsp-native-owner-reference.json for the focused path/clock evidence.
+
 Register bit jumps/branches and DO/DOR/REP counters cover all six accumulator
 parts and X0/X1/Y0/Y1. Matching accumulator writers require one transfer period;
 an intervening NOP removes it. Independent controls and source/status readback
 are pinned in dsp-register-control-reference.json (238 new NXP windows).
 
-Focused Release consumers pass 197 prefix, 13,172 timeline and 43 MCU checks.
+Focused Release consumers pass 56 bounded-owner, 197 prefix, 13,199 timeline
+and 43 MCU checks, including genuine native L: reads with paired checkpoints
+and delayed actual GPIO publication. Extensive campaigns remain deferred.
+
+The connected-reset evidence below predates this bounded-owner increment.
 A bounded original 1.25 reset reaches 18,836,211 DSP retirements and 5,552 valid
 serial PCM frames. A read-only public-Board observer confirms all 528 bytes of
 the first overlay at entry and return, and original overlay execution. Every

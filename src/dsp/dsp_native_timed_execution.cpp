@@ -143,6 +143,14 @@ void DspNativeTimedExecution::complete_owner(const dsp56300::Core &cpu,
     throw Fault("DSP dependency completion lacks its actual staged retirement pc=" +
                 hex(words.address, 6));
   }
+  commit_owner(accounted, after, outcome->control_transfer);
+}
+
+void DspNativeTimedExecution::commit_owner(const DspTimedInstruction accounted,
+                                           const dsp56300::Progress after,
+                                           const bool control_transfer) {
+  const auto words = accounted.words;
+  const auto base_units = accounted.base_units;
   const auto described = describe(words.opcode, base_units);
   if (!described && policy_ == DspDependencyPolicy::conservative &&
       dsp56300::inspect_instruction(words.opcode)) {
@@ -166,7 +174,7 @@ void DspNativeTimedExecution::complete_owner(const dsp56300::Core &cpu,
   static_cast<void>(history_.complete(base_units));
   expected_ = after;
   offered_.reset();
-  control_delay_ = conditional(words.opcode) && !outcome->control_transfer ? 1U : 0U;
+  control_delay_ = conditional(words.opcode) && !control_transfer ? 1U : 0U;
 }
 
 void DspNativeTimedExecution::reset(const dsp56300::Progress actual) {

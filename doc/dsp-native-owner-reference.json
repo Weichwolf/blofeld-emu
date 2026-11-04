@@ -1,0 +1,77 @@
+{
+  "license": "GPL-3.0-only",
+  "scope": "Genuine bounded parallel/NOP execution after reserved dependency clocks in the connected DSP timeline; focused optimized Release, not instrument acceptance",
+  "root_base": "8b180566bef2f4d52817c5610b0b306fffc9b825",
+  "source_sha256": {
+    "cmake/NativeTimedExecution.cmake": "36a95b0136f1ccf8e2630687d7499033d111dde44ce1323a0e380ea570c10ae3",
+    "src/dsp/dsp_native_timed_execution.cpp": "6a5a1ff7cda28267f445ef65c54adabbd797f51b113b72e51cd9f47ab40d0dc5",
+    "src/dsp/dsp_native_timed_execution.hpp": "5b2b5472d7a45078a1080641175aec4d6d9ca2bde9feae1171de886e1c4b2c06",
+    "src/dsp/dsp_native_timed_owner.cpp": "231828e43254004a555bbf07487bf98c00daa024c120d5df874ca25376471bb4",
+    "src/dsp/own_dsp_native_regions.cpp": "135eb661b46683f4fb1089a879b6767754e8680a02278c4a891cb1f3d0f0140d",
+    "test/dsp_native_owner_test.cpp": "e8943d1c36b88f0872e5a50c4dfe8712a4d5c0efeb17de6169aaaa568a73c753",
+    "test/native_dependency_timeline_test.cpp": "124de72e3b05ab0f5b416dc9eef25510b914ded8a494b61b9e77894225811a7f"
+  },
+  "core_revision": "46dc05f38c79199b940c327913874e55f9ae674d",
+  "core_archive_sha256": "901a5b7e57b76f6bfa48357e060bb4b6da8532796d74c54d677e1243b6c558d2",
+  "compiler": "LLVM19/C++23 O3/native ThinLTO; warnings as errors, zero clang-tidy findings in affected consumers",
+  "class_declarations_changed": true,
+  "class_fields_changed": false,
+  "all_affected_linked_class_consumers_rebuilt": true,
+  "native_receipt": "The timing kernel owns the actual Core::run call with one instruction and the reserved base cost, checks actual progress/cost and unchanged captured words/revision, then commits timing history. No caller-supplied successful CPU outcome is accepted.",
+  "staged_receipt_guards_unchanged": true,
+  "admission": "Parallel/NOP only after full reserved pre-delay; Core RAM grants remain authoritative. Existing zero-delay prefix/control path is retained.",
+  "independent_expectations": [
+    "Eight real native L: destination views, fixed flags, exactly one post-increment and actual native transfer counts",
+    "Unchanged three-clock pre/post barriers for conservative metadata gaps",
+    "A matching accumulator RAM store retains one genuine dependency clock and then executes natively",
+    "Consumed or shortened-clock reservations fail before another retirement",
+    "Code substitution retains the original captured instruction for actual staged fallback",
+    "Peripheral addresses receive no speculative callback or AGU update; the genuine subsequent owned read retains its real space/address/PC fault",
+    "Connected timeline checkpoints in both gaps preserve exact CPU/clock state and the later actual GPIO publication"
+  ],
+  "checks": {
+    "bounded_owner": 56,
+    "retained_prefix": 197,
+    "timeline": 13199,
+    "retained_mcu": 43
+  },
+  "runs": {
+    "canonical-owner-r1": {
+      "pid": 2004510,
+      "actual_exit": 0,
+      "reaped": true,
+      "actual_executable_sha256": "0815a9eda7053f08d7d0f0685a29acd8e6e2bcb3fd59245b35ea2ea90e11aabd",
+      "log_sha256": "2b46e392cbffa8ef6b8cd82c4cd825906c4d23906c90cde5b1683607b790bed2"
+    },
+    "canonical-prefix-r1": {
+      "pid": 2004532,
+      "actual_exit": 0,
+      "reaped": true,
+      "actual_executable_sha256": "96d35623a1f26a24e2a45b4159800148cfc8c0187d4262da8dcb45410d24c5ea",
+      "log_sha256": "620121ab2ea546c200c066af844238a4ecb9fe957eea9b5e1dae15a0c6dc8339"
+    },
+    "canonical-timeline-r1": {
+      "pid": 2004542,
+      "actual_exit": 0,
+      "reaped": true,
+      "actual_executable_sha256": "fd44b310fcce4b945a698b844c357844d27ee72a5d5125bca80a48f26b291827",
+      "log_sha256": "0e439fcfb2ba39aad8e3ff2f2f721213ea87aeb496efe9d2a3aa229a703086b7"
+    },
+    "canonical-mcu-r1": {
+      "pid": 2005672,
+      "actual_exit": 0,
+      "reaped": true,
+      "actual_executable_sha256": "8264de17b744cb909d492c56760031a740e724a32aa7f6bf6ba0270202c9500c",
+      "log_sha256": "adf984c7e68819534cec3a45cc69bd699feb1f0fcdcf41eb443a97375aff9760"
+    }
+  },
+  "code_generation_scope": "Normal canonical Core archive and coherent kernel/timeline/MCU consumers. Earlier isolated prototype used the separately qualified generic Core archive; it is supporting evidence only.",
+  "connected_original_run": "No new original reset was started by this increment. Existing boot evidence predates this execution path; the ongoing NAND/standard-MIDI original run uses its independently frozen earlier timing kernel.",
+  "performance": "Native transfer counts establish the fast path; no qualified whole-instrument or paired wall-time speed claim while another original-firmware process runs.",
+  "deferred": "Extensive quality, sanitizer matrices and broad regression until original firmware runs in real time",
+  "open": "Other instruction-family reservations still use genuine staged execution when required; full instrument/Keyboard/MIDI/audio/USB/update/recovery acceptance and real-time operation remain open.",
+  "fuzz": false,
+  "instrument_complete": false,
+  "affected_consumers_scope": "The four focused binaries in this record only. No old/new class-declaration objects are mixed within them. The production headless relink follows this publication.",
+  "conditional_scope": "Bounded-owner admission covers nonconditional parallel/NOP kinds only. Conditional-opcode timing continues to use the actual staged Core flow receipt."
+}

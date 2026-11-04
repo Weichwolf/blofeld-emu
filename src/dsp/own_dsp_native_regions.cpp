@@ -168,22 +168,32 @@ void OwnDspTimeline::finish_native_reservation() {
     throw Fault("DSP native completion requires a fully clocked reservation");
   }
   if (!native_staged_) {
-    const auto preview = machine_.cpu_.run(dsp56300::RunBudget{});
-    if (native_dependencies_ == 0 && preview.next && same_words(*preview.next, *native_words_)) {
-      const auto native = native_history_.run(
-          machine_.cpu_, machine_.io_, {.instructions = 1, .cycles = native_cost_});
-      if (native.execution.fault.kind != dsp56300::FaultKind::none) { return; }
-      if (native.execution.dispatches == 1) {
-        if (native.cycles != native_cost_) {
-          throw Fault("DSP native completion changed base cost");
+    bool completed = false;
+    if (native_dependencies_ == 0) {
+      const auto preview = machine_.cpu_.run(dsp56300::RunBudget{});
+      if (preview.next && same_words(*preview.next, *native_words_)) {
+        const auto native = native_history_.run(
+            machine_.cpu_, machine_.io_, {.instructions = 1, .cycles = native_cost_});
+        const bool retired = native.execution.dispatches == 1;
+        const bool invalid =
+            native.execution.dispatches > 1 || (retired && native.cycles != native_cost_);
+        if (native.execution.fault.kind == dsp56300::FaultKind::none && invalid) {
+          throw Fault("DSP native completion changed its single-opcode budget or base cost");
         }
-        machine_.bus_.observe_omr(machine_.cpu_.registers().omr);
-        native_words_.reset();
-        return;
+        completed = retired;
       }
-      if (native.execution.dispatches != 0) {
-        throw Fault("DSP native completion exceeded one opcode");
-      }
+    } else {
+      completed = native_history_.run_owner(machine_.cpu_,
+                                            machine_.io_,
+                                            {.words = *native_words_,
+                                             .base_units = native_cost_,
+                                             .dependency_units = native_dependencies_});
+    }
+    if (machine_.cpu_.fault().kind != dsp56300::FaultKind::none) { return; }
+    if (completed) {
+      machine_.bus_.observe_omr(machine_.cpu_.registers().omr);
+      native_words_.reset();
+      return;
     }
     // A peripheral boundary or code mutation uses the captured original
     // instruction, never newer bytes with the previously reserved cost.
