@@ -6,10 +6,12 @@ SPI, GPIO, NAND, MIDI input and native ESAI output. Configuration and memory inp
 are declared experiment contracts; they are not qualified Desktop/Keyboard
 profiles. See reference-board.txt for the format and diagnostics.
 
-The required dsp-execution setting selects reference-effects or native-cycles.
-The latter uses computed native instruction budgets with CPU-only publication
-grouping; physical interlocks and original connected startup remain separate
-qualification requirements. See dsp-native-budget.txt.
+The required dsp-execution setting selects reference-effects, native-cycles or
+native-regions. Native-cycles uses computed native instruction budgets with
+CPU-only publication grouping (dsp-native-budget.txt). Native-regions couples
+bounded native CPU/RAM work to MCU/peripheral horizons and deferred IRQs
+(dsp-native-regions.txt). These diagnostic configurations do not qualify full
+original startup or either normal device profile.
 
   blofeld-headless --firmware update.zip --reference-board scenario.bfboard \
     --dsp-rom packed24.bin --device-state /private/existing-dir/unit.bfnvm \

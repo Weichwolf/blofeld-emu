@@ -57,9 +57,11 @@ horizons, genuine deferred IRQ/vector reads, DMA, reset and paired snapshots.
 Seventeen directed groups per ASan/UBSan and TSan profile qualify the combined
 layout and regular Board paths, including computed cold/live NAND writes and
 CE-enabled native reservations with the explicit empty external P-cache profile.
-The regular application entrypoint compiles in both profiles. These authored
-reset/runtime cases do not establish complete original-firmware boot, musical
-functions, hardware equivalence or real-time throughput. See dsp-native-regions.txt.
+The regular application entrypoint compiles in both profiles. Its optimized
+build links without the foreign DSP and passes original firmware inspection.
+These authored reset/runtime cases do not establish complete original-firmware
+boot, musical functions, hardware equivalence or real-time throughput. See
+dsp-native-regions.txt.
 The VSL component test now excludes the former interpreter/assembler and passes
 its 9,216 independent numeric/address cases, native REP/modulo and contextual
 refusals under both sanitizer profiles. This preserves useful legacy coverage;
