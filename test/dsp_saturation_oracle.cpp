@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp_norm_expectations.hpp"
 #include "dsp_saturation_fixture.hpp"
 
 #include <array>
@@ -279,7 +279,9 @@ Expected expected(const Input &input) {
                               (((value & (std::uint64_t{1} << 48)) != 0) ? 2U : 0U) |
                               (((value & (std::uint64_t{1} << 47)) != 0) ? 1U : 0U);
     const auto action = table.at(selector);
-    result.overflowed = action != 0;
+    // Table3-1 selects the stored value; it does not erase a full56 overflow.
+    // FM5-1's V/L rules and an independent vendor simulator retain that event.
+    result.overflowed = result.overflowed || action != 0;
     if (action == 1) { value = result.rounded ? rounded_positive_limit : positive_limit; }
     if (action == 2) { value = negative_limit; }
   }

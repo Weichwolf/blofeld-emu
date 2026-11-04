@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
-#include "dsp_norm_fixture.hpp"
-#include "dsp_operand_fixture.hpp"
+#include "dsp_norm_expectations.hpp"
 #include "dsp_saturation_fixture.hpp"
 
 #include <array>
@@ -39,7 +38,7 @@ constexpr std::array words{0U, 1U, 0x7fffffU, 0x800000U, word_mask};
 constexpr std::array sources{
     std::uint64_t{0}, std::uint64_t{1}, accumulator_mask, sign_bit, sign_bit - 1};
 constexpr std::array scales{0U, scale_down, scale_up};
-constexpr std::array statuses{0U, carry | overflow, operands::all_ccr};
+constexpr std::array statuses{0U, carry | overflow, 0xffU};
 
 void variants(std::vector<Input> &result, Input input, const bool round = false) {
   for (const auto mode : {0U, saturation_mode}) {
@@ -307,6 +306,56 @@ std::vector<Input> regressions() {
            .y = 1,
            .status = saturation_mode}};
 }
+
+void overflow_boundary(std::vector<Input> &result,
+                       const Input input,
+                       const std::uint64_t value,
+                       unsigned flags) {
+  constexpr unsigned all_ccr = 0xff;
+  const auto wanted = expected(input);
+  auto mask = all_ccr;
+  if (!wanted.qualified_carry) { mask &= ~carry; }
+  if (input.operation == Operation::shift_left && input.destination == sign_bit) { flags |= carry; }
+  require(wanted.value == value && (wanted.flags & mask) == (flags & mask),
+          "Literal full56 overflow/zero/48-bit limiting flags retain independent V/L witnesses");
+  result.push_back(input);
+}
+
+std::vector<Input> overflow_flags() {
+  struct Boundary {
+    std::uint64_t input;
+    std::array<std::uint64_t, 2> results;
+    std::array<unsigned, 2> flags;
+  };
+
+  // Manual table3-1/table5-1, corroborated by an independent vendor simulator.
+  // SM limiting and full56 overflow are separate sources of V and sticky L.
+  constexpr std::array boundaries{
+      Boundary{.input = sign_bit, .results = {0, 0}, .flags = {0x56, 0x56}},
+      Boundary{.input = 0, .results = {0, 0}, .flags = {0x14, 0x14}},
+      Boundary{.input = positive_limit,
+               .results = {0x00fffffffffffe, positive_limit},
+               .flags = {0x30, 0x42}}};
+  constexpr std::array modes{0U, saturation_mode};
+  std::vector<Input> result;
+  for (const auto operation :
+       {Operation::add_left, Operation::subtract_left, Operation::shift_left}) {
+    for (const auto boundary : boundaries) {
+      for (std::size_t mode = 0; mode < modes.size(); ++mode) {
+        for (const bool destination_b : {false, true}) {
+          overflow_boundary(result,
+                            {.operation = operation,
+                             .destination = boundary.input,
+                             .status = modes.at(mode),
+                             .destination_b = destination_b},
+                            boundary.results.at(mode),
+                            boundary.flags.at(mode));
+        }
+      }
+    }
+  }
+  return result;
+}
 }
 
 std::vector<Input> cases(const std::string_view scope) {
@@ -318,6 +367,7 @@ std::vector<Input> cases(const std::string_view scope) {
   if (scope == "accumulate") { return product_cases(true); }
   if (scope == "rounding") { return rounding_cases(); }
   if (scope == "exceptions") { return exception_cases(); }
+  if (scope == "overflow-flags") { return overflow_flags(); }
   if (scope == "mac-host-overflow") {
     return {{.operation = Operation::accumulate,
              .destination = sign_bit - 1,

@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp_norm_fixture.hpp"
-#include "dsp_operand_fixture.hpp"
+#include "dma_native_fixture.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
+#include "dsp_norm_expectations.hpp"
 #include "dsp_saturation_fixture.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -17,6 +18,8 @@
 
 namespace blofeld::test::saturation {
 namespace {
+namespace native = dma_test;
+using Program = native::NativeProgram;
 constexpr std::size_t batch_limit = 1800;
 constexpr unsigned bfu_left_word = 0x0c1d02;  // FM13-15: BFU ASL #1,A,A, not single-bit ASL A.
 constexpr unsigned bfu_right_word = 0x0c1c02; // FM13-17: BFU ASR #1,A,A.
@@ -29,6 +32,50 @@ constexpr unsigned power_product_word = 0x0100d0;     // QQ=01: X0,#n.
 constexpr unsigned mixed_multiply_word = 0x01278d;    // QQQQ=1101: X0,Y0, signed/unsigned.
 constexpr unsigned mixed_accumulate_word = 0x01268d;
 constexpr unsigned double_accumulate_word = 0x01248d; // ss=00, QQQQ=1101.
+// FM13-118/131: long-immediate moves to A0/A1/A2/B0/B1/B2/X0/X1/Y1/SR/Y0/R0.
+constexpr std::array operand_seeds{0x50f400U,
+                                   0x54f400U,
+                                   0x52f400U,
+                                   0x51f400U,
+                                   0x55f400U,
+                                   0x53f400U,
+                                   0x44f400U,
+                                   0x45f400U,
+                                   0x47f400U,
+                                   0x05f439U,
+                                   0x46f400U,
+                                   0x60f400U};
+
+struct Encoding {
+  Operation operation;
+  unsigned a;
+  unsigned b;
+};
+
+// FM13 instruction diagrams and table12-18 (NE=0010). The two columns name
+// destination A/B; EXTRACTU reads the other accumulator in each column.
+constexpr std::array scalar_encodings{
+    Encoding{.operation = Operation::add, .a = 0x200040, .b = 0x200048},
+    Encoding{.operation = Operation::subtract, .a = 0x200044, .b = 0x20004c},
+    Encoding{.operation = Operation::adc, .a = 0x200021, .b = 0x200029},
+    Encoding{.operation = Operation::sbc, .a = 0x200025, .b = 0x20002d},
+    Encoding{.operation = Operation::add_left, .a = 0x200012, .b = 0x20001a},
+    Encoding{.operation = Operation::add_right, .a = 0x200002, .b = 0x20000a},
+    Encoding{.operation = Operation::subtract_left, .a = 0x200016, .b = 0x20001e},
+    Encoding{.operation = Operation::subtract_right, .a = 0x200006, .b = 0x20000e},
+    Encoding{.operation = Operation::absolute, .a = 0x200026, .b = 0x20002e},
+    Encoding{.operation = Operation::negate, .a = 0x200036, .b = 0x20003e},
+    Encoding{.operation = Operation::shift_left, .a = 0x200032, .b = 0x20003a},
+    Encoding{.operation = Operation::shift_right, .a = 0x200022, .b = 0x20002a},
+    Encoding{.operation = Operation::round, .a = 0x200011, .b = 0x200019},
+    Encoding{.operation = Operation::transfer, .a = 0x200001, .b = 0x200009},
+    Encoding{.operation = Operation::increment, .a = 0x000008, .b = 0x000009},
+    Encoding{.operation = Operation::decrement, .a = 0x00000a, .b = 0x00000b},
+    Encoding{.operation = Operation::normalize, .a = 0x01d815, .b = 0x01d81d},
+    Encoding{.operation = Operation::conditional_transfer, .a = 0x022000, .b = 0x022008},
+    Encoding{.operation = Operation::extract, .a = 0x0c1a98, .b = 0x0c1a89},
+    Encoding{.operation = Operation::insert, .a = 0x0c1b68, .b = 0x0c1b69},
+    Encoding{.operation = Operation::self_move, .a = 0x21ce00, .b = 0x21ef00}};
 
 bool product_operation(const Operation operation) {
   return operation == Operation::multiply || operation == Operation::multiply_round ||
@@ -53,7 +100,7 @@ unsigned mixed_product(const Input &input) {
   return word;
 }
 
-void emit_product(DspProgram &code, const Input &input) {
+void emit_product(Program &code, const Input &input) {
   const bool accumulate =
       input.operation == Operation::accumulate || input.operation == Operation::accumulate_round;
   if (input.operation == Operation::double_accumulate ||
@@ -104,18 +151,37 @@ std::string product_instruction(const Input &input, const std::string &destinati
   return name + first + second + ',' + destination;
 }
 
-void seed(DspProgram &code, const Input &input) {
-  operands::seed_operands(code,
-                          {.a = input.destination_b ? input.source : input.destination,
-                           .b = input.destination_b ? input.destination : input.source,
-                           .control = input.x,
-                           .source = input.y,
-                           .status = input.status});
-  code.immediate("y0", input.y);
-  code.immediate("r0", counter_seed);
+void seed(Program &code, const Input &input) {
+  const auto a = input.destination_b ? input.source : input.destination;
+  const auto b = input.destination_b ? input.destination : input.source;
+  const std::array words{static_cast<unsigned>(a & word_mask),
+                         static_cast<unsigned>((a >> word_bits) & word_mask),
+                         static_cast<unsigned>(a >> data_bits),
+                         static_cast<unsigned>(b & word_mask),
+                         static_cast<unsigned>((b >> word_bits) & word_mask),
+                         static_cast<unsigned>(b >> data_bits),
+                         input.x,
+                         input.y,
+                         input.y ^ word_mask,
+                         masked_status | input.status,
+                         input.y,
+                         counter_seed};
+  for (std::size_t index = 0; index < words.size(); ++index) {
+    code.word(operand_seeds.at(index));
+    code.word(words.at(index));
+  }
 }
 
-void emit(DspProgram &code, const Input &input) {
+unsigned scalar_opcode(const Input &input) {
+  for (const auto &encoding : scalar_encodings) {
+    if (encoding.operation == input.operation) {
+      return input.destination_b ? encoding.b : encoding.a;
+    }
+  }
+  throw Fault("Expected a scalar saturation fixture operation");
+}
+
+void emit(Program &code, const Input &input) {
   if (product_operation(input.operation)) {
     emit_product(code, input);
     return;
@@ -126,20 +192,21 @@ void emit(DspProgram &code, const Input &input) {
     code.word(word);
     return;
   }
-  code.emit(instruction(input));
+  code.word(scalar_opcode(input));
 }
 
-void verify(DspMachine &machine, const Input &input) {
-  const auto before = machine.cpu().debug_state();
-  require(before.cpu.a == (input.destination_b ? input.source : input.destination) &&
-              before.cpu.b == (input.destination_b ? input.destination : input.source) &&
-              (before.cpu.x & word_mask) == input.x && (before.cpu.y & word_mask) == input.y &&
-              (before.cpu.x >> word_bits) == input.y &&
-              (before.cpu.y >> word_bits) == (input.y ^ word_mask) &&
-              before.cpu.sr == (masked_status | input.status) && before.cpu.r.at(0) == counter_seed,
+void verify(OwnDspMachine &machine, const Input &input) {
+  const auto before = machine.cpu().registers();
+  const auto progress = machine.cpu().progress();
+  require(before.a == (input.destination_b ? input.source : input.destination) &&
+              before.b == (input.destination_b ? input.destination : input.source) &&
+              (before.x & word_mask) == input.x && (before.y & word_mask) == input.y &&
+              (before.x >> word_bits) == input.y &&
+              (before.y >> word_bits) == (input.y ^ word_mask) &&
+              before.sr == (masked_status | input.status) && before.r.at(0) == counter_seed,
           "Native setup supplies independent operand values, modes, flags and counter");
   const auto wanted = expected(input);
-  auto cpu = before.cpu;
+  auto cpu = before;
   if (input.destination_b) {
     cpu.b = wanted.value;
   } else {
@@ -148,22 +215,20 @@ void verify(DspMachine &machine, const Input &input) {
   cpu.pc += input.form == ProductForm::immediate ? 2U : 1U;
   cpu.sr = (cpu.sr & ~wanted.flag_mask) | wanted.flags;
   cpu.r.at(0) = static_cast<unsigned>(std::int64_t{counter_seed} + wanted.counter_delta);
-  machine.cpu().step();
-  auto after = machine.cpu().debug_state();
-  const auto observed_status = after.cpu.sr;
+  native::step_native(machine);
+  auto after = machine.cpu().registers();
+  const auto observed_status = after.sr;
   if (!wanted.qualified_carry) {
     cpu.sr &= ~carry;
-    after.cpu.sr &= ~carry;
+    after.sr &= ~carry;
   }
-  const auto context =
-      instruction(input) + " D=" + number(input.destination) + " S=" + number(input.source) +
-      " X0=" + number(input.x) + " Y0=" + number(input.y) + " incoming SR=" + number(input.status) +
-      " expected value=" + number(wanted.value) +
-      " observed value=" + number(input.destination_b ? after.cpu.b : after.cpu.a) +
-      " expected SR=" + number(cpu.sr) + " observed SR=" + number(observed_status);
-  require(after.cpu == cpu && after.native_instructions == before.native_instructions + 1 &&
-              after.stack_high == before.stack_high && after.stack_low == before.stack_low &&
-              after.ep == before.ep && after.sz == before.sz && after.sc == before.sc,
+  const auto context = instruction(input) + " D=" + number(input.destination) +
+                       " S=" + number(input.source) + " X0=" + number(input.x) +
+                       " Y0=" + number(input.y) + " incoming SR=" + number(input.status) +
+                       " expected value=" + number(wanted.value) +
+                       " observed value=" + number(input.destination_b ? after.b : after.a) +
+                       " expected SR=" + number(cpu.sr) + " observed SR=" + number(observed_status);
+  require(after == cpu && machine.cpu().progress().instructions == progress.instructions + 1,
           "Independent arithmetic, literal saturation table and qualified whole-state outcome: " +
               context);
 }
@@ -206,19 +271,18 @@ std::string instruction(const Input &input) {
 }
 
 void run(const std::span<const Input> inputs) {
-  DspMachine machine;
   for (std::size_t start = 0; start < inputs.size(); start += batch_limit) {
     const auto count = std::min(batch_limit, inputs.size() - start);
     const auto batch = inputs.subspan(start, count);
-    DspProgram code;
+    Program code;
     for (const auto &input : batch) {
       seed(code, input);
       emit(code, input);
     }
-    machine.cpu().reset_spi_boot();
-    code.install(machine.bus());
+    OwnDspMachine machine(native::native_clocks);
+    native::reset_native(machine, code);
     for (const auto &input : batch) {
-      for (unsigned step = 0; step < preamble_steps; ++step) { machine.cpu().step(); }
+      for (unsigned step = 0; step < preamble_steps; ++step) { native::step_native(machine); }
       verify(machine, input);
     }
   }

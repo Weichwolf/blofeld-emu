@@ -2429,13 +2429,6 @@ if(BUILD_TESTING)
     test/dsp_checkpoint_interrupts.cpp test/dsp_checkpoint_peripherals.cpp)
   target_link_libraries(blofeld-dsp-checkpoint-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_checkpoint COMMAND blofeld-dsp-checkpoint-test)
-  add_executable(blofeld-dsp-saturation-test test/dsp_saturation_test.cpp
-    test/dsp_saturation_oracle.cpp test/dsp_saturation_cases.cpp)
-  target_link_libraries(blofeld-dsp-saturation-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  foreach(scope IN ITEMS regressions arithmetic increment decrement multiply accumulate rounding exceptions mac-host-overflow)
-    add_test(NAME dsp_saturation_${scope} COMMAND blofeld-dsp-saturation-test ${scope})
-    set_tests_properties(dsp_saturation_${scope} PROPERTIES TIMEOUT 120)
-  endforeach()
   add_executable(blofeld-dsp-power-test test/dsp_power_test.cpp test/dsp_saturation_oracle.cpp)
   target_link_libraries(blofeld-dsp-power-test PRIVATE blofeld_dsp blofeld_dsp_native)
   foreach(scope IN ITEMS mpy mpyr mac macr reject-a-mpy reject-b-mpy reject-a-mpyr reject-b-mpyr

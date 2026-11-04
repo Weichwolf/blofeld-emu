@@ -295,10 +295,13 @@ NAND event formatting is disabled by default and follows the runtime --trace
 option. A startup-selected lazy sink evaluates no formatter when disabled;
 contextual failures remain visible. Off/on component tests preserve the actual
 array byte, complete protocol/timing state, reset and clone/refusal contracts in
-both sanitizer profiles and Core0115/390. The regular runtime pins Core390 with
-four actual fetch/checkpoint interface passes. Optimized O3/ThinLTO/native-CPU
-ELFs contain no sanitizer or foreign-DSP runtime and pass the two telemetry
-contracts plus a firmware inspection smoke. Full original boot, playable output
-and measured real-time factor remain open. A rounded full56 MACR V/L boundary
-and saturation test migration remain open; no instrument percentage is inferred.
+both sanitizer profiles and Core0115/390 in the original telemetry record.
+The current core pin and its interface/numeric qualification are recorded in
+dependencies.json and fused-rounding-adoption-reference.json. Optimized
+O3/ThinLTO/native-CPU ELFs contain no sanitizer or foreign-DSP runtime. The
+retained saturation target now uses the independent core: all 82803 authored
+inputs and four causal frontend/events/MCU/NAND groups pass in each sanitizer
+profile. Fused MACR cancellation and independent full56 overflow/limiting controls
+retain their real V/L behavior. Full original boot, playable output and measured
+real-time factor remain open; no instrument percentage is inferred.
 See telemetry.txt and telemetry-reference.json. No fuzzing was run.
