@@ -89,6 +89,7 @@ set(CMAKE_CXX_CLANG_TIDY "${BLOFELD_CLANG_TIDY};--warnings-as-errors=*")
 include(cmake/Hc12Spec.cmake)
 include(cmake/Hcs08Spec.cmake)
 include(cmake/OwnDspComponents.cmake)
+include(cmake/NativeTimedExecution.cmake)
 include(cmake/ReferenceRomFixtures.cmake)
 include(cmake/SerialPcm.cmake)
 add_library(blofeld_hcs08 src/keyboard/hcs08.cpp src/keyboard/hcs08_interrupts.cpp src/keyboard/hcs08_registers.cpp src/keyboard/hcs08_ccr.cpp)
@@ -3186,7 +3187,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS blofeld-dsp-native-dependencies-test
+  DEPENDS blofeld-dsp-native-timed-test blofeld-dsp-native-dependencies-test
     blofeld-native-region-clock-test blofeld-native-region-frontend-test
     blofeld-native-region-events-test blofeld-native-deferred-irq-test
     blofeld-native-region-mcu-test

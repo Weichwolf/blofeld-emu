@@ -332,3 +332,13 @@ checks, including all 992 previous cases and 120 full-state Core observations.
 See dsp-native-alu-dependencies-reference.json for evidence and scope. This
 extends metadata for the timing integration; the connected original transfer,
 IRQ timing and complete instrument acceptance remain unqualified.
+
+Timed native DSP prefixes
+------------------------
+The independent Core now has an optional dependency-history execution owner.
+Actual retired prefixes, staged ownership, code mutation, paired checkpoints,
+REP latches and DO/control endpoints pass 178 checks in both sanitizer profiles.
+Four independently authored NXP windows retain their 10/10/11/9-clock results;
+native multi-instruction execution remains active. See
+dsp-native-timed-execution-reference.json. Board clock/IRQ integration and the
+original 528-byte transfer remain open; this component does not change runtime.

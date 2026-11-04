@@ -8,6 +8,7 @@ include(cmake/Zlib.cmake)
 include(cmake/OwnDsp.cmake)
 set(CMAKE_CXX_CLANG_TIDY "${BLOFELD_CLANG_TIDY};--warnings-as-errors=*")
 include(cmake/OwnDspComponents.cmake)
+include(cmake/NativeTimedExecution.cmake)
 include(cmake/ReferenceRomFixtures.cmake)
 include(cmake/SerialPcm.cmake)
 add_custom_target(blofeld-own-dsp-components ALL DEPENDS blofeld_own_dsp_io

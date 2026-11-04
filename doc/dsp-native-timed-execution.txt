@@ -1,0 +1,15 @@
+Timed native DSP prefixes
+
+  cmake --build build/strict --target blofeld-dsp-native-timed-test
+  ctest --test-dir build/strict -R '^dsp_native_timed$' --output-on-failure
+
+Costs come from actual Core previews. Only completed CPU prefixes commit history;
+unknown costs/dependencies stop planning. Control and DO endpoints terminate the
+plan. REP retains the real Core latch. Native execution remains enabled.
+Owner completion requires the offered opcode/extension/base cost and a genuine
+staged retirement; changing a host-supplied word cannot replace that offer.
+
+Own normal-NXP timing windows accompany real CPU/register/peripheral assertions,
+checkpoint/mutation, REP/DO, native-control and ownership controls. This component
+is not yet bound to the Board timeline/PLL/DMA clock or original IRQ entry.
+Complete original reset/528-byte reception and instrument operation remain open.

@@ -1,0 +1,88 @@
+{
+  "license": "GPL-3.0-only",
+  "qualification": "PASS-native-prefix-dependency-owner-component",
+  "source_base": "6b50927bcf5c9732a462401c4070438fc9fce3d7",
+  "core_revision": "feb66969a12813d9bb6852b5ff1d55ecfec5f3ed",
+  "scope": "Actual native prefixes and genuine staged retirement; not yet bound to Board clock/IRQ",
+  "source_sha256": {
+    "CMakeLists.txt": "bd7b3d9a47711ebdd440f8daf9891df60e50aa02a7f70952338a41a2c7da8949",
+    "cmake/OwnDspOnly.cmake": "9d5876db737f4f69d2fa5a2ceea8bc83f20c6f11341f04c15741801b417a3145",
+    "cmake/NativeTimedExecution.cmake": "df329b6f5f8b624fbb2913a2da5b470c6daae54889b519572a94c96ac8876087",
+    "src/dsp/dsp_native_timed_execution.hpp": "45fd98482aa5ce697c6083ea65d678787a0269f1a585d2526d5af5ed2d869043",
+    "src/dsp/dsp_native_timed_execution.cpp": "45c6dcf63ced58cd4f3d5df0beb474d789fd2ba67749dee9d8f71168f37ac192",
+    "src/dsp/dsp_native_timed_prefix.cpp": "01228ed4ca23bfc584d3a48bc7a432d7f1346097f1ea56ca05f2c202ac8fe23b",
+    "test/dsp_native_timed_fixture.hpp": "ca9cfe2b6e2f0d02b77c383f82ccb91440e20ccfb72bfd0e9cf70c6c300ea304",
+    "test/dsp_native_timed_test.cpp": "52afb7e4ba7b98edf9e7aace7e83b6bd855596363991cfa4c98405515f80be04",
+    "doc/dsp-native-timed-execution.txt": "863320aa65d103f93c6afba56503a21f4af52c3baa831f1671827b501cff1914"
+  },
+  "profiles": {
+    "strict": {
+      "timed": {
+        "actual_exit": 0,
+        "reaped": true,
+        "checks": 178,
+        "ELF_sha256": "1c6aa14375f5355f5a7266391c993baa5d3a2d90e33de57da22be5ac9757887e",
+        "log_sha256": "464e43793b1a12f955c96d6ced88f8673a425fc9110a49ba0af4eb3f230d59e2",
+        "PIE_RELRO_NOW_NX": true
+      },
+      "dependencies": {
+        "actual_exit": 0,
+        "reaped": true,
+        "checks": 2757,
+        "ELF_sha256": "1ad7495bfbca5f5c846f810ba8d9dddb8eb9ca4b581cefbeab5e7492c7b2ec9d",
+        "log_sha256": "b363da893c753847e8018a8c7d7643f42d589ba3bc319d6e66c07b9b6a73352f",
+        "PIE_RELRO_NOW_NX": true
+      }
+    },
+    "thread": {
+      "timed": {
+        "actual_exit": 0,
+        "reaped": true,
+        "checks": 178,
+        "ELF_sha256": "2dcd9f248bf455cf2844db9c39c120ccc49c848c624de0245452d2c5c5ca68fc",
+        "log_sha256": "464e43793b1a12f955c96d6ced88f8673a425fc9110a49ba0af4eb3f230d59e2",
+        "PIE_RELRO_NOW_NX": true
+      },
+      "dependencies": {
+        "actual_exit": 0,
+        "reaped": true,
+        "checks": 2757,
+        "ELF_sha256": "7c9687440d416ac2e3a0d4ae80522d350d3591a559a57f7568c875c400220922",
+        "log_sha256": "b363da893c753847e8018a8c7d7643f42d589ba3bc319d6e66c07b9b6a73352f",
+        "PIE_RELRO_NOW_NX": true
+      }
+    }
+  },
+  "independent_windows": {
+    "reference": "native-gpio-transfer-reference.json",
+    "instructions": 97,
+    "clocks": [
+      10,
+      10,
+      11,
+      9
+    ],
+    "actual_peripheral_values": [
+      1,
+      1,
+      1,
+      0
+    ],
+    "base_units": 115,
+    "dependency_units": 1
+  },
+  "controls": [
+    "Paired real Core checkpoint and timing history",
+    "Same-cost P mutation changes dependency and actual result",
+    "REP latch survives real P mutation",
+    "DO endpoint and short JMP terminate prefixes",
+    "Opcode/extension/base-cost substitution refuses",
+    "Untracked actual execution refuses; real reset restores ownership"
+  ],
+  "canonical_regular_registration_count_per_profile": 1,
+  "regular_and_independent_compiler_flags_identical": true,
+  "clang_format": "PASS",
+  "clang_tidy_findings": 0,
+  "fuzz": false,
+  "full_instrument": false
+}
