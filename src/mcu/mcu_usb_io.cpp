@@ -83,9 +83,10 @@ void McuUsb::write_endpoint(const ByteWrite access) {
     if ((requested & usb::transfer_complete) != 0) { next &= ~usb::transfer_complete; }
     buffer.control = static_cast<std::uint16_t>(next);
   } else {
-    // RXTXSIZ writes are used only by IN endpoints. Nonzero OUT size writes
-    // are unspecified by the module guide rather than fabricated receive data.
-    if (!input_endpoint(index)) {
+    // UEPCSR2/3 RXTXSIZ is writable before their endpoint is configured
+    // (USB20D6E2F 3.1.11/3.1.12). Reset DIR=0 does not bind an OUT function.
+    const bool unconfigured = index >= 2 && configuration_.at(index - 1) == 0;
+    if (!input_endpoint(index) && !unconfigured) {
       if ((access.value & usb::packet_size) != 0) {
         throw Fault("Unverified USB OUT receive-size write");
       }

@@ -28,8 +28,8 @@ Registers and interrupts
   corrupt/missing SOF does not update the read-only eleven-bit UTSR timestamp.
 - Decoder configuration requests expose CFGVALID/INTFVALID, requested fields and
   SETECR. DONEECRU acknowledges SETECR and self-clears. UNCIR/UNASR bound decoded
-  requests. The guide's inclusive interface-count wording remains ambiguous at
-  the upper boundary; that case and overlapping configuration requests fail.
+  requests. NINTC is the inclusive highest interface index; host metadata uses
+  NINTC+1. Overlapping configuration requests fail. See usb-standard-control.txt.
 - Actual standard SET_CONFIGURATION/SET_INTERFACE SETUP packets now decode into
   that same register/IRQ path. Direction/recipient, complete little-endian fields,
   zero data length, selection bounds and configured-interface prerequisites are
@@ -105,8 +105,12 @@ Buffers and transactions
   completed configuration/interface update resets affected bulk toggles to DATA0.
 - CPU modification of unacknowledged IN buffers/control/descriptions, and ACTEP
   reads during an in-flight IN packet, fail at explicitly unresolved ownership/
-  timing boundaries. OUT size writes and active endpoint descriptions outside
+  timing boundaries. Configured OUT size writes and active descriptions outside
   the implemented local full-speed configurations also fail visibly.
+- Physical2/3 with reset-zero descriptions retain CPU RXTXSIZ writes independently
+  of DIR=0 (USB20D6E2F3.1.11/3.1.12). These writes cannot enumerate an endpoint,
+  make payload bytes known or complete a transaction. Literal register cases and
+  actual native HC12 STD verify both bytes; the previous archive fails at0319.
 - Physical endpoints 2/3 retain functional halt separately from their software
   STALL command. The command bit self-clears on the first stalled transaction;
   subsequent IN/OUT still return STALL without consuming data, advancing DATA

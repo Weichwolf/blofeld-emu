@@ -1,0 +1,60 @@
+{
+  "qualification": "One recorded actual original1.25 reset to main WAI/A001 Init and MIDI-driven DSP PCM, using explicit functional board/reference clocks and PM3 LOW input. Firmware unmodified; no checkpoint replay. Not complete instrument, SL, polyphony, physical pitch, realtime or host-audio qualification.",
+  "root_source_revision": "c6072b306ff74792ff0b4ba4a7f6d0996871ca24",
+  "dsp_core_revision": "bd79f96ef38729b25303f23829fb847574790ae7",
+  "firmware_zip_sha256": "095c760a576dcb04fe3e379bed1b95a0360002295ab42b29e3335a39514f0c72",
+  "observer_ELF_sha256": "68c977ff9727a90791117f09e3a0a8b32af4227c8860ef5affddec5a67c84da0",
+  "archive_manifest_sha256": "4ebb6f74bda0a4574c7c9908e4deccc795d901547e51bcbc8bb1720d32a462aa",
+  "boot_rom": {
+    "qualification": "Document-derived192-word DSP bootstrap reference; no physical dump",
+    "sha256": "4d72a5bd75ad086ec7190c6c25b4438aa1cfaa2ddc0ac510055c2540e886de56"
+  },
+  "main_WAI": {
+    "operations": 88704583,
+    "MCU_instructions": 88693663,
+    "DSP_steps": 732111144,
+    "ticks": 4761458044056,
+    "PCM_frames": 319014
+  },
+  "MIDI": {
+    "tool": "aplaymidi",
+    "destination": "PID-owned software Blofeld ALSA sequencer port",
+    "note_on_hex": "90 45 64",
+    "note_off_hex": "80 45 00",
+    "observed_virtual_dwell_ms": 115.8884,
+    "baseline_PCM_frames": 319014,
+    "voice_capture_PCM_frames": 330979,
+    "new_nonzero_frames_per_channel": [
+      11842,
+      11842
+    ],
+    "peak_S32_per_channel": [
+      92664832,
+      92664832
+    ],
+    "descriptive_peak_hz": 439.9164539884774,
+    "hardware_pitch_qualified": false
+  },
+  "voice_WAV_sha256": "23d31e6ad92bf29ec39f7ed638ca5cc91329377d924cba325ecc3a0350ca46cf",
+  "native_PCM_excerpt_sha256": "d6079ce14505b315f50fc08ecd63019f778788b45a923b90212c157ecd565d76",
+  "terminal": {
+    "actual_exit": 2,
+    "operations": 95937084,
+    "DSP_steps": 760225844,
+    "PCM_frames": 331249,
+    "identity_request_hex": "f0 7e 7f 06 01 f7",
+    "fault": "Unconfigured physical2 RXTXSIZ write0319/PCb65b during original STD7004",
+    "host_reply_observed": false
+  },
+  "register_fix_validation": {
+    "scope": "Reset-zero physical2/3 descriptor CPU size writes; unknown payload/host qualification and configured OUT guards retained",
+    "native_checks": [
+      "usb_events",
+      "memory_usb"
+    ],
+    "previous_archive_native_STD_control": "Fails at0319/PC8003; same test passes with correction",
+    "fresh_instrument_replay": "Pending"
+  },
+  "private_evidence": "doc/local/pm3-original-boot-r1/boot-midi-r0/main-midi-audio-qualification.json",
+  "fuzz": false
+}

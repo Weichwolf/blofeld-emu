@@ -11,6 +11,14 @@ in function-acceptance.tsv; its pending entries are not waived by component test
 Reference manifests pin specific source/input/test scopes, not an assertion that
 all functions or every current binary have passed.
 
+A frozen c607/Corebd79 original reset reaches genuine main WAI and A001/Init.
+Actual aplaymidi note-on/off produces native stereo PCM with 11842 nonzero frames
+and a descriptive 439.916Hz peak after a silent319014-frame prefix. The subsequent
+Identity Request reaches an unconfigured USB RXTXSIZ write at0319/PCb65b and stops
+before any host reply. The register fix passes focused native/field checks;
+fresh complete replay, SL, polyphony, host audio and realtime remain open.
+See original-a4-runtime-reference.json; this is one recorded reference profile.
+
 The bounded optimized original-reset measurement in instrument-performance.txt
 reaches 3M MCU operations and 393 original DSP PCM frames at RTF 0.0021272 with
 core 3903224. Profiler-on/off outputs match exactly, including the earlier
@@ -299,8 +307,8 @@ No USB audio function is part of the Blofeld profile. See usb-runtime.txt.
 
 9. Normal standalone instrument — pending
 The executable currently exposes explicit reference configurations, file inputs,
-render/export facilities and separate host adapters. A complete Keyboard-default /
-Desktop normal device launcher, sustained original instrument operation, all
+render/export facilities and separate host adapters. A complete fixed Desktop-SL
+normal device launcher, sustained original instrument operation, all
 MIDI/SysEx controls, live audio and their failure behavior are not qualified.
 Bank/program selection with original name/number/audio changes is specifically
 pending. See runtime.txt and MIDI-BANK-PROGRAM/UI-SELECT in function-acceptance.tsv.

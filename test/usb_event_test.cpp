@@ -568,6 +568,34 @@ void test_control_enable_gates() {
   clock.write({.address = control, .value = 0});
   require(clock.read(control) == 0, "After MEN clears, another write can disable the module clock");
 }
+
+void test_unconfigured_endpoint_size_registers() {
+  constexpr unsigned size_mask = 0x7f;
+  for (const unsigned endpoint : {endpoint2, endpoint3}) {
+    blofeld::McuUsb usb;
+    usb.observe_decoder({});
+    usb.set_control(enabled_control);
+    const auto before = word(usb, status);
+    for (const unsigned size : {0U, 4U, 63U, 64U, 127U, 255U}) {
+      const auto requested = (endpoint_rx_ack << 8U) | size;
+      write_word(usb, endpoint, requested);
+      require(word(usb, endpoint) == ((endpoint_dv_ie << 8U) | (size & size_mask)) &&
+                  word(usb, status) == before && usb.interrupt_sources() == 0,
+              "Reset endpoint RXTXSIZ retains CPU writes without configuration or completion");
+      usb.write(
+          {.address = buffers, .value = static_cast<std::uint8_t>(endpoint == endpoint2 ? 2 : 3)});
+      reject([&] { static_cast<void>(usb.read(local_buffer)); },
+             "A CPU size write cannot invent any received or transmitted payload byte");
+      reject([&] { static_cast<void>(usb.request_in(blofeld::UsbBuffer::endpoint2)); },
+             "A CPU size write cannot enumerate or qualify a USB endpoint");
+    }
+  }
+  blofeld::McuUsb configured;
+  start(configured);
+  activate_bulk(configured);
+  reject([&] { configured.write({.address = endpoint3 + 1, .value = 4}); },
+         "Unqualified nonzero receive-size writes to a configured OUT endpoint stay visible");
+}
 }
 
 int main() {
@@ -582,6 +610,7 @@ int main() {
     test_in_ack_loss_and_ownership();
     test_packet_boundaries_and_reset_during_in();
     test_control_enable_gates();
+    test_unconfigured_endpoint_size_registers();
     std::cout << "USB status, interrupts, setup, local buffers and retry checks passed\n";
     return 0;
   } catch (const std::exception &error) {

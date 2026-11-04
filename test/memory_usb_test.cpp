@@ -327,6 +327,30 @@ void test_interrupt_and_return_word_transfers() {
               cpu.state().d == initial.d,
           "Grouped transfers retain the independently expected restored registers");
 }
+
+void test_unconfigured_usb_native_size_store() {
+  // Own independent S12 LDD/STD operands exercise both bytes of a reset CSR.
+  constexpr unsigned endpoint = 0x318;
+  constexpr unsigned ready_size = 0x507f;
+  constexpr unsigned after_store = entry + 6;
+  constexpr std::array<std::uint8_t, 6> own_program{0xcc, 0x50, 0x7f, 0x7c, 3, 0x18};
+  std::array<std::uint8_t, 32768> flash{};
+  std::ranges::copy(own_program, flash.begin());
+  blofeld::McuBus bus(flash);
+  bus.write(clock_control, module_clock);
+  blofeld::Hc12 cpu(bus, BLOFELD_DEFAULT_SLA);
+  constexpr blofeld::CpuState initial{.pc = entry, .sp = 0x2000, .ccr = 0xd0};
+  cpu.set_state(initial);
+  cpu.step();
+  cpu.step();
+  require(cpu.state().pc == after_store && cpu.state().d == ready_size &&
+              bus.read_memory({.address = endpoint, .size = 2}) == ready_size,
+          "Actual native STD retains the whole writable unconfigured USB size/status word");
+  bus.write(select_low, 2);
+  constexpr unsigned local_buffer = 0x380;
+  reject([&] { static_cast<void>(bus.read(local_buffer)); },
+         "Native CSR programming cannot fabricate endpoint data");
+}
 }
 
 int main() {
@@ -337,6 +361,7 @@ int main() {
     test_reserved_selections_and_incomplete_writes();
     test_real_cpu_configures_usb_window();
     test_interrupt_and_return_word_transfers();
+    test_unconfigured_usb_native_size_store();
     std::cout << "Native memory operand widths and USB configuration checks passed\n";
     return 0;
   } catch (const std::exception &error) {
