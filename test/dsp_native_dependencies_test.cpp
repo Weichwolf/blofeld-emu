@@ -149,6 +149,7 @@ int main() {
     assertions += blofeld::test::native_dependency_alu_checks();
     assertions += blofeld::test::native_dependency_scalar_checks();
     assertions += blofeld::test::native_dependency_parallel_checks();
+    assertions += blofeld::test::native_dependency_address_checks();
     std::cout << "PASS native dependencies: " << assertions << " independent checks\n";
     return 0;
   } catch (const std::exception &error) {

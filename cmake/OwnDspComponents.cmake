@@ -373,7 +373,8 @@ target_link_libraries(blofeld_dsp_dependencies PUBLIC blofeld_quality dsp56300::
 if(BUILD_TESTING)
   add_executable(blofeld-dsp-native-dependencies-test test/dsp_native_dependencies_test.cpp
     test/dsp_native_dependency_operands.cpp test/dsp_native_dependency_alu.cpp
-    test/dsp_native_dependency_scalar.cpp test/dsp_native_dependency_parallel.cpp)
+    test/dsp_native_dependency_scalar.cpp test/dsp_native_dependency_parallel.cpp
+    test/dsp_native_dependency_address.cpp)
   target_link_libraries(blofeld-dsp-native-dependencies-test PRIVATE blofeld_dsp_dependencies)
   add_test(NAME dsp_native_dependencies COMMAND blofeld-dsp-native-dependencies-test)
 endif()

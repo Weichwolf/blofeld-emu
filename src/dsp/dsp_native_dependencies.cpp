@@ -35,9 +35,7 @@ unsigned agu(const Register reg) {
 bool describe_address(DspInterlockInstruction &result, const Operand &operand) {
   if (operand.kind != OperandKind::memory) { return true; }
   if (operand.space == dsp56300::TransferSpace::program ||
-      operand.space == dsp56300::TransferSpace::long_pair ||
-      operand.address.kind == dsp56300::AddressKind::pre_decrement ||
-      operand.address.kind == dsp56300::AddressKind::indexed) {
+      operand.space == dsp56300::TransferSpace::long_pair) {
     return false;
   }
   const auto inputs = dsp56300::address_inputs(operand.address);
@@ -67,7 +65,9 @@ bool describe_move(DspInterlockInstruction &result, const dsp56300::EncodedTrans
   }
   if (destination.kind == OperandKind::memory &&
       (destination.address.kind == dsp56300::AddressKind::absolute_extension ||
-       destination.address.kind == dsp56300::AddressKind::displacement_extension)) {
+       destination.address.kind == dsp56300::AddressKind::displacement_extension ||
+       destination.address.kind == dsp56300::AddressKind::pre_decrement ||
+       destination.address.kind == dsp56300::AddressKind::indexed)) {
     result.move_read_advance = 1;
   }
   return true;
@@ -142,7 +142,13 @@ std::optional<DspInterlockInstruction> inspect_native_dependencies(const std::ui
   DspInterlockInstruction result{.opcode = opcode, .native_units = native_units};
   if (scalar_alu(shape->kind)) { return describe_scalar(result, shape->kind); }
   const auto transfers = dsp56300::inspect_transfers(opcode);
-  if (!transfers || transfers->address_update) { return std::nullopt; }
+  if (!transfers) { return std::nullopt; }
+  if (transfers->address_update) {
+    const auto inputs = dsp56300::address_inputs(*transfers->address_update);
+    if (!inputs) { return std::nullopt; }
+    // AGU post-update forwards directly; it is not an explicit MOVE to Rn.
+    result.agu_reads |= inputs->r;
+  }
   if (transfers->instruction.kind == dsp56300::InstructionKind::parallel) {
     if (!describe_parallel(result, transfers->parallel_alu)) { return std::nullopt; }
   }

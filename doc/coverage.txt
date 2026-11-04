@@ -375,3 +375,18 @@ See dsp-native-parallel-dependencies-reference.json. Unsupported transfers,
 IRQ entry timing, the connected original overlay and instrument acceptance
 remain open. Qualification uses the committed history definition; separately
 modified timeline/history classes require coherent consumer rebuilds.
+
+Address-update and predecrement/indexed dependencies
+--------------------------------------------------
+Parallel AGU-only updates and X/Y predecrement/indexed transfers now have
+dependency descriptions. Automatic R updates forward to the next register/EA
+read without a MOVE-write stall. The longer indexed/predecrement store absorbs
+the preceding arithmetic/transfer data hazard. Program and L-transfer guards
+remain explicit. Own NXP programs cover 288 windows/76 producer-consumer forms,
+including complete register and 128-word-per-space RAM observations; 128
+assembled operand controls cover all eight AGU groups. Both sanitizer profiles
+pass 47,325 checks, retaining previous inputs and adding 864 full core/RAM
+observations each. The static census gains 123 descriptions (3,690 to 3,813).
+See dsp-native-address-dependencies-reference.json. These component results
+do not qualify the connected original firmware or complete instrument; the
+separately modified timeline/history classes still require coherent rebuilds.

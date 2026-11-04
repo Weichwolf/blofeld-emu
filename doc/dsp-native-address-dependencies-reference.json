@@ -1,0 +1,217 @@
+{
+  "license": "GPL-3.0-only",
+  "qualification": "PASS-selected-AGU-dependencies",
+  "source_base": "628eca86bed9d32257ec6893e6fbcb72ca02ffde",
+  "core_revision": "feb66969a12813d9bb6852b5ff1d55ecfec5f3ed",
+  "scope": "Pure parallel address updates and X/Y predecrement/indexed transfer dependencies, preserving existing explicit unsupported program/L-transfer guards; not complete pipeline, ISA, firmware boot or instrument qualification",
+  "qualification_source_target": "Committed 628eca8 history plus owned address metadata/tests. Independent unpublished timeline/history/board changes are excluded; changed class declarations require coherent consumer rebuilds.",
+  "Core_source_and_history_layout_unchanged_in_this_change": true,
+  "source_sha256": {
+    "src/dsp/dsp_native_dependencies.cpp": "38f5ec885434b8104562da4005649032dde7e730dd45cbe1d48a706823c773d0",
+    "src/dsp/dsp_native_dependencies.hpp": "ec46290d1e23461b46c10107dd610c0e242d2fde3c9e9e3cfac781088a30b12a",
+    "test/dsp_native_dependencies_test.cpp": "895a59e542727eaf3e171da3731421b4e2e71cd427c16c51f62b6b0c87acc519",
+    "test/dsp_native_dependency_operands.cpp": "97459fb59bcbdbb5250857979b89074b8ed00bd984ed19c66321705610095d07",
+    "test/dsp_native_dependency_operands.hpp": "02d0196ee08ba613ae0745bbce078b33681e82d82c85d6fe103ddf23c335ddea",
+    "test/dsp_native_dependency_alu.cpp": "2fa80d5eb443c2ee2aeea16e586c7e4d362cbba3e549e476f07fc409c090f5f3",
+    "test/dsp_native_dependency_scalar.cpp": "36363dbd9a80e413901d1237261bde1f633b363f18d32818ddc06c2990a369c5",
+    "test/dsp_native_dependency_parallel.cpp": "121d7f6424833908cf8c12f57b07bde61220ca5f11dce7ecec0ba9ccd77a4c5c",
+    "test/dsp_native_parallel_cases.hpp": "e0662e26276df91d956d6c69ab3305f52540b1572817f8b5d8819159cdbf8fd5",
+    "test/dsp_native_dependency_address.cpp": "cff5b86d867840e100332e10e948c11476d7d6b1dc33064f82920a0f2930255a",
+    "test/dsp_native_address_cases.hpp": "eacc92583e1cf43689fbabda2578525aea392f727b02e9963c451dba599b9e20",
+    "src/dsp/dsp_interlocks.cpp": "f3df59fa68d43654b01ecac4b25544e15e39a75d7b34b021bc97b95b35e3240c",
+    "src/dsp/dsp_interlocks.hpp": "9e666ec2e19595cc5593008f6f1cd692a83c97834a7c94df2fe61afc4372231e"
+  },
+  "profiles": {
+    "strict": {
+      "contexts": 8,
+      "strict_flags_archive_hardening_verified": true,
+      "coherent_no_work": true,
+      "core_archive_sha256": "a8968bbfdbbec16dac1eb6f3655ec1adfe61d712a8bcc29e5f309ee88b3290c7",
+      "metadata_archive_sha256": "f8b811bcf9d9f3867616f30123e0ed03001bca6c308ee7cbde1c6f03a86d1fca",
+      "elf_sha256": "8792d9f089c480062e7e9194db9f9b8a2e02d6d06e04c8c8f72ed69472db7f0b",
+      "actual_exit": 0,
+      "reaped": true,
+      "checks": 47325,
+      "log_sha256": "c2dfae2cce6b05e9934c05b6da691b718976d4894f687f4fb22de60d32bc6ee3",
+      "clang_tidy_findings": 0
+    },
+    "thread": {
+      "contexts": 8,
+      "strict_flags_archive_hardening_verified": true,
+      "coherent_no_work": true,
+      "core_archive_sha256": "4e980d0f5ee3d3f1fae11cbb4a88efbc0718201c7789e22bbfb114a1e24e9c51",
+      "metadata_archive_sha256": "80d951b782e08361bbf7c9257285d2ea77b072bcb9de6283975572c0ab4ec31e",
+      "elf_sha256": "ac81bb7b93d6be69cc57c8f74e04f004cd61e5d7b70d160b73833b6dba0ab21d",
+      "actual_exit": 0,
+      "reaped": true,
+      "checks": 47325,
+      "log_sha256": "c2dfae2cce6b05e9934c05b6da691b718976d4894f687f4fb22de60d32bc6ee3",
+      "clang_tidy_findings": 0
+    }
+  },
+  "retained_prior_checks_per_profile": 43777,
+  "new_checks_per_profile": 3548,
+  "new_complete_register_and_full_RAM_Core_observations_per_profile": 864,
+  "Core_backends": [
+    "reference",
+    "cached",
+    "jit"
+  ],
+  "independent_reference": {
+    "provider": "NXP assembler 6.3.28 and unmodified normal DSP56300 model; local transport-only RSP adapter",
+    "producer_consumer_forms": 76,
+    "timing_windows": 288,
+    "predeclared_quiet_gap_controls": 116,
+    "exploratory_windows": 172,
+    "before_after_register_and_full_RAM_observations": 288,
+    "RAM_words_per_space": 128,
+    "independently_assembled_operand_controls": {
+      "qualified": 128,
+      "remaining_program_L_guards": 4,
+      "source_sha256": "765f794bc9df87137ba763cb2ab25d08e78847932bcb510e17b3f28e5d0089b1",
+      "listing_sha256": "d9803ab1b715aae02287a1ecd8ca3495917d0837a9c52eafa1e8d54e20f12fef",
+      "COFF_sha256": "02bdde864d6cdb0e3d4d47a4cd86395d261adbd09b5c703db9f75c1fa39731f2"
+    },
+    "register_MOVE_to_AGU_added_clocks_by_gap": [
+      3,
+      2,
+      1,
+      0
+    ],
+    "long_immediate_MOVE_to_AGU_added_clocks_by_gap": [
+      2,
+      1,
+      0,
+      0
+    ],
+    "automatic_R_update_to_next_R_read_or_EA_added_clocks": 0,
+    "arithmetic_or_transfer_to_predecrement_or_indexed_A_A1_store_added_clocks": 0,
+    "all_eight_AGU_groups_have_literal_metadata_controls": true,
+    "dynamic_register_RAM_observations_use_R0": true,
+    "programs": [
+      {
+        "windows": 40,
+        "program_sha256": "04e4892a2f3b2ec23228b82e05ee207b963df1f3c87b17ee1c82d5b5c7343946",
+        "measured_log_sha256": "33a014f12d2970844ef7d2f4190dce429c47b4b56e6648269dca06debb54d2b0",
+        "full_log_sha256": "33a014f12d2970844ef7d2f4190dce429c47b4b56e6648269dca06debb54d2b0",
+        "append_only_Wine_termination_diagnostics": false,
+        "libraries_sha256": {
+          "libdsp56300simapi.dll": "602d93d794acb835a5f6b335b47cedb59f8edbf0e02bf63330dce5620bff2ce5",
+          "libdsp56300.dll": "9f3c1393ec89aaf6f64b29f7aebf3ffa50f3d4c0108ccf635a8b4b47fdbd6e23"
+        }
+      },
+      {
+        "windows": 40,
+        "program_sha256": "bba4840186f3ecce5c98643c63e620f8db45b64c22f92bde06f3e4c936294884",
+        "measured_log_sha256": "1dfa497b1f09fd3c0a436311f07aee6847eaa69e5b4e5a9666fed48f0f3fff06",
+        "full_log_sha256": "f7083941b0403ca339f678bf23408061a722f96947ac33b1f1d4abfbc1f9128d",
+        "append_only_Wine_termination_diagnostics": true,
+        "libraries_sha256": {
+          "libdsp56300simapi.dll": "602d93d794acb835a5f6b335b47cedb59f8edbf0e02bf63330dce5620bff2ce5",
+          "libdsp56300.dll": "9f3c1393ec89aaf6f64b29f7aebf3ffa50f3d4c0108ccf635a8b4b47fdbd6e23"
+        }
+      },
+      {
+        "windows": 40,
+        "program_sha256": "f91932b792218558c492780992e2cb07291878f49ae9998a7387efe67e8f8004",
+        "measured_log_sha256": "db94f02c59cbebbb626c7a36a7f6d2214f0d9387a208e0eeeb25fef3d2154ed3",
+        "full_log_sha256": "15c72df13e20859651d97e72cff6daf6c6b0a7989c79557191249c9f736d7f0f",
+        "append_only_Wine_termination_diagnostics": true,
+        "libraries_sha256": {
+          "libdsp56300simapi.dll": "602d93d794acb835a5f6b335b47cedb59f8edbf0e02bf63330dce5620bff2ce5",
+          "libdsp56300.dll": "9f3c1393ec89aaf6f64b29f7aebf3ffa50f3d4c0108ccf635a8b4b47fdbd6e23"
+        }
+      },
+      {
+        "windows": 40,
+        "program_sha256": "8dee8f2da07aba7bfe9dec798e355b0fa00f3956dd5ff9596662aa056eb234c1",
+        "measured_log_sha256": "8ed1c959486ede5a4af1cf01d5846408d1ff172498e5a72d9b8652672df395df",
+        "full_log_sha256": "8ed1c959486ede5a4af1cf01d5846408d1ff172498e5a72d9b8652672df395df",
+        "append_only_Wine_termination_diagnostics": false,
+        "libraries_sha256": {
+          "libdsp56300simapi.dll": "602d93d794acb835a5f6b335b47cedb59f8edbf0e02bf63330dce5620bff2ce5",
+          "libdsp56300.dll": "9f3c1393ec89aaf6f64b29f7aebf3ffa50f3d4c0108ccf635a8b4b47fdbd6e23"
+        }
+      },
+      {
+        "windows": 40,
+        "program_sha256": "0cdbe282695809cf283e8542a8e00f9b0ade49b8bf21e0831648217cbeefdc86",
+        "measured_log_sha256": "a1ea40041e154efab63c49c6ccd0df58bcb2a5328bd0d271bec184a71a330324",
+        "full_log_sha256": "a1ea40041e154efab63c49c6ccd0df58bcb2a5328bd0d271bec184a71a330324",
+        "append_only_Wine_termination_diagnostics": false,
+        "libraries_sha256": {
+          "libdsp56300simapi.dll": "602d93d794acb835a5f6b335b47cedb59f8edbf0e02bf63330dce5620bff2ce5",
+          "libdsp56300.dll": "9f3c1393ec89aaf6f64b29f7aebf3ffa50f3d4c0108ccf635a8b4b47fdbd6e23"
+        }
+      },
+      {
+        "windows": 40,
+        "program_sha256": "02a255c697005b5f4fac983acc3f8acf9d9d01a9fa4e1c1e31de4d1887b46f35",
+        "measured_log_sha256": "22056947ba85ff534c7e60ea0a9353c575ae4e7e3d28b7753975551cea244d99",
+        "full_log_sha256": "a4047fe35cc5696022a3527ae0fe8760df2b142ecc5216ac4c52d085a851bed3",
+        "append_only_Wine_termination_diagnostics": true,
+        "libraries_sha256": {
+          "libdsp56300simapi.dll": "602d93d794acb835a5f6b335b47cedb59f8edbf0e02bf63330dce5620bff2ce5",
+          "libdsp56300.dll": "9f3c1393ec89aaf6f64b29f7aebf3ffa50f3d4c0108ccf635a8b4b47fdbd6e23"
+        }
+      },
+      {
+        "windows": 40,
+        "program_sha256": "7bd6a924cf295464440b05434159ad74a74c00e6781d0f86fdeb03d96f35fcee",
+        "measured_log_sha256": "ab2330835a22e08c78f1bf9815dd2ef26b9886646975131dca368175275965ef",
+        "full_log_sha256": "cb39f145dbaa3d28d312b26811847bf2d209e889d60ab1daf82e759a7a2b7f15",
+        "append_only_Wine_termination_diagnostics": true,
+        "libraries_sha256": {
+          "libdsp56300simapi.dll": "602d93d794acb835a5f6b335b47cedb59f8edbf0e02bf63330dce5620bff2ce5",
+          "libdsp56300.dll": "9f3c1393ec89aaf6f64b29f7aebf3ffa50f3d4c0108ccf635a8b4b47fdbd6e23"
+        }
+      },
+      {
+        "windows": 8,
+        "program_sha256": "52080ff46d1c102433c9591df5cab332f316f44b91d1141e45c0fcbd03abfbce",
+        "measured_log_sha256": "3293607f26bd68ded631cff54a510d57a4ec34e96898efbcf801c5b920798d52",
+        "full_log_sha256": "3293607f26bd68ded631cff54a510d57a4ec34e96898efbcf801c5b920798d52",
+        "append_only_Wine_termination_diagnostics": false,
+        "libraries_sha256": {
+          "libdsp56300simapi.dll": "602d93d794acb835a5f6b335b47cedb59f8edbf0e02bf63330dce5620bff2ce5",
+          "libdsp56300.dll": "9f3c1393ec89aaf6f64b29f7aebf3ffa50f3d4c0108ccf635a8b4b47fdbd6e23"
+        }
+      }
+    ],
+    "physical_device_or_bus_validation": false
+  },
+  "negative_control": {
+    "same_final_test_objects_old_published_metadata": true,
+    "matching_committed_history": true,
+    "actual_exit": 1,
+    "reaped": true,
+    "failure": "Missing authored address dependency description"
+  },
+  "canonical_configuration": "Both normal presets register one dependency target with eight implementation/test source contexts and strict flags. Runtime qualification uses the coherent frozen eight-source component.",
+  "census": {
+    "scope": "Static descriptor coverage only; no firmware execution or dynamic correctness claim",
+    "rows": 4806,
+    "before": 3690,
+    "after": 3813,
+    "new_descriptions": 123,
+    "added_by_kind": {
+      "1": 123
+    },
+    "no_old_description_lost": true,
+    "all_rows_zero_guest_instructions_cycles_and_Io_asserted": true,
+    "input_sha256": "9405d0de6c8b1af327f3ad0232085eaae2d09c662280b95ee4802a68e7065f97"
+  },
+  "reproduce": [
+    "cmake --build --preset strict --target blofeld-dsp-native-dependencies-test",
+    "build/strict/blofeld-dsp-native-dependencies-test",
+    "cmake --build --preset thread --target blofeld-dsp-native-dependencies-test",
+    "build/thread/blofeld-dsp-native-dependencies-test"
+  ],
+  "remaining": [
+    "Program/L transfers, other unsupported dependencies and IRQ entry timing",
+    "Connected original reset, first overlay transfer and normal clocked timeline integration",
+    "All Desktop/Keyboard instrument/audio/MIDI/USB/storage/update/recovery and realtime acceptance"
+  ],
+  "whole_instrument_qualified": false,
+  "fuzz": false
+}
