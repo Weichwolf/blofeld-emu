@@ -358,3 +358,20 @@ changed A1/B1 counts. Both sanitizer profiles pass 27,789 checks with all prior
 inputs retained; invalid arithmetic counts now have explicit refusal checks.
 See dsp-native-scalar-dependencies-reference.json. Normal timeline/IRQ promotion,
 the connected original transfer and complete instrument acceptance remain open.
+
+Parallel DALU dependency descriptions
+------------------------------------
+All 253 valid parallel ALU low-byte selectors have result/status resource
+descriptions; the three reserved selectors still refuse. TST/CMP/CMPM occupy
+only the status path. TFR occupies it despite unchanged flags; MAX/MAXM occupy
+the B result path even without a transfer. Observed IFcc/IFcc.U dependencies
+persist for false and true conditions; the core owns actual state changes.
+Independent own-program NXP observations cover 119 forms and 833 quiet-anchor
+windows. Both sanitizer profiles pass 43,777 checks, retaining prior inputs
+and adding 357 full-register core observations per profile. The static pinned
+4,806-word census gains 744 descriptions (2,946 to 3,690), with no execution or
+real I/O. This does not establish dynamic coverage or instrument operation.
+See dsp-native-parallel-dependencies-reference.json. Unsupported transfers,
+IRQ entry timing, the connected original overlay and instrument acceptance
+remain open. Qualification uses the committed history definition; separately
+modified timeline/history classes require coherent consumer rebuilds.

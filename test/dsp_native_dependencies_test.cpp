@@ -122,12 +122,13 @@ void reference_windows() {
 
 void guards() {
   constexpr unsigned excessive_units = 1048577;
-  constexpr unsigned unsupported_add = 0x200010;
+  constexpr unsigned full_accumulator_add = 0x200010;
   require(!blofeld::inspect_native_dependencies(0x1000000, 1), "Non-word opcode refuses");
   require(!blofeld::inspect_native_dependencies(0, 0), "Unknown base cost refuses");
   require(!blofeld::inspect_native_dependencies(0, excessive_units), "Unbounded base cost refuses");
-  require(!blofeld::inspect_native_dependencies(unsupported_add, 1),
-          "Unqualified arithmetic description refuses");
+  const auto add = blofeld::inspect_native_dependencies(full_accumulator_add, 1);
+  require(add && add->arithmetic_writes == 1 && add->status_write,
+          "Full accumulator ADD occupies the result and status paths");
   const blofeld::DspInterlocks history;
   auto invalid = blofeld::DspInterlockInstruction{.native_units = 1, .agu_reads = 256};
   bool refused = false;
@@ -147,6 +148,7 @@ int main() {
     assertions += blofeld::test::native_dependency_operand_checks();
     assertions += blofeld::test::native_dependency_alu_checks();
     assertions += blofeld::test::native_dependency_scalar_checks();
+    assertions += blofeld::test::native_dependency_parallel_checks();
     std::cout << "PASS native dependencies: " << assertions << " independent checks\n";
     return 0;
   } catch (const std::exception &error) {

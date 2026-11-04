@@ -123,9 +123,15 @@ unsigned native_dependency_alu_checks() {
       }
     }
   }
-  // Reserved ALU selectors, unqualified carry/TFR/CMP and prefix widths stay explicit.
-  for (const unsigned opcode : {0x200004U, 0x200008U, 0x200021U, 0x200041U, 0x200045U}) {
+  // Retain all former guard stimuli; independently qualified carry/TFR/CMP now describe.
+  for (const unsigned opcode : {0x200004U, 0x200008U, 0x20000cU}) {
     require(!inspect_native_dependencies(opcode, 1));
+  }
+  constexpr unsigned compare_x0_a = 0x200045;
+  for (const unsigned opcode : {0x200021U, 0x200041U, compare_x0_a}) {
+    const auto decoded = describe(opcode);
+    require(decoded.arithmetic_writes == (opcode == compare_x0_a ? 0U : 1U) &&
+            decoded.status_write);
   }
   return checks;
 }

@@ -106,6 +106,31 @@ std::optional<DspInterlockInstruction> describe_scalar(DspInterlockInstruction r
   result.status_write = true;
   return result;
 }
+
+bool describe_parallel(DspInterlockInstruction &result, const unsigned alu) {
+  constexpr unsigned product = 0x80;
+  constexpr unsigned test = 3;
+  constexpr unsigned compare = 5;
+  constexpr unsigned compare_magnitude = 7;
+  constexpr unsigned maximum = 0x1d;
+  constexpr unsigned maximum_magnitude = 0x15;
+  if (alu == 0) { return true; }
+  if (alu == 4 || alu == 8 || alu == 12) { return false; }
+  const auto source = (alu >> 4) & 7U;
+  const auto operation = alu & 7U;
+  const bool flags_only =
+      alu < product &&
+      ((alu & ~8U) == test ||
+       ((source == 0 || source >= 4) && (operation == compare || operation == compare_magnitude)));
+  if (!flags_only) {
+    const bool writes_b = (alu & 8U) != 0 || alu == maximum || alu == maximum_magnitude;
+    result.arithmetic_writes = writes_b ? 2U : 1U;
+  }
+  // Busy resources, not architectural changes: TFR still occupies the SR path;
+  // MAX/MAXM and false IFcc/IFcc.U retain their result-path dependencies.
+  result.status_write = true;
+  return true;
+}
 }
 
 std::optional<DspInterlockInstruction> inspect_native_dependencies(const std::uint32_t opcode,
@@ -119,22 +144,7 @@ std::optional<DspInterlockInstruction> inspect_native_dependencies(const std::ui
   const auto transfers = dsp56300::inspect_transfers(opcode);
   if (!transfers || transfers->address_update) { return std::nullopt; }
   if (transfers->instruction.kind == dsp56300::InstructionKind::parallel) {
-    const auto alu = transfers->parallel_alu;
-    constexpr unsigned clear_a = 0x13;
-    constexpr unsigned destination_b = 8;
-    constexpr unsigned product = 0x80;
-    if (alu != 0) {
-      // FM parallel data-register ADD/SUB/OR/EOR/AND: JJJ selects X0/Y0/X1/Y1.
-      const auto source = (alu >> 4) & 7U;
-      const auto operation = alu & 7U;
-      const bool binary = source >= 4 && (operation == 0 || operation == 2 || operation == 3 ||
-                                          operation == 4 || operation == 6);
-      if (alu != clear_a && alu != (clear_a | destination_b) && (alu & product) == 0 && !binary) {
-        return std::nullopt;
-      }
-      result.arithmetic_writes = (alu & destination_b) != 0 ? 2U : 1U;
-      result.status_write = true;
-    }
+    if (!describe_parallel(result, transfers->parallel_alu)) { return std::nullopt; }
   }
   for (unsigned index = 0; index < transfers->count; ++index) {
     if (!describe_move(result, transfers->moves.at(index))) { return std::nullopt; }
