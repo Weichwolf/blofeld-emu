@@ -148,6 +148,15 @@ public:
 
   [[nodiscard]] std::uint64_t unselected_reads() const noexcept { return unselected_reads_; }
 
+  // Explicit functional word for vacant low-128K X/Y data addresses only.
+  // Selected RAM/ROM knowledge, P, I/O and pending switches remain strict.
+  // nullopt refuses; a configured word is a virtual-instance hypothesis.
+  void set_unselected_data_read_word(std::optional<std::uint32_t> word);
+
+  [[nodiscard]] std::optional<std::uint32_t> unselected_data_read_word() const noexcept {
+    return unselected_data_read_word_;
+  }
+
   [[nodiscard]] std::optional<bool> access_peripheral_bit(DspBitAccess access);
   [[nodiscard]] static bool handles_peripheral_bit(DspAddress access);
   [[nodiscard]] DspMemoryResource memory_resource(DspMemoryAccess access) const;
@@ -259,6 +268,7 @@ private:
   [[nodiscard]] Location locate_data(DspAddress access, Operation operation) const;
   [[nodiscard]] bool unselected_write(DspAddress access) const;
   [[nodiscard]] bool unselected_read(DspAddress access) const;
+  [[nodiscard]] std::optional<std::uint32_t> unselected_read_value(DspAddress access) const;
   [[nodiscard]] std::uint32_t read_peripheral(DspAddress access);
   void write_peripheral(DspStore access);
   [[nodiscard]] DspEsai *esai_register(DspAddress access);
@@ -290,6 +300,7 @@ private:
   std::uint64_t unselected_writes_ = 0;
   std::optional<std::uint32_t> unselected_io_read_word_;
   std::uint64_t unselected_reads_ = 0;
+  std::optional<std::uint32_t> unselected_data_read_word_;
   std::optional<std::uint32_t> once_latch_;
 };
 

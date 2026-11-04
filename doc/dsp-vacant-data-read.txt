@@ -1,0 +1,53 @@
+Functional vacant-data read decoder
+
+DSP56371UM Rev2.1 section3.1.1 reserves the vacant memory windows; it does not
+specify their read values. Section3.1.4 excludes external memory. Original1.25
+nevertheless executes a Reverb parallel X read at P001f93 using a Y-ring cursor.
+An actual reset/Main/MIDI/program-change run stopped at X011cc1, outside the
+selected X RAM in the requested MS/MSW111 layout. Do not extend RAM or alias Y.
+
+The separate set_unselected_data_read_word(optional24bit) contract models a
+virtual instance's response when no data cell is selected. It requires
+functional_decode and applies only to vacant low128K X/Y windows in the current
+documented map. Default nullopt refuses. Selected RAM/ROM knowledge, P, I/O,
+out-of-range addresses and pending-switch checks remain strict. Writes select
+no new storage; returned words do not expose the physical block switched to P.
+The NAND reference-board profile explicitly selects nominal zero. This is a
+functional hypothesis, not a measured zero or reconstructed electrical bus.
+The reserved-Y-I/O word remains a separate contract.
+
+Actual reads execute and increment unselected_reads; resource queries report
+selected=false without consuming a read. Native loads, register changes,
+instruction retirement and existing timing/arbitration owners remain in use.
+Hardware reset starts a new observation epoch while retaining the instance word. Trusted
+snapshots retain both. Disabling the model restores the same native fault.
+
+A private current-Core experiment executes the unchanged MACR, immediate DO and
+following MAC/parallel overwrite for every16777216 possible read word. X1 really
+receives each candidate; all other intermediate registers, all final registers
+and both actual Y stores are identical. The four original words match independent
+extraction of the hash-pinned official archive/all127 records. This proves the
+uninterrupted three-instruction dependency for one declared arithmetic/AGU/outer-
+loop state; it does not prove physical read semantics or interrupt interleavings.
+
+The component gate checks all low128K X/Y destinations in five layouts with
+three explicit words, selected-memory/I/O/switch guards, actual native loads,
+fresh-owner replay and reference fetch/data periods. Eight affected native
+executables pass on one coherent class/dependency build.
+
+A separate original fixture executes type-reset/live setup and two real ready
+calls for Diffusion0/64/127 and three data words:18 scenes,64404 instructions,
+36 genuine ready RTS returns and432 actual vacant X reads. Final architectural
+registers and all mapped P/X/Y words/knowledge match within each word-variant
+group; every original P word stays unchanged. Ring contents are declared known,
+and the initializer's scheduled clear is not dispatched. This does not establish
+the normal clear-to-ready lifecycle or coupled original MIDI/audio operation.
+
+Focused gate:
+  cmake --build --preset release --target blofeld-vacant-read-decoder-test blofeld-reserved-read-decoder-test blofeld-dsp-memory-map-test
+  ctest --test-dir build/release --output-on-failure -R '^(dsp_vacant_read_decoder|dsp_reserved_read_decoder|dsp_memory_map)$'
+
+Full original program-selection/Reverb, coupled audio, SL, realtime and physical
+equivalence remain unqualified. No instruction is skipped and no original DSP
+synthesis is replaced. Manufacturer words, callers and detailed analysis remain
+local. Qualification and precise experimental scope: dsp-vacant-data-read-reference.json.

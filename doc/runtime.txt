@@ -27,6 +27,8 @@ size-register correction, the real original Identity response reaches aseqdump
 (15 bytes, original ASCII1.24 quirk retained). A valid program change then fails
 at DSP PC001f93 reading unmapped X011cc1. Complete normal operation remains
 unqualified. See original-midi-runtime-reference.json and coverage.txt for scope.
+The NAND reference profile now selects an explicit vacant-data read hypothesis
+(dsp-vacant-data-read.txt); fresh complete program-change replay remains required.
 
 Execution ownership
 One emulation owner advances MCU and DSP against the common board timeline.

@@ -13,7 +13,8 @@ contents and missing-content knowledge are unchanged. A write resource with
 selected=false has no RAM/ROM bank geometry and cannot contend for storage.
 The actual native instruction still executes and retires through its existing
 owner. Unknown reads, invalid words, unsupported I/O and missing code remain
-visible failures. This contract does not turn every unknown access into success.
+visible failures. This write contract does not turn unknown reads into success.
+The separate opt-in vacant-data read hypothesis is in dsp-vacant-data-read.txt.
 
 unselected_writes counts actual committed no-storage writes. Resource queries
 have no effect on it. Hardware reset begins a new counter epoch while retaining

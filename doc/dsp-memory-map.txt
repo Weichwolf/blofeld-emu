@@ -60,7 +60,9 @@ no manufacturer code bytes are embedded and no physical-device equivalence is cl
 Original 1.25 requests MS/MSW=111. Strict diagnostics retain the Y:002000
 refusal. The explicit functional write decoder in dsp-write-decoder.txt models
 vacant/data-ROM writes without writable storage; it preserves these RAM windows,
-unknown reads and physical backing. Its complete original-clear regression
+selected unknown reads and physical backing. Vacant reads remain strict unless
+the separate explicit virtual-word contract in dsp-vacant-data-read.txt is selected.
+Its complete original-clear regression
 supports instrument bring-up without claiming the silicon decoder is identical.
 Later GPIO/NAND setup, required ROM/table functions, full boot and original
 MIDI/audio remain separate requirements. No firmware patch or loop skip is used.

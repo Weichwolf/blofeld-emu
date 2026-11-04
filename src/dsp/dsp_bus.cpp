@@ -458,8 +458,8 @@ DspBus::Location DspBus::locate_data(const DspAddress access, const Operation op
 }
 
 std::uint32_t DspBus::read(const DspAddress access) {
-  const auto unselected_word = unselected_io_read_word_;
-  if (unselected_word && unselected_read(access)) {
+  const auto unselected_word = unselected_read_value(access);
+  if (unselected_word) {
     if (unselected_reads_ == std::numeric_limits<std::uint64_t>::max()) {
       throw Fault("DSP unselected-read observation count exhausted at " + address_text(access));
     }
@@ -490,8 +490,35 @@ void DspBus::set_unselected_io_read_word(const std::optional<std::uint32_t> word
 }
 
 bool DspBus::unselected_read(const DspAddress access) const {
-  return write_contract_ == DspWriteContract::functional_decode && unselected_io_read_word_ &&
-         access.space == DspSpace::y && dsp_io_selection(access) == DspIoSelection::reserved;
+  return unselected_read_value(access).has_value();
+}
+
+void DspBus::set_unselected_data_read_word(const std::optional<std::uint32_t> word) {
+  if (word && *word > word_mask) { throw Fault("Invalid DSP unselected data read word"); }
+  unselected_data_read_word_ = word;
+}
+
+std::optional<std::uint32_t> DspBus::unselected_read_value(const DspAddress access) const {
+  if (write_contract_ != DspWriteContract::functional_decode) { return std::nullopt; }
+  if (access.space == DspSpace::y && dsp_io_selection(access) == DspIoSelection::reserved) {
+    return unselected_io_read_word_;
+  }
+  constexpr unsigned internal_end = 0x20000;
+  if (!unselected_data_read_word_ || (access.space != DspSpace::x && access.space != DspSpace::y) ||
+      access.address >= internal_end) {
+    return std::nullopt;
+  }
+  if (switch_delay_ != 0 && switching_address(access)) {
+    throw Fault("DSP memory access requires elapsed switch cycles: " + address_text(access));
+  }
+  const auto layout = memory_layout(memory_mode_);
+  const auto lower_end = access.space == DspSpace::x ? x_low_end : y_low_end;
+  const auto upper_end = access.space == DspSpace::x ? layout.x_end : layout.y_end;
+  const auto address = access.address;
+  const bool selected = address < lower_end ||
+                        (address >= data_rom_base && address < data_rom_end) ||
+                        (address >= data_rom_end && address < upper_end);
+  return selected ? std::nullopt : unselected_data_read_word_;
 }
 
 bool DspBus::unselected_write(const DspAddress access) const {

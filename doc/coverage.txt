@@ -19,6 +19,9 @@ ASCII1.24 version quirk. A subsequent valid C0 01 program change is admitted but
 fails at DSP PC001f93 on unmapped X011cc1. Program selection, SL, polyphony,
 host audio and realtime remain open. See original-midi-runtime-reference.json;
 the older0319 failure remains historical in original-a4-runtime-reference.json.
+The separate vacant-data decoder hypothesis preserves selected-memory guards
+and the actual Reverb X access (dsp-vacant-data-read.txt). Fresh complete-reset
+program-selection/audio replay remains required.
 
 The bounded optimized original-reset measurement in instrument-performance.txt
 reaches 3M MCU operations and 393 original DSP PCM frames at RTF 0.0021272 with
