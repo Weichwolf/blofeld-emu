@@ -27,6 +27,14 @@ The original Reverb callback now has a separate48-clear/two-ready regression:
 first unselected store remain intact. Independent NXP software AGU observations
 corroborate this profile, not physical silicon (dsp-reverb-clear.txt).
 
+The original sample installer/foreground/queue now has a conditional four-block
+NAND regression:128 pages,132 actual Timer1 entries,67584 target bytes and50688
+guard bytes per run. A programmed-cell fault retains C1 while the original
+counter reaches4; independent storage/wire checks distinguish those outcomes.
+Declared RAM, source-initial thresholds and functional NAND timing remain
+premises. Full receiver, factory SL, installed image and playback are pending
+(sample-nand.txt;sample-nand-reference.json).
+
 The bounded optimized original-reset measurement in instrument-performance.txt
 reaches 3M MCU operations and 393 original DSP PCM frames at RTF 0.0021272 with
 core 3903224. Profiler-on/off outputs match exactly, including the earlier

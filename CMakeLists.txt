@@ -4216,6 +4216,7 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld_nand_native_fixture PUBLIC blofeld_nand_peer
     blofeld_own_dsp_fetch)
   include(cmake/NandStatusTests.cmake)
+  include(cmake/NandSampleTests.cmake)
   add_executable(blofeld-nand-native-runtime-test test/nand_native_runtime_test.cpp)
   target_link_libraries(blofeld-nand-native-runtime-test PRIVATE blofeld_nand_native_fixture)
   add_test(NAME nand_native_runtime COMMAND blofeld-nand-native-runtime-test)

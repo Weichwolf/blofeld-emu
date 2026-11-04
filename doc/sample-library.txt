@@ -44,7 +44,7 @@ bytes, with native calls and original installer relocations. Original completion
 remains unsupplied; the actual poller rejects missing status. Exact helper/frame
 identities, reproducible commands and limits are in sample-preparation.txt.
 
-Ten separate private helper-to-original-queue cases check actual request fields and
+Ten earlier private helper-to-original-queue cases checked actual request fields and
 producer/consumer state for all four staging slots, both sides of the row gap
 and the final frame. The gap is already among the first four frames, yielding
 five unique frames, each checked through scanner and complete byte copier.
@@ -57,7 +57,7 @@ ELF hardening and terminal run evidence remain under ignored doc/local/.
 The actual descriptor producer, later request-address table updates, receiver,
 NAND outcomes and hardware wiring remain unqualified; no flash success is supplied.
 
-A further private extension connects that queue to the existing candidate NAND
+A further historical private extension connected that queue to the candidate NAND
 route under explicit laboratory ready/WP/select/block and GPIO preconditions.
 The scanner's first row write and the copier's initial command word set reserved
 Port F bits. All ten original paths fail before any NAND row/data latch or
@@ -66,6 +66,14 @@ component power-off projections retain all NAND bytes, knowledge and history.
 The failed full-confirmation probe remains recorded. DSP56371UM 6.2.4.3/Figure 6-3
 and Appendix C/Figure C-29 request zero reserved-bit writes; they do not establish
 ignoring these nonzero writes. No bit mask or successful hardware result is supplied.
+
+These earlier frontiers are superseded under the current explicit functional
+GPIO/NAND profile by original_sample_nand (sample-nand.txt). Original installer,
+foreground, four staging slots, queue and132 actual Timer1 entries complete four
+consecutive blocks, including the row gap. All128 pages/67584 bytes and50688
+guard bytes are checked. A cell-inhibit case retains actual failed status while
+the original completion counter advances. This conditional path supplies no
+SL authorization, boot-derived mapping, complete library installation or playback.
 
 The WPC file is not established as a raw NAND image. Original Spectre 1.00 and
 1.01 page readers identify a repeating 528-byte XOR mask. Both pinned executable
