@@ -76,14 +76,20 @@ struct Device {
 
   void begin() { clock.begin_step(bus, {.pc = observed_pc, .omr = 0}); }
 
-  [[nodiscard]] std::optional<blofeld::DspDmaWord> cycle(const unsigned requests = 0) {
+  [[nodiscard]] std::optional<blofeld::DspDmaWord>
+  cycle(const unsigned requests = 0, const blofeld::DspClockUnits units = {.native = 1}) {
     begin();
-    return clock.finish_native_cycle(bus, inputs({.cycles = 1, .requests = requests}));
+    return clock.finish_native_cycle(bus, inputs({.cycles = 1, .requests = requests}), units);
   }
 
   void span(const Span span) {
     begin();
     clock.finish_native_region(bus, span.cycles, inputs(span));
+  }
+
+  void dependencies(const unsigned cycles) {
+    begin();
+    clock.finish_native_region(bus, {.interlocks = cycles}, inputs({.cycles = cycles}));
   }
 
   void timer(const unsigned match) {
@@ -232,6 +238,103 @@ void test_pll_change_at_completed_boundary() {
               device.clock.native_cycle_units() == 6 && device.clock.timer_clk2_edges() == 3,
           "A completed PLL command changes the following region without losing timer phase");
 }
+
+void test_dependency_periods_keep_timer_phase() {
+  Device device;
+  device.timer(4);
+  device.dependencies(2);
+  require(device.clock.native_cycle_units() == 1 && device.clock.interlock_cycle_units() == 2 &&
+              device.clock.elapsed_cycle_units() == 3 &&
+              device.clock.elapsed_ticks() == 3 * period && device.clock.timer_clk2_edges() == 1 &&
+              device.bus.timers().read(count) == 3 && device.bus.last_dma_cycle() == 2 &&
+              device.bus.timers().interrupt_vectors().empty() &&
+              device.clock.next_native_boundary_ticks(device.bus) == period,
+          "Two dependency-only periods advance real time/DMA/CLK2 without native units");
+  require(!device.cycle() && device.clock.native_cycle_units() == 2 &&
+              device.clock.interlock_cycle_units() == 2 && device.clock.timer_clk2_edges() == 2 &&
+              device.bus.timers().read(count) == 4 &&
+              device.bus.timers().interrupt_vectors() == std::vector{timer_compare_vector},
+          "An ordinary period retains odd stall phase and reaches the exact timer IRQ");
+  device.begin();
+  device.clock.finish_native_region(
+      device.bus, {.native = 2, .interlocks = 1}, device.inputs({.cycles = 3}));
+  require(device.clock.native_cycle_units() == 4 && device.clock.interlock_cycle_units() == 3 &&
+              device.clock.elapsed_ticks() == 7 * period && device.clock.timer_clk2_edges() == 3 &&
+              device.bus.last_dma_cycle() == 6,
+          "Mixed native/dependency periods preserve separate totals and one peripheral phase");
+}
+
+void test_actual_dma_during_dependency_periods() {
+  Device device;
+  constexpr unsigned source = 0x80;
+  constexpr unsigned destination = 0x90;
+  device.bus.write({.space = blofeld::DspSpace::x, .address = source, .value = sample});
+  for (const auto store :
+       {blofeld::DspStore{.space = blofeld::DspSpace::x, .address = dma_source, .value = source},
+        {.space = blofeld::DspSpace::x, .address = dma_destination, .value = destination},
+        {.space = blofeld::DspSpace::x, .address = dma_count, .value = 0},
+        {.space = blofeld::DspSpace::x, .address = dma_control, .value = dma_word_copy}}) {
+    device.bus.write(store);
+  }
+  for (unsigned cycle = 0; cycle < blofeld::dma::settling_cycles; ++cycle) {
+    require(!device.cycle(0, {.interlocks = 1}),
+            "DMA enable settling progresses during actual dependency-only periods");
+  }
+  require(device.clock.native_cycle_units() == 1 && device.clock.interlock_cycle_units() == 3 &&
+              device.bus.has_active_dma() && device.bus.native_dma_quiescent(),
+          "Three real settling periods add no fabricated CPU cycles");
+  require(!device.cycle(1, {.interlocks = 1}) && !device.bus.native_dma_quiescent(),
+          "A real request samples the source during the dependency stall");
+  const auto word = device.cycle(1, {.interlocks = 1});
+  require(word && word->value == sample && device.bus.native_dma_quiescent() &&
+              device.bus.read({.space = blofeld::DspSpace::y, .address = destination}) == sample &&
+              device.clock.native_cycle_units() == 1 && device.clock.interlock_cycle_units() == 5 &&
+              device.clock.elapsed_ticks() == 6 * period && device.bus.last_dma_cycle() == 5,
+          "The next dependency period commits real DMA data with distinct CPU/stall counters");
+}
+
+void test_dependency_clock_guards_and_pll() {
+  Device device;
+  device.dependencies(2);
+  device.bus.pll().write(pll_9_over_2);
+  device.dependencies(1);
+  require(device.clock.elapsed_ticks() == 3 * period + pll_period &&
+              device.clock.native_cycle_units() == 1 && device.clock.interlock_cycle_units() == 3 &&
+              device.clock.timer_clk2_edges() == 2,
+          "Dependency periods use the genuine next PLL ratio and shared timer phase");
+
+  Device crossing;
+  crossing.timer(4);
+  const auto ticks = crossing.clock.elapsed_ticks();
+  const auto cursor = crossing.bus.last_dma_cycle();
+  const auto error = refuses([&] { crossing.dependencies(4); });
+  require(error.contains("crossed a device event") && crossing.clock.faulted() &&
+              crossing.clock.elapsed_ticks() == ticks &&
+              crossing.clock.interlock_cycle_units() == 0 &&
+              crossing.bus.last_dma_cycle() == cursor,
+          "Dependency spans cannot bypass the real next peripheral event");
+
+  Device invalid;
+  const auto invalid_cursor = invalid.bus.last_dma_cycle();
+  const auto bad = refuses([&] { static_cast<void>(invalid.cycle(0, {.interlocks = 2})); });
+  require(bad.contains("exactly one elapsed period") && invalid.clock.faulted() &&
+              invalid.clock.native_cycle_units() == 1 &&
+              invalid.clock.interlock_cycle_units() == 0 &&
+              invalid.bus.last_dma_cycle() == invalid_cursor,
+          "Invalid single-cycle grants refuse before advancing DMA or any clock counter");
+
+  for (const auto mode : {blofeld::DspClockSwitch::reference_instruction_boundary,
+                          blofeld::DspClockSwitch::reference_cycle_boundary}) {
+    const blofeld::DspRunClock other(
+        {.extal_hz = extal, .timebase_hz = timebase, .switch_timing = mode});
+    static_cast<void>(refuses([&] {
+      static_cast<void>(other.next_step_ticks(device.bus, blofeld::DspClockUnits{.interlocks = 1}));
+    }));
+  }
+  static_cast<void>(refuses([&] {
+    static_cast<void>(device.clock.next_step_ticks(device.bus, blofeld::DspClockUnits{}));
+  }));
+}
 }
 
 int main() {
@@ -241,6 +344,9 @@ int main() {
     test_mapping_and_shi_boundaries();
     test_actual_dma_then_idle_region();
     test_pll_change_at_completed_boundary();
+    test_dependency_periods_keep_timer_phase();
+    test_actual_dma_during_dependency_periods();
+    test_dependency_clock_guards_and_pll();
     std::cout << "Native-region clock/peripherals: " << assertions << " assertions passed\n";
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

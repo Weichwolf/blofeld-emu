@@ -54,11 +54,18 @@ public:
   void finish_step(DspBus &bus, unsigned native_cycles);
   void finish_step(DspBus &bus, DspClockUnits units);
   // Completes one already admitted DMA cycle, including shared peripheral delays.
-  void finish_dma_cycle(DspBus &bus, std::uint64_t cycle, bool switch_was_pending);
+  void finish_dma_cycle(DspBus &bus,
+                        std::uint64_t cycle,
+                        bool switch_was_pending,
+                        DspClockUnits units = {.native = 1});
   // Whole-instruction functional regions retain actual PLL/CLK2/DMA cursors.
   // Board-owned request edges and I/O cannot occur inside the admitted region.
   void finish_native_region(DspBus &bus, unsigned cycles, DspDmaInputs inputs);
-  [[nodiscard]] std::optional<DspDmaWord> finish_native_cycle(DspBus &bus, DspDmaInputs inputs);
+  // Dependency-only periods advance the same real peripheral clocks, without
+  // attributing them to the independent Core's base instruction-cycle count.
+  void finish_native_region(DspBus &bus, DspClockUnits units, DspDmaInputs inputs);
+  [[nodiscard]] std::optional<DspDmaWord>
+  finish_native_cycle(DspBus &bus, DspDmaInputs inputs, DspClockUnits units = {.native = 1});
   // Positive distance from this completed boundary, not an absolute timestamp.
   [[nodiscard]] std::optional<std::uint64_t> next_native_boundary_ticks(const DspBus &bus) const;
   // Nominal zero-duration reset boundary; preserve completed lifetime time/units.

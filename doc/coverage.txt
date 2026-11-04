@@ -342,3 +342,7 @@ Four independently authored NXP windows retain their 10/10/11/9-clock results;
 native multi-instruction execution remains active. See
 dsp-native-timed-execution-reference.json. Board clock/IRQ integration and the
 original 528-byte transfer remain open; this component does not change runtime.
+Typed dependency-only clock periods separately pass 75 assertions per sanitizer
+profile: timer phase/IRQ, PLL, actual DMA and event/budget refusals. See
+dsp-native-dependency-clock-reference.json. The native machine consumer retains
+84 assertions per profile. Board timing enablement remains open.

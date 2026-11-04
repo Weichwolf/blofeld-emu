@@ -50,7 +50,9 @@ std::uint64_t DspRunClock::duration_ticks(const DspClockUnits units,
       (units.native != 1 || units.interlocks != 0)) {
     throw Fault("DSP cycle-boundary PLL contract requires one reference period");
   }
-  if (units.native == 0 || units.native > maximum_step_cycles ||
+  const bool dependency_only =
+      inputs_.switch_timing == DspClockSwitch::functional_region_boundary && units.interlocks != 0;
+  if ((units.native == 0 && !dependency_only) || units.native > maximum_step_cycles ||
       units.interlocks > maximum_step_cycles - units.native) {
     throw Fault("Invalid or exhausted DSP reference cycle count");
   }
@@ -114,15 +116,20 @@ void DspRunClock::finish_step(DspBus &bus, const DspClockUnits units) {
 
 void DspRunClock::finish_dma_cycle(DspBus &bus,
                                    const std::uint64_t cycle,
-                                   const bool switch_was_pending) {
+                                   const bool switch_was_pending,
+                                   const DspClockUnits units) {
   if (faulted_ || !active_) { throw Fault("DSP reference clock has no healthy prepared step"); }
   try {
-    const auto ticks = duration_ticks({.native = 1}, period_ticks_);
+    const auto ticks = duration_ticks(units, period_ticks_);
+    if (units.native + units.interlocks != 1) {
+      throw Fault("DSP DMA completion requires exactly one elapsed period");
+    }
     const auto phase = (epoch_native_cycle_units() + epoch_interlock_cycle_units()) & 1U;
     bus.advance_reference_cycle_delays(cycle, switch_was_pending);
     bus.timers().advance_clk2(phase);
     ticks_ += ticks;
-    ++cycles_;
+    cycles_ += units.native;
+    interlocks_ += units.interlocks;
     clk2_edges_ += phase;
     active_ = false;
   } catch (const std::exception &error) {

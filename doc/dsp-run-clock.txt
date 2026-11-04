@@ -120,3 +120,9 @@ its source cannot destroy the running callable. Callback objects are not
 checkpoint state. Existing callers with no completion observer retain their
 previous nominal timing, deadlines and fault boundaries. Public C++ call
 signatures changed: rebuild scheduler consumers with the matching headers/libs.
+
+Functional native regions accept DspClockUnits with zero native units and
+positive dependency units. Both classes advance PLL time, CLK/2, DMA and device
+delays; counters remain separate. Active DMA still requires one actual period,
+and dependency spans obey the same next-event horizon. This clock support alone
+does not enable native instruction dependency timing in the Board timeline.
