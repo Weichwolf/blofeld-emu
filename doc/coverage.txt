@@ -62,6 +62,13 @@ build links without the foreign DSP and passes original firmware inspection.
 These authored reset/runtime cases do not establish complete original-firmware
 boot, musical functions, hardware equivalence or real-time throughput. See
 dsp-native-regions.txt.
+An actual original 1.25 POR with native-regions reaches 20,310,004 MCU operations
+and 63,970 stereo PCM frames before a contextual NAND read-control refusal.
+The 7,495-frame earlier native prefix matches exactly; the older effect-cycle
+model matches 63,968 aligned frames with its explicit two-frame onset difference.
+Both persistent images remain byte-identical. This does not establish normal
+boot, completed programming/erase, live audio/MIDI or real-time behavior. See
+original-native-regions-reference.json.
 The VSL component test now excludes the former interpreter/assembler and passes
 its 9,216 independent numeric/address cases, native REP/modulo and contextual
 refusals under both sanitizer profiles. This preserves useful legacy coverage;
