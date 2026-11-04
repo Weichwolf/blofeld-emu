@@ -3192,7 +3192,10 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS blofeld-dsp-rom-program-test blofeld-reference-original-midi-rom
+  DEPENDS blofeld-native-region-clock-test blofeld-native-region-frontend-test
+    blofeld-native-region-events-test blofeld-native-deferred-irq-test
+    blofeld-native-region-mcu-test
+    blofeld-dsp-rom-program-test blofeld-reference-original-midi-rom
     blofeld-mcu-dsp-runtime-test blofeld-own-dsp-timeline-checkpoint-test
     blofeld-own-dsp-ram-bit-test blofeld-own-dsp-ram-bit-dma-test
     blofeld-own-dsp-fetch-test blofeld-own-dsp-clock-test
@@ -3448,6 +3451,10 @@ add_custom_target(quality
     "${CMAKE_CURRENT_BINARY_DIR}/reference-reset-release-test")
   set_tests_properties(reference_reset_release PROPERTIES TIMEOUT 60)
   add_executable(blofeld-reference-nand-test test/reference_nand_test.cpp)
+  add_executable(blofeld-nand-cell-board-test test/nand_cell_board_test.cpp)
+  target_link_libraries(blofeld-nand-cell-board-test PRIVATE blofeld_reference_board)
+  add_test(NAME nand_cell_board COMMAND blofeld-nand-cell-board-test)
+  add_dependencies(quality blofeld-nand-cell-board-test)
   add_executable(blofeld-reference-nand-functional-timing-test test/reference_nand_functional_timing_test.cpp)
   target_link_libraries(blofeld-reference-nand-functional-timing-test PRIVATE blofeld_reference_board)
   add_test(NAME reference_nand_functional_timing COMMAND blofeld-reference-nand-functional-timing-test)

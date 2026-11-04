@@ -10,8 +10,8 @@
 #include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_shi.hpp"
+#include "dsp/own_dsp_fetch.hpp"
 #include "storage/nand.hpp"
-#include "storage/nand_cell_model.hpp"
 #include "storage/nand_image.hpp"
 #include "storage/nand_write_store.hpp"
 
@@ -24,7 +24,9 @@
 
 namespace blofeld::reference {
 DspRunClockInputs dsp_clock_inputs(const Config &config) {
-  if (config.dsp_clock.switch_timing != DspClockSwitch::reference_cycle_boundary) {
+  const bool native = config.dsp.timing == OwnDspAutomaticTiming::functional_native_regions &&
+                      config.dsp_clock.switch_timing == DspClockSwitch::functional_region_boundary;
+  if (!native && config.dsp_clock.switch_timing != DspClockSwitch::reference_cycle_boundary) {
     throw Fault("Regular DSP runtime requires explicit reference cycle boundaries");
   }
   return config.dsp_clock;
@@ -62,8 +64,10 @@ void Board::prepare_dsp() {
           !config_.nand->image.blocks.empty()) {
         throw Fault("Live NAND requires an existing source file without a second cold image");
       }
-      auto store = std::make_unique<NandWriteStore>(
-          *config_.nand->source_path, config_.nand->continuation, common_hz(), NandCellProfile{});
+      auto store = std::make_unique<NandWriteStore>(*config_.nand->source_path,
+                                                    config_.nand->continuation,
+                                                    common_hz(),
+                                                    config_.nand->cell_profile);
       store->observe_wp(config_.nand->write_protect_n);
       native_->nand = std::make_unique<NandPeer>(native_->dsp,
                                                  std::move(store),
@@ -74,7 +78,7 @@ void Board::prepare_dsp() {
       device.observe_wp(config_.nand->write_protect_n);
       native_->nand = std::make_unique<NandPeer>(native_->dsp,
                                                  std::move(device),
-                                                 NandCellProfile{},
+                                                 config_.nand->cell_profile,
                                                  NandBusContract::functional_transactions,
                                                  config_.nand->timing);
     } else {
@@ -163,12 +167,23 @@ McuDspRuntime::Observer Board::runtime_observer() {
     if (native_->nand) {
       native_->nand->after_native(cycle.completion_ticks, cycle.result.native_pc);
     }
-    if (cycle.result.native && cycle.result.native->retired) { ++control_.dsp_retirements; }
+    if (cycle.region) {
+      control_.dsp_retirements += cycle.region->dispatches;
+    } else if (cycle.result.native && cycle.result.native->retired) {
+      ++control_.dsp_retirements;
+    }
     control_.return_boundary = cycle.completion_ticks;
     update_wiring();
     control_.return_boundary.reset();
     observe_pcm(cycle.completion_ticks, "pipeline");
-    if (execution_.trace != nullptr) {
+    if (execution_.trace != nullptr && cycle.phase != DspRuntimePhase::cycle) {
+      *execution_.trace << (cycle.phase == DspRuntimePhase::region ? "DSP-REGION" : "DSP-IO")
+                        << " start=" << cycle.start_ticks << " end=" << cycle.completion_ticks
+                        << " cycle=" << cycle.cycle << " cycle-known=" << cycle.cycle_known
+                        << " pc=" << hex(cycle.result.native_pc.value_or(0), 6)
+                        << " retired=" << (cycle.region ? cycle.region->dispatches : 0)
+                        << " pc-known=" << cycle.result.native_pc.has_value() << '\n';
+    } else if (execution_.trace != nullptr) {
       *execution_.trace << "DSP-PIPELINE start=" << cycle.start_ticks
                         << " end=" << cycle.completion_ticks << " cycle=" << cycle.cycle
                         << " f1=" << cycle.result.issued_address.value_or(0)

@@ -15,6 +15,10 @@ bool DspDma::quiescent() const noexcept {
   });
 }
 
+bool DspDma::request_levels_held(const DspDmaInputs inputs) const noexcept {
+  return inputs.known_requests == known_requests_ && inputs.requests == requests_;
+}
+
 void DspDma::advance_quiescent(const DspDmaInputs inputs) {
   const bool valid = inputs.timing == DspDmaTiming::reference_sampled_cycles &&
                      (inputs.grant == DspDmaGrant::available || inputs.grant == DspDmaGrant::wait);

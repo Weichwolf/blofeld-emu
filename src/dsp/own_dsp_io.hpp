@@ -31,6 +31,14 @@ struct DspIoWriteObserver {
   void (*completed)(void *context, const DspStore &store, unsigned pc) = nullptr;
 };
 
+// Required wiring/protocol observation after a real peripheral access or RESET.
+// No invented whole-word value is needed for a bit operation.
+struct DspPeripheralObserver {
+  void *context = nullptr;
+  void (*preparing)(void *context, unsigned pc) = nullptr;
+  void (*completed)(void *context, unsigned pc) = nullptr;
+};
+
 // Converts synchronous core accesses to the strict board bus. This does not
 // schedule clocks, DMA, interrupts or a complete device.
 class OwnDspIo final : public dsp56300::Io {
@@ -81,6 +89,9 @@ public:
 
 private:
   friend class OwnDspMachine;
+  friend class OwnDspTimeline;
+  void prepare_peripheral(DspAddress target, unsigned pc) const;
+  void observe_peripheral(DspAddress target, unsigned pc) const;
   bool fail(Operation operation,
             dsp56300::Space space,
             dsp56300::Word address,
@@ -93,5 +104,6 @@ private:
   DspIoReadObserver read_observer_;
   DspIoWriteObserver write_observer_;
   std::array<std::array<dsp56300::MemoryWindow, 3>, 2> windows_{};
+  DspPeripheralObserver peripheral_observer_;
 };
 } // namespace blofeld

@@ -43,22 +43,23 @@ nand-read-handoff-reference.json.
 The pinned core now defaults to native execution with the board bus's pure known
 program view and code/mapping revisions. Actual default-Core bus tests qualify
 native NOPs, data-cache reuse, code invalidation, real RAM/BCR transfers and
-precise unknown-code/BIU refusals. The connected scheduler still uses captured
-effects; finite cycle horizons and observable-I/O synchronization remain open.
+precise unknown-code/BIU refusals. Diagnostic schedulers retain captured effects;
+functional native-regions uses the separate finite-time contract below.
 See dsp-native-bus.txt for the component evidence and its limits.
 The pinned core additionally provides bounded native CPU-only regions, native
 short JMP/cached tails and genuine known next-fetch snapshots. The real bus
 consumer passes both sanitizer profiles with native NOP/JMP and pre-effect owner
-boundaries. Connected scheduling and instrument throughput remain unqualified.
-The Core and board adapter now qualify direct sparse internal X/Y data windows,
-including known-byte guards, readonly ROM, all map transitions, matching storage
-and paired restore. Full-access observers retain genuine callbacks and detach
-back to native execution. The 462-case board gate and nine affected groups pass
-both sanitizer profiles. Connected native frontend integration and instrument
-throughput remain separate; see dsp-data-windows.txt.
-State-only deferred IRQ admission is also available from WAIT and ordinary
-unknown foreground. The Core qualifies its actual vector/continuation and
-rejection contracts; connected frontend integration remains separate.
+boundaries. Whole-instrument throughput remains unqualified.
+The board exports guarded sparse internal X/Y data windows. Full-access observers
+retain actual callbacks; the separate peripheral-only observer permits native RAM.
+The explicit native-regions runtime couples real Core execution, finite hardware
+horizons, genuine deferred IRQ/vector reads, DMA, reset and paired snapshots.
+Seventeen directed groups per ASan/UBSan and TSan profile qualify the combined
+layout and regular Board paths, including computed cold/live NAND writes and
+CE-enabled native reservations with the explicit empty external P-cache profile.
+The regular application entrypoint compiles in both profiles. These authored
+reset/runtime cases do not establish complete original-firmware boot, musical
+functions, hardware equivalence or real-time throughput. See dsp-native-regions.txt.
 The VSL component test now excludes the former interpreter/assembler and passes
 its 9,216 independent numeric/address cases, native REP/modulo and contextual
 refusals under both sanitizer profiles. This preserves useful legacy coverage;

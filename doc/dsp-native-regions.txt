@@ -1,0 +1,33 @@
+Functional native regions
+
+The reference-board format2 selector `dsp-execution native-regions` selects the
+functional clock/frontend pair. Native CPU/RAM prefixes consume actual Core base
+cycles and stop at MCU, DMA, timer, SHI, map and declared peer deadlines.
+Instructions crossing a horizon retain their genuine code and cost. Actual
+MMIO/read/write/bit/RESET effects complete at the reserved boundary; hardware
+reset cancels pending work. Paired snapshots retain CPU, bus, clock and reservation.
+IRQ admission uses state-only request_interrupt(vector,level), including WAIT
+and unknown foreground; real vector reads and acknowledgement remain owned work.
+
+Only stable, known, permitted data windows receive direct native RAM access.
+Full-access observers suppress those grants and rebind on detach. Peripheral-only
+callbacks notify actual MMIO without synthetic RAM stores or cache invalidation.
+The machine explicitly declares an empty external architectural P-cache interval.
+SR.CE remains unchanged; genuine Core control/vector fetch ownership is retained.
+
+NAND configuration may append `cells reference` to nand-image/nand-store together
+with the independent timing and `wp high|low` fields. This selects computed
+pulse-inhibit physics; C++ profiles may supply inhibit maps. Omission remains
+unqualified. WP, block validity/protection and program history are not inferred.
+Both cold and durable backings use the same model; completed durable data and
+metadata match the actual computed state.
+
+Validation: native_region_clock/frontend/events/mcu, native_deferred_irq,
+nand_cell_board and nine data-window/owner groups plus reference NAND timing/store
+pass ASan/UBSan and separately TSan. The CE reservation oracle checks actual
+native JMP retirement after three clocks split 1+2, with independent PC/SR/cycle
+expectations; the old caller fails that native-path assertion after state passes.
+
+Original full boot, all instrument functions and real-time operation remain open.
+STOP/debug oscillator contracts and physical NAND characterization are not
+qualified by these authored tests. No fuzz test is part of this validation.

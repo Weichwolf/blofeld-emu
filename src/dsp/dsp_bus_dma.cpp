@@ -243,8 +243,7 @@ std::optional<DspDmaWord> DspBus::advance_dma(DspDmaInputs inputs) {
   return advance_dma_with_admission(inputs, {});
 }
 
-std::optional<DspDmaWord> DspBus::advance_dma_with_admission(DspDmaInputs inputs,
-                                                             const DspDmaAdmission &admission) {
+DspDmaInputs DspBus::resolve_dma_inputs(DspDmaInputs inputs) {
   constexpr unsigned external = 15;
   constexpr unsigned primary = 1U << 12U;
   constexpr unsigned secondary = 1U << 22U;
@@ -270,6 +269,12 @@ std::optional<DspDmaWord> DspBus::advance_dma_with_admission(DspDmaInputs inputs
       if (serial.transmit_request()) { inputs.requests |= bit; }
     }
   }
+  return inputs;
+}
+
+std::optional<DspDmaWord> DspBus::advance_dma_with_admission(DspDmaInputs inputs,
+                                                             const DspDmaAdmission &admission) {
+  inputs = resolve_dma_inputs(inputs);
   return dma_.advance(
       inputs,
       {.read =

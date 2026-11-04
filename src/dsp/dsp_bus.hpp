@@ -174,6 +174,12 @@ public:
 
   [[nodiscard]] bool has_active_dma() const { return dma_.active(); }
 
+  [[nodiscard]] bool native_dma_quiescent() const noexcept {
+    return dma_.last_cycle().has_value() && dma_.quiescent();
+  }
+
+  [[nodiscard]] bool native_dma_quiescent(DspDmaInputs inputs);
+
   void install_rom(DspRom image);
   void observe_omr(std::uint32_t value);
   void advance_instruction_cycles(unsigned cycles);
@@ -221,6 +227,9 @@ private:
   friend class OwnDspFetch;
   void advance_reference_cycle_delays(std::uint64_t admitted_dma_cycle, bool switch_was_pending);
   void advance_core_delays(unsigned cycles);
+  [[nodiscard]] DspDmaInputs resolve_dma_inputs(DspDmaInputs inputs);
+  [[nodiscard]] std::optional<std::uint64_t> native_cycle_boundary(unsigned clk2_phase) const;
+  void advance_quiescent_cycles(unsigned cycles, DspDmaInputs inputs);
   void advance_memory_switch(unsigned cycles);
   void acknowledge_latched_interrupt(DspInterruptRequest request);
   [[nodiscard]] bool interrupt_source_pending(DspInterruptRequest request) const;

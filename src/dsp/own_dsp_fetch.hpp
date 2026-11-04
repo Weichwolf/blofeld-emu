@@ -19,7 +19,8 @@ enum class OwnDspAutomaticTiming : std::uint8_t {
   one_effect_per_cycle_program_write_priority,
   one_effect_per_cycle_write_priority_with_interrupts,
   one_effect_per_cycle_program_priority_with_interrupts,
-  native_cycle_budget
+  native_cycle_budget,
+  functional_native_regions
 };
 
 struct OwnDspFetchCycleResult {

@@ -30,6 +30,23 @@ bool OwnDspInterrupts::admit(const dsp56300::InstructionWords foreground) {
   return true;
 }
 
+bool OwnDspInterrupts::admit() {
+  if (request_) { throw std::logic_error("DSP interrupt already owns vector acknowledgement"); }
+  constexpr unsigned mask_shift = 8;
+  constexpr unsigned mask_bits = 3;
+  constexpr dsp56300::Word vector_base_mask = 0xffff00;
+  const auto regs = cpu_.registers();
+  const auto candidate = bus_.interrupt_request((regs.sr >> mask_shift) & mask_bits);
+  if (!candidate || !cpu_.interruptible()) { return false; }
+  const auto address = (regs.vba & vector_base_mask) | candidate->vector;
+  bus_.validate_admitted_interrupt(*candidate);
+  cpu_.request_interrupt(address, candidate->level);
+  request_ = *candidate;
+  vector_ = address;
+  first_ = false;
+  return true;
+}
+
 dsp56300::InstructionProgress OwnDspInterrupts::advance(const dsp56300::EffectTicket &ticket) {
   // The native core validates every ticket. Vector inspection is needed only
   // while this owner is acknowledging an admitted interrupt.

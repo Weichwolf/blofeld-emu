@@ -20,6 +20,7 @@ public:
   [[nodiscard]] bool pending() const noexcept { return request_.has_value(); }
 
   [[nodiscard]] bool admit(dsp56300::InstructionWords foreground);
+  [[nodiscard]] bool admit();
   [[nodiscard]] dsp56300::InstructionProgress advance(const dsp56300::EffectTicket &ticket);
 
 private:

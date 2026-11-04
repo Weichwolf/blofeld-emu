@@ -30,6 +30,7 @@
 #include "midi/midi_timed.hpp"
 #include "storage/flash_image.hpp"
 #include "storage/nand.hpp"
+#include "storage/nand_cell_model.hpp"
 #include "storage/nand_image.hpp"
 #include "storage/nand_timing.hpp"
 
@@ -156,6 +157,8 @@ struct NandConnection {
   NandTiming timing = NandTiming::candidate_minima;
   // Explicit held active-low input; absence does not imply write permission.
   std::optional<bool> write_protect_n = std::nullopt;
+  // Explicit simulated cell physics; no block validity or command result is inferred.
+  NandCellProfile cell_profile = {};
 };
 
 // Declared peripheral POR source; first native pad observation at/after release wins.

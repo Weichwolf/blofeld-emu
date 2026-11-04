@@ -17,6 +17,7 @@
 #include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_run_clock.hpp"
 #include "storage/nand.hpp"
+#include "storage/nand_cell_model.hpp"
 #include "storage/nand_file.hpp"
 #include "storage/nand_image.hpp"
 #include "storage/nand_timing.hpp"
@@ -298,6 +299,9 @@ void dsp_execution(Config &config, std::istringstream &line) {
         OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts;
   } else if (timing == "native-cycles") {
     config.dsp.timing = OwnDspAutomaticTiming::native_cycle_budget;
+  } else if (timing == "native-regions") {
+    config.dsp.timing = OwnDspAutomaticTiming::functional_native_regions;
+    config.dsp_clock.switch_timing = DspClockSwitch::functional_region_boundary;
   } else {
     throw Fault("Unknown reference-board DSP execution timing: " + timing);
   }
@@ -435,6 +439,33 @@ bool midi_setting(Config &config, const std::string_view key, std::istringstream
   return true;
 }
 
+void nand_write_protect(std::istringstream &line, std::optional<bool> &input) {
+  if (input.has_value()) { throw Fault("Duplicate NAND WP input"); }
+  const auto level = token(line);
+  if (level != "high" && level != "low") { throw Fault("NAND WP must be high or low"); }
+  input = level == "high";
+}
+
+void nand_cell_profile(std::istringstream &line, NandCellProfile &profile) {
+  if (profile.contract != NandCellContract::unqualified) {
+    throw Fault("Duplicate NAND cell profile");
+  }
+  if (token(line) != "reference") {
+    throw Fault("NAND cells require the explicit reference transition model");
+  }
+  profile.contract = NandCellContract::reference_pulse_inhibit;
+}
+
+void nand_timing(const std::string &policy, NandTiming &timing, bool &selected) {
+  if (selected) { throw Fault("Duplicate or unknown NAND timing selector"); }
+  if (policy == "functional-protocol") {
+    timing = NandTiming::functional_protocol;
+  } else if (policy != "candidate-minima") {
+    throw Fault("NAND timing must be candidate-minima or functional-protocol");
+  }
+  selected = true;
+}
+
 NandConnection nand_connection(std::istringstream &line, const NandBacking backing) {
   const auto kind = token(line);
   NandReadContinuation continuation = NandReadContinuation::unqualified;
@@ -449,22 +480,16 @@ NandConnection nand_connection(std::istringstream &line, const NandBacking backi
   if (!(line >> std::quoted(path)) || path.empty()) { throw Fault("Missing NAND backing path"); }
   auto timing = NandTiming::candidate_minima;
   std::optional<bool> write_protect_n;
+  NandCellProfile cell_profile;
   bool timing_selected = false;
   std::string policy;
   while (line >> policy) {
     if (policy == "wp") {
-      if (write_protect_n.has_value()) { throw Fault("Duplicate NAND WP input"); }
-      const auto level = token(line);
-      if (level != "high" && level != "low") { throw Fault("NAND WP must be high or low"); }
-      write_protect_n = level == "high";
+      nand_write_protect(line, write_protect_n);
+    } else if (policy == "cells") {
+      nand_cell_profile(line, cell_profile);
     } else {
-      if (timing_selected) { throw Fault("Duplicate or unknown NAND timing selector"); }
-      if (policy == "functional-protocol") {
-        timing = NandTiming::functional_protocol;
-      } else if (policy != "candidate-minima") {
-        throw Fault("NAND timing must be candidate-minima or functional-protocol");
-      }
-      timing_selected = true;
+      nand_timing(policy, timing, timing_selected);
     }
   }
   return {.image = backing == NandBacking::cold_image ? load_nand_image(path) : NandImage{},
@@ -472,7 +497,8 @@ NandConnection nand_connection(std::istringstream &line, const NandBacking backi
           .backing = backing,
           .source_path = path,
           .timing = timing,
-          .write_protect_n = write_protect_n};
+          .write_protect_n = write_protect_n,
+          .cell_profile = cell_profile};
 }
 
 McuDspGpioWiring gpio_peer(std::istringstream &line) {

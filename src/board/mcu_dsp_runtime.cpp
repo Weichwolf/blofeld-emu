@@ -332,6 +332,10 @@ void McuDspRuntime::advance(const bool native_through,
                             const bool external_through,
                             const CycleInputs &inputs,
                             const Observer &observer) {
+  if (timeline_->native_regions()) {
+    advance_regions(native_through, external_through, inputs, observer);
+    return;
+  }
   while (true) {
     const auto input = next_event();
     const auto event = input.ticks;

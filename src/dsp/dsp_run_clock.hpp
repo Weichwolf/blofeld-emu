@@ -11,7 +11,8 @@ namespace blofeld {
 enum class DspClockSwitch : std::uint8_t {
   unqualified,
   reference_instruction_boundary,
-  reference_cycle_boundary
+  reference_cycle_boundary,
+  functional_region_boundary
 };
 
 struct DspRunClockInputs {
@@ -54,6 +55,12 @@ public:
   void finish_step(DspBus &bus, DspClockUnits units);
   // Completes one already admitted DMA cycle, including shared peripheral delays.
   void finish_dma_cycle(DspBus &bus, std::uint64_t cycle, bool switch_was_pending);
+  // Whole-instruction functional regions retain actual PLL/CLK2/DMA cursors.
+  // Board-owned request edges and I/O cannot occur inside the admitted region.
+  void finish_native_region(DspBus &bus, unsigned cycles, DspDmaInputs inputs);
+  [[nodiscard]] std::optional<DspDmaWord> finish_native_cycle(DspBus &bus, DspDmaInputs inputs);
+  // Positive distance from this completed boundary, not an absolute timestamp.
+  [[nodiscard]] std::optional<std::uint64_t> next_native_boundary_ticks(const DspBus &bus) const;
   // Nominal zero-duration reset boundary; preserve completed lifetime time/units.
   void restart_native_epoch();
   [[nodiscard]] std::uint64_t next_step_ticks(const DspBus &bus, unsigned native_cycles) const;

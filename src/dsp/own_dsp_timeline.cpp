@@ -27,15 +27,19 @@ OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine,
       expected_epoch_(machine.clock().native_epoch()),
       expected_dma_(machine.bus().last_dma_cycle()),
       horizon_(epoch_ticks) {
-  if (machine_.clock_inputs_.switch_timing != DspClockSwitch::reference_cycle_boundary ||
-      (timing_ != OwnDspAutomaticTiming::one_effect_per_cycle &&
-       timing_ != OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority &&
-       timing_ != OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts &&
-       timing_ != OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts &&
-       timing_ != OwnDspAutomaticTiming::native_cycle_budget) ||
+  const auto clock_mode = machine_.clock_inputs_.switch_timing;
+  const bool native = native_regions() && clock_mode == DspClockSwitch::functional_region_boundary;
+  const bool diagnostic =
+      clock_mode == DspClockSwitch::reference_cycle_boundary &&
+      (timing_ == OwnDspAutomaticTiming::one_effect_per_cycle ||
+       timing_ == OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority ||
+       timing_ == OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts ||
+       timing_ == OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts ||
+       timing_ == OwnDspAutomaticTiming::native_cycle_budget);
+  if ((!native && !diagnostic) ||
       expected_ticks_ > std::numeric_limits<std::uint64_t>::max() - epoch_ticks_) {
-    throw Fault("Own DSP timeline requires reference-cycle clock switching, qualified timing and "
-                "representable epoch");
+    throw Fault(
+        "Own DSP timeline requires a qualified clock/frontend pair and representable epoch");
   }
   cycle_identity_ = std::make_shared<const bool>(true);
   if (initial_reset) {
@@ -43,6 +47,8 @@ OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine,
       throw Fault("Own DSP timeline reset requires an unowned machine");
     }
     start_reset(*initial_reset);
+  } else if (native_regions()) {
+    machine_.require_running();
   } else {
     fetch_ = std::make_unique<OwnDspFetch>(machine_);
   }
@@ -59,6 +65,12 @@ void OwnDspTimeline::check_owner() const {
       machine_.bus().last_dma_cycle() != expected_dma_) {
     throw Fault("Own DSP timeline requires its healthy unchanged native boundary");
   }
+  if (native_regions() && !reset_identity_) {
+    if (!machine_.captured_fetch_owner_.expired()) {
+      throw Fault("Native DSP timeline lost its unshared instruction owner");
+    }
+    return;
+  }
   if (fetch_) {
     static_cast<void>(fetch_->view());
   } else if (!reset_identity_ || machine_.captured_fetch_owner_.owner_before(reset_identity_) ||
@@ -72,6 +84,10 @@ void OwnDspTimeline::start_reset(const OwnDspResetInputs inputs) {
   const auto identity = std::make_shared<const bool>(true);
   try {
     machine_.perform_hardware_reset(inputs);
+    native_words_.reset();
+    native_cost_ = 0;
+    native_remaining_ = 0;
+    native_staged_ = false;
     fetch_.reset();
     reset_identity_ = identity;
     machine_.captured_fetch_owner_ = reset_identity_;
@@ -88,7 +104,7 @@ void OwnDspTimeline::start_reset(const OwnDspResetInputs inputs) {
 
 void OwnDspTimeline::begin_hardware_reset(const OwnDspResetInputs inputs) {
   check_owner();
-  if (!fetch_ || horizon_ != epoch_ticks_ + expected_ticks_) {
+  if ((!fetch_ && !native_regions()) || horizon_ != epoch_ticks_ + expected_ticks_) {
     throw Fault("Own DSP timeline reset requires its current completed reference boundary");
   }
   start_reset(inputs);
@@ -96,7 +112,7 @@ void OwnDspTimeline::begin_hardware_reset(const OwnDspResetInputs inputs) {
 
 std::uint64_t OwnDspTimeline::advance_reset_to(const std::uint64_t horizon) {
   check_owner();
-  if (fetch_ || horizon < horizon_) {
+  if (!machine_.clock().hardware_reset_active() || horizon < horizon_) {
     throw Fault("Own DSP timeline reset advance requires held reset and monotonic time");
   }
   const auto now = epoch_ticks_ + expected_ticks_;
@@ -109,7 +125,7 @@ std::uint64_t OwnDspTimeline::advance_reset_to(const std::uint64_t horizon) {
     if (!machine_.clock().hardware_reset_active()) {
       machine_.captured_fetch_owner_.reset();
       reset_identity_.reset();
-      fetch_ = std::make_unique<OwnDspFetch>(machine_);
+      if (!native_regions()) { fetch_ = std::make_unique<OwnDspFetch>(machine_); }
     }
     return consumed;
   } catch (...) {
@@ -120,14 +136,18 @@ std::uint64_t OwnDspTimeline::advance_reset_to(const std::uint64_t horizon) {
 
 void OwnDspTimeline::release_hardware_reset() {
   check_owner();
-  if (fetch_) { throw Fault("Own DSP timeline reset is already complete"); }
+  if (!machine_.clock().hardware_reset_active()) {
+    throw Fault("Own DSP timeline reset is already complete");
+  }
   machine_.check_reset_release();
   machine_.clock_.release_hardware_reset();
 }
 
 std::uint64_t OwnDspTimeline::next_deadline() const {
   check_owner();
-  if (!fetch_) { throw Fault("Own DSP timeline execution awaits completed reset recovery"); }
+  if (machine_.clock().hardware_reset_active()) {
+    throw Fault("Own DSP timeline execution awaits completed reset recovery");
+  }
   return cycle_deadline();
 }
 
@@ -144,7 +164,9 @@ std::optional<OwnDspFetchCycleResult> OwnDspTimeline::advance_one(const std::uin
                                                                   const OwnDspBoundary boundary,
                                                                   const DspDmaInputs inputs) {
   check_owner();
-  if (!fetch_) { throw Fault("Own DSP timeline execution awaits completed reset recovery"); }
+  if (!fetch_ || native_regions()) {
+    throw Fault("DSP cycle replay requires its diagnostic fetch owner");
+  }
   if ((boundary != OwnDspBoundary::before && boundary != OwnDspBoundary::through) ||
       horizon < horizon_ ||
       (horizon == horizon_ && boundary_ == OwnDspBoundary::through &&

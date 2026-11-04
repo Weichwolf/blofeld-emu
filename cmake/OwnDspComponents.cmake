@@ -12,6 +12,7 @@ add_library(blofeld_dsp_peripherals src/dsp/dsp_shi.cpp src/dsp/dsp_shi_spi.cpp 
   src/dsp/dsp_dax.cpp src/dsp/dsp_dax_clock.cpp src/dsp/dsp_bus_dax.cpp
   src/dsp/dsp_gpio.cpp src/dsp/dsp_timers.cpp src/dsp/dsp_timer_clock.cpp src/dsp/dsp_timer_capture.cpp
   src/dsp/dsp_timer_boundary.cpp src/dsp/dsp_dma_quiescent.cpp src/dsp/dsp_interrupts.cpp
+  src/dsp/dsp_native_region_bus.cpp src/dsp/dsp_native_region_clock.cpp
   src/dsp/dsp_run_clock.cpp src/dsp/dsp_run_reset.cpp)
 target_include_directories(blofeld_dsp_peripherals PUBLIC src)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware blofeld_gpio_pads)
@@ -40,12 +41,12 @@ add_library(blofeld_own_dsp_fetch STATIC EXCLUDE_FROM_ALL src/dsp/own_dsp_fetch.
   src/dsp/own_dsp_fetch_checkpoint.cpp src/dsp/dsp_native_budget.cpp src/dsp/dsp_loop_publication.cpp
   src/dsp/own_dsp_timeline.cpp src/dsp/own_dsp_timeline_checkpoint.cpp
   src/dsp/dsp_program_fetch.cpp src/dsp/dsp_fetch_context.cpp src/dsp/dsp_loop_fetch.cpp
-  src/dsp/dsp_loop_source.cpp)
+  src/dsp/dsp_loop_source.cpp src/dsp/own_dsp_native_regions.cpp)
 target_include_directories(blofeld_own_dsp_fetch PUBLIC src)
 target_link_libraries(blofeld_own_dsp_fetch PUBLIC blofeld_own_dsp_io blofeld_dsp_branch_decode
   blofeld_dsp_control_decode)
 add_library(blofeld_mcu_dsp_runtime STATIC EXCLUDE_FROM_ALL src/board/mcu_dsp_runtime.cpp
-  src/board/mcu_dsp_runtime_peripheral.cpp)
+  src/board/mcu_dsp_runtime_peripheral.cpp src/board/mcu_dsp_runtime_regions.cpp)
 target_link_libraries(blofeld_mcu_dsp_runtime PUBLIC blofeld_own_dsp_fetch blofeld_dsp_peripheral_calendar)
 if(NOT BLOFELD_OWN_DSP_ONLY)
   target_link_libraries(blofeld_mcu_dsp_runtime PUBLIC blofeld_core)
@@ -56,6 +57,22 @@ if(NOT BLOFELD_OWN_DSP_ONLY)
   endif()
 endif()
 if(BUILD_TESTING)
+  add_executable(blofeld-native-region-clock-test test/native_region_clock_test.cpp)
+  target_link_libraries(blofeld-native-region-clock-test PRIVATE blofeld_dsp_peripherals)
+  add_test(NAME native_region_clock COMMAND blofeld-native-region-clock-test)
+  foreach(scope IN ITEMS frontend events)
+    add_executable(blofeld-native-region-${scope}-test test/native_region_${scope}_test.cpp)
+    target_link_libraries(blofeld-native-region-${scope}-test PRIVATE blofeld_own_dsp_fetch)
+    add_test(NAME native_region_${scope} COMMAND blofeld-native-region-${scope}-test)
+  endforeach()
+  add_executable(blofeld-native-deferred-irq-test test/native_deferred_irq_test.cpp)
+  target_link_libraries(blofeld-native-deferred-irq-test PRIVATE blofeld_own_dsp_fetch)
+  add_test(NAME native_deferred_irq COMMAND blofeld-native-deferred-irq-test)
+  if(NOT BLOFELD_OWN_DSP_ONLY)
+    add_executable(blofeld-native-region-mcu-test test/native_region_mcu_test.cpp)
+    target_link_libraries(blofeld-native-region-mcu-test PRIVATE blofeld_mcu_dsp_runtime)
+    add_test(NAME native_region_mcu COMMAND blofeld-native-region-mcu-test)
+  endif()
   add_executable(blofeld-dsp-timer-boundary-test test/dsp_timer_boundary_test.cpp)
   target_link_libraries(blofeld-dsp-timer-boundary-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_timer_boundary COMMAND blofeld-dsp-timer-boundary-test)

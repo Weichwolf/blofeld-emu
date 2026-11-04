@@ -68,6 +68,7 @@ public:
   // No transfer, enable settling or first request sample can change on a held
   // request baseline. Pending IRQ flags remain separately admissible.
   [[nodiscard]] bool quiescent() const noexcept;
+  [[nodiscard]] bool request_levels_held(DspDmaInputs inputs) const noexcept;
   // Consume a nonempty span after an actual sampled cycle. The board owns
   // all request edges and must stop the span before their next change.
   // Rejects changed/unknown baselines and any uncompleted DMA transition.

@@ -28,6 +28,10 @@
 
 namespace blofeld {
 namespace {
+// The functional board profile declares no external architectural P-cache interval.
+constexpr dsp56300::Options core_profile{.cacheable_begin = dsp56300::address_words,
+                                         .cacheable_end = dsp56300::address_words};
+
 class EffectGuard {
 public:
   explicit EffectGuard(bool &active) : active_(active) { active_ = true; }
@@ -188,7 +192,11 @@ OwnDspCheckpoint::OwnDspCheckpoint(std::shared_ptr<const Storage> storage)
 OwnDspCheckpoint::~OwnDspCheckpoint() = default;
 
 OwnDspMachine::OwnDspMachine(const DspRunClockInputs clock)
-    : io_(bus_), cpu_(io_), interrupts_(bus_, cpu_), clock_(clock), clock_inputs_(clock) {}
+    : io_(bus_),
+      cpu_(io_, core_profile),
+      interrupts_(bus_, cpu_),
+      clock_(clock),
+      clock_inputs_(clock) {}
 
 OwnDspCheckpoint OwnDspMachine::checkpoint() const {
   if (advancing_effect_) { throw Fault("Own DSP checkpoint requires an inactive effect"); }
@@ -251,6 +259,7 @@ void OwnDspMachine::restore(const OwnDspCheckpoint &checkpoint) {
   interrupts_.vector_ = state.vector;
   interrupts_.first_ = state.first;
   io_.failure_ = std::move(restored_failure);
+  io_.peripheral_observer_ = {};
   captured_fetch_owner_.reset();
   clocked_owner_.reset();
 }
@@ -325,6 +334,7 @@ void OwnDspMachine::perform_hardware_reset(const OwnDspResetInputs inputs) {
     regs.m.fill(dsp56300::word_mask);
     cpu_.set_registers(regs);
     io_.clear_failure();
+    io_.peripheral_observer_ = {};
     clock_.begin_hardware_reset(inputs.recovery_cycles);
   } catch (...) {
     clock_.fail();

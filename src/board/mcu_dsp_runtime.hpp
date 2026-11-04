@@ -50,11 +50,16 @@ struct DspRuntimePeripheralEvents {
   unsigned maximum_events_per_period = 0;
 };
 
+enum class DspRuntimePhase : std::uint8_t { cycle, region, peripheral };
+
 struct DspRuntimeCycle {
   std::uint64_t start_ticks;
   std::uint64_t completion_ticks;
   std::uint64_t cycle;
   OwnDspFetchCycleResult result;
+  DspRuntimePhase phase = DspRuntimePhase::cycle;
+  std::optional<dsp56300::RunResult> region = std::nullopt;
+  bool cycle_known = true;
 };
 
 class McuDspRuntimeCheckpoint {
@@ -177,6 +182,22 @@ private:
                const CycleInputs &inputs,
                const Observer &observer);
   void advance_native(std::uint64_t ticks, const CycleInputs &inputs, const Observer &observer);
+  void advance_regions(bool native_through,
+                       bool external_through,
+                       const CycleInputs &inputs,
+                       const Observer &observer);
+  [[nodiscard]] bool advance_region_reset(bool native_through,
+                                          bool external_through,
+                                          const InputEvent &event,
+                                          const CycleInputs &inputs,
+                                          const Observer &observer);
+  [[nodiscard]] bool advance_native_region(std::uint64_t horizon,
+                                           OwnDspBoundary boundary,
+                                           const CycleInputs &inputs,
+                                           const Observer &observer);
+  void prepare_native_effect(const CycleInputs &inputs);
+  void observe_native_effect(unsigned pc, const Observer &observer);
+  void observe_input_event(const InputEvent &event);
   void advance_reset(std::uint64_t ticks, bool through);
   void observe_external(std::uint64_t ticks);
   void prepare_write(const CycleInputs &inputs, const Observer &observer);

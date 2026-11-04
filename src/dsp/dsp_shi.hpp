@@ -44,6 +44,11 @@ public:
   void write(DspWordWrite access);
   void observe_spi(SpiInputs pins);
   void advance_instruction_cycles(unsigned cycles);
+
+  [[nodiscard]] std::optional<unsigned> next_cycle_boundary() const noexcept {
+    return reset_pending_ || interrupt_delay_ ? std::optional<unsigned>{1} : std::nullopt;
+  }
+
   [[nodiscard]] ShiOutputs outputs() const;
   [[nodiscard]] std::vector<std::uint32_t> interrupt_vectors() const;
 

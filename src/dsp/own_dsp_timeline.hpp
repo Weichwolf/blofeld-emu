@@ -30,6 +30,12 @@ private:
 // External events and their ordering at equal timestamps remain board-owned.
 // Owns chip execution and reset/time controls until destruction or chip-only
 // restoration. Direct unclocked execution is rejected while this owner lives.
+struct OwnDspRegionResult {
+  std::uint64_t start_ticks;
+  std::uint64_t completion_ticks;
+  dsp56300::RunResult execution;
+};
+
 class OwnDspTimeline {
 public:
   OwnDspTimeline(OwnDspMachine &machine,
@@ -51,6 +57,17 @@ public:
   [[nodiscard]] std::optional<OwnDspFetchCycleResult>
   advance_one(std::uint64_t horizon, OwnDspBoundary boundary, DspDmaInputs inputs);
 
+  [[nodiscard]] std::optional<OwnDspRegionResult>
+  advance_native_region(std::uint64_t horizon,
+                        OwnDspBoundary boundary,
+                        DspDmaInputs inputs,
+                        unsigned maximum_cycles,
+                        DspPeripheralObserver observer = {});
+
+  [[nodiscard]] bool native_regions() const noexcept {
+    return timing_ == OwnDspAutomaticTiming::functional_native_regions;
+  }
+
   [[nodiscard]] bool faulted() const { return faulted_; }
 
   // Read-only ownership check, including held reset and chip-only restoration.
@@ -61,9 +78,27 @@ public:
 private:
   [[nodiscard]] static const OwnDspTimelineCheckpoint::Storage &
   saved_state(const OwnDspTimelineCheckpoint &checkpoint);
+
+  struct NativeSlice {
+    std::uint64_t horizon;
+    OwnDspBoundary boundary;
+    DspDmaInputs inputs;
+    unsigned maximum_cycles;
+    unsigned capacity;
+  };
+
+  [[nodiscard]] dsp56300::RunResult execute_native_region(const NativeSlice &slice);
   void check_owner() const;
   [[nodiscard]] std::uint64_t cycle_deadline() const;
   void start_reset(OwnDspResetInputs inputs);
+  [[nodiscard]] unsigned
+  native_capacity(std::uint64_t horizon, OwnDspBoundary boundary, unsigned maximum_cycles) const;
+  void native_time(unsigned cycles, DspDmaInputs inputs);
+  void reserve_native(const dsp56300::BoundedRunResult &preview);
+  void finish_native_reservation();
+  void advance_native_effects();
+  void publish_native_boundary();
+  [[nodiscard]] dsp56300::RunResult native_snapshot(std::uint64_t before) const;
   OwnDspMachine &machine_;
   std::shared_ptr<const bool> cycle_identity_;
   std::unique_ptr<OwnDspFetch> fetch_;
@@ -75,6 +110,10 @@ private:
   std::optional<std::uint64_t> expected_dma_;
   std::uint64_t horizon_;
   OwnDspBoundary boundary_ = OwnDspBoundary::before;
+  std::optional<dsp56300::InstructionWords> native_words_;
+  unsigned native_cost_ = 0;
+  unsigned native_remaining_ = 0;
+  bool native_staged_ = false;
   bool faulted_ = false;
 };
 }

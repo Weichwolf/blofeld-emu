@@ -2,6 +2,7 @@
 #include "dsp/own_dsp_fetch.hpp"
 #include "dsp/own_dsp_machine.hpp"
 #include "dsp/own_dsp_timeline.hpp"
+#include "dsp56300/core.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -20,6 +21,10 @@ struct OwnDspTimelineCheckpoint::Storage {
   std::optional<std::uint64_t> expected_dma;
   std::uint64_t horizon;
   OwnDspBoundary boundary;
+  std::optional<dsp56300::InstructionWords> native_words;
+  unsigned native_cost;
+  unsigned native_remaining;
+  bool native_staged;
 };
 
 OwnDspTimelineCheckpoint::OwnDspTimelineCheckpoint(std::shared_ptr<const Storage> storage)
@@ -45,7 +50,11 @@ OwnDspTimelineCheckpoint OwnDspTimeline::checkpoint() const {
           .expected_epoch = expected_epoch_,
           .expected_dma = expected_dma_,
           .horizon = horizon_,
-          .boundary = boundary_}));
+          .boundary = boundary_,
+          .native_words = native_words_,
+          .native_cost = native_cost_,
+          .native_remaining = native_remaining_,
+          .native_staged = native_staged_}));
 }
 
 OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine, const OwnDspTimelineCheckpoint &checkpoint)
@@ -56,15 +65,21 @@ OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine, const OwnDspTimelineCheck
       expected_epoch_(saved_state(checkpoint).expected_epoch),
       expected_dma_(saved_state(checkpoint).expected_dma),
       horizon_(saved_state(checkpoint).horizon),
-      boundary_(saved_state(checkpoint).boundary) {
+      boundary_(saved_state(checkpoint).boundary),
+      native_words_(saved_state(checkpoint).native_words),
+      native_cost_(saved_state(checkpoint).native_cost),
+      native_remaining_(saved_state(checkpoint).native_remaining),
+      native_staged_(saved_state(checkpoint).native_staged) {
   const auto &state = saved_state(checkpoint);
   cycle_identity_ = std::make_shared<const bool>(true);
   if (state.fetch) {
     fetch_ = std::make_unique<OwnDspFetch>(machine_, *state.fetch);
   } else if (state.reset) {
-    reset_identity_ = std::make_shared<const bool>(true);
     machine_.restore(*state.reset);
-    machine_.captured_fetch_owner_ = reset_identity_;
+    if (!native_regions() || machine_.clock().hardware_reset_active()) {
+      reset_identity_ = std::make_shared<const bool>(true);
+      machine_.captured_fetch_owner_ = reset_identity_;
+    }
   } else {
     throw std::invalid_argument("Own DSP timeline checkpoint has no execution or reset state");
   }

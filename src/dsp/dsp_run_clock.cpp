@@ -23,7 +23,8 @@ DspRunClock::DspRunClock(const DspRunClockInputs inputs) : inputs_(inputs) {
   constexpr unsigned maximum_extal = 100000000;
   constexpr std::uint64_t maximum_timebase = 1000000000000;
   if ((inputs.switch_timing != DspClockSwitch::reference_instruction_boundary &&
-       inputs.switch_timing != DspClockSwitch::reference_cycle_boundary) ||
+       inputs.switch_timing != DspClockSwitch::reference_cycle_boundary &&
+       inputs.switch_timing != DspClockSwitch::functional_region_boundary) ||
       inputs.extal_hz < minimum_extal || inputs.extal_hz > maximum_extal ||
       inputs.timebase_hz > maximum_timebase || inputs.timebase_hz < inputs.extal_hz ||
       inputs.timebase_hz % inputs.extal_hz != 0) {
