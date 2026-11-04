@@ -1,0 +1,59 @@
+{
+  "scope": "Original reset trace with an unresolved receiver timing failure; independent authored dependency windows. No instrument acceptance.",
+  "core_revision": "c3bb2011ef7f7059484f5bef58fd9ac5f8d6bd6d",
+  "original_trace": {
+    "operation_budget": 4450000,
+    "actual_exit": 2,
+    "reaped": true,
+    "binary_sha256": "996fcf129120c42b4f0dafb750c8e4b8b7b52f4c18eccfcf82c04f965dadb10b",
+    "qualification_sha256": "c73cda2ab74ef324a68e2cf0499716f5f9c9c4e6f998da3bfa7c076ff61e097c",
+    "MCU_read_events": 32,
+    "DSP_driven_bytes_matching_source_order": 32,
+    "MCU_call_entry_return_snapshots_identical_to_prior": true,
+    "DSP_byte_period_common_ticks": 103125,
+    "MCU_byte_period_common_ticks": 105840,
+    "common_timebase_hz": 635040000000,
+    "scope": "Two 16-byte blocks; correct emitted source bytes, receiver starts at source offset+1. Native clocks are model inputs."
+  },
+  "independent_dependency": {
+    "reference": "DSP56300FM Rev5 A.2.3; NXP assembler 6.3.28 and normal simulator model",
+    "sequence": "INSERT immediate,X0,A followed by MOVEP A1,peripheral",
+    "expected_additional_clocks": 1,
+    "controls": "One/two intervening NOPs and INSERT to B remove the dependency stall.",
+    "authored_instructions": 97,
+    "windows": [
+      {
+        "name": "insert_a_movep_a1_gap0",
+        "clocks": 10,
+        "expected": 10
+      },
+      {
+        "name": "insert_a_movep_a1_gap1",
+        "clocks": 10,
+        "expected": 10
+      },
+      {
+        "name": "insert_a_movep_a1_gap2",
+        "clocks": 11,
+        "expected": 11
+      },
+      {
+        "name": "insert_b_movep_a1_gap0",
+        "clocks": 9,
+        "expected": 9
+      }
+    ],
+    "program_words_read_back_before_and_after": true,
+    "qualification_sha256": "fc2308729d222715ca935d29953a744660700a4f3d9e7fb722c2f1824c2c2e06",
+    "physical_validation": false
+  },
+  "interrupt_timing": {
+    "reference": "DSP56371 data sheet Rev4.1 Table19 item18, printed page39",
+    "minimum_trigger_to_interrupt_code_execution": "10*Tc + 5 ns",
+    "scope": "Minimum bound, not a qualified fixed entry delay or an additive correction to already counted vector execution."
+  },
+  "next_requirement": "Qualify general native dependency and IRQ timing before a connected original-reset regression; no fitted byte delay or firmware change.",
+  "production_source_changed": false,
+  "fuzz": false,
+  "full_instrument": false
+}

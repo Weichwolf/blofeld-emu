@@ -106,6 +106,6 @@
       "matches_original_page15": true
     },
     "qualification_sha256": "75e7baad20cd947e67eba51c0f11b4d99d98e8d45cd5a7cf229e59b45ee493b3",
-    "scope": "Early transfer regression precedes the later status refusal; data at every producer/consumer event still needs tracing"
+    "scope": "Earlier transfer failure; timestamped producer/receiver and independent dependency evidence in native-gpio-transfer-reference.json"
   }
 }
