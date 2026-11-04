@@ -18,6 +18,7 @@
 namespace {
 unsigned assertions = 0;
 constexpr unsigned source_address = 8, destination_address = 12;
+constexpr unsigned port_address = 0xffff90;
 constexpr unsigned high_word = 0x923456, low_word = 0xabcdef;
 constexpr std::uint64_t initial_a = 0x5a112233445566, initial_b = 0xa5f1e2d3c4b5a6;
 constexpr unsigned normal_omr = 0x305, initial_status = 0x300;
@@ -58,6 +59,10 @@ public:
             unsigned /*pc*/,
             unsigned &value) noexcept override {
     ++effects_;
+    if (space == dsp56300::Space::x && address == port_address && port_) {
+      value = *port_;
+      return true;
+    }
     if (space == dsp56300::Space::program) {
       if (address >= known_) { return false; }
       value = code_.at(address);
@@ -75,6 +80,10 @@ public:
              unsigned /*pc*/,
              const unsigned value) noexcept override {
     ++effects_;
+    if (space == dsp56300::Space::x && address == port_address && port_) {
+      port_ = value;
+      return true;
+    }
     if ((space != dsp56300::Space::x && space != dsp56300::Space::y) || address >= x_.size()) {
       return false;
     }
@@ -97,6 +106,13 @@ public:
 
   [[nodiscard]] unsigned read_x(const unsigned address) const { return x_.at(address); }
 
+  void map_port() { port_ = 0; }
+
+  [[nodiscard]] unsigned port_value() const {
+    if (!port_) { throw std::logic_error("Authored port is not mapped"); }
+    return *port_;
+  }
+
   void advance_clock(const std::uint64_t units) { clock_ += units; }
 
 private:
@@ -107,6 +123,7 @@ private:
   std::array<unsigned, 16> code_{};
   std::size_t known_;
   std::uint64_t revision_ = 0;
+  std::optional<unsigned> port_;
 };
 
 dsp56300::Registers seed() {
@@ -130,17 +147,6 @@ offer(blofeld::DspNativeTimedExecution &timing, dsp56300::Core &cpu, const Ram &
     throw std::runtime_error("Missing genuine Core offer");
   }
   return timing.prepare_owner(cpu, actual.next.value(), actual.next_cycles.value());
-}
-
-dsp56300::InstructionProgress stage(dsp56300::Core &cpu,
-                                    const blofeld::DspTimedInstruction instruction) {
-  auto actual =
-      cpu.begin_instruction(instruction.words, dsp56300::InstructionPublication::pcu_updates);
-  constexpr unsigned maximum_effects = 64;
-  for (unsigned i = 0; actual.pending && i < maximum_effects; ++i) {
-    actual = cpu.advance_instruction(actual.pending->ticket);
-  }
-  return actual;
 }
 
 unsigned long_load(const unsigned selector) {
@@ -228,6 +234,32 @@ void clocked_known_dependency() {
       "A charged dependency no longer forces an otherwise genuine native RAM store into replay");
 }
 
+void clocked_peripheral() {
+  constexpr unsigned load_a = 0x56e000;
+  constexpr unsigned write_a1 = 0x04cc90;
+  constexpr std::uint64_t expected_a = 0xff923456000000;
+  const std::array program{load_a, write_a1};
+  Ram memory(program);
+  memory.map_port();
+  dsp56300::Core cpu(memory.storage(), &memory);
+  cpu.set_registers(seed());
+  blofeld::DspNativeTimedExecution timing(cpu.progress());
+  const auto first = timing.run(cpu, memory, {.instructions = 1, .cycles = 16});
+  require(first.execution.dispatches == 1, "Actual RAM producer retires before the port consumer");
+  memory.advance_clock(first.cycles);
+  const auto instruction = offer(timing, cpu, memory);
+  require(instruction.dependency_units == 1 && memory.effects() == 0 && memory.port_value() == 0,
+          "Dependent register MOVEP remains pending until its actual transfer-port delay");
+  memory.advance_clock(instruction.base_units + instruction.dependency_units);
+  auto expected = seed();
+  expected.a = expected_a;
+  expected.pc = 2;
+  require(timing.run_owner(cpu, memory, instruction) && cpu.registers() == expected &&
+              cpu.progress() == dsp56300::Progress{.instructions = 2, .estimated_cycles = 2} &&
+              memory.port_value() == high_word && memory.effects() == 1 && memory.clock() == 3,
+          "One actual captured MOVEP writes the independent RAM value after exactly three clocks");
+}
+
 void changed_captured_code() {
   constexpr std::uint64_t expected_x = 0x923456abcdef;
   const std::array program{long_load(2)};
@@ -238,15 +270,16 @@ void changed_captured_code() {
                                           blofeld::DspDependencyPolicy::conservative);
   const auto instruction = offer(timing, cpu, memory);
   memory.replace_first(cpu, 0);
-  const auto before = cpu.registers();
   memory.advance_clock(instruction.base_units + instruction.dependency_units);
-  require(!timing.run_owner(cpu, memory, instruction) && cpu.registers() == before &&
-              cpu.progress().instructions == 0,
-          "Live code substitution cannot replace the previously captured reserved opcode");
-  const auto actual = stage(cpu, instruction);
-  require(actual.retired && cpu.registers().x == expected_x && memory.effects() == 2,
-          "The original captured instruction remains available to its genuine staged owner");
-  timing.complete_owner(cpu, instruction);
+  auto expected = seed();
+  expected.x = expected_x;
+  expected.pc = 1;
+  ++expected.r[0];
+  require(timing.run_owner(cpu, memory, instruction) && cpu.registers() == expected &&
+              cpu.progress() == dsp56300::Progress{.instructions = 1, .estimated_cycles = 1} &&
+              memory.effects() == 0 && memory.clock() == 4 &&
+              cpu.jit_statistics().native_move_instructions == 1,
+          "Captured original words retire natively despite later backing-P substitution");
 }
 
 void invalid_owner_clocks_and_real_fault() {
@@ -269,15 +302,14 @@ void invalid_owner_clocks_and_real_fault() {
   require(refused && cpu.registers() == initial && memory.effects() == 0,
           "A shortened declared gap is refused before any CPU or bus effect");
   memory.advance_clock(instruction.base_units + instruction.dependency_units);
-  require(!timing.run_owner(cpu, memory, instruction) && cpu.registers() == initial &&
-              memory.effects() == 0 && cpu.progress().instructions == 0 &&
-              cpu.fault().kind == dsp56300::FaultKind::none,
-          "A real peripheral address remains owned with no speculative callback or AGU update");
-  const auto actual = stage(cpu, instruction);
-  require(!actual.retired && actual.fault.kind == dsp56300::FaultKind::memory_read &&
-              actual.fault.space == dsp56300::Space::x && actual.fault.address == port &&
-              actual.fault.pc == 0 && memory.effects() == 1,
-          "The genuine owned read still fails visibly with its actual address and originating PC");
+  require(!timing.run_owner(cpu, memory, instruction) && cpu.progress().instructions == 0 &&
+              cpu.fault() == dsp56300::Fault{.kind = dsp56300::FaultKind::io_read,
+                                             .space = dsp56300::Space::x,
+                                             .address = port,
+                                             .value = 0,
+                                             .pc = 0} &&
+              memory.effects() == 1 && memory.clock() == 4,
+          "The clocked real peripheral refusal is visible once, without successful retirement");
 }
 }
 
@@ -285,6 +317,7 @@ int main() {
   try {
     native_long_views();
     clocked_known_dependency();
+    clocked_peripheral();
     changed_captured_code();
     invalid_owner_clocks_and_real_fault();
     std::cout << "PASS bounded native owners: " << assertions << " checks\n";

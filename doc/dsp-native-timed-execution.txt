@@ -40,27 +40,32 @@ resource description or CPU result is fabricated. Checkpoint/copy preserve polic
 and pending barriers; reset preserves policy and clears pending work. Negative fixtures explicitly
 select qualified mode. See dsp-conservative-execution-reference.json.
 
-After the complete reserved delay has elapsed, a parallel/NOP instruction may
-retire through exactly one bounded Core call. Matching captured words (including
-extensions), actual preview cost, unchanged code/mapping revision and actual
-single-instruction progress are required. This activates native RAM transfers
-after a dependency delay, including conservative L: loads. The three-clock
-serialization policy and all previously described delays remain unchanged.
-Refused native grants, real peripherals, changed code and other instruction
-families retain the captured staged path. Conditional flow still requires its
-actual staged receipt; no InstructionOutcome or peripheral response is invented.
-See dsp-native-owner-reference.json for the focused path/clock evidence.
+After the complete reserved nonzero dependency delay, parallel/NOP/register-MOVEP
+instructions may retire through one actual captured Core dispatch. The original
+Core offer, base cost and real sole-instruction progress remain mandatory.
+Backing-P changes cannot replace captured words. RAM lowering and real Io run
+through the Core; an unknown peripheral is accessed once and fails visibly with
+its ordinary io_read/io_write fault. No successful retirement or bus reply is
+fabricated. The three-clock serialization policy and described delays remain
+unchanged. Existing zero-dependency prefixes and genuine conditional/vector/
+control stage paths remain. Unlowered MOVEP forms still use general Core helpers;
+this entry removes staged replay, not that remaining native-compiler gap.
+See dsp-captured-owner-reference.json; dsp-native-owner-reference.json preserves
+the earlier bounded-owner evidence.
 
 Register bit jumps/branches and DO/DOR/REP counters cover all six accumulator
 parts and X0/X1/Y0/Y1. Matching accumulator writers require one transfer period;
 an intervening NOP removes it. Independent controls and source/status readback
 are pinned in dsp-register-control-reference.json (238 new NXP windows).
 
-Focused Release consumers pass 56 bounded-owner, 197 prefix, 13,199 timeline
-and 43 MCU checks, including genuine native L: reads with paired checkpoints
-and delayed actual GPIO publication. Extensive campaigns remain deferred.
+Focused Release proofs cover 57 clocked-owner and 197 prefix checks. Their exact
+source/header/SDK/archive and compilation options match the canonical rebuild,
+so those raw results are reused. Current canonical binaries pass 13,199 timeline
+and 43 MCU checks, including real GPIO timing and paired checkpoints. Standalone
+read-only firmware inspection passes; it is not a reset/runtime proof. Extensive
+campaigns remain deferred.
 
-The connected-reset evidence below predates this bounded-owner increment.
+The connected-reset evidence below predates this captured-owner increment.
 A bounded original 1.25 reset reaches 18,836,211 DSP retirements and 5,552 valid
 serial PCM frames. A read-only public-Board observer confirms all 528 bytes of
 the first overlay at entry and return, and original overlay execution. Every

@@ -42,7 +42,7 @@ public:
   // The external clock owner executes the captured instruction through genuine
   // staged Core effects, then supplies its actually accounted dependency clocks.
   void complete_owner(const dsp56300::Core &cpu, DspTimedInstruction accounted);
-  // Attempt one real bounded parallel/NOP retirement after the clock owner has
+  // Attempt one captured parallel/NOP/register-MOVEP retirement after the clock owner has
   // charged this reservation. False retains staged ownership or a visible fault.
   [[nodiscard]] bool
   run_owner(dsp56300::Core &cpu, const dsp56300::Io &code, DspTimedInstruction accounted);

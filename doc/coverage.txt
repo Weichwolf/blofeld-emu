@@ -419,7 +419,7 @@ Clocked native instruction dependencies
 The Board timeline now charges selected dependencies before genuine retirement,
 including PCU false-condition holes, P-memory ports and L-store limiting/status.
 Checkpoint/reset and finite MCU budgets retain both clock domains. Focused Release
-checks: 13,199 timeline, 197 prefix, 56 bounded-owner, 43 MCU. Register-bit branches/jumps and all
+checks: 13,199 timeline, 197 prefix, 57 clocked-owner, 43 MCU. Register-bit branches/jumps and all
 six accumulator DO/DOR/REP counters add 238 independent NXP windows; source,
 flags, taken/fallthrough paths and matching/unrelated producer delays are checked
 (dsp-register-control-reference.json). The device timeline conservatively
@@ -427,11 +427,17 @@ serializes implemented instructions without dependency metadata through actual
 Core effects; the raw timing kernel remains qualified by default. Paired restores,
 reset, genuine bus faults and refusal of forged completion receipts are checked
 (dsp-conservative-execution-reference.json). After the full reserved delay,
-one actual bounded Core parallel/NOP instruction can now retire natively with
-the captured words, cost and code revision unchanged. Native transfer counters,
-paired pre/post checkpoints and delayed real GPIO output are verified; refused
-RAM grants and genuine I/O faults keep their staged owner. No staged receipt is
-fabricated (dsp-native-owner-reference.json). Connected-reset evidence predating
+one actual captured Core parallel/NOP/register-MOVEP instruction can retire after
+a nonzero dependency delay. Original offers/costs and real sole-retirement progress
+remain checked; backing-P changes cannot replace captured words. Real peripheral
+accesses occur once, including visible ordinary Io refusals. Native RAM counters,
+paired checkpoints, real GPIO timing and unchanged clock budgets are verified.
+The zero-dependency prefix and genuine conditional/vector/control stage paths
+remain; no flow receipt or peripheral reply is fabricated. The raw 57/197 results
+are reused only after exact source/header/archive/options identity checks;
+current canonical Timeline/MCU binaries pass 13,199/43 checks. Standalone inspection
+passes but does not prove reset execution (dsp-captured-owner-reference.json;
+prior bounded proof in dsp-native-owner-reference.json). Connected-reset evidence predating
 this increment: a bounded original reset completes
 18,836,211 DSP retirements and 5,552 valid but all-zero serial PCM frames; a public
 Board observer confirms exact first 528-byte overlay reception and execution.

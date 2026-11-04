@@ -1,17 +1,26 @@
 {
   "independent_dsp56300": {
     "source": "https://github.com/Weichwolf/dsp56300",
-    "revision": "46dc05f38c79199b940c327913874e55f9ae674d",
+    "revision": "bd79f96ef38729b25303f23829fb847574790ae7",
     "license": "GPL-3.0-only",
-    "integration": "Pinned independent execution core for the regular Board/headless runtime, with native REP, bounded RAM grants and instruction-publication/checkpoint interfaces. All eight L: RAM store/load views have native guarded transfers, including sparse windows and one shared AGU update. The device timeline now attempts one genuine bounded parallel/NOP retirement after its complete reserved dependency delay, including conservative L: loads; actual CPU progress and captured words/cost/revision are checked, with real staged fallback for I/O, changed code or refused grants. Focused Release consumers pass 56 bounded-owner, 197 prefix, 13199 timeline and 43 MCU assertions. The six public Core SDK headers are unchanged. Connected original-firmware acceptance, a whole-instrument speed gain, complete native ISA coverage and remaining legacy test migration are incomplete. Extensive quality campaigns remain deferred until original-firmware realtime.",
+    "integration": "Pinned independent execution core for the regular Board/headless runtime. The timing owner uses the actual captured ordinary Core entry after complete reserved dependency clocks for parallel/NOP/register-MOVEP instructions. Genuine Core offers, base costs and actual sole-retirement/progress remain required. Captured original words survive backing-P changes; real Io and exact refusals occur once. Conditional/vector/control publication retains genuine staged handling. Core.hpp and Backend.hpp add the captured API and concept/forwarder; matching Core-class consumer rebuilds are required. Focused new-SDK raw-owner/prefix proofs pass 57/197 checks; matching source/header/archive/code-generation evidence is reused after a coherent canonical rebuild. Current Timeline/MCU binaries pass 13199/43 assertions, and standalone read-only firmware inspection passes. New-ELF connected reset acceptance remains pending. Unlowered MOVEP/general helpers, complete native ISA and remaining legacy test migration remain open. Extensive quality campaigns remain deferred until original-firmware realtime.",
     "release_integration": {
       "core_archive_sha256": "d7f4c17711cb075824a75b3d2ddc555a85e67af1bc26871bed74d15f14bfbb05",
       "unchanged_public_headers": 6,
       "retained_root_source_base": "3f75847c43518f4363b425e31dd3b5a4a8babc1c",
       "link_manifest_sha256": "a9216c450b696f304a8ee3f8d9f888722f137d0514da1cfb6565f0a399a90282",
-      "qualification": "Baseline Core revision adoption before bounded-owner integration; current focused execution consumers are recorded by execution_integration. No repeated cold boot or instrument-speed claim."
+      "qualification": "Historical Core46dc adoption before bounded/captured owner integration; unchanged headers and generic archive refer only to that baseline. Current captured execution evidence is recorded separately. No instrument-speed claim."
     },
     "execution_integration": {
+      "reference": "doc/dsp-captured-owner-reference.json",
+      "scope": "Actual captured nonconditional owners after fully charged nonzero dependency delays; current canonical coupled consumers qualified; no new-ELF original boot or whole-instrument speed result"
+    },
+    "captured_core_integration": {
+      "core_archive_sha256": "3c78645773c9930174234ffc9778fad503651540e29a05dd52d1adc039cf88b5",
+      "core_reference": "https://github.com/Weichwolf/dsp56300/blob/bd79f96ef38729b25303f23829fb847574790ae7/doc/captured-execution-reference.json",
+      "scope": "Published Core API plus source-qualified 57 clocked-owner/197 prefix checks; current canonical13199 Timeline/43 MCU checks and standalone inspection. Original reset/playable instrument acceptance with the new ELF remains pending."
+    },
+    "historical_bounded_owner": {
       "reference": "doc/dsp-native-owner-reference.json",
       "scope": "Clocked bounded owners and preserved genuine staged fallbacks; no new original cold boot or instrument-throughput claim"
     }
