@@ -38,6 +38,28 @@ bool omr_bit_jump(const dsp56300::Word opcode) {
   return (opcode & operand_mask) == omr_operand && (opcode & bit_mask) < word_bits;
 }
 
+std::optional<unsigned> bit_register_source(const dsp56300::Word opcode) {
+  // Non-call JCLR/JSET and BRCLR/BRSET register forms (FM opcode tables).
+  constexpr unsigned mask = 0xffc0c0;
+  constexpr unsigned absolute = 0x0ac000;
+  constexpr unsigned relative = 0x0cc080;
+  constexpr unsigned bit_mask = 0x1f;
+  constexpr unsigned word_bits = 24;
+  if (((opcode & mask) != absolute && (opcode & mask) != relative) ||
+      (opcode & bit_mask) >= word_bits) {
+    return std::nullopt;
+  }
+  constexpr unsigned selector_mask = 63;
+  constexpr unsigned selector_shift = 8;
+  const auto source = (opcode >> selector_shift) & selector_mask;
+  using Register = dsp56300::RegisterId;
+  if (source < static_cast<unsigned>(Register::x0) ||
+      source > static_cast<unsigned>(Register::b1)) {
+    return std::nullopt;
+  }
+  return source;
+}
+
 bool literal_bit_jump(const dsp56300::Word opcode) {
   // Non-call JCLR/JSET on AA6/pp6/qq6: fixed memory, no DALU/AGU operand.
   constexpr unsigned mask = 0xffc080;
@@ -102,14 +124,25 @@ std::optional<DspInterlockInstruction> register_control(const dsp56300::Instruct
                                                         const dsp56300::Word opcode,
                                                         const unsigned units) {
   using Kind = dsp56300::InstructionKind;
+  if (kind == Kind::bit_jump || kind == Kind::bit_branch) {
+    const auto source = bit_register_source(opcode);
+    if (!source) { return std::nullopt; }
+    constexpr auto first_accumulator = static_cast<unsigned>(dsp56300::RegisterId::a0);
+    // Each accumulator part reads its matching transfer port. Independent NXP
+    // CLR/MOVE windows require one period at gap0, none after a NOP.
+    const auto reads = *source >= first_accumulator ? 1U << (*source & 1U) : 0U;
+    return DspInterlockInstruction{.opcode = opcode, .native_units = units, .move_reads = reads};
+  }
   if (kind == Kind::loop_register || kind == Kind::repeat_register) {
     constexpr unsigned selector_mask = 63;
     constexpr unsigned selector_shift = 8;
     const auto source = (opcode >> selector_shift) & selector_mask;
     using Register = dsp56300::RegisterId;
-    if (source == static_cast<unsigned>(Register::a0)) {
-      // DO/REP A0 use the accumulator transfer port (one matching-write period).
-      return DspInterlockInstruction{.opcode = opcode, .native_units = units, .move_reads = 1};
+    if (source >= static_cast<unsigned>(Register::a0) &&
+        source <= static_cast<unsigned>(Register::b1)) {
+      // DO/DOR/REP use each accumulator part's matching transfer port.
+      return DspInterlockInstruction{
+          .opcode = opcode, .native_units = units, .move_reads = 1U << (source & 1U)};
     }
     if (source >= static_cast<unsigned>(Register::x0) &&
         source <= static_cast<unsigned>(Register::y1)) {
@@ -225,8 +258,11 @@ bool DspNativeTimedExecution::conditional(const dsp56300::Word opcode) {
   using Kind = dsp56300::InstructionKind;
   if (shape->kind == Kind::conditional_jump) { return literal_conditional_jump(opcode); }
   if (shape->kind == Kind::relative_branch) { return literal_conditional_branch(opcode); }
-  if (shape->kind == Kind::bit_jump) { return omr_bit_jump(opcode) || literal_bit_jump(opcode); }
-  return shape->kind == Kind::bit_branch && literal_bit_branch(opcode);
+  if (shape->kind == Kind::bit_jump) {
+    return omr_bit_jump(opcode) || literal_bit_jump(opcode) || bit_register_source(opcode);
+  }
+  return shape->kind == Kind::bit_branch &&
+         (literal_bit_branch(opcode) || bit_register_source(opcode));
 }
 
 std::optional<DspInterlockInstruction> DspNativeTimedExecution::control(const dsp56300::Word opcode,

@@ -17,6 +17,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <vector>
 
 namespace {
 constexpr unsigned extal = 12000000;
@@ -598,6 +599,211 @@ void test_real_relative_bit_control() {
   }
 }
 
+unsigned bit_source_value(const dsp56300::Registers &registers, const unsigned selector) {
+  constexpr unsigned word_bits = 24;
+  constexpr unsigned first_accumulator = 8;
+  if (selector >= first_accumulator) {
+    constexpr std::array shifts{0U, 2 * word_bits, word_bits};
+    const auto accumulator = (selector & 1U) != 0 ? registers.b : registers.a;
+    return static_cast<unsigned>(accumulator >> shifts.at((selector - first_accumulator) / 2)) &
+           dsp56300::word_mask;
+  }
+  constexpr unsigned first_y = 6;
+  const auto pair = selector >= first_y ? registers.y : registers.x;
+  return static_cast<unsigned>(pair >> ((selector & 1U) * word_bits)) & dsp56300::word_mask;
+}
+
+struct RegisterBitWindow {
+  unsigned selector;
+  unsigned operation;
+  unsigned producer;
+  unsigned gap;
+  unsigned distance = 2;
+};
+
+void register_bit_window(const RegisterBitWindow window) {
+  const auto [selector, operation, producer, gap, distance] = window;
+  // Own NXP-assembled bit1 controls: six accumulator parts and X0/X1/Y0/Y1.
+  constexpr unsigned first_accumulator = 8;
+  constexpr unsigned first_high_part = 12;
+  constexpr unsigned clear_a = 0x200013;
+  constexpr unsigned clear_b = 0x20001b;
+  constexpr unsigned move_a1 = 0x20ac00;
+  constexpr unsigned move_b1 = 0x20ad00;
+  constexpr unsigned set_condition = 0x20;
+  const bool accumulator = selector >= first_accumulator;
+  const bool matching_clear = producer == ((selector & 1U) != 0 ? clear_b : clear_a);
+  const bool transfer = producer == move_a1 || producer == move_b1;
+  const bool zero = accumulator && (matching_clear || (transfer && selector >= first_high_part));
+  const unsigned expected_value = zero ? 0U : 2U;
+  const bool taken = ((operation & set_condition) != 0) == !zero;
+  const bool relative = (operation & 0xff0000U) == 0x0c0000;
+  const unsigned branch_cycles = relative ? 5U : 4U;
+  const unsigned dependency = accumulator && gap == 0 && (matching_clear || transfer) ? 1U : 0U;
+  constexpr std::array setup{0x05f43aU, 0x305U, 0x52f400U, 2U, 0x54f400U, 2U, 0x50f400U, 2U,
+                             0x53f400U, 2U,     0x55f400U, 2U, 0x51f400U, 2U, 0x44f400U, 2U,
+                             0x45f400U, 0U,     0x46f400U, 2U, 0x47f400U, 2U, 0x05f439U, 0xc00301U};
+  std::vector<unsigned> program(setup.begin(), setup.end());
+  constexpr unsigned x1_literal = 17;
+  if (!accumulator) { program.at(x1_literal) = 2; }
+  constexpr unsigned quiet_periods = 8;
+  constexpr unsigned setup_instructions = 12;
+  program.insert(program.end(), quiet_periods, 0);
+  program.push_back(producer);
+  program.insert(program.end(), gap, 0);
+  const auto branch_pc = static_cast<unsigned>(program.size());
+  constexpr unsigned selector_shift = 8;
+  program.push_back(operation | (selector << selector_shift));
+  program.push_back(relative ? distance : branch_pc + distance);
+  program.insert(program.end(), quiet_periods, 0);
+  Device device(program);
+  constexpr unsigned warmed = 1 + setup_instructions + quiet_periods;
+  device.retire_until(warmed);
+  const auto before = device.chip.clock().elapsed_ticks();
+  const auto native = device.chip.clock().native_cycle_units();
+  const auto retired_branch = warmed + 2 + gap;
+  device.retire_until(retired_branch);
+  const auto registers = device.chip.cpu().registers();
+  const auto outcome = device.chip.cpu().instruction_outcome();
+  const unsigned status = producer == clear_a || producer == clear_b ? 0xc00315U : 0xc00301U;
+  require(outcome && outcome->control_transfer == taken &&
+              registers.pc == branch_pc + (taken ? distance : 2U) && registers.sr == status &&
+              bit_source_value(registers, selector) == expected_value &&
+              device.chip.clock().native_cycle_units() == native + 1 + gap + branch_cycles &&
+              device.chip.clock().interlock_cycle_units() == dependency,
+          "Register bit control retains independent data, status, flow and producer clocks");
+  advance(device.chip, *device.timeline);
+  require(device.chip.cpu().progress().instructions == retired_branch + (taken ? 1U : 0U) &&
+              device.chip.clock().interlock_cycle_units() == dependency + (taken ? 0U : 1U),
+          "The genuine register condition determines the following decoding period");
+  device.retire_until(retired_branch + 1);
+  const auto expected_periods = 2 + gap + branch_cycles + dependency + (taken ? 0U : 1U);
+  require(device.chip.clock().elapsed_ticks() == before + expected_periods * period,
+          "Register bit timing includes both resource and conditional clocks exactly once");
+}
+
+void test_real_register_bit_control() {
+  constexpr std::array operations{0x0ac001U, 0x0ac021U, 0x0cc081U, 0x0cc0a1U};
+  constexpr unsigned clear_a = 0x200013;
+  constexpr unsigned clear_b = 0x20001b;
+  constexpr unsigned move_a1 = 0x20ac00;
+  constexpr unsigned move_b1 = 0x20ad00;
+  for (const auto operation : operations) {
+    for (unsigned selector = 8; selector <= 13; ++selector) {
+      const auto matching = (selector & 1U) != 0 ? clear_b : clear_a;
+      const auto other = (selector & 1U) != 0 ? clear_a : clear_b;
+      const auto transfer = (selector & 1U) != 0 ? move_b1 : move_a1;
+      for (const auto producer : {matching, transfer, other}) {
+        register_bit_window(
+            {.selector = selector, .operation = operation, .producer = producer, .gap = 0});
+        if (producer != other) {
+          register_bit_window(
+              {.selector = selector, .operation = operation, .producer = producer, .gap = 1});
+        }
+      }
+    }
+    for (unsigned selector = 4; selector <= 7; ++selector) {
+      register_bit_window({.selector = selector, .operation = operation, .producer = 0, .gap = 0});
+    }
+    constexpr unsigned a1 = 12;
+    constexpr unsigned different_target = 4;
+    register_bit_window({.selector = a1,
+                         .operation = operation,
+                         .producer = clear_a,
+                         .gap = 0,
+                         .distance = different_target});
+  }
+}
+
+struct RegisterLoopWindow {
+  unsigned selector;
+  unsigned operation;
+  unsigned producer;
+  unsigned gap;
+};
+
+void register_loop_window(const RegisterLoopWindow window) {
+  const auto [selector, operation, producer, gap] = window;
+  constexpr unsigned absolute = 0x200026;
+  constexpr unsigned absolute_b = 0x20002e;
+  constexpr unsigned move_a1 = 0x20ac00;
+  constexpr unsigned move_b1 = 0x20ad00;
+  constexpr unsigned first_accumulator = 8;
+  constexpr unsigned repeat = 0x06c020;
+  constexpr unsigned relative_loop = 0x06c010;
+  const bool is_repeat = operation == repeat;
+  const unsigned body_size = is_repeat ? 1U : 2U;
+  const unsigned loop_words = is_repeat ? 1U : 2U;
+  const bool matching = producer == ((selector & 1U) != 0 ? absolute_b : absolute);
+  const bool transfer = producer == move_a1 || producer == move_b1;
+  const unsigned dependency =
+      selector >= first_accumulator && gap == 0 && (matching || transfer) ? 1U : 0U;
+  constexpr std::array setup{0x05f43aU, 0x305U, 0x52f400U, 1U, 0x54f400U, 1U, 0x50f400U, 1U,
+                             0x53f400U, 1U,     0x55f400U, 1U, 0x51f400U, 1U, 0x44f400U, 1U,
+                             0x45f400U, 1U,     0x46f400U, 1U, 0x47f400U, 1U, 0x05f439U, 0xc00300U};
+  std::vector<unsigned> program(setup.begin(), setup.end());
+  constexpr unsigned quiet_periods = 8;
+  constexpr unsigned setup_instructions = 12;
+  program.insert(program.end(), quiet_periods, 0);
+  program.push_back(producer);
+  program.insert(program.end(), gap, 0);
+  const auto loop_pc = static_cast<unsigned>(program.size());
+  constexpr unsigned selector_shift = 8;
+  program.push_back(operation | (selector << selector_shift));
+  if (!is_repeat) {
+    const auto last = loop_pc + loop_words + body_size - 1;
+    program.push_back(operation == relative_loop ? last - loop_pc : last);
+  }
+  program.insert(program.end(), body_size + quiet_periods, 0);
+  Device device(program);
+  constexpr unsigned warmed = 1 + setup_instructions + quiet_periods;
+  device.retire_until(warmed);
+  const auto before = device.chip.clock().elapsed_ticks();
+  const auto native = device.chip.clock().native_cycle_units();
+  device.retire_until(warmed + 2 + gap);
+  require(device.chip.cpu().registers().lc == 1 &&
+              bit_source_value(device.chip.cpu().registers(), selector) == 1,
+          "The genuine register counter initializes the actual PCU loop to one");
+  device.retire_until(warmed + 3 + gap + body_size);
+  const auto registers = device.chip.cpu().registers();
+  constexpr unsigned loop_cycles = 5;
+  const auto elapsed = 2 + gap + loop_cycles + body_size;
+  const unsigned status = producer == absolute || producer == absolute_b ? 0xc00330U : 0xc00300U;
+  require(registers.lc == 0 && registers.sp == 0 && registers.sr == status &&
+              registers.pc == loop_pc + loop_words + body_size + 1 &&
+              bit_source_value(registers, selector) == 1 &&
+              device.chip.clock().interlock_cycle_units() == dependency &&
+              device.chip.clock().native_cycle_units() == native + elapsed &&
+              device.chip.clock().elapsed_ticks() == before + (elapsed + dependency) * period,
+          "Independent DO/DOR/REP data, stack, status and resource clocks survive real execution");
+}
+
+void test_real_accumulator_loop_counters() {
+  constexpr std::array operations{0x06c000U, 0x06c010U, 0x06c020U};
+  constexpr unsigned absolute_a = 0x200026;
+  constexpr unsigned absolute_b = 0x20002e;
+  constexpr unsigned move_a1 = 0x20ac00;
+  constexpr unsigned move_b1 = 0x20ad00;
+  for (const auto operation : operations) {
+    for (unsigned selector = 8; selector <= 13; ++selector) {
+      const auto matching = (selector & 1U) != 0 ? absolute_b : absolute_a;
+      const auto other = (selector & 1U) != 0 ? absolute_a : absolute_b;
+      const auto transfer = (selector & 1U) != 0 ? move_b1 : move_a1;
+      for (const auto producer : {matching, transfer, other}) {
+        register_loop_window(
+            {.selector = selector, .operation = operation, .producer = producer, .gap = 0});
+        if (producer != other) {
+          register_loop_window(
+              {.selector = selector, .operation = operation, .producer = producer, .gap = 1});
+        }
+      }
+    }
+    for (unsigned selector = 4; selector <= 7; ++selector) {
+      register_loop_window({.selector = selector, .operation = operation, .producer = 0, .gap = 0});
+    }
+  }
+}
+
 void receive_spi_word(blofeld::DspShi &shi, const unsigned word) {
   constexpr unsigned hcsr = 0xffff91;
   constexpr unsigned spi_fifo = 0xa9;
@@ -664,6 +870,8 @@ int main() {
     test_real_relative_register_loop();
     test_real_program_memory_ports();
     test_real_relative_bit_control();
+    test_real_register_bit_control();
+    test_real_accumulator_loop_counters();
     std::cout << "Native dependency timeline: " << assertions << " assertions passed\n";
     return 0;
   } catch (const std::exception &error) {

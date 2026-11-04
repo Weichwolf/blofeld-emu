@@ -22,8 +22,14 @@ stack, memory and code-invalidation effects. False conditional outcomes delay th
 next instruction by one period (FM A.2.6.3), using the actual Core flow receipt
 including equal taken/fallthrough PCs. Unknown descriptions still fail visibly.
 
-Focused Release consumers pass 178 prefix, 785 timeline and 43 MCU checks. Original
-reset passes SPI boot and reaches DSP main initialization; complete boot, original
-528-byte reception, IRQ entry timing and instrument operation remain unqualified.
+Register bit jumps/branches and DO/DOR/REP counters cover all six accumulator
+parts and X0/X1/Y0/Y1. Matching accumulator writers require one transfer period;
+an intervening NOP removes it. Independent controls and source/status readback
+are pinned in dsp-register-control-reference.json (238 new NXP windows).
+
+Focused Release consumers pass 178 prefix, 13,125 timeline and 43 MCU checks.
+Original reset passes the register-bit and DOR initialization paths, then stops
+at unqualified RTI dependency metadata. Complete boot, original 528-byte reception,
+IRQ entry timing and instrument operation remain unqualified.
 Extensive sanitizer/regression campaigns are deferred until real-time firmware
 under the current project workflow; compiler diagnostics remain enforced.

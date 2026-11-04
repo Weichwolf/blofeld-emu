@@ -1,0 +1,77 @@
+{
+  "license": "GPL-3.0-only",
+  "scope": "Qualified register-bit and six accumulator-part DO/DOR/REP dependencies; normal NXP software model, not physical hardware or complete instrument validation",
+  "base": "ecedce3edb6d75654680f1e0dbfc11e79b933440",
+  "core_revision": "0c201ba6a9354064e4821ed74f31187d010eaa85",
+  "source_sha256": {
+    "src/dsp/dsp_native_timed_control.cpp": "63b8b328ac76b3010c2bd433cddfcb25ffdbe453b78c811c5db9d9238ad22f5c",
+    "test/native_dependency_timeline_test.cpp": "2f43f8d3db9387b99c5067fae6e0f0d9bcfea1a668424e56a0e59d58078689cb"
+  },
+  "normal_model_dll_sha256": {
+    "libdsp56300simapi.dll": "602d93d794acb835a5f6b335b47cedb59f8edbf0e02bf63330dce5620bff2ce5",
+    "libdsp56300.dll": "9f3c1393ec89aaf6f64b29f7aebf3ffa50f3d4c0108ccf635a8b4b47fdbd6e23"
+  },
+  "assembler_sha256": "8e60b2e0d7c9f8251c01335543bcec966884670e2f37d4a63afe6d1169425abd",
+  "reference": {
+    "jclr": {
+      "windows": 34,
+      "instructions": 1030,
+      "qualification_sha256": "d97600ea3e59e1831b8285597909efbe71d3f7eb04979c8cbf3430ba6f0c3171",
+      "program_sha256": "f78c4da0226fc906f2e18fa4113018fca5b65b01849da0134f07a8d4fdc74a6f",
+      "manifest_sha256": "53584a1a955ced0ed93e25763362aebd7deb4d9044f44076bd858e7b8587fa1f"
+    },
+    "jset": {
+      "windows": 34,
+      "instructions": 1030,
+      "qualification_sha256": "3ea50353914b6ca39635e17a99bacc9dba237a4014c88d7ac99d797e2d942e5c",
+      "program_sha256": "72bad96b988771845e8d5c96904d4d73303894e0058555606c022ef89034d0be",
+      "manifest_sha256": "45e4a7104b94465ae62a9b551bde48eefe0052d37cb878458b8bff1ebb5a4268"
+    },
+    "brclr": {
+      "windows": 34,
+      "instructions": 1030,
+      "qualification_sha256": "4dbc65450d92bb230da2c5268566cd2a752fa5014e68b01ffa4b3b5b0404b8ec",
+      "program_sha256": "fc6a80bb997e63731be14fc51d3ec97b22845ef5bf4388dba22ba1acbdc2a6cb",
+      "manifest_sha256": "4e0417791f1b89a531ab1e2681dc8452d23f89a51fe568d2cc48cf3ced33370f"
+    },
+    "brset": {
+      "windows": 34,
+      "instructions": 1030,
+      "qualification_sha256": "ec9b0ae7235dc4fe952b7358caa69b0ea4a26ec0be8bc31d1383b6c07b190c08",
+      "program_sha256": "b5812228e6a7efc3f854730cb6be988ffa58f62b6e95d51d2436f35e8077e6e9",
+      "manifest_sha256": "6392bb22e47ef8f1fb8996bed0d5e09acbba6163188b9b736f108a938317979d"
+    },
+    "do": {
+      "windows": 34,
+      "instructions": 1134,
+      "qualification_sha256": "c5022155c6cb10125461dadd90d9badedfd18d1a6787e507eeaf3cd57d5e6591",
+      "program_sha256": "1a1eaa5fe32026afe49689ad8ef3c634be02868b6496ca55b98aa9e77c35b140",
+      "manifest_sha256": "1e88fc9059ae8a3f01e8bf5dd0fb93d90c0ee3294db1d9ad37a5c8b7659b780e"
+    },
+    "dor": {
+      "windows": 34,
+      "instructions": 1134,
+      "qualification_sha256": "0691dbdb24730a17e4a800a9b30dd8921862b003a5ed5ccb088cecbc31af0dd9",
+      "program_sha256": "dd70100220de89f43da0f2a8b554fec6c99d796fd2d2c486c1c74ad750db4408",
+      "manifest_sha256": "c2b5fe4b7fd01a6c3872ea2670a2cd2ab0ecec8523f363195dea1867c4586b86"
+    },
+    "rep": {
+      "windows": 34,
+      "instructions": 1100,
+      "qualification_sha256": "61ce77dfeaeae07389db1ead234e99448195a07d02ef8d77a91213228045191d",
+      "program_sha256": "bcf2e6de40d0f17f78c396fed806e565868fb029f18a9c37a2702ed1bfe6e706",
+      "manifest_sha256": "98e3d3d9019cc46997c287ef179e5280e0a040c4dd4c1ac761cd6e8204d45185"
+    }
+  },
+  "predeclared_windows": 238,
+  "executed_reference_instructions": 7488,
+  "expected": "Matching arithmetic/transfer accumulator producer: one extra period at gap0, none at gap1; unrelated producers and ordinary data-register inputs add none. False bit conditions delay the next decode by one period. Genuine Core base costs retained.",
+  "qualification": "Release: timeline13125, prefix178, MCU43; clang-tidy0. Identical final tests linked to each pre-change timing library fail at the missing bit/counter metadata respectively.",
+  "original_reset": "1,076,455 DSP retirements; next RTI metadata at001a65; no PCM; NAND/NVM unchanged.",
+  "limits": [
+    "Register-bit SR/AGU/whole-accumulator operands and bit subroutine calls remain outside this precise metadata scope.",
+    "Zero/degenerate loop and complete IRQ timing are not established by count1 windows.",
+    "Extensive sanitizer and broad regression deferred until real-time original firmware; concurrent unpublished policy class changes excluded."
+  ],
+  "fuzz": false
+}
