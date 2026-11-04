@@ -141,12 +141,60 @@ void real_peripheral_transfer() {
           "Actual native BCR reads still refuse unobserved BIU status with the true cause");
   std::cout << "ACTUAL_BIU unknown-status-refusal=1 context=1\n";
 }
+
+void staged_peripheral_transfer() {
+  DspBus bus;
+  constexpr std::array words{load_x, datum_address, store_x, bus_control, load_x, bus_control};
+  program(bus, words);
+  bus.write({.space = DspSpace::x, .address = datum_address, .value = datum});
+  OwnDspIo io(bus);
+  dsp56300::Core cpu(io);
+  const auto advance = [&cpu] {
+    auto step = cpu.begin_fetch(dsp56300::InstructionPublication::pcu_updates);
+    for (unsigned effect = 0; effect < 32 && step.pending && !step.retired; ++effect) {
+      auto observation = *step.pending;
+      observation.effect.value ^= word_mask;
+      step = cpu.advance_instruction(observation.ticket);
+    }
+    return step;
+  };
+  auto wanted = cpu.registers();
+  require(advance().retired && !io.failure(),
+          "The actual staged board RAM load retires through its owned read and publication");
+  wanted.pc = 2;
+  wanted.x = datum;
+  require(cpu.registers() == wanted &&
+              cpu.progress() == dsp56300::Progress{.instructions = 1, .estimated_cycles = 2},
+          "Tampered caller observations cannot replace the independently expected held result");
+  require(advance().retired && !io.failure(),
+          "The stored owned effect writes BCR through the genuine board adapter");
+  wanted.pc = 4;
+  require(cpu.registers() == wanted &&
+              cpu.progress() == dsp56300::Progress{.instructions = 2, .estimated_cycles = 4} &&
+              bus.read({.space = DspSpace::y, .address = port_f_control}) == 0,
+          "Owned publication preserves full registers, exact base costs and the actual BCR gate");
+  const auto refused = advance();
+  const dsp56300::Fault expected{.kind = dsp56300::FaultKind::memory_read,
+                                 .space = dsp56300::Space::x,
+                                 .address = bus_control,
+                                 .pc = 4};
+  const auto &failure = io.failure();
+  require(!refused.retired && refused.fault == expected && !refused.pending && failure &&
+              failure->operation == OwnDspIo::Operation::read && failure->pc == 4 &&
+              failure->address == bus_control && failure->cause && cpu.registers() == wanted &&
+              cpu.progress() == dsp56300::Progress{.instructions = 2, .estimated_cycles = 4},
+          "An actual unknown BIU status refuses with context and preserves the retired prefix");
+  std::cout << "ACTUAL_STAGED_IO caller-copy-isolation=1 peripheral-write=1 "
+               "unknown-refusal=1 retained-prefix=1\n";
+}
+
 }
 
 int main() {
   try {
     native_cache_and_refusal();
     real_peripheral_transfer();
+    staged_peripheral_transfer();
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
     return 1;
