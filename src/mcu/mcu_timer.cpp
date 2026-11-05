@@ -5,6 +5,7 @@
 #include "mcu/hc12_registers.hpp"
 #include "mcu/mcu_gpio.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <string_view>
@@ -354,22 +355,80 @@ void McuTimer::advance(const unsigned bus_cycles) {
   }
   check_activation();
   clocked_since_observation_ = true;
-  for (unsigned cycle = 0; cycle < bus_cycles; ++cycle) {
-    if (reset_pending_) {
-      for (unsigned channel = 0; channel < channel_count; ++channel) {
-        if ((controls_[0] & (1U << channel)) != 0 && channels_[channel] == 0) {
-          throw Fault("Unverified timer compare-at-counter-reset phase");
-        }
+  if (bus_cycles == 1) {
+    advance_one();
+  } else {
+    advance_span(bus_cycles);
+  }
+}
+
+void McuTimer::advance_one() {
+  if (reset_pending_) {
+    for (unsigned channel = 0; channel < channel_count; ++channel) {
+      if ((controls_[0] & (1U << channel)) != 0 && channels_[channel] == 0) {
+        throw Fault("Unverified timer compare-at-counter-reset phase");
       }
-      reset_pending_ = false;
-      counter_ = 0;
-      prescaler_phase_ = 0;
-      active_prescale_ = controls_[system_control2] & prescale_mask;
+    }
+    reset_pending_ = false;
+    counter_ = 0;
+    prescaler_phase_ = 0;
+    active_prescale_ = controls_[system_control2] & prescale_mask;
+    return;
+  }
+  prescaler_phase_ = (prescaler_phase_ + 1) & prescaler_mask;
+  if (prescaler_phase_ % (1U << active_prescale_) == 0) { count_tick(); }
+  if (prescaler_phase_ == 0) { active_prescale_ = controls_[system_control2] & prescale_mask; }
+}
+
+unsigned McuTimer::ticks_until_event() const {
+  constexpr unsigned counter_range = word_mask + 1;
+  unsigned next = counter_range - counter_;
+  for (unsigned channel = 0; channel < channel_count; ++channel) {
+    if ((controls_[0] & (1U << channel)) == 0) { continue; }
+    const auto distance =
+        (static_cast<unsigned>(channels_[channel]) + counter_range - counter_) & word_mask;
+    const auto positive = distance == 0 ? counter_range : distance;
+    next = std::min(next, positive);
+  }
+  return next;
+}
+
+unsigned McuTimer::cycles_until_event() const {
+  if (!enabled()) { return 0; }
+  if (reset_pending_ || (activation_pending_ & controls_[0]) != 0 ||
+      (capture_mask() & ~static_cast<unsigned>(inputs_known_)) != 0) {
+    return 1;
+  }
+  const auto divider = 1U << active_prescale_;
+  auto next = ((ticks_until_event() - 1) * divider) + divider - (prescaler_phase_ % divider);
+  if (active_prescale_ != (controls_[system_control2] & prescale_mask)) {
+    const auto latch = prescaler_wrap - prescaler_phase_;
+    next = std::min(next, latch);
+  }
+  return next;
+}
+
+void McuTimer::advance_span(unsigned remaining) {
+  while (remaining != 0) {
+    if (reset_pending_ || remaining == 1) {
+      advance_one();
+      --remaining;
       continue;
     }
-    prescaler_phase_ = (prescaler_phase_ + 1) & prescaler_mask;
-    if (prescaler_phase_ % (1U << active_prescale_) == 0) { count_tick(); }
+    const auto divider = 1U << active_prescale_;
+    const auto counter_event =
+        ((ticks_until_event() - 1) * divider) + divider - (prescaler_phase_ % divider);
+    const auto boundary = cycles_until_event();
+    const auto count = remaining < boundary ? remaining : boundary;
+    const auto ticks = ((prescaler_phase_ % divider) + count) / divider;
+    prescaler_phase_ = (prescaler_phase_ + count) & prescaler_mask;
+    // No comparator or overflow lies inside this span. Publish its final tick
+    // through the existing effect path, including its original failure order.
+    const bool effect = count == counter_event;
+    counter_ = static_cast<std::uint16_t>(counter_ + ticks - (effect ? 1U : 0U));
+    if (effect) { count_tick(); }
     if (prescaler_phase_ == 0) { active_prescale_ = controls_[system_control2] & prescale_mask; }
+    remaining -= count;
   }
 }
 

@@ -27,6 +27,9 @@ public:
   void advance(unsigned bus_cycles);
   void observe_inputs(TimerInputs inputs);
   [[nodiscard]] unsigned cycles_until_tick() const;
+  // First compare/overflow, pending reset or prescaler latch; zero when disabled.
+  // Validation that must precede progress has a one-cycle boundary.
+  [[nodiscard]] unsigned cycles_until_event() const;
   [[nodiscard]] bool runs_in_wait() const;
   [[nodiscard]] PinFunction pins() const; // Logical channels, before package routing.
   [[nodiscard]] std::uint8_t interrupt_channels() const;
@@ -47,6 +50,9 @@ private:
   void output_actions(unsigned matches);
   void apply_output(unsigned channel);
   void count_tick();
+  [[nodiscard]] unsigned ticks_until_event() const;
+  void advance_one();
+  void advance_span(unsigned remaining);
   void check_activation();
   std::array<std::uint8_t, 16> controls_{};
   std::array<std::uint16_t, channel_count> channels_{};

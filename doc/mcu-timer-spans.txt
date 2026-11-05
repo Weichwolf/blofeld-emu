@@ -1,0 +1,26 @@
+MCU timer event spans
+
+McuTimer::advance computes quiet counter intervals up to compare, overflow,
+TC7 reset or a delayed prescaler latch. Existing count_tick applies each effect
+and retains its partial-failure order. The one-cycle entry retains its scalar
+path. Input levels must remain fixed during a slice; callers split at changes.
+
+cycles_until_event is a pure conservative offer: zero when disabled, one cycle
+for pending reset/activation or unknown active capture inputs, otherwise the
+next compare/overflow/divider-latch boundary. Callers also clip to their work
+budget and the existing1,048,576-cycle advance limit; the offer is not a slice.
+
+  ctest --test-dir build/native-mcu --output-on-failure \
+    -R '^(mcu_timer|mcu_timer_span)$'
+
+364 independent assertions cover all eight dividers, wrap, phase, split spans,
+TC7 priority/reset and first-cycle/partial failures. The old per-cycle model
+matches their observable signature. All11 existing timer/routing groups pass.
+One connected original3M POR prefix retains all7 guest states,5120 RAM bytes,
+393 stereo PCM frames and MCU/DSP Core counters exactly.
+
+This provides the timer boundary for future finite idle intervals. Board WAI,
+SCI/GPIO/flash/COP bounds and DSP event coordination still need integration;
+current normal execution still advances one MCU bus period at a time. This
+component result establishes neither connected speedup nor complete startup,
+MIDI/audio, realtime or full instrument acceptance after the change.
