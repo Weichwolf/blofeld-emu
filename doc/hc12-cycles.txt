@@ -39,6 +39,10 @@ Both NXP manuals specify that order; the previous native description read Y
 before PC. The build-local exception patch corrects it without changing the
 final frame layout. S12CPUV2's glossary/section 7.5.5 and S12CPU15UG's RTI entry
 agree on eleven cycles; an inconsistent summary-table entry is not used.
+The post-RTI reuse decision precedes the final three refill periods. Independent
+IRQ arrivals during each refill period require a completed eight-cycle return,
+then normal nine-cycle entry with nine actual stack-byte writes. They cannot
+extend the earlier frame-reuse window into the next instruction boundary.
 
 Extended independent vectors cover all six MOV modes for byte/word operands,
 nine memory modifications across six address modes, TST, LEA/BSR, CCR stack

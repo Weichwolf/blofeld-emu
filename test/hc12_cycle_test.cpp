@@ -184,6 +184,43 @@ void test_rti_order_and_chaining() {
   }
 }
 
+void test_irq_during_rti_refill() {
+  constexpr unsigned refill_cycles = 3;
+  constexpr unsigned entry_cycles = 9;
+  constexpr unsigned frame_bytes = 9;
+  constexpr unsigned reset_cycles = 5;
+  constexpr unsigned return_cycles = 8;
+  for (unsigned arrival = 0; arrival < refill_cycles; ++arrival) {
+    FlatBus memory;
+    memory.bytes[entry] = nop;
+    unsigned refill = 0;
+    blofeld::Hc12CycleBus bus(memory, [&](const auto cycle) {
+      if (cycle.context.pc == handler && cycle.kind == 'P' && refill++ == arrival) {
+        memory.pending = {.vector = irq_vector};
+      }
+    });
+    blofeld::Hc12 cpu(bus, BLOFELD_DEFAULT_SLA);
+    cpu.reset();
+    cpu.set_state({.pc = entry, .d = accumulator, .sp = stack, .ccr = flags});
+    memory.pending = {.vector = irq_vector};
+    require(cpu.step().interrupt_vector == irq_vector, "Initial real IRQ precedes its RTI");
+    const auto writes = memory.generation;
+    const auto returned = cpu.step();
+    require(returned.instruction_executed && !returned.interrupt_vector && !returned.stack_reused &&
+                refill == refill_cycles && cpu.state().pc == entry && cpu.state().sp == stack &&
+                bus.cycles() == reset_cycles + return_cycles + entry_cycles &&
+                memory.generation == writes,
+            "IRQ arriving during final RTI refill follows the completed return");
+    const auto accepted = cpu.step();
+    require(!accepted.instruction_executed && accepted.interrupt_vector == irq_vector &&
+                !accepted.stack_reused && cpu.state().pc == handler &&
+                cpu.state().sp == stack - frame_bytes &&
+                bus.cycles() == reset_cycles + return_cycles + 2 * entry_cycles &&
+                memory.generation == writes + frame_bytes,
+            "A late IRQ needs normal nine-cycle entry and nine actual frame writes");
+  }
+}
+
 void test_visible_rejection_and_precommit_clocks() {
   FlatBus memory;
   constexpr std::array<std::uint8_t, 3> program{0x7a, 0x12, 0};
@@ -217,6 +254,7 @@ int main() {
     test_native_operand_slots();
     test_constant_address_word_operands();
     test_rti_order_and_chaining();
+    test_irq_during_rti_refill();
     test_visible_rejection_and_precommit_clocks();
     std::cout
         << "Native HC12 cycle boundaries, IRQ/RTI order, chaining and failure context passed.\n";
