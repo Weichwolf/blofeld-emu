@@ -10,6 +10,8 @@ import shlex
 import subprocess
 import tempfile
 
+from archive_hardening import check_archive_control_flow
+
 COMMON_FLAGS = {
     "-fstack-protector-strong", "-fstack-clash-protection",
     "-Wformat=2", "-Werror=format-security", "-D_FORTIFY_SOURCE=3",
@@ -85,13 +87,11 @@ def check_elf(path, readelf):
     require("(TEXTREL)" not in info, f"{path}: text relocations are unsupported")
 
 
-def check_native_objects(native, readelf, cf_protection):
+def check_native_objects(native, readelf, cf_protection, llvm_dis="llvm-dis-19"):
     for name, path in native.items():
         require(path.is_file(), f"Missing native archive: {name}: {path}")
         if cf_protection:
-            notes = output([readelf, "--notes", str(path)])
-            require(re.search(r"x86 feature:.*\bIBT\b.*\bSHSTK\b", notes),
-                    f"{name}: native objects lack full compiler CF properties")
+            check_archive_control_flow(path, readelf, llvm_dis)
 
 
 def check_negative_elf_controls(compiler, readelf):
@@ -128,6 +128,7 @@ def main():
     parser.add_argument("--binary-list", type=Path, required=True)
     parser.add_argument("--readelf", required=True)
     parser.add_argument("--compiler", required=True)
+    parser.add_argument("--llvm-dis", default="llvm-dis-19")
     parser.add_argument("--native", action="append", required=True)
     parser.add_argument("--libstdcxx", action="store_true")
     parser.add_argument("--cf-protection", action="store_true")
@@ -137,7 +138,7 @@ def main():
         require(len(native) == len(args.native), "Duplicate native archive entry")
         counts = check_commands(json.loads(args.database.read_text()), args.source.resolve(),
                                 native, args.libstdcxx, args.cf_protection)
-        check_native_objects(native, args.readelf, args.cf_protection)
+        check_native_objects(native, args.readelf, args.cf_protection, args.llvm_dis)
         binaries = [Path(line) for line in args.binary_list.read_text().splitlines() if line]
         require(binaries and len(binaries) == len(set(binaries)), "Invalid executable inventory")
         for binary in binaries:

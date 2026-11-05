@@ -52,8 +52,8 @@ private:
   bool defer_irq_ = false;
 };
 
-// Native SLEIGH semantics execute original HC12 instructions. Peripheral and
-// cycle timing are supplied by the board model, not by the instruction decoder.
+// The build selects the HC12 executor. The board supplies peripheral/cycle
+// timing; instruction decoding never substitutes for those observations.
 class Hc12 {
 public:
   explicit Hc12(Bus &bus, const std::filesystem::path &specification);

@@ -1,0 +1,28 @@
+Experimental native MCU integration
+
+BLOFELD_NATIVE_MCU selects the independent CPU12 executor at build time.
+BLOFELD_CPU12_ROOT supplies the clean local checkout pinned in dependencies.json.
+The normal build retains its current MCU executor while full native boot and
+instrument qualification remain pending. No unsupported native instruction is
+retried through SLEIGH.
+
+  cmake --preset release -B build/native-mcu -DBLOFELD_NATIVE_MCU=ON -DBUILD_TESTING=OFF
+  cmake --build build/native-mcu --target blofeld-headless --parallel 2
+
+Focused checks require BUILD_TESTING=ON and the legacy DSP test dependency
+described in README.txt. Select only hc12_cycles, mcu_cycles and mcu_integrity
+for the adapter's affected reset/IRQ/wait/bus boundary checks.
+
+The adapter keeps the existing logical byte/word/selected-bit bus accesses,
+cycle owner, reset, interrupt acknowledgement and coordinated checkpoints.
+Noexcept callbacks retain actual partial effects and rethrow the board cause
+after the native call. RTI arbitration closes the returned-frame window before
+later refill clocks. hc12_cycles covers pending and late-refill interrupts;
+mcu_cycles covers real SCI/timer acknowledgement and return. mcu_integrity
+covers debug/native mutation, WAI, checkpoint ownership and callback refusal.
+
+Native instruction inspection currently prints bytes. The SLA input remains
+part of McuMachine checkpoint identity; native execution does not consume it.
+Unsupported ISA, STOP board clocks, complete original boot, active factory SL,
+full function coverage and realtime operation remain open. Extensive sanitizer
+matrices are deferred until realtime; fuzzing requires an explicit request.

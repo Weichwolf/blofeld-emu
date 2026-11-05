@@ -39,12 +39,17 @@ no system-package fallback or source download occurs during configure/build.
 The packaged zlib license must match the archive's notice exactly.
 
 Verification
+  python3 -m unittest discover -s test -p test_archive_hardening.py -v
   ctest --test-dir build/strict -R '^dependency_instrumentation$' --output-on-failure
   ctest --test-dir build/strict -R '^build_hardening$' --output-on-failure
 
 build_hardening checks every project/native compile command and all generated
 project executables for PIE, RELRO, immediate binding and a non-executable stack.
-Linux/x86 native archives must also contain object IBT/SHSTK properties.
+Every Linux/x86 archive member must carry both compiler CF properties: ELF
+IBT/SHSTK notes or referenced LLVM module flags for ThinLTO/full LTO. Duplicate
+member names remain distinct. Mixed protected/unprotected archives must fail.
+The fixed archive controls use ELF, both LTO forms, long GNU/BSD names and
+unreferenced metadata decoys; no generated control program is executed.
 Its ELF verifier must also reject four separately compiled inert controls, each
 missing one protection; those control binaries are inspected and never executed.
 Compiler control-flow instrumentation is not proof of runtime CET enforcement.

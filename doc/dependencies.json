@@ -136,5 +136,11 @@
     "sha256": "77706e2368a00d789c097632ccf4fc39251fba56d03e1e1b262559a3c7a08f5b",
     "license": "Apache-2.0",
     "integration": "Pinned Python build tool used only to configure unmodified PulseAudio source; no installation or system changes."
+  },
+  "independent_cpu12": {
+    "source": "https://github.com/Weichwolf/cpu12",
+    "revision": "69bd36e70654a3112636128e9fed59d2d5d9c8db",
+    "license": "GPL-3.0-only",
+    "integration": "Optional experimental build-time MCU executor. Keeps the existing board bus, cycles, reset/IRQ acknowledgement and coordinated CPU checkpoints. No SLEIGH execution fallback. Three focused native binding consumers and the late-RTI refill regression are qualified; complete native original boot and instrument/realtime acceptance remain pending. See native-mcu.txt."
   }
 }

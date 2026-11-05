@@ -11,6 +11,11 @@ Native SLEIGH and the HC12 language specification:
   (patches/README.txt); the corrected language is compiled with native SLEIGH.
   The integration uses exceptions as the native SLEIGH error interface.
 
+Optional independent CPU12 executor:
+  https://github.com/Weichwolf/cpu12
+  GPL-3.0-only; corresponding source and notices remain in the pinned checkout.
+  Built under its own strict diagnostics and matching project sanitizers.
+
 zlib:
   Jean-loup Gailly and Mark Adler, zlib license (LICENSES/Zlib.txt).
   https://zlib.net/zlib_license.html

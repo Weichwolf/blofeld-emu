@@ -38,7 +38,7 @@ component interface. Test fixtures live under test/; prepared native dependencie
 live in the build directory and retain their own source layout and notices.
 
 Build and quality checks
-Requirements: LLVM 19 (clang, clang-tidy, clang-format, llvm-nm, llvm-readelf and
+Requirements: LLVM 19 (clang, clang-tidy, clang-format, llvm-ar, llvm-dis, llvm-nm, llvm-readelf and
 sanitizer runtime), CMake >= 3.25, Ninja, Git, GNU patch, Python 3 and Ghidra 12.1.2
 including its native SLEIGH sources and compiler. Set GHIDRA_ROOT if it is not
 installed under ~/.local/opt/ghidra_*_PUBLIC. Native SLEIGH does not need Java at
@@ -46,6 +46,9 @@ runtime.
 The regular runtime uses our independent Weichwolf/dsp56300 core, pinned in
 doc/dependencies.json. BLOFELD_OWN_DSP_ROOT selects its clean checkout; the default
 is ~/Git/dsp56300. Its integration names remain transitional during test migration.
+The experimental BLOFELD_NATIVE_MCU build uses a pinned BLOFELD_CPU12_ROOT
+checkout; its qualified boundaries and remaining requirements are in
+doc/native-mcu.txt.
 A standalone build without test harnesses requires no foreign DSP checkout:
 
   cmake --preset strict -B build/standalone -DBUILD_TESTING=OFF -DBLOFELD_FUZZING=OFF

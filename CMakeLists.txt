@@ -19,7 +19,11 @@ include(cmake/Quality.cmake)
 find_program(BLOFELD_CLANG_TIDY NAMES clang-tidy-19 REQUIRED)
 find_program(BLOFELD_CLANG_FORMAT NAMES clang-format-19 REQUIRED)
 option(BLOFELD_OWN_DSP_ONLY "Build independent DSP integration components without the legacy core" OFF)
+option(BLOFELD_NATIVE_MCU "Build the experimental independent CPU12 MCU executor" OFF)
 if(BLOFELD_OWN_DSP_ONLY)
+  if(BLOFELD_NATIVE_MCU)
+    message(FATAL_ERROR "BLOFELD_NATIVE_MCU requires the regular board build")
+  endif()
   include(cmake/OwnDspOnly.cmake)
   return()
 endif()
@@ -242,7 +246,12 @@ target_link_libraries(blofeld_display PUBLIC blofeld_firmware)
 add_library(blofeld_lcd_export src/display/lcd_image.cpp src/display/lcd_png.cpp src/display/lcd_export.cpp)
 target_include_directories(blofeld_lcd_export PUBLIC src)
 target_link_libraries(blofeld_lcd_export PUBLIC blofeld_display blofeld_private_files PRIVATE ZLIB::ZLIB)
-add_library(blofeld_core src/mcu/hc12.cpp src/mcu/hc12_decimal.cpp src/mcu/mcu_machine.cpp)
+if(BLOFELD_NATIVE_MCU)
+  include(cmake/Cpu12.cmake)
+  add_library(blofeld_core src/mcu/hc12_native.cpp src/mcu/mcu_machine.cpp)
+else()
+  add_library(blofeld_core src/mcu/hc12.cpp src/mcu/hc12_decimal.cpp src/mcu/mcu_machine.cpp)
+endif()
 add_library(blofeld_hc12_cycles src/mcu/hc12_cycle_plan.cpp src/mcu/hc12_cycle_page2.cpp src/mcu/hc12_cycle_bus.cpp)
 target_include_directories(blofeld_hc12_cycles PUBLIC src)
 target_link_libraries(blofeld_hc12_cycles PUBLIC blofeld_firmware)
@@ -299,7 +308,14 @@ if(BUILD_TESTING OR BLOFELD_FUZZING)
 endif()
 add_dependencies(blofeld_core blofeld_hc12_spec)
 target_include_directories(blofeld_core PUBLIC src)
-target_link_libraries(blofeld_core PUBLIC blofeld_mcu PRIVATE blofeld_sleigh blofeld_hc12_cycles)
+target_link_libraries(blofeld_core PUBLIC blofeld_mcu)
+set(blofeld_independent_native_args --native dsp56300_core=$<TARGET_FILE:dsp56300_core>)
+if(BLOFELD_NATIVE_MCU)
+  target_link_libraries(blofeld_core PRIVATE cpu12::core blofeld_hc12_cycles)
+  list(APPEND blofeld_independent_native_args --native cpu12_core=$<TARGET_FILE:cpu12_core>)
+else()
+  target_link_libraries(blofeld_core PRIVATE blofeld_sleigh blofeld_hc12_cycles)
+endif()
 target_compile_definitions(blofeld_core PUBLIC
   BLOFELD_DEFAULT_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla")
 if(BUILD_TESTING)
@@ -1841,6 +1857,7 @@ if(BUILD_TESTING)
   set_tests_properties(original_owned_clock PROPERTIES SKIP_RETURN_CODE 77)
   find_program(BLOFELD_LLVM_NM NAMES llvm-nm-19 REQUIRED)
   find_program(BLOFELD_LLVM_READELF NAMES llvm-readelf-19 REQUIRED)
+  find_program(BLOFELD_LLVM_DIS NAMES llvm-dis-19 REQUIRED)
   add_test(NAME dependency_instrumentation COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/dependency_instrumentation.py"
     --source "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -1859,7 +1876,8 @@ if(BUILD_TESTING)
     --native asmjit=$<TARGET_FILE:asmjit>
     --native sndfile=$<TARGET_FILE:sndfile>
     --native blofeld_pulse=$<TARGET_FILE:blofeld_pulse>
-    --native blofeld_pulse_common=$<TARGET_FILE:blofeld_pulse_common>)
+    --native blofeld_pulse_common=$<TARGET_FILE:blofeld_pulse_common>
+    ${blofeld_independent_native_args})
   add_executable(blofeld-firmware-nand-test test/firmware_nand_image_test.cpp)
   target_link_libraries(blofeld-firmware-nand-test PRIVATE blofeld_firmware_nand blofeld_nand_store)
   add_test(NAME firmware_nand_image COMMAND blofeld-firmware-nand-test)
@@ -3173,6 +3191,7 @@ if(BUILD_TESTING)
     --database "${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json"
     --binary-list "${CMAKE_CURRENT_BINARY_DIR}/generated/hardening-executables.txt"
     --readelf "${BLOFELD_LLVM_READELF}" --compiler "${CMAKE_C_COMPILER}"
+    --llvm-dis "${BLOFELD_LLVM_DIS}"
     --native zlibstatic=$<TARGET_FILE:zlibstatic>
     --native blofeld_sleigh=$<TARGET_FILE:blofeld_sleigh>
     --native blofeld_dsp_native=$<TARGET_FILE:blofeld_dsp_native>
@@ -3180,6 +3199,7 @@ if(BUILD_TESTING)
     --native sndfile=$<TARGET_FILE:sndfile>
     --native blofeld_pulse=$<TARGET_FILE:blofeld_pulse>
     --native blofeld_pulse_common=$<TARGET_FILE:blofeld_pulse_common>
+    ${blofeld_independent_native_args}
     ${blofeld_hardening_options})
 endif()
 
