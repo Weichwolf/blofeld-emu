@@ -1,0 +1,21 @@
+DSP clock calculation cache
+
+Each lookup reads current PCTL first, including unknown reset-PINIT rejection.
+Per-thread single-entry caches retain only pure calculations: reduced PLL ratio
+by full PCTL, and period by PCTL,timebase,EXTAL. Failed calculations are not
+cached. No model pointer, elapsed clock, owner state or checkpoint layout is
+shared. Restore and interleaved owners select their actual current inputs.
+
+  ctest --test-dir build/native-mcu -R '^dsp_clock_cache$' --output-on-failure
+
+The directed contract checks58 independent expectations: literal periods/ratios,
+all command fields, unknown PINIT after a warm hit, repeated nonintegral refusal,
+rejected writes, single/paired restore, different owner timebases/EXTAL and
+mid-region rate changes with unchanged guest/DMA counters on failure.
+
+A build-free same-CPU original3M POR pair retains all7 guest observations,
+5120-byte RAM captures,393 PCM frames and MCU/DSP Core counters exactly.
+One pair takes66.48s before and65.00s after (CPU66.19s/64.75s); descriptive only,
+without a confidence interval or realtime claim. Firmware and emulated clocks
+are unchanged. Full Main/MIDI evidence in native-mcu.txt predates this cache;
+active factorySL, live audio, realtime and full instrument acceptance remain open.

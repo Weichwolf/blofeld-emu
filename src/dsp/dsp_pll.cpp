@@ -60,17 +60,29 @@ void DspPll::write(const std::uint32_t value) {
 }
 
 DspClockRatio DspPll::target_ratio() const {
+  struct RatioCache {
+    std::optional<std::uint32_t> control;
+    DspClockRatio ratio;
+  };
+
+  // The ratio depends only on the current validated command, never the owner.
+  static constinit thread_local RatioCache cache;
   const auto control = read();
+  if (cache.control == control) { return cache.ratio; }
   const auto division = 1U << ((control >> 8U) & 7U);
-  if ((control & pen) == 0) { return {.denominator = division}; }
-  const auto predivision = (control >> 16U) & predivider_mask;
-  const auto multiplication = control & multiplication_mask;
-  const unsigned feedback = (control & od1) != 0 ? 4 : 2;
-  const unsigned output = ((control & od0) != 0 ? 2U : 1U) * (feedback / 2);
-  const auto numerator = multiplication * feedback;
-  const auto denominator = predivision * division * output;
-  const auto common = std::gcd(numerator, denominator);
-  return {.numerator = numerator / common, .denominator = denominator / common};
+  DspClockRatio ratio{.denominator = division};
+  if ((control & pen) != 0) {
+    const auto predivision = (control >> 16U) & predivider_mask;
+    const auto multiplication = control & multiplication_mask;
+    const unsigned feedback = (control & od1) != 0 ? 4 : 2;
+    const unsigned output = ((control & od0) != 0 ? 2U : 1U) * (feedback / 2);
+    const auto numerator = multiplication * feedback;
+    const auto denominator = predivision * division * output;
+    const auto common = std::gcd(numerator, denominator);
+    ratio = {.numerator = numerator / common, .denominator = denominator / common};
+  }
+  cache = {.control = control, .ratio = ratio};
+  return ratio;
 }
 
 }

@@ -33,13 +33,33 @@ DspRunClock::DspRunClock(const DspRunClockInputs inputs) : inputs_(inputs) {
 }
 
 std::uint64_t DspRunClock::period_ticks(const DspBus &bus) const {
+  struct PeriodCache {
+    std::uint64_t timebase_hz = 0;
+    std::uint32_t extal_hz = 0;
+    std::uint32_t control = 0;
+    std::uint64_t period = 0;
+  };
+
+  // Pure calculation cache shared by this thread; no model owner or clock state.
+  // A zero period marks an empty cache. Read current PCTL before considering a hit.
+  static constinit thread_local PeriodCache cache;
+  const auto control = bus.pll().read();
+  if (cache.period != 0 && cache.timebase_hz == inputs_.timebase_hz &&
+      cache.extal_hz == inputs_.extal_hz && cache.control == control) {
+    return cache.period;
+  }
   const auto ratio = bus.pll().target_ratio();
   const auto numerator = inputs_.timebase_hz * ratio.denominator;
   const auto denominator = static_cast<std::uint64_t>(inputs_.extal_hz) * ratio.numerator;
-  if (numerator % denominator != 0 || numerator < denominator) {
+  if (denominator == 0 || numerator % denominator != 0 || numerator < denominator) {
     throw Fault("DSP PLL target is not integral in the declared reference timebase");
   }
-  return numerator / denominator;
+  const auto period = numerator / denominator;
+  cache = {.timebase_hz = inputs_.timebase_hz,
+           .extal_hz = inputs_.extal_hz,
+           .control = control,
+           .period = period};
+  return period;
 }
 
 std::uint64_t DspRunClock::duration_ticks(const DspClockUnits units,
