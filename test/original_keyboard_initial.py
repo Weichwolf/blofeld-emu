@@ -229,12 +229,12 @@ def controls(cases, expected, texts, counts):
 def main():
     binary, firmware, keyboard, trace = map(Path, sys.argv[1:])
     assembler = Path(os.environ.get('BLOFELD_DSP_ASSEMBLER', str(
-        ROOT / 'doc/local/dsp-tools-release/dsp56300-1.0.0-x86_64-unknown-linux-gnu/bin/dsp56300-asm'))).resolve()
+        ROOT / 'build/local/dsp-tools-release/dsp56300-1.0.0-x86_64-unknown-linux-gnu/bin/dsp56300-asm'))).resolve()
     if not all(path.is_file() for path in (firmware, keyboard, assembler)):
         print('SKIP original initial Keyboard path: local archives or independent assembler absent')
         return 77
     trace.parent.mkdir(parents=True, exist_ok=True)
-    original_records(firmware, json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text()))
+    original_records(firmware, json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text()))
     blocks, _, _ = verified_blocks(keyboard)
     packets = trace.with_suffix('.packets')
     expected = packet_references(blocks, LAYOUTS, packets)

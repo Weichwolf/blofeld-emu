@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Keep client code in the instrumented native build; never load system libpulse.
 function(blofeld_stage_audio_archive component output)
-  file(READ "${CMAKE_CURRENT_SOURCE_DIR}/doc/dependencies.json" manifest)
+  file(READ "${CMAKE_CURRENT_SOURCE_DIR}/cmake/dependencies.json" manifest)
   string(JSON name GET "${manifest}" ${component} file)
   string(JSON size GET "${manifest}" ${component} bytes)
   string(JSON hash GET "${manifest}" ${component} sha256)
-  set(archive "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/${name}")
+  set(archive "${CMAKE_CURRENT_SOURCE_DIR}/build/local/${name}")
   if(NOT EXISTS "${archive}")
     message(FATAL_ERROR "Missing ${component}: run python3 tools/dependencies.py --fetch --component ${component}")
   endif()
   file(SIZE "${archive}" actual_size)
   file(SHA256 "${archive}" actual_hash)
   if(NOT actual_size EQUAL size OR NOT actual_hash STREQUAL hash)
-    message(FATAL_ERROR "${component} source size/SHA-256 differs from doc/dependencies.json")
+    message(FATAL_ERROR "${component} source size/SHA-256 differs from cmake/dependencies.json")
   endif()
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${archive}")
   set(stage "${CMAKE_CURRENT_BINARY_DIR}/generated/audio/${component}")
@@ -70,7 +70,7 @@ function(blofeld_add_audio_dependencies)
   set(pulse_build "${CMAKE_CURRENT_BINARY_DIR}/generated/audio/pulse-config")
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/configure_pulse.py"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/dependencies.json")
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/dependencies.json")
   execute_process(COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/configure_pulse.py"
     --source "${pulse_source}" --build "${pulse_build}" --meson "${meson_stage}"

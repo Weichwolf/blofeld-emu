@@ -22,7 +22,7 @@ def main():
     pinned = next(row for row in downloads["files"] if row["file"] == firmware.name)
     if hashlib.sha256(firmware.read_bytes()).hexdigest() != pinned["sha256"]:
         raise ValueError("Changed original firmware archive")
-    reference = json.loads((ROOT / "doc/dsp-filter-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/dsp-filter-reference.json").read_text())
     midi, _ = load_input(firmware)
     if hashlib.sha256(midi).hexdigest() != reference["midi_sha256"]:
         raise ValueError("Changed original firmware MID")

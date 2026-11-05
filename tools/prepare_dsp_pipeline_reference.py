@@ -60,7 +60,7 @@ def reference_program():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path, nargs="?",
-                        default=Path(__file__).resolve().parents[1] / "doc/local/dsp-pipeline-reference",
+                        default=Path(__file__).resolve().parents[1] / "build/local/dsp-pipeline-reference",
                         help="Local output directory; this tool assembles or executes nothing")
     args = parser.parse_args()
     source, metadata = reference_program()

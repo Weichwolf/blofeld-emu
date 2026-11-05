@@ -131,9 +131,9 @@ def acquire(root, name, profile=None, firmware_version=None):
 def save_capture(metadata, raw, output, repository=REPOSITORY):
     repository = repository.resolve(strict=True)
     output = output.absolute()
-    private = repository / "doc/local"
+    private = repository / "build/local"
     if not output.resolve().is_relative_to(private.resolve()):
-        raise CaptureError("Hardware observations must stay under the repository's doc/local/")
+        raise CaptureError("Hardware observations must stay under the repository's build/local/")
     result = subprocess.run(["git", "-C", str(repository), "check-ignore", "-q", "--", str(output)],
                             check=False, capture_output=True)
     if result.returncode != 0:
@@ -176,7 +176,7 @@ def main():
                               "hardware_equivalence_verified": False}, indent=2))
         else:
             if args.output is None:
-                parser.error("--device requires --output under doc/local/")
+                parser.error("--device requires --output under build/local/")
             metadata, raw = acquire(args.sysfs, args.device, args.profile, args.firmware_version)
             save_capture(metadata, raw, args.output)
             print(json.dumps({"status": metadata["status"], "output": str(args.output),

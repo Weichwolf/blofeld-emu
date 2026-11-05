@@ -17,8 +17,8 @@ def main():
     binary, firmware, trace = map(Path, sys.argv[1:])
     trace.parent.mkdir(parents=True, exist_ok=True)
     inputs = trace.with_suffix('.pages')
-    reference = json.loads((ROOT / 'doc/dsp-sample-timer-reference.json').read_text())
-    shared = json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text())
+    reference = json.loads((ROOT / 'test/reference/dsp-sample-timer-reference.json').read_text())
+    shared = json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text())
     if reference['vector_record'] != shared['records'][83]:
         raise ValueError('Changed original Timer1 vector identity')
     try:

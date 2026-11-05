@@ -26,7 +26,7 @@ class SourceGuardTest(unittest.TestCase):
                                 GIT_COMMITTER_NAME="Source guard test",
                                 GIT_COMMITTER_EMAIL="test@example.invalid")
         self.git("-c", "init.templateDir=", "init", "-q", "--initial-branch=main")
-        (self.root / ".gitignore").write_text("build/\ndoc/local/\n")
+        (self.root / ".gitignore").write_text("build/\n")
         (self.root / "main.cpp").write_bytes(b"abc")
         (self.root / "main.cpp").chmod(0o644)
         self.git("add", ".gitignore", "main.cpp")
@@ -76,7 +76,7 @@ class SourceGuardTest(unittest.TestCase):
         self.assertEqual(self.changed()["modified"], ["main.cpp"])
 
     def test_ignored_build_and_reference_inputs(self):
-        for name in ("build/object.o", "doc/local/reference.bin"):
+        for name in ("build/object.o", "build/local/reference.bin"):
             path = self.root / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"own ignored fixture")
@@ -135,7 +135,7 @@ class SourceGuardTest(unittest.TestCase):
                     source_guard.check(value, self.root)
 
     def test_cli_capture_and_check(self):
-        destination = self.root / "doc/local/snapshot.json"
+        destination = self.root / "build/local/snapshot.json"
         for operation in ("capture", "check"):
             result = subprocess.run([sys.executable, str(TOOLS / "source_guard.py"), operation,
                                      str(destination), "--root", str(self.root)],
@@ -168,7 +168,7 @@ class SourceGuardTest(unittest.TestCase):
                 source_guard.capture(self.root)
 
     def test_ignored_snapshot_publication_and_permissions(self):
-        destination = self.root / "doc/local/snapshot.json"
+        destination = self.root / "build/local/snapshot.json"
         source_guard.save(self.snapshot, destination)
         self.assertEqual(destination.stat().st_mode & 0o777, 0o600)
         source_guard.check(json.loads(destination.read_text()), self.root)
@@ -176,7 +176,7 @@ class SourceGuardTest(unittest.TestCase):
     def test_publication_preserves_symlink_target(self):
         target = Path(self.temporary.name) / "untouched"
         target.write_text("retain this file")
-        destination = self.root / "doc/local/snapshot.json"
+        destination = self.root / "build/local/snapshot.json"
         destination.parent.mkdir(parents=True)
         destination.symlink_to(target)
         source_guard.save(self.snapshot, destination)
@@ -191,7 +191,7 @@ class SourceGuardTest(unittest.TestCase):
         self.assertFalse(destination.exists())
 
     def test_cli_added_file_is_not_success(self):
-        destination = self.root / "doc/local/snapshot.json"
+        destination = self.root / "build/local/snapshot.json"
         source_guard.save(self.snapshot, destination)
         (self.root / "new.cpp").write_text("own new source")
         result = subprocess.run([sys.executable, str(TOOLS / "source_guard.py"), "check",

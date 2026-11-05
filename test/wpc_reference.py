@@ -88,7 +88,7 @@ def correspondence(decoded, frames, reference):
 
 
 def original(output):
-    reference = json.loads((ROOT / "doc/wpc-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/wpc-reference.json").read_text())
     required = [ROOT / "doc" / row["archive"] for row in reference["spectre"]]
     required += [ROOT / "doc/library" / reference["wpc_file"],
                  ROOT / "doc/library" / reference["midi_archive"]]
@@ -98,7 +98,7 @@ def original(output):
         print("SKIP fixed WPC/MIDI reference: private official reference assets absent")
         return 77
     decoded, summary = inspect()
-    native = json.loads((ROOT / "doc/sample-preparation-reference.json").read_text())
+    native = json.loads((ROOT / "test/reference/sample-preparation-reference.json").read_text())
     messages, observations = load_reference(required[-1])
     _, frames = extract_inputs(sample_blocks(messages), native, observations)
     observed = correspondence(decoded, frames, native)

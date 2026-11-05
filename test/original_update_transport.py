@@ -22,7 +22,7 @@ LAYOUTS = ((3, 0xef00, 256, 256, 37), (0, 0x2e00, 63, 63, 9),
 
 
 def references(firmware, destination):
-    original_records(firmware, json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text()))
+    original_records(firmware, json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text()))
     midi, _ = load_input(firmware)
     blocks = split_blocks(read_smf(midi)[0])
     return packet_references(blocks, LAYOUTS, destination)
@@ -155,7 +155,7 @@ def controls(observed, reference, layouts=LAYOUTS):
 def main():
     binary, firmware, trace = map(Path, sys.argv[1:])
     assembler = Path(os.environ.get('BLOFELD_DSP_ASSEMBLER', str(
-        ROOT / 'doc/local/dsp-tools-release/dsp56300-1.0.0-x86_64-unknown-linux-gnu/bin/dsp56300-asm'))).resolve()
+        ROOT / 'build/local/dsp-tools-release/dsp56300-1.0.0-x86_64-unknown-linux-gnu/bin/dsp56300-asm'))).resolve()
     if not firmware.is_file() or not assembler.is_file():
         print('SKIP original update transport: local firmware or independent assembler absent')
         return 77

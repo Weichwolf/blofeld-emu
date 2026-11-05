@@ -1,35 +1,14 @@
-Documentation map
+Reference documents
 
-Current scope and evidence
-  objective.txt               Complete acceptance objective; not a completion claim
-  coverage.txt                Current requirement-by-requirement state and gaps
-  function-acceptance.tsv     Every documented Desktop/Keyboard function
-  function-acceptance.txt     Rules for qualifying those function rows
+architecture-design.txt        Target runtime architecture and design references
+hardware/sources.json          Manufacturer hardware specifications and identities
+hardware/board-photos.json     Primary board-photo references
+function-references.json       Manufacturer function documentation identities
+downloads.json                Official firmware, manual and tool download sources
+library/sources.json           Official sample-library source identities
+produktbilder/quellen.json     Manufacturer product-image source identities
+reference-tools.json          Manufacturer development-tool references
 
-Running and viewing
-  runtime.txt                 Available runtime interface and current limits
-  display-export.txt          Display file format, publication and GTK viewer
-  host-midi-session.txt       Host MIDI input and native-output session contract
-  midi-output.txt             Native serial output capture and scoped evidence
-  host-audio.txt              Session audio negotiation and transport
-  own-dsp-integration.txt     Current independent-core composition
-  dsp-native-bus.txt          Pure known code view and actual native bus boundary
-  instrument-performance.txt Connected Release measurement and execution-path limits
-  dsp-native-budget.txt      Native instruction periods, ownership and timing limits
-
-References
-  dependencies.json          Pinned source dependencies
-  downloads.json             Official local-input download identities
-  firmware-nand.txt          Complete cold NAND payloads and explicit state policies
-  hardware/sources.json      Primary hardware documentation
-  *-reference.json           Scoped test inputs/results, with source identities
-
-Implementation belongs in ../src/ and tests in ../test/. The viewer implementation
-is ../src/gui/; ../tools/blofeld-display is its thin launcher. Ignored local
-references and experiment artifacts stay in local/ and are not product programs
-or published manufacturer assets. Earlier bring-up narratives are available in
-Git history rather than repeated as current project status.
-
-Low-level documents describe the named component contracts. Their fixture
-results do not establish the complete instrument. Use coverage.txt and the
-function record for present acceptance status.
+Manufacturer materials remain local and are not redistributed. Local working
+inputs are under ignored build/local/. Build metadata belongs in cmake/;
+qualification requirements and fixture manifests belong in test/.

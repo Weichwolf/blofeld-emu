@@ -24,7 +24,7 @@ def main():
     from inspect_firmware import decode_block, load_input, read_smf, split_blocks
     midi, _ = load_input(firmware)
     messages, _ = read_smf(midi)
-    reference = json.loads((ROOT / "doc/nand-first-records-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/nand-first-records-reference.json").read_text())
     payload = decode_block(split_blocks(messages)[reference["update_block"]])[1]
     start, size = reference["runtime_byte_offset"], reference["page_bytes"]
     page = payload[start:start + size]

@@ -136,7 +136,7 @@ def main():
     if not firmware.is_file():
         print('SKIP original dual DMA: private firmware absent')
         return 77
-    original_records(firmware, json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text()))
+    original_records(firmware, json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text()))
     trace.parent.mkdir(parents=True, exist_ok=True)
     trace.unlink(missing_ok=True)
     trace.with_suffix('.json').unlink(missing_ok=True)

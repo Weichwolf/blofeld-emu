@@ -249,7 +249,7 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_boot.py"
     $<TARGET_FILE:blofeld-dsp-boot-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-boot.trace")
   set_tests_properties(original_dsp_boot PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-original-dsp-midi-test test/original_dsp_midi_test.cpp)

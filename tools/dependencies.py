@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():
-    manifests = json.loads((ROOT / "doc/dependencies.json").read_text())
+    manifests = json.loads((ROOT / "cmake/dependencies.json").read_text())
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--fetch", action="store_true")
@@ -22,7 +22,7 @@ def main():
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     manifest = manifests[args.component]
-    args.output = args.output or ROOT / "doc/local" / manifest["file"]
+    args.output = args.output or ROOT / "build/local" / manifest["file"]
     if not matches(args.output, manifest) and args.fetch:
         fetch(args.output, manifest)
     if not matches(args.output, manifest):

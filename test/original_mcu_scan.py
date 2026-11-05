@@ -78,7 +78,7 @@ def main():
     if not firmware.is_file():
         print("SKIP original MCU scan helpers: private firmware absent")
         return 77
-    reference = json.loads((ROOT / "doc/mcu-scan-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/mcu-scan-reference.json").read_text())
     original_mcu(firmware, reference)
     trace.parent.mkdir(parents=True, exist_ok=True)
     trace.unlink(missing_ok=True)

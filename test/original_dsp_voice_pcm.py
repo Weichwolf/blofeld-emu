@@ -77,7 +77,7 @@ def main():
     if not firmware.is_file():
         print('SKIP original voice PCM: private firmware absent')
         return 77
-    reference = json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text())
+    reference = json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text())
     program = {}
     xdata, ydata = original_records(firmware, reference, program)
     result = subprocess.run([str(binary.resolve()), str(firmware.resolve()), str(trace.resolve())],

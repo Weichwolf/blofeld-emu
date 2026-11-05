@@ -23,7 +23,7 @@ HC12 branch corrections
 ghidra-hc12-branches.patch corrects the BRSET predicate in all three operand
 constructors, makes BRN decode its displacement byte, and fixes inverted BGE/
 LBGE predicates (N equals V). It is guarded by the
-original HCS_HC12.sinc SHA-256 recorded in doc/dependencies.json. It is applied
+original HCS_HC12.sinc SHA-256 recorded in cmake/dependencies.json. It is applied
 only to a build-directory copy, then compiled with Ghidra's native SLEIGH tool.
 No manufacturer firmware bytes or processor-language source copies are shipped
 in this repository. The specification retains Ghidra's Apache-2.0 license.
@@ -87,7 +87,7 @@ hc12_minmax supplies exhaustive byte pairs, word boundaries, literal HCS12 bus
 slots, changing-input/failure controls and genuine GPIO writes/snapshot replay.
 The native timing adapter now supports all five index families. Prior-decoder
 controls fail without a diagnostic baseline; no hardware behavior, firmware
-result or installed upstream source is substituted. See doc/hc12-minmax.txt.
+result or installed upstream source is substituted. See the corresponding independent tests under test/.
 
 HC12 exception corrections
 -------------------------
@@ -115,7 +115,7 @@ against the original two-byte-load RTI description.
 DSP56300 reference adapter
 -------------------------
 dsp56300-reference-bus.patch applies only to the revision pinned in
-cmake/DspCore.cmake and doc/dependencies.json. GNU patch applies this zero-context
+cmake/DspCore.cmake and cmake/dependencies.json. GNU patch applies this zero-context
 diff against that exact revision. It adds unconditional strict bus hooks, custom
 peripheral dispatch, exception propagation, exact extension checks
 and a bounded reference entry for DO/positive REP. Program stores do not synthesize
@@ -142,7 +142,7 @@ with the interpreter forced. Detection operations and returned values are
 unchanged; no test prewarm or sanitizer suppression is used. dsp_omr_thread
 runs two cold owners through actual OMR checkpoint suffixes under TSan.
 AsmJit's original Zlib notices remain in the copied source. The pinned original
-cpuinfo.cpp SHA-256 is recorded in doc/dependencies.json.
+cpuinfo.cpp SHA-256 is recorded in cmake/dependencies.json.
 
 UBSan caught reset using out-of-range CCR enum values for full SR masks. Reset
 and interrupt entry now use the correct SR-mask overloads. No sanitizer is
@@ -175,14 +175,14 @@ IPL, allowing only higher-level nesting. Native RTI restores the frame. Fast
 vectors retain foreground PC and may change SR. Native MOVEC masks read-only VBA
 bits; active/consecutive REP defers entry. Unsupported vector flows/lengths and
 stack overflow fail. Independent dsp_interrupts checks and reference limits are
-described in doc/dsp-interrupts.txt. No JIT or physical pipeline claim is made.
+described in the corresponding independent tests under test/. No JIT or physical pipeline claim is made.
 
 NORM's no-shift path now refreshes E/U/N/Z/V as specified by DSP56300FM 13-146.
 The SDK previously preserved stale flags indefinitely after a data MOVE. A
 three-NORM regression fails against that path; 4608 independently computed
 vectors check scaling, A/B, Rn, compatibility and preserved state. Pinned external
 MCPX hardware corpus banks b0/b1/b2 provide a separate instruction-state comparison
-(doc/dsp-validation.txt). This does not qualify the JIT or a Blofeld board.
+(the corresponding independent tests under test/). This does not qualify the JIT or a Blofeld board.
 
 Whole-accumulator transfer helpers now update sticky S from the pre-move source
 before scaling/limiting. Raw partial transfers bypass that update. Register bit
@@ -195,7 +195,7 @@ addressing/scaling/flag vectors, modulo REP, strict faults and preservation.
 In reference mode, unimplemented instructions throw their name before coreDump
 can obscure the cause with unrelated bus reads. These changes do not implement
 cache instructions or establish DSP56371 silicon/pipeline equivalence. See
-doc/dsp-validation.txt for scope and remaining derivative-specific loop questions.
+the corresponding independent tests under test/ for scope and remaining derivative-specific loop questions.
 
 Normal zero REP now annuls valid one-word targets in reference mode, preserving
 count-source effects, LC and flags, with strict target/compatibility/placement
@@ -205,7 +205,7 @@ stack slots retain LA/LC/body-PC/SR writes even though its body does not execute
 The old early return omitted those writes. Own failure regressions, nested state,
 IRQ chains, boundaries and all71 pinned b2 cases check the corrections. Normal
 interpreter/JIT paths are unchanged; full chip/pipeline/compatibility qualification
-remains open. See doc/dsp-zero-loops.txt. The original nonzero clear loop is not
+remains open. See the corresponding independent tests under test/. The original nonzero clear loop is not
 shortened, skipped or allowed to write unqualified reserved memory.
 
 Reference TRAP/ILLEGAL, DEBUG, STOP and WAIT now reject their unqualified exception,
@@ -213,7 +213,7 @@ debug or clock state before the SDK can issue a host debug break or silently
 continue. Conditional TRAP/DEBUG check their condition first: all sixteen literal
 encodings have true/false flag vectors with PC/CCR/SP and selected RAM checks in
 dsp_instruction_fixture. These guards do not implement software exception entry,
-OnCE or suspended clocks; see doc/dsp-instructions.txt.
+OnCE or suspended clocks; see the corresponding independent tests under test/.
 
 An earlier own instruction input exposed an ASR carry-bit shift exponent of 70
 under UBSan. The reference helper now rejects counts above FM 13-16's defined
@@ -229,7 +229,7 @@ dispatch while retaining cached diagnostic cycle costs. REP opcode/extension
 latches remain independent of later backing-program changes. JIT/debugger/external-bus and SDK interrupt
 queue/callback contexts reject. DspMachine pairs this trusted native state with
 an immutable strict-bus copy; no portable SDK object dump is exposed. See
-doc/dsp-checkpoints.txt for independent instruction and original-coupling checks.
+the corresponding independent tests under test/ for independent instruction and original-coupling checks.
 
 PulseAudio17 client callback types
 The pinned build copy receives pulseaudio-callback-types.patch with zero patch
@@ -259,7 +259,7 @@ and unchanged vendor-model windows distinguish these cases independently;
 the older own transfer oracle is corrected from the same primary equations.
 The patch uses one zero-context diff per affected upstream file and produces
 the qualified native source bytes. No JIT/physical timing claim is implied.
-See doc/dsp-accumulator-transfers.txt and its reference manifest.
+See the corresponding independent tests under test/ and its reference manifest.
 
 HCS08 software interrupt
 ------------------------
@@ -267,7 +267,7 @@ ghidra-hcs08-swi.patch dereferences FFFC/FFFD instead of branching to FFFC.
 It changes only the hash-pinned generated language copy; upstream Apache-2.0
 notices and installed SDK/firmware bytes remain intact. Native execution owns
 stack/branch/SP effects; the memory owner resolves actual vector reads.
-See doc/hcs08-swi.txt for independent tests and timing limits.
+See the corresponding independent tests under test/ for independent tests and timing limits.
 
 Native virtual-memory information initialization
 ----------------------------------------------
@@ -284,9 +284,9 @@ ghidra-hcs08-decimal.patch replaces unresolved DAA intrinsics with native
 p-code for Family Rev2 Table A-2. Both corrections use original A/H/C;the
 owner rejects unspecified inputs and tracks undefined V. The pinned build
 copy retains Ghidra Apache-2.0 terms;installed SDK/firmware stay unchanged.
-Independent decimal/table/snapshot tests:doc/hcs08-decimal.txt.
+Independent decimal/table/snapshot tests:the corresponding independent tests under test/.
 
 ghidra-hc12-masked-read.patch routes only BRCLR/BRSET byte observations through
 an explicit selected-bit intrinsic. Effective-address subtables retain native
 address updates and avoid an extra data read. Native predicates/CCR/PC and the
-ordinary whole-byte paths remain; see doc/hc12-masked-gpio.txt.
+ordinary whole-byte paths remain; see the corresponding independent tests under test/.

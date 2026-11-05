@@ -82,7 +82,7 @@ def decode_pages(data, mask):
 
 
 def inspect(root=ROOT):
-    reference = json.loads((root / "doc/wpc-reference.json").read_text())
+    reference = json.loads((root / "test/reference/wpc-reference.json").read_text())
     downloads = json.loads((root / "doc/downloads.json").read_text())["files"]
     masks = [reference_mask(root, row, downloads) for row in reference["spectre"]]
     require(len(masks) == 2 and masks[0] == masks[1]

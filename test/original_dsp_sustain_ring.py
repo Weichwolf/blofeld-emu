@@ -171,7 +171,7 @@ def main():
         print('SKIP original sustain ring: private firmware absent')
         return 77
     program = {}
-    xdata, ydata = original_records(firmware, json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text()), program)
+    xdata, ydata = original_records(firmware, json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text()), program)
     trace.parent.mkdir(parents=True, exist_ok=True)
     trace.unlink(missing_ok=True)
     report = trace.with_suffix('.json')

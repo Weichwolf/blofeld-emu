@@ -70,7 +70,7 @@ def main():
     if not firmware.is_file():
         print("SKIP original MIDI forwarding: local firmware absent")
         return 77
-    reference = json.loads((ROOT / "doc/midi-forwarding-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/midi-forwarding-reference.json").read_text())
     original_mcu(firmware, reference)
     result = subprocess.run([str(binary.resolve()), str(firmware.resolve())], capture_output=True,
                             text=True, check=False, timeout=160)

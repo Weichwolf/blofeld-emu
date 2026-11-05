@@ -19,7 +19,7 @@ def main():
     if not firmware.is_file():
         print("SKIP original workspace regression: private firmware absent")
         return 77
-    reference = json.loads((ROOT / "doc/dsp-workspace-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/dsp-workspace-reference.json").read_text())
     runtime_path = ROOT / reference["runtime_reference"]["path"]
     if hashlib.sha256(runtime_path.read_bytes()).hexdigest() != reference["runtime_reference"]["sha256"]:
         raise ValueError("Changed ordered original runtime reference")

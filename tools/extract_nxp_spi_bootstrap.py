@@ -74,7 +74,7 @@ def main() -> None:
     manual = ROOT / "doc/hardware" / reference["file"]
     if hashlib.sha256(manual.read_bytes()).hexdigest() != reference["sha256"]:
         raise ValueError("The downloaded NXP manual does not match the pinned reference")
-    output = ROOT / "doc/local"
+    output = ROOT / "build/local"
     output.mkdir(parents=True, exist_ok=True)
     text_path = output / "DSP56371UM.txt"
     subprocess.run(["pdftotext", "-layout", str(manual), str(text_path)], check=True)

@@ -16,8 +16,8 @@ def main():
     if not firmware.is_file():
         print("SKIP original NAND status: private firmware absent")
         return 77
-    reference = json.loads((ROOT / "doc/nand-functional-status-reference.json").read_text())
-    records = json.loads((ROOT / "doc/dsp-voice-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/nand-functional-status-reference.json").read_text())
+    records = json.loads((ROOT / "test/reference/dsp-voice-reference.json").read_text())
     program = {}
     original_records(firmware, records, program)
     span = reference["original_status_slice"]

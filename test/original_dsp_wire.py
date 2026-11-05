@@ -16,7 +16,7 @@ from inspect_firmware import decode_block, load_input, read_smf, split_blocks
 def main() -> int:
     binary, firmware, trace = map(Path, sys.argv[1:4])
     scope = sys.argv[4]
-    reference = json.loads((ROOT / "doc/dsp-midi-wire-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/dsp-midi-wire-reference.json").read_text())
     if scope not in reference["scopes"]:
         raise ValueError("Unsupported original MIDI wire scope")
     if not firmware.is_file():

@@ -96,9 +96,9 @@ def main():
     if not firmware.is_file():
         print("SKIP original request queue regression: private firmware absent")
         return 77
-    records = json.loads((ROOT / "doc/dsp-voice-reference.json").read_text())
+    records = json.loads((ROOT / "test/reference/dsp-voice-reference.json").read_text())
     original_records(firmware, records)
-    reference = json.loads((ROOT / "doc/dsp-request-queue-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/dsp-request-queue-reference.json").read_text())
     expected = reference["complete_original_queue_record"]
     if records["records"][expected["record"]] != expected:
         raise ValueError("Queue source component differs from original record identity")

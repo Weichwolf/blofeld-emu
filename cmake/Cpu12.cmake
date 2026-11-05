@@ -7,8 +7,8 @@ endif()
 execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${BLOFELD_CPU12_ROOT}" rev-parse HEAD
   OUTPUT_VARIABLE BLOFELD_CPU12_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE
   COMMAND_ERROR_IS_FATAL ANY)
-if(NOT BLOFELD_CPU12_REVISION STREQUAL "69bd36e70654a3112636128e9fed59d2d5d9c8db")
-  message(FATAL_ERROR "BLOFELD_CPU12_ROOT must contain the revision pinned in doc/dependencies.json")
+if(NOT BLOFELD_CPU12_REVISION STREQUAL "64e5f4dac51bca6d96d3567620af5c8fd5e9c150")
+  message(FATAL_ERROR "BLOFELD_CPU12_ROOT must contain the revision pinned in cmake/dependencies.json")
 endif()
 execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${BLOFELD_CPU12_ROOT}"
   diff --exit-code HEAD -- src include cmake CMakeLists.txt

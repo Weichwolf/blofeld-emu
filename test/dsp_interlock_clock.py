@@ -34,7 +34,7 @@ def execute(binary, path, window, profile):
 
 def accumulator_forms(binary, directory):
     prepared = accumulator_program()
-    reference = json.loads((ROOT / "doc/dsp-interlock-form-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/dsp-interlock-form-reference.json").read_text())
     instructions = prepared["instructions"]
     path = directory / "complete-own-accumulator-program.asm"
     path.write_text("\n".join(instructions) + "\n")
@@ -77,7 +77,7 @@ def main():
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     _, prepared = reference_program()
-    reference = json.loads((ROOT / "doc/dsp-pipeline-timing-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/dsp-pipeline-timing-reference.json").read_text())
     instructions = prepared["instructions"]
     program = directory / "complete-own-program.asm"
     program.write_text("\n".join(instructions) + "\n")

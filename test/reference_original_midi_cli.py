@@ -49,7 +49,7 @@ def config(msb=0x40, unknown=False):
 class OriginalMidiCli(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        reference = json.loads((ROOT / "doc/dsp-voice-reference.json").read_text())
+        reference = json.loads((ROOT / "test/reference/dsp-voice-reference.json").read_text())
         original_records(FIRMWARE, reference)
         ARTIFACTS.mkdir(parents=True, exist_ok=True)
         cls.rom = ARTIFACTS / "private-original-midi.bin"

@@ -17,7 +17,7 @@ def main():
     if not firmware.is_file():
         print("SKIP original USB-MIDI producer: local firmware absent")
         return 77
-    reference = json.loads((ROOT / "doc/usb-midi-producer-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/usb-midi-producer-reference.json").read_text())
     original_mcu(firmware, reference)
     result = subprocess.run([str(binary.resolve()), str(firmware.resolve())],
                             check=False, capture_output=True, text=True, timeout=50)

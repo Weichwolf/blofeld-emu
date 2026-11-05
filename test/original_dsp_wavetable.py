@@ -54,7 +54,7 @@ def main():
     if not firmware.is_file():
         print('SKIP original wavetable FIR: private firmware absent')
         return 77
-    reference = json.loads((ROOT / 'doc/dsp-wavetable-reference.json').read_text())
+    reference = json.loads((ROOT / 'test/reference/dsp-wavetable-reference.json').read_text())
     verify_inputs(ROOT, firmware, reference)
     trace.parent.mkdir(parents=True, exist_ok=True)
     with trace.open('w') as output:

@@ -18,7 +18,7 @@ def main():
     if not firmware.is_file():
         print("SKIP original program guard: private firmware absent")
         return 77
-    original_records(firmware, json.loads((ROOT / "doc/dsp-voice-reference.json").read_text()))
+    original_records(firmware, json.loads((ROOT / "test/reference/dsp-voice-reference.json").read_text()))
     frozen = {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in (binary, firmware)}
     directory.mkdir(parents=True, exist_ok=True)
     for profile in ("foreground", "stream"):

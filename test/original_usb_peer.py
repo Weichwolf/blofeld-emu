@@ -69,7 +69,7 @@ def main():
     if not firmware.is_file():
         print("SKIP original USB/peer paths: local firmware absent")
         return 77
-    reference = json.loads((ROOT / "doc/usb-peer-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/usb-peer-reference.json").read_text())
     original_mcu(firmware, reference)
     result = subprocess.run([str(binary.resolve()), str(firmware.resolve())], capture_output=True,
                             text=True, check=False, timeout=160)

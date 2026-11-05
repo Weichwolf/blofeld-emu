@@ -19,7 +19,7 @@ Optional independent CPU12 executor:
 zlib:
   Jean-loup Gailly and Mark Adler, zlib license (LICENSES/Zlib.txt).
   https://zlib.net/zlib_license.html
-  Version/source archive identity is pinned in doc/dependencies.json.
+  Version/source archive identity is pinned in cmake/dependencies.json.
   Built statically from the unmodified source archive; original notices remain
   in the build copy. LICENSES/Zlib.txt retains that source version's full notice.
   Source/notice availability for binary distribution remains governed by zlib's
@@ -36,7 +36,7 @@ Independent DSP56300 runtime core:
 
 Legacy DSP test harness only (not the regular runtime):
   https://github.com/dsp56300/dsp56300
-  GPL-3.0 (see the dependency's LICENSE.md), pinned in doc/dependencies.json.
+  GPL-3.0 (see the dependency's LICENSE.md), pinned in cmake/dependencies.json.
   The native interpreter is built from a local checkout, patched only in build/.
   Original notices remain in the build copy and source checkout. Its asmjit
   component uses the Zlib license (source/asmjit/LICENSE.md).
@@ -57,7 +57,7 @@ Native session audio client:
   libsndfile 1.2.2, upstream authors and contributors, LGPL-2.1-or-later.
   https://github.com/libsndfile/libsndfile
   LICENSES/libsndfile.txt retains the upstream COPYING file. Both source archives
-  are pinned in doc/dependencies.json and built statically with dependency
+  are pinned in cmake/dependencies.json and built statically with dependency
   sanitizers. Original notices remain in the extracted sources. A local patch
   corrects callback types; see patches/pulseaudio-callback-types.patch.
   Corresponding sources, modifications and notices must accompany redistributable
@@ -74,7 +74,7 @@ Optional offline DSP assembly tool:
 
 Optional offline silicon test corpus:
   https://github.com/mborgerson/dsp56300
-  Matt Borgerson, MIT license; pinned in doc/dsp-corpus.json.
+  Matt Borgerson, MIT license; pinned in test/reference/dsp-corpus.json.
   External MCPX GP silicon results, metadata and test programs stay in the local
   checkout with their notices. They are not linked or redistributed with the
   emulator and do not establish DSP56371/Blofeld hardware equivalence.

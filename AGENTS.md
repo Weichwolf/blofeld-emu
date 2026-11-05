@@ -1,52 +1,51 @@
-# Project context
+# blofeld-emu
 
-- Speak German with the user. Code, comments, documentation and commit messages are English.
-- The primary objective is a complete Blofeld Desktop instrument emulator with active SL sample capability, initially headless and standalone. Unmodified original 1.25 firmware is the known-working compatibility reference; tests verify our emulator, not the manufacturer's firmware.
-- The original firmware is known to run on the real device, not assumed bug-free. Its executed accesses constrain the hardware model but do not prove that every access is intentional or selects a device. Resolve documentation/firmware conflicts through explicit decoder, timing and chip-profile hypotheses, retaining firmware quirks and checking multiple connected paths.
-- Correctness means equivalent instrument behavior: original DSP sound, MIDI/SysEx, voice management, musical timing, controls, storage and updates. Functional bootstrap/peripheral models and coarser internal scheduling are allowed; identical electrical wiring, bus phases and silicon pipeline timing are not acceptance requirements. Preserve instrument-visible effects and document each simplification and its tests.
-- Implement the connected device from actual reset through normal instrument operation with original DSP audio, MIDI and persistent storage. Isolated routine fixtures are supporting evidence, never a substitute for that runtime. Alternative-firmware development is a secondary future use.
-- Physical disassembly and measurement are unavailable and are not acceptance prerequisites. Independently reconstruct missing hardware through documented constraints and reproducible offline hypotheses/experiments without a preset attempt limit. Missing information remains a research task; completion requires correctly running original firmware and every documented Desktop function.
-- Execute the original Blofeld firmware and its DSP synthesis. Do not substitute a host synthesizer, patch the firmware, skip its routines or fabricate successful instrument results. Chip-internal bootstrap and peripheral functions may use explicit, tested functional models.
-- Unknown or unsupported hardware accesses must fail visibly with address, operation, PC and execution context. Keep observed behavior, hypotheses and hardware-verified facts distinct.
-- Device detection is not hardware validation. Hardware update/programming tests require a separately established recovery procedure; never flash experimental firmware as a routine test.
-- Keep the emulator, board model, transport and time-critical audio processing separate. Run as a regular user.
-- After removing the foreign DSP backend, replace transitional OwnDsp/own_dsp names in classes, files, build targets, configuration and documentation with normal DSP names. Do not retain a permanent "own" backend label.
-- Query audio and MIDI host capabilities independently and read back actual settings and buffer/pool grants. Adapt bounded buffering and packetization to those limits; report unsupported configurations, overload and disconnects. Development-host limits are not global hardware limits, and host differences must not change emulated clocks.
+- Execute unmodified original 1.25 firmware from reset to a complete standalone
+  instrument. The supplied acceptance scope includes Desktop and Keyboard; keep
+  profile work explicit. Preserve original DSP audio, MIDI/USB, display, storage,
+  active SL samples and update/recovery behavior. See OBJECTIVE.md.
+- Correctness concerns instrument behavior. Reconstruct missing contracts without
+  physical disassembly; preserve firmware quirks. No firmware patches, skipped
+  routines, invented success responses or replacement host synthesizer.
+- Use our independent cpu12 and dsp56300 cores; fix generic core defects there.
+  Separate board model, core execution, transport and audio. Unknown accesses
+  fail with address, operation, PC and context. Run as a regular user.
+- Query audio/MIDI capabilities separately and read actual grants; keep bounded
+  queues, visible overload/disconnect errors and unchanged virtual clocks. Audio
+  callbacks must not allocate, throw, lock or access files. Native SLEIGH requires
+  exceptions outside that callback. Hardware flashing needs established recovery.
+- Keep the canonical checkout on main. Publish only to configured upstream/main.
+  All issue communication belongs in private Weichwolf/blofeld-src; no emulator
+  issues or routine status spam. Gearmulator is read-only reference; copy no code.
+  Preserve GPL dependency notices; do not import GPL-2.0-only octa-capture code.
 
-- The product has one fixed Desktop-with-SL identity and no Keyboard/Desktop selection modes. Its external instrument path is MIDI <-> emulator -> audio. HCS08/keybed-controller emulation is outside the active objective. Reconstruct actual SL-capable factory storage; do not patch the firmware or substitute host license-success responses.
+## Working rules
 
-# Quality gates
-
-- Use the fastest optimized Release build for functional experiments, original
-  firmware runs and performance measurements. Until the firmware runs in real
-  time, prioritize focused Release correctness/path checks and runtime progress;
-  defer extensive sanitizer matrices and broad regression campaigns until then.
-  Keep compiler diagnostics and existing checks intact; record deferred scope.
-- Apply the strict quality practices of `~/Git/octa-capture`: warnings as errors, strict compiler/linker flags, clang-format, clang-tidy with zero findings, and a maximum 120 lines per function.
-- Use C++23, CMake/Ninja and LLVM 19. Instrument our code and native dependencies with ASan/UBSan; run TSan separately once concurrent code exists.
-- Never weaken checks, add diagnostic baselines or add NOLINT markers to hide findings. Third-party source retains its notices and is analyzed separately from project-owned code.
-- Correct slow DSP helpers and similar performance defects promptly in the independent dsp56300 project; qualify and publish the core fix before updating the emulator pin. Do not substitute emulator-side workarounds for missing fast core execution.
-- Scope validation to the affected behavior. Do not rerun the entire suite after small changes. Run a broader regression once after a coherent CPU/DSP, memory-map or scheduler integration when justified. Avoid duplicate runs across identical source in separate worktrees; verify source identity and evidence scope before reusing results.
-- Native SLEIGH uses exceptions as its error interface. This dependency requirement must stay explicit; no exceptions or allocations belong in a future real-time audio callback.
-- Run fuzz tests only when the user explicitly requests them; never run them automatically as part of routine development, validation or quality checks. When requested, fuzz untrusted firmware, MIDI and state parsers offline under sanitizers. Preserve a regression input for every finding. Never send malformed fuzz traffic to physical devices.
-- Test CPU flags, addressing and state changes against independent instruction expectations and recovered firmware behavior. Round trips and self-consistency alone are insufficient.
-- Recheck current binaries, test coverage and connected hardware before making claims. Do not label absent or untested requirements as complete.
-- Commit verified increments. Push to `upstream` only when that remote is configured; never invent a publication destination.
-
-# References and records
-
-- Official firmware, samples, product images, extracted assets and disassemblies remain local references and must not be committed or redistributed with the implementation.
-- ~/Git/gearmulator is a read-only comparison reference. Do not copy its implementation into this project or our independent dsp56300 core.
-- Keep download URLs, sizes and hashes in tracked manifests. Private analysis and run artifacts belong in ignored `doc/local/`.
-- Keep documentation concise: reproducible commands, protocol facts, evidence, material limitations and outstanding requirements. Do not maintain an activity diary.
-- Maintain the complete objective and a requirement-by-requirement coverage record. Passing parser tests does not establish boot, MIDI/audio, flash safety or real-device equivalence.
-- Original project code is GPL-3.0-only; add matching SPDX identifiers to new source files.
-- The DSP dependency is GPL-3.0. Preserve dependency licenses; do not copy OCTA-CAPTURE's GPL-2.0-only implementation into this combined emulator.
-
-# Publication
-
-- The public repository is Weichwolf/blofeld-emu; its original implementation uses GPL-3.0-only.
-- Keep `/home/cosmo/Git/blofeld-emu` on `main` and synchronize it after every verified publication. Continue active work in this canonical checkout; preserve open source changes and local references before removing unused worktrees.
-- Push only reviewed source commits to upstream/main. Never push local/pre-publication-* backup branches or use --all/--mirror.
-- Keep detailed manufacturer disassembly analysis under ignored doc/local/. Public tests pin reference hashes instead of embedding manufacturer program bytes.
-- All GitHub issue communication belongs in private Weichwolf/blofeld-src, including emulator interfaces, test summaries and source findings. Do not create or comment on blofeld-emu issues. Existing emulator issues are migrated with their history before the originals are removed. Raw disassembly and reference assets retain their local-only rules.
+- Speak German with the user; write code, comments, documentation and commits in English.
+- Prefer simple native execution, direct memory and large bounded runs. Keep device
+  effects and event boundaries explicit; avoid per-clock work and unnecessary copies.
+  Telemetry is runtime-selectable and off by default; keep its work out of hot paths.
+- Use C++23, LLVM 19 and CMake/Ninja. Keep strict compiler/linker flags, warnings
+  as errors, clang-format, clang-tidy with zero findings and functions <=120 lines.
+  Never weaken checks or hide findings with suppressions or diagnostic baselines.
+- Release is the performance build. Preserve ASan/UBSan for project code and native
+  dependencies, and separate TSan for concurrent code; preserve dependency notices.
+- Until the instrument reaches real time, suspend component, functional, regression
+  and diagnostic execution tests. Only short optimized startup/throughput probes
+  may establish that milestone: stop after at most 10 host seconds, fail unless
+  playable, and never extend or automatically repeat a failed probe. Compilation,
+  formatting and static analysis remain active. Run fuzzing only on explicit request.
+- Afterwards validate affected behavior against independent expectations; avoid
+  duplicate or full-suite runs after small changes. Report gaps and measured scope.
+- Keep doc/ for one target architecture and important primary references only.
+  Requirements belong in OBJECTIVE.md and test/; build metadata belongs in cmake/.
+  No activity diaries or historical result manifests. Issue communication belongs
+  in private Weichwolf/blofeld-src, with concrete consolidated problems only.
+- Keep firmware, samples, manuals, disassemblies and private analysis untracked.
+  Preserve source URLs, sizes and hashes in reference manifests; never publish assets.
+  Local reference inputs live under ignored build/local/; run artifacts belong
+  under ignored build/. Preserve inputs when cleaning generated files.
+- Original code is GPL-3.0-only; add matching SPDX identifiers to new source.
+- Commit reviewed, verified increments; push only to the configured project remote
+  on main. Never publish backup branches or use --all/--mirror. Coordinate core
+  revisions with consumer dependency pins; preserve unrelated work.

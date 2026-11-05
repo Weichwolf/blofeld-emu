@@ -111,7 +111,7 @@ def synthetic():
 
 
 def reference(output):
-    manifest = json.loads((ROOT / 'doc/wpc-reference.json').read_text())
+    manifest = json.loads((ROOT / 'test/reference/wpc-reference.json').read_text())
     needed = [ROOT / 'doc' / row['archive'] for row in manifest['spectre']]
     needed.append(ROOT / 'doc/library' / manifest['wpc_file'])
     output.parent.mkdir(parents=True, exist_ok=True)

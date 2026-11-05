@@ -41,7 +41,7 @@ def main():
     if not firmware.is_file():
         print("SKIP original note regression: private firmware absent")
         return 77
-    reference = json.loads((ROOT / "doc/dsp-voice-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/dsp-voice-reference.json").read_text())
     original_records(firmware, reference)
     trace.parent.mkdir(parents=True, exist_ok=True)
     trace.unlink(missing_ok=True)

@@ -9,7 +9,7 @@ execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${DSP56300_ROOT}" rev-parse HEAD
   OUTPUT_VARIABLE BLOFELD_DSP_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE
   COMMAND_ERROR_IS_FATAL ANY)
 if(NOT BLOFELD_DSP_REVISION STREQUAL "3ff6610d5018d798f35bc784696f3384ade0e3c4")
-  message(FATAL_ERROR "DSP56300_ROOT must contain the revision pinned in doc/dependencies.json")
+  message(FATAL_ERROR "DSP56300_ROOT must contain the revision pinned in cmake/dependencies.json")
 endif()
 execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${DSP56300_ROOT}" diff --exit-code HEAD -- source
   RESULT_VARIABLE BLOFELD_DSP_DIRTY OUTPUT_QUIET ERROR_QUIET)

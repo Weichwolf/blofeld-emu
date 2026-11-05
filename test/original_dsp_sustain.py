@@ -182,7 +182,7 @@ def main():
     if not firmware.is_file():
         print('SKIP original CC64: private firmware absent')
         return 77
-    _, ydata = original_records(firmware, json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text()))
+    _, ydata = original_records(firmware, json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text()))
     coefficient = ydata[0x16c8]
     require(coefficient == 0x7fffff, 'Changed original zero-rate coefficient')
     trace.parent.mkdir(parents=True, exist_ok=True)

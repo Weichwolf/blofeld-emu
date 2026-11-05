@@ -1,5 +1,5 @@
 HeaderFilterRegex: '.*/(include|src|test)/.*'
-ExcludeHeaderFilterRegex: '.*/(usr|doc/local|build)/.*'
+ExcludeHeaderFilterRegex: '.*/(usr|build)/.*'
 FormatStyle: file
 Checks: >
   -*,

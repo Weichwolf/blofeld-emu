@@ -1,0 +1,92 @@
+Blofeld runtime design
+
+This is the implementation target, not a claim about current functionality or
+performance. Original firmware and DSP synthesis remain the instrument.
+
+                         emu()
+                           |
+          memory -> persistent images -> peripherals -> cores
+                           |
+             +-------------+-------------+
+             |                           |
+       MCU worker                    DSP worker
+       cpu12::Core                   dsp56300::Core
+       mcu.run(stop)                 dsp.run(stop)
+       JIT -> JIT -> ...             JIT -> JIT -> ...
+       MCU RAM / flash               P / X / Y RAM
+       local MMIO / timers           local MMIO / audio / NAND RAM
+             |                           |
+             +--- MCU-to-DSP FIFO ------->+
+             +<-- DSP-to-MCU FIFO -------+
+             |    timestamped events     |
+             |    IRQ / reset notices    +---- PCM ring ---- audio consumer
+             |                           |
+             +------ dirty storage ------+---- storage worker ---- images
+
+       Host event loop: MIDI, optional UI, commands and shutdown
+       Host input -> bounded input queue -> MCU worker
+
+Execution
+
+Initialization loads local images once, creates stable memory views and device
+state, then starts each core's long-lived run loop. The DSP starts in its real
+reset/bootstrap state; original MCU activity releases and loads it. Shutdown
+requests stop at safe execution boundaries, joins workers and closes storage.
+
+Each worker owns its core, JIT cache, ordinary RAM and peripheral state. RAM
+accesses use direct native loads/stores. Selected MMIO accesses run the required
+local side effects. Unknown accesses remain explicit faults with PC/context.
+Do not replace firmware routines, synthesize host audio or fabricate replies.
+
+Generated blocks chain directly where code identity and execution state permit.
+Code changes invalidate affected translations/links. Exit generated execution for
+pending interrupts, actual I/O effects, due device events, stop or backpressure;
+do not return through board-control code for every instruction or clock edge.
+
+Communication and time
+
+Cross-core transport uses bounded single-producer/single-consumer queues and
+explicit atomic notification. A receiver handles its own interrupts and state;
+another thread never modifies its architectural registers. Device registers with
+read/pop/acknowledgement behavior retain those effects rather than becoming
+unconditionally successful plain memory.
+
+Core clocks use one virtual device timeline with bounded lookahead. Grants and
+communication boundaries must prevent delivery from the future and late IRQ
+service caused by blindly completing a larger grant. Synchronize at relevant
+device effects/deadlines, not every electrical edge. Derive idle time and timer
+progress in spans. The time-grant protocol is an explicit implementation task;
+independent host threads alone do not establish correct virtual ordering.
+
+Live audio consumption bounds runahead; offline consumers may drain faster than
+real time. Host capabilities do not change device clocks. Audio callbacks only
+consume bounded PCM, with no core execution, allocation, file I/O or mutex wait.
+
+Storage and observation
+
+NAND/sample reads use RAM. A storage owner persists changed pages/sectors and
+reports completion before the firmware observes durable completion. Device
+identity/MCU NVM and selectable NAND images remain distinct local resources.
+Manufacturer firmware, populated images and samples are never published.
+
+Publish display snapshots on changes. Enable diagnostics explicitly; disabled
+diagnostics perform no instruction-by-instruction copying or logging. Keep run
+artifacts outside doc/. No activity diary is maintained in the repository.
+
+Implementation gate
+
+Compile, format and statically analyze without weakening checks. Execution QA
+is deferred until real time. Only short optimized startup/throughput probes may
+establish that milestone; stop and fail if not playable within 10 host seconds.
+Do not extend or automatically repeat a failed probe. Fuzzing remains explicit.
+
+Established references
+
+QEMU multi-threaded execution and CPU-local ownership:
+https://www.qemu.org/docs/master/devel/multi-thread-tcg.html
+QEMU translated-block chaining and invalidation:
+https://www.qemu.org/docs/master/devel/tcg.html
+Linux single-producer/single-consumer circular buffers and ordering:
+https://docs.kernel.org/core-api/circular-buffers.html
+
+These are design references. Their implementations are not copied.

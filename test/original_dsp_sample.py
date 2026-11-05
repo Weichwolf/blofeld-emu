@@ -129,8 +129,8 @@ def validate(trace, vectors_path, expected):
 
 
 def inputs(firmware):
-    shared = json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text())
-    reference = json.loads((ROOT / 'doc/dsp-sample-reference.json').read_text())
+    shared = json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text())
+    reference = json.loads((ROOT / 'test/reference/dsp-sample-reference.json').read_text())
     coefficients, _ = original_records(firmware, shared)
     if (reference['records'] != [shared['records'][index] for index in (39, 40, 114)] or
             reference['midi_sha256'] != shared['midi_sha256']):

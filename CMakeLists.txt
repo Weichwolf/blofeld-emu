@@ -1538,7 +1538,7 @@ if(BUILD_TESTING)
   add_test(NAME dsp_pipeline_bootstrap_prefix COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_bootstrap_pipeline.py"
     $<TARGET_FILE:blofeld-peripheral-pipeline-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-pipeline-bootstrap-prefix.trace")
   set_tests_properties(dsp_pipeline_bootstrap_prefix PROPERTIES SKIP_RETURN_CODE 77)
   foreach(kind read native automatic automatic_state automatic_guard)
@@ -1634,19 +1634,19 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_clocked_frontier.py"
     $<TARGET_FILE:blofeld-original-clocked-frontier-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-main-boot-document.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-main-boot-document.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-clocked-frontier.trace")
   set_tests_properties(original_dsp_clocked_frontier PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_test(NAME dsp_document_loader_entry COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_document_loader_entry.py"
     $<TARGET_FILE:blofeld-document-loader-entry-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-main-boot-document.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-main-boot-document.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-document-loader-entry.trace")
   set_tests_properties(dsp_document_loader_entry PROPERTIES SKIP_RETURN_CODE 77)
   add_test(NAME dsp_document_spi_loader_operands COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_loader_prefix_operands.py"
     $<TARGET_FILE:blofeld-loader-prefix-operand-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-document-loader-operands.trace")
   set_tests_properties(dsp_document_spi_loader_operands PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-overlap-test test/dsp_overlap_test.cpp test/dsp_overlap_clock.cpp)
@@ -2851,15 +2851,15 @@ if(BUILD_TESTING)
   add_test(NAME dsp_hardware_corpus COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_hardware_corpus.py"
     $<TARGET_FILE:blofeld-dsp-corpus-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/dsp56300-tools/tools/difftest/goldens"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/dsp-corpus.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/dsp56300-tools/tools/difftest/goldens"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/reference/dsp-corpus.json"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-hardware-corpus")
   set_tests_properties(dsp_hardware_corpus PROPERTIES SKIP_RETURN_CODE 77)
   add_test(NAME dsp_operand_regressions COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_operand_regressions.py"
     $<TARGET_FILE:blofeld-dsp-corpus-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/dsp56300-tools/tools/difftest/goldens"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/dsp-operand-regressions.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/dsp56300-tools/tools/difftest/goldens"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/reference/dsp-operand-regressions.json"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-operand-regressions")
   set_tests_properties(dsp_operand_regressions PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 250)
   add_test(NAME dsp_corpus_bounds COMMAND ${Python3_EXECUTABLE}
@@ -2892,7 +2892,7 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_boot.py"
     $<TARGET_FILE:blofeld-coupled-boot-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-coupled-boot.trace")
   set_tests_properties(original_coupled_boot PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-scheduled-coupling-test test/original_scheduled_coupling_test.cpp
@@ -2908,7 +2908,7 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_reset_start.py"
     $<TARGET_FILE:blofeld-original-reset-start-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-reset-start.trace")
   set_tests_properties(original_reset_start PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-original-fetch-reset-start-test test/original_fetch_reset_start_test.cpp
@@ -2919,57 +2919,57 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_fetch_reset_start.py"
     $<TARGET_FILE:blofeld-original-fetch-reset-start-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-main-boot-document.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-main-boot-document.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-fetch-reset-start.json")
   set_tests_properties(original_fetch_reset_start PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
   add_test(NAME original_fetch_write_decoder COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_fetch_write_decoder.py"
     $<TARGET_FILE:blofeld-original-fetch-reset-start-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-main-boot-document.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-main-boot-document.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-fetch-write-decoder.json")
   set_tests_properties(original_fetch_write_decoder PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
   add_test(NAME original_fetch_gpio_start COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_fetch_gpio_start.py"
     $<TARGET_FILE:blofeld-original-fetch-reset-start-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-main-boot-document.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-main-boot-document.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-fetch-gpio-start.json")
   set_tests_properties(original_fetch_gpio_start PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
   add_test(NAME original_fetch_nand_start COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_fetch_nand_start.py"
     $<TARGET_FILE:blofeld-original-fetch-reset-start-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-main-boot-document.bin"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/connected-nand/initial-nand.bfnand"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-main-boot-document.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/connected-nand/initial-nand.bfnand"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-fetch-nand-start.json")
   set_tests_properties(original_fetch_nand_start PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 3600)
   add_test(NAME original_shi_routes COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_shi_routes.py"
     $<TARGET_FILE:blofeld-headless>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-shi-routes")
   set_tests_properties(original_shi_routes PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
   add_test(NAME original_checkpoint_cli COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_checkpoint_cli.py"
     $<TARGET_FILE:blofeld-headless>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-checkpoint-cli.trace")
   set_tests_properties(original_checkpoint_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
   add_test(NAME original_reference_cli COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_reference_cli.py"
     $<TARGET_FILE:blofeld-headless>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-reference-cli.trace")
   set_tests_properties(original_reference_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
   add_test(NAME original_scheduled_coupling COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_scheduled_coupling.py"
     $<TARGET_FILE:blofeld-scheduled-coupling-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-scheduled-coupling.trace")
   set_tests_properties(original_scheduled_coupling PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-shi-test test/dsp_shi_test.cpp)
@@ -3073,14 +3073,14 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_clock.py"
     $<TARGET_FILE:blofeld-original-dsp-clock-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-clock.trace")
   set_tests_properties(original_dsp_clock PROPERTIES SKIP_RETURN_CODE 77)
   add_test(NAME original_dsp_agu_clock COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_agu_clock.py"
     $<TARGET_FILE:blofeld-original-dsp-clock-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-agu-clock.trace")
   set_tests_properties(original_dsp_agu_clock PROPERTIES SKIP_RETURN_CODE 77)
 
@@ -3088,7 +3088,7 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_reset_clock.py"
     $<TARGET_FILE:blofeld-original-dsp-clock-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-reset-clock.trace")
   set_tests_properties(original_dsp_reset_clock PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
   add_executable(blofeld-clocked-midi-test test/mcu_clocked_midi_test.cpp)

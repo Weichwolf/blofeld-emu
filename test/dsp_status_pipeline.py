@@ -18,7 +18,7 @@ def main():
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=True)
     _, prepared = reference_program()
-    reference = json.loads((ROOT / "doc/dsp-status-timing-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/dsp-status-timing-reference.json").read_text())
     instructions = prepared["instructions"]
     path = destination / "complete-own-status-program.asm"
     path.write_text("\n".join(instructions) + "\n")

@@ -33,7 +33,7 @@ def execute(binary, firmware, output):
     if not firmware.is_file():
         print('SKIP original master histories: private firmware absent')
         return 77
-    reference = json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text())
+    reference = json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text())
     original_records(firmware, reference)
     result = subprocess.run([str(binary.resolve()), str(firmware.resolve())], capture_output=True,
                             text=True, check=False, timeout=120)

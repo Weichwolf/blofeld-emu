@@ -58,11 +58,11 @@ def main():
     report.unlink(missing_ok=True)
     trace.unlink(missing_ok=True)
     assembler = Path(os.environ.get("BLOFELD_DSP_ASSEMBLER", str(
-        ROOT / "doc/local/dsp-tools-release/dsp56300-1.0.0-x86_64-unknown-linux-gnu/bin/dsp56300-asm"))).resolve()
+        ROOT / "build/local/dsp-tools-release/dsp56300-1.0.0-x86_64-unknown-linux-gnu/bin/dsp56300-asm"))).resolve()
     if not firmware.is_file() or not assembler.is_file():
         print("SKIP original DSP download: local firmware or independent offline assembler absent")
         return 77
-    reference = json.loads((ROOT / "doc/dsp-voice-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/dsp-voice-reference.json").read_text())
     original_records(firmware, reference)
     selected = [reference["records"][i] for i in (93, 94)]
     if [(row["space"], row["address"], row["words"]) for row in selected] != [

@@ -95,7 +95,7 @@ def main():
     if not firmware.is_file():
         print('SKIP original pair checkpoints: local firmware absent')
         return 77
-    original_records(firmware, json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text()))
+    original_records(firmware, json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text()))
     report.parent.mkdir(parents=True, exist_ok=True)
     trace, receipt = report.with_suffix('.trace'), report.with_suffix('.json')
     for path in (report, trace, receipt):

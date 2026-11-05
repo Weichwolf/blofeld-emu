@@ -23,7 +23,7 @@ def main():
     if (firmware.stat().st_size != pinned["bytes"]
             or hashlib.sha256(firmware.read_bytes()).hexdigest() != pinned["sha256"]):
         raise ValueError("Changed original firmware archive")
-    reference = json.loads((ROOT / "doc/dsp-envelope-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/dsp-envelope-reference.json").read_text())
     midi, _ = load_input(firmware)
     if hashlib.sha256(midi).hexdigest() != reference["midi_sha256"]:
         raise ValueError("Changed original firmware MID")

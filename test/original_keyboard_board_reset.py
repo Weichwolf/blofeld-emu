@@ -81,7 +81,7 @@ def main():
         print('SKIP original production-board reset:pinned archives absent')
         return 77
     trace.parent.mkdir(parents=True, exist_ok=True)
-    original_records(firmware, json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text()))
+    original_records(firmware, json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text()))
     helper, word, _ = reference_files(keyboard, trace)
     pins = {p: hashlib.sha256(p.read_bytes()).hexdigest()
             for p in (binary, firmware, keyboard, hcs08, hc12, helper, word)}

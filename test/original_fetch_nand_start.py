@@ -23,7 +23,7 @@ UNKNOWN = 'NAND read page=0x00006a column=0x10e command=0x00: unknown contents'
 
 
 def source(image):
-    reference = json.loads((ROOT / 'doc/own-dsp-nand-reference.json').read_text())
+    reference = json.loads((ROOT / 'test/reference/own-dsp-nand-reference.json').read_text())
     if identity(image) != dict(bytes=reference['sparse_image_bytes'],
                                sha256=reference['sparse_image_sha256']):
         raise ValueError('Expected the pinned sparse original-derived NAND source')
@@ -139,7 +139,7 @@ def main():
     if not nand.exists() or not check_inputs(firmware, rom, ROOT):
         return 77
     expected = source(nand)
-    original_records(firmware, json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text()))
+    original_records(firmware, json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text()))
     frozen = {str(p): identity(p) for p in (binary, firmware, rom, nand)}
     destination.parent.mkdir(parents=True, exist_ok=True)
     trace = destination.with_suffix('.trace')

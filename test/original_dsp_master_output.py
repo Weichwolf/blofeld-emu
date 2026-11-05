@@ -21,8 +21,8 @@ def main():
     if not firmware.is_file():
         print("SKIP original DSP master output: private firmware absent")
         return 77
-    shared = json.loads((ROOT / "doc/dsp-voice-reference.json").read_text())
-    reference = json.loads((ROOT / "doc/dsp-master-output-reference.json").read_text())
+    shared = json.loads((ROOT / "test/reference/dsp-voice-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/dsp-master-output-reference.json").read_text())
     original_records(firmware, shared)
     if (reference["program_record"] != shared["records"][44] or
             reference["midi_sha256"] != shared["midi_sha256"]):

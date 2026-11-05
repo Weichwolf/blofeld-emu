@@ -54,7 +54,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path, nargs="?",
                         default=Path(__file__).resolve().parents[1] /
-                                "doc/local/dsp-branch-reference-generated")
+                                "build/local/dsp-branch-reference-generated")
     args = parser.parse_args()
     source, metadata = reference_program()
     args.directory.mkdir(parents=True, exist_ok=True)

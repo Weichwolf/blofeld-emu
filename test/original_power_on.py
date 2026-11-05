@@ -35,7 +35,7 @@ def main():
     if not firmware.is_file():
         print("SKIP original POR: private firmware absent")
         return 77
-    reference = json.loads((ROOT / "doc/mcu-power-on-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/mcu-power-on-reference.json").read_text())
     original_mcu(firmware, reference)
     digest = hashlib.sha256(binary.read_bytes()).hexdigest()
     result = subprocess.run([str(binary.resolve()), str(firmware.resolve())], check=False,

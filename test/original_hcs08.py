@@ -18,7 +18,7 @@ def reference_inputs(archive):
     blocks, _, _ = verified_blocks(archive)
     data = decode_block(blocks[2])[1]
     helper, consumed = hc12_object(data)
-    reference = json.loads((ROOT / 'doc/hcs08-reference.json').read_text())
+    reference = json.loads((ROOT / 'test/reference/hcs08-reference.json').read_text())
     programmer = helper[0x1546 - 0x1200:0x15ca - 0x1200]
     if len(programmer) != 132 or hashlib.sha256(programmer).hexdigest() != reference['programmer_sha256']:
         raise ValueError('Changed original HCS08 RAM programmer identity')

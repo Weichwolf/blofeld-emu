@@ -81,7 +81,7 @@ def main():
     if not firmware.is_file():
         print("SKIP original MIDI queue: local firmware absent")
         return 77
-    original_mcu(firmware, json.loads((ROOT / "doc/usb-midi-queue-reference.json").read_text()))
+    original_mcu(firmware, json.loads((ROOT / "test/reference/usb-midi-queue-reference.json").read_text()))
     result = subprocess.run([str(binary.resolve()), str(firmware.resolve())],
                             capture_output=True, text=True, check=False, timeout=160)
     log.parent.mkdir(parents=True, exist_ok=True)

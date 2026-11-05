@@ -59,7 +59,7 @@ def message_controls(messages, reference):
 
 
 def verified_blocks(path):
-    reference = json.loads((ROOT / 'doc/keyboard-update-reference.json').read_text())
+    reference = json.loads((ROOT / 'test/reference/keyboard-update-reference.json').read_text())
     manifest = json.loads((ROOT / 'doc/downloads.json').read_text())['files']
     archive = next(row for row in manifest if row['file'] == reference['archive'])
     if path.stat().st_size != archive['bytes'] or digest(path.read_bytes()) != archive['sha256']:

@@ -22,7 +22,7 @@ TEXTS = ((0x12a2, 24, '6ae902b451f7bb32dc4727495c34160a234cf93b6a8a99945cd28b6f4
 
 
 def reference(firmware):
-    original_records(firmware, json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text()))
+    original_records(firmware, json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text()))
     midi, _ = load_input(firmware)
     main = decode_block(split_blocks(read_smf(midi)[0])[4])[1]
     _, offset = hc12_object(main)

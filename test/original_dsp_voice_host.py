@@ -203,7 +203,7 @@ def main():
         if shutil.which(command) is None:
             print(f"SKIP original host voice: {command} absent")
             return 77
-    reference = json.loads((ROOT / "doc/dsp-voice-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/dsp-voice-reference.json").read_text())
     program = {}
     xdata, ydata = original_records(firmware, reference, program)
     artifacts.mkdir(parents=True, exist_ok=True)

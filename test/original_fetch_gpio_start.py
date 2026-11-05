@@ -113,7 +113,7 @@ def main():
     binary, firmware, rom, destination = map(Path, sys.argv[1:])
     if not check_inputs(firmware, rom, ROOT):
         return 77
-    original_records(firmware, json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text()))
+    original_records(firmware, json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text()))
     frozen = {str(path): identity(path) for path in (binary, firmware, rom)}
     destination.parent.mkdir(parents=True, exist_ok=True)
     trace = destination.with_suffix('.trace')

@@ -160,7 +160,7 @@ def main():
     if not firmware.is_file():
         print('SKIP original MIDI release: private firmware absent')
         return 77
-    _, ydata = original_records(firmware, json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text()))
+    _, ydata = original_records(firmware, json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text()))
     coefficient = ydata[0x16c8]
     if coefficient != 0x7fffff:
         raise ValueError('Changed original zero-rate coefficient')

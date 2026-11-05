@@ -20,8 +20,8 @@ def main():
     if not firmware.is_file():
         print('SKIP original GPIO producer: private firmware absent')
         return 77
-    all_records = json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text())
-    reference = json.loads((ROOT / 'doc/dsp-gpio-input-reference.json').read_text())
+    all_records = json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text())
+    reference = json.loads((ROOT / 'test/reference/dsp-gpio-input-reference.json').read_text())
     original_records(firmware, all_records)
     if reference['midi_sha256'] != all_records['midi_sha256']:
         raise ValueError('Changed original GPIO input MID reference')

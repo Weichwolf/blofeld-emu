@@ -58,7 +58,7 @@ def main():
         print('SKIP original Keyboard short message: pinned local archives absent')
         return 77
     trace.parent.mkdir(parents=True, exist_ok=True)
-    shared = json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text())
+    shared = json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text())
     xdata, _ = original_records(firmware, shared)
     assert all(address not in xdata for address in range(0x779, 0x77c))
     _, reference, _ = verified_blocks(keyboard)

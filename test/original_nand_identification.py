@@ -102,7 +102,7 @@ def main():
     if not firmware.is_file():
         print("SKIP original NAND ID: private firmware absent")
         return 77
-    reference = json.loads((ROOT / "doc/nand-identification-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/nand-identification-reference.json").read_text())
     verify_firmware(firmware, reference)
     trace.parent.mkdir(parents=True, exist_ok=True)
     trace.unlink(missing_ok=True)

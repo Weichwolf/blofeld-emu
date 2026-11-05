@@ -136,7 +136,7 @@ def main():
     if not firmware.is_file():
         print('SKIP original voice audio: private firmware absent')
         return 77
-    reference = json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text())
+    reference = json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text())
     program = {}
     xdata, ydata = original_records(firmware, reference, program)
     with tempfile.TemporaryDirectory(prefix='bf-voice-') as temporary:

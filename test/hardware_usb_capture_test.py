@@ -46,7 +46,7 @@ class UsbObservationTest(unittest.TestCase):
         self.repository = self.base / "repository"
         self.repository.mkdir()
         subprocess.run(["git", "init", "-q", str(self.repository)], check=True, capture_output=True)
-        (self.repository / ".gitignore").write_text("doc/local/\n")
+        (self.repository / ".gitignore").write_text("build/local/\n")
 
     def capture(self):
         return OBSERVER.acquire(self.sysfs, "1-2", "keyboard", "1.25")
@@ -139,9 +139,9 @@ class UsbObservationTest(unittest.TestCase):
 
     def test_only_ignored_private_outputs_are_written_and_existing_capture_is_not_overwritten(self):
         metadata, raw = self.capture()
-        with self.assertRaisesRegex(OBSERVER.CaptureError, "doc/local"):
+        with self.assertRaisesRegex(OBSERVER.CaptureError, "build/local"):
             OBSERVER.save_capture(metadata, raw, self.repository / "public", self.repository)
-        output = self.repository / "doc/local/captured"
+        output = self.repository / "build/local/captured"
         OBSERVER.save_capture(metadata, raw, output, self.repository)
         self.assertEqual((output / "descriptors.bin").read_bytes(), OWN_DESCRIPTOR)
         self.assertEqual(json.loads((output / "capture.json").read_text()), metadata)
@@ -153,11 +153,11 @@ class UsbObservationTest(unittest.TestCase):
 
     def test_unignored_private_path_and_inconsistent_bytes_are_rejected(self):
         metadata, raw = self.capture()
-        output = self.repository / "doc/local/captured"
+        output = self.repository / "build/local/captured"
         (self.repository / ".gitignore").write_text("")
         with self.assertRaisesRegex(OBSERVER.CaptureError, "Git-ignored"):
             OBSERVER.save_capture(metadata, raw, output, self.repository)
-        (self.repository / ".gitignore").write_text("doc/local/\n")
+        (self.repository / ".gitignore").write_text("build/local/\n")
         with self.assertRaisesRegex(OBSERVER.CaptureError, "do not match"):
             OBSERVER.save_capture(metadata, b"different", output, self.repository)
         self.assertFalse(output.exists())

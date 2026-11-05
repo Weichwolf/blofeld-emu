@@ -67,8 +67,8 @@ def run(binary, firmware, trace, reference_name, validator, arguments=()):
     if not firmware.is_file():
         print('SKIP native GPIO/MIDI: private original firmware absent')
         return 77
-    reference = json.loads((ROOT / 'doc' / reference_name).read_text())
-    complete = json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text())
+    reference = json.loads((ROOT / 'test/reference' / reference_name).read_text())
+    complete = json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text())
     original_records(firmware, complete)
     original_mcu(firmware, reference)
     if reference['midi_sha256'] != complete['midi_sha256']:

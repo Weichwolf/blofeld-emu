@@ -122,8 +122,8 @@ def catalogue_scan_controls():
 
 
 def reference_inputs():
-    reference = json.loads((ROOT / 'doc/sample-midi-reference.json').read_text())
-    preparation = json.loads((ROOT / 'doc/sample-preparation-reference.json').read_text())
+    reference = json.loads((ROOT / 'test/reference/sample-midi-reference.json').read_text())
+    preparation = json.loads((ROOT / 'test/reference/sample-preparation-reference.json').read_text())
     assert reference['prepared_frames'] == preparation['frames']
     archive = ROOT / 'doc/library' / reference['archive']
     messages, observed = load_reference(archive)

@@ -96,7 +96,7 @@ def suffixes(trace, blocks):
 def main():
     binary, firmware, trace = map(Path, sys.argv[1:])
     assembler = Path(os.environ.get('BLOFELD_DSP_ASSEMBLER', str(
-        coupled.ROOT / 'doc/local/dsp-tools-release/dsp56300-1.0.0-x86_64-unknown-linux-gnu/bin/dsp56300-asm')))
+        coupled.ROOT / 'build/local/dsp-tools-release/dsp56300-1.0.0-x86_64-unknown-linux-gnu/bin/dsp56300-asm')))
     if not firmware.is_file() or not assembler.is_file():
         print('SKIP reset inputs: local firmware or independent assembler absent')
         return 77

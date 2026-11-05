@@ -65,7 +65,7 @@ def main():
     if not firmware.is_file():
         print('SKIP original Drive voices: private firmware absent')
         return 77
-    reference = json.loads((ROOT / 'doc/dsp-drive-voice-reference.json').read_text())
+    reference = json.loads((ROOT / 'test/reference/dsp-drive-voice-reference.json').read_text())
     path = ROOT / reference['runtime_reference']['path']
     if hashlib.sha256(path.read_bytes()).hexdigest() != reference['runtime_reference']['sha256']:
         raise ValueError('Changed ordered original runtime identities')

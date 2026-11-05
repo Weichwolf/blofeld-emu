@@ -153,7 +153,7 @@ def main():
     if not firmware.is_file():
         print('SKIP original update validation: local firmware absent')
         return 77
-    original_records(firmware, json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text()))
+    original_records(firmware, json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text()))
     midi, _ = load_input(firmware)
     payload = decode_block(split_blocks(read_smf(midi)[0])[4])[1]
     original = [int.from_bytes(payload[i:i + 3], 'big') for i in range(0, len(payload), 3)]

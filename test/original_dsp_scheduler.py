@@ -39,9 +39,9 @@ def main():
     if not firmware.is_file():
         print("SKIP original scheduler regression: private firmware absent")
         return 77
-    records = json.loads((ROOT / "doc/dsp-voice-reference.json").read_text())
+    records = json.loads((ROOT / "test/reference/dsp-voice-reference.json").read_text())
     original_records(firmware, records)
-    reference = json.loads((ROOT / "doc/dsp-scheduler-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/dsp-scheduler-reference.json").read_text())
     for expected in reference["complete_original_program_records"]:
         if expected != records["records"][expected["record"]]:
             raise ValueError("Scheduler source component differs from original record identity")

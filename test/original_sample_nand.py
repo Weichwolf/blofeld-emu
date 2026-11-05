@@ -21,8 +21,8 @@ def execute(binary, firmware, archive, output):
     if not firmware.is_file() or not archive.is_file():
         print("SKIP original sample NAND: private original firmware or sample archive absent")
         return 77
-    original_records(firmware, json.loads((ROOT / "doc/dsp-voice-reference.json").read_text()))
-    preparation = json.loads((ROOT / "doc/sample-preparation-reference.json").read_text())
+    original_records(firmware, json.loads((ROOT / "test/reference/dsp-voice-reference.json").read_text()))
+    preparation = json.loads((ROOT / "test/reference/sample-preparation-reference.json").read_text())
     messages, observations = load_reference(archive)
     helper, frames = extract_inputs(sample_blocks(messages), preparation, observations)
     output.mkdir(parents=True, exist_ok=True)
@@ -43,7 +43,7 @@ def execute(binary, firmware, archive, output):
             "AddressSanitizer", "LeakSanitizer", "UndefinedBehaviorSanitizer",
             "ThreadSanitizer", "runtime error:")):
         raise ValueError("Original sample NAND execution failed: " + diagnostics)
-    reference = json.loads((ROOT / "doc/sample-nand-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/sample-nand-reference.json").read_text())
     totals = validate(diagnostics, [path.read_text() for path in paths], frames, reference)
     report.write_text(json.dumps({"passed": True, "scope": reference["scope"], **totals,
                                   "traces_sha256": {path.name: hashlib.sha256(path.read_bytes()).hexdigest()

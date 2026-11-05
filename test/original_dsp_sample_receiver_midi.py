@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def prepare_inputs(firmware, inputs, native_timer=False):
     reference, pages, (_, samples, unresolved) = reference_inputs()
-    shared = json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text())
+    shared = json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text())
     xdata, ydata = original_records(firmware, shared)
     controls()
     assert len(samples) == 142 and sum(x.high-x.low+1 for x in unresolved) == 265
@@ -64,7 +64,7 @@ def main():
         'partial_byte_cuts': [0, 1, 71, 72, 527], 'trusted_replays': 10,
         'input_sha256': hashlib.sha256(inputs.read_bytes()).hexdigest(),
         'trace_sha256': hashlib.sha256(trace.read_bytes()).hexdigest(),
-        'scope': reference['qualification'] + ' Native caller/receiver conditions: doc/dsp-sample-receiver.txt.',
+        'scope': reference['qualification'] + ' Native caller/receiver conditions: test/reference/dsp-sample-receiver-reference.json.',
         'fuzz_execution': False, 'physical_traffic': False,
     }, indent=2)+'\n')
     print('Verified142 original MIDI-page receives, preparation/refill/active sample callbacks, '

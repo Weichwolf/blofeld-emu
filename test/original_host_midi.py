@@ -17,7 +17,7 @@ def main():
         print("SKIP original host MIDI: private firmware absent")
         return 77
     root = Path(__file__).resolve().parents[1]
-    reference = json.loads((root / "doc/host-midi-reference.json").read_text())
+    reference = json.loads((root / "test/reference/host-midi-reference.json").read_text())
     original_mcu(firmware, reference)
     trace.parent.mkdir(parents=True, exist_ok=True)
     source = trace.with_suffix(".bytes")

@@ -139,7 +139,7 @@ def main():
     binary, reference, manifest_path, output_path = sys.argv[1:]
     reference = Path(reference)
     if not reference.is_dir():
-        print("SKIP: pinned external MCPX silicon corpus is absent; see doc/dsp-validation.txt")
+        print("SKIP: pinned external MCPX silicon corpus is absent; see test/reference/dsp-corpus.json")
         return 77
     manifest = json.loads(Path(manifest_path).read_text())
     output = Path(output_path)

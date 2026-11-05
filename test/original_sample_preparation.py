@@ -113,7 +113,7 @@ def execute(binary, archive, trace):
     if not archive.is_file():
         print("SKIP original sample preparation: private official sample archive absent")
         return 77
-    reference = json.loads((ROOT / "doc/sample-preparation-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/sample-preparation-reference.json").read_text())
     messages, observations = load_reference(archive)
     helper, frames = extract_inputs(sample_blocks(messages), reference, observations)
     trace.parent.mkdir(parents=True, exist_ok=True)

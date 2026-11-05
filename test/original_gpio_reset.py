@@ -18,7 +18,7 @@ def digest(path):
 
 
 def reference():
-    data = json.loads((ROOT / "doc/mcu-power-on-reference.json").read_text())
+    data = json.loads((ROOT / "test/reference/mcu-power-on-reference.json").read_text())
     return {
         "mcu_sha256": data["mcu_sha256"],
         "routines": [

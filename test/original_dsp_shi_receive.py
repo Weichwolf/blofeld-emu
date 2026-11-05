@@ -17,7 +17,7 @@ def main():
     if not firmware.is_file():
         print("SKIP original SHI receive: private firmware absent")
         return 77
-    reference = json.loads((ROOT / "doc/dsp-voice-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/dsp-voice-reference.json").read_text())
     original_records(firmware, reference)
     selected = [entry for entry in reference["records"]
                 if entry["space"] == 0 and entry["address"] in (0x44, 0x4a, 0x23df)]

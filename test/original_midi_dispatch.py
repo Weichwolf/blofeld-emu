@@ -62,7 +62,7 @@ def main():
     if not firmware.is_file():
         print("SKIP original MIDI dispatcher: local firmware absent")
         return 77
-    reference = json.loads((ROOT / "doc/midi-dispatch-reference.json").read_text())
+    reference = json.loads((ROOT / "test/reference/midi-dispatch-reference.json").read_text())
     original_mcu(firmware, reference)
     result = subprocess.run([str(binary.resolve()), str(firmware.resolve())], capture_output=True,
                             text=True, check=False, timeout=160)

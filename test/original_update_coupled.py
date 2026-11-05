@@ -289,7 +289,7 @@ def controls(cases, blocks, texts, counts, frame):
 def main():
     binary, firmware, trace = map(Path, sys.argv[1:])
     assembler = Path(os.environ.get('BLOFELD_DSP_ASSEMBLER', str(
-        ROOT / 'doc/local/dsp-tools-release/dsp56300-1.0.0-x86_64-unknown-linux-gnu/bin/dsp56300-asm'))).resolve()
+        ROOT / 'build/local/dsp-tools-release/dsp56300-1.0.0-x86_64-unknown-linux-gnu/bin/dsp56300-asm'))).resolve()
     if not firmware.is_file() or not assembler.is_file():
         print('SKIP coupled update: local firmware or independent assembler absent')
         return 77

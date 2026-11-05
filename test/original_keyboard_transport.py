@@ -18,7 +18,7 @@ from original_update_transport import collect, controls, packet_references, vali
 def main():
     binary, firmware, keyboard, trace = map(Path, sys.argv[1:])
     assembler = Path(os.environ.get('BLOFELD_DSP_ASSEMBLER', str(
-        ROOT / 'doc/local/dsp-tools-release/dsp56300-1.0.0-x86_64-unknown-linux-gnu/bin/dsp56300-asm'))).resolve()
+        ROOT / 'build/local/dsp-tools-release/dsp56300-1.0.0-x86_64-unknown-linux-gnu/bin/dsp56300-asm'))).resolve()
     if not binary.is_file():
         raise ValueError('Original keyboard transport test binary is missing')
     if not all(path.is_file() for path in (firmware, keyboard, assembler)):
@@ -28,7 +28,7 @@ def main():
     trace.unlink(missing_ok=True)
     receipt = trace.with_suffix('.json')
     receipt.unlink(missing_ok=True)
-    original_records(firmware, json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text()))
+    original_records(firmware, json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text()))
     blocks, reference, message_corruptions = verified_blocks(keyboard)
     packets = trace.with_suffix('.packets')
     expected = packet_references(blocks, LAYOUTS, packets)

@@ -18,8 +18,8 @@ from wpc_catalogue import catalogue, page_at, word
 
 
 def prepare(firmware, destination, limit=None):
-    reference = json.loads((ROOT / 'doc/dsp-sample-receiver-reference.json').read_text())
-    shared = json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text())
+    reference = json.loads((ROOT / 'test/reference/dsp-sample-receiver-reference.json').read_text())
+    shared = json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text())
     xdata, ydata = original_records(firmware, shared)
     if (reference['records'] != [shared['records'][i] for i in (39, 40, 41, 79, 84, 114)] or
             reference['midi_sha256'] != shared['midi_sha256']):

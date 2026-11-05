@@ -66,7 +66,7 @@ def main():
     trace.unlink(missing_ok=True)
     receipt = trace.with_suffix('.json')
     receipt.unlink(missing_ok=True)
-    original_records(firmware, json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text()))
+    original_records(firmware, json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text()))
     helper, word, layout = reference_files(keyboard, trace)
     frozen = {path: hashlib.sha256(path.read_bytes()).hexdigest()
               for path in (binary, firmware, keyboard, helper, word)}

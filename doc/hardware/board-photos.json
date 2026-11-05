@@ -1,5 +1,5 @@
 {
-  "local_directory": "doc/local/startup-dsp-diagnosis",
+  "local_directory": "build/local/startup-dsp-diagnosis",
   "qualification": "Primary author photographs of third-party Desktop and Keyboard boards. No user-device identification, readable chip/ROM identity, electrical continuity or hardware validation is established. Keep all image assets local.",
   "files": [
     {

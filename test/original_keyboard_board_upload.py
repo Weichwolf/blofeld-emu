@@ -162,7 +162,7 @@ def main():
         print('SKIP original Keyboard target: pinned original archives absent')
         return 77
     trace.parent.mkdir(parents=True, exist_ok=True)
-    original_records(firmware, json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text()))
+    original_records(firmware, json.loads((ROOT / 'test/reference/dsp-voice-reference.json').read_text()))
     helper, word, _ = reference_files(keyboard, trace)
     programmer, records = reference_inputs(keyboard)
     if helper.read_bytes()[838:970] != programmer:
