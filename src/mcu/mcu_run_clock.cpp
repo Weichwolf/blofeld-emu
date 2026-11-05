@@ -5,10 +5,12 @@
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_clock.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <exception>
 #include <limits>
 #include <numeric>
+#include <optional>
 #include <string>
 
 namespace blofeld {
@@ -41,11 +43,101 @@ McuRunClock::McuRunClock(const McuRunClockInputs inputs)
       oscillator_phase_(initial_phase(inputs, oscillator_period_)) {}
 
 void McuRunClock::advance_run_cycle(McuBus &bus, const ExecutionContext context) {
-  advance_cycle(bus, context, false);
+  static_cast<void>(advance(bus, context, 1));
 }
 
 void McuRunClock::advance_wait_cycle(McuBus &bus, const ExecutionContext context) {
-  advance_cycle(bus, context, true);
+  static_cast<void>(advance(bus, context, 1, true));
+}
+
+std::optional<std::uint64_t> McuRunClock::cycles_until_event(const McuBus &bus,
+                                                             const bool waiting) const {
+  const auto period = next_cycle_ticks(bus);
+  std::optional<std::uint64_t> next;
+  const auto offer = [&](const std::uint64_t ticks) {
+    const auto cycles =
+        std::max(std::uint64_t{1}, (ticks / period) + (ticks % period != 0 ? 1U : 0U));
+    if (!next || cycles < *next) { next = cycles; }
+  };
+  const auto peripheral = bus.cycles_until_peripheral_event(waiting);
+  if (peripheral != 0) { next = peripheral; }
+  const auto rti = bus.oscillator_cycles_until_rti();
+  if (rti != 0) { offer((rti * oscillator_period_) - oscillator_phase_); }
+  const auto cop = bus.oscillator_cycles_until_cop();
+  if (cop != 0 && (!waiting || bus.wait_clock_gates().cop)) {
+    offer((cop * oscillator_period_) - oscillator_phase_);
+  }
+  if (const auto flash = bus.next_flash_event_ticks()) {
+    offer(*flash > elapsed_ticks_ ? *flash - elapsed_ticks_ : 0);
+  }
+  return next;
+}
+
+unsigned McuRunClock::advance(McuBus &bus,
+                              const ExecutionContext context,
+                              const unsigned maximum_cycles,
+                              const bool waiting) {
+  if (maximum_cycles == 0) {
+    static_cast<void>(next_cycle_ticks(bus));
+    return 0;
+  }
+  if (maximum_cycles == 1) {
+    advance_cycle(bus, context, waiting);
+    return 1;
+  }
+  constexpr unsigned maximum_span = 1048576;
+  if (maximum_cycles > maximum_span) { throw Fault("MCU clock span exceeds its cycle limit"); }
+  bus.begin_instruction(context);
+  try {
+    auto cycles = maximum_cycles;
+    const auto event = cycles_until_event(bus, waiting);
+    if (event && *event < cycles) { cycles = static_cast<unsigned>(*event); }
+    // Two real edges settle the existing PIM input history. No peripheral or
+    // physical input may change in the quiet interior before the final edge.
+    constexpr unsigned synchronizer_edges = 2;
+    const auto prefix = std::min(cycles, synchronizer_edges);
+    for (unsigned edge = 0; edge < prefix; ++edge) { advance_cycle(bus, context, waiting); }
+    if (cycles > prefix) {
+      const auto quiet = cycles - prefix - 1;
+      if (quiet != 0) { advance_quiet(bus, quiet, waiting); }
+      advance_cycle(bus, context, waiting);
+    }
+    return cycles;
+  } catch (const std::exception &error) {
+    if (faulted_) { throw; }
+    faulted_ = true;
+    throw Fault("MCU clock span pc=" + hex(context.pc) + " ccr=" + hex(context.ccr, 2) +
+                " completed-bus-cycles=" + std::to_string(bus_cycles_) +
+                " timebase-ticks=" + std::to_string(elapsed_ticks_) + ": " + error.what());
+  }
+}
+
+void McuRunClock::advance_quiet(McuBus &bus, const unsigned cycles, const bool waiting) {
+  const auto gates = waiting ? bus.wait_clock_gates() : McuWaitClockGates{};
+  const auto period = next_cycle_ticks(bus);
+  constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+  if (period > maximum / cycles) { throw Fault("MCU quiet span duration exhausted"); }
+  const auto ticks = period * cycles;
+  if (ticks > maximum - elapsed_ticks_ || cycles > maximum - bus_cycles_ ||
+      ticks > maximum - oscillator_phase_) {
+    throw Fault("MCU quiet span counter exhausted");
+  }
+  const auto oscillator_total = oscillator_phase_ + ticks;
+  const auto edges = oscillator_total / oscillator_period_;
+  if (edges > std::numeric_limits<unsigned>::max() || edges > maximum - oscillator_cycles_) {
+    throw Fault("MCU quiet span oscillator count exhausted");
+  }
+  bus.advance_flash_time({.ticks = elapsed_ticks_ + ticks,
+                          .timebase_hz = timebase_hz_,
+                          .oscillator_hz = oscillator_hz_,
+                          .bus_period_ticks = period});
+  if (gates.sci) { bus.advance_sci(cycles); }
+  if (gates.timer) { bus.advance_timer(cycles); }
+  bus.advance_oscillator(static_cast<unsigned>(edges), gates.cop);
+  elapsed_ticks_ += ticks;
+  oscillator_phase_ = oscillator_total % oscillator_period_;
+  oscillator_cycles_ += edges;
+  bus_cycles_ += cycles;
 }
 
 std::uint64_t McuRunClock::next_cycle_ticks(const McuBus &bus) const {

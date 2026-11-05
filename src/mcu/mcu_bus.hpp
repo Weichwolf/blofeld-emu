@@ -127,6 +127,8 @@ private:
   friend class McuMachine;
   friend class McuRunClock;
 
+  [[nodiscard]] unsigned cycles_until_peripheral_event(bool waiting) const;
+
   // Only the owner of an actual IPBus edge can advance register input history.
   void advance_gpio_inputs() { gpio_.advance_inputs(); }
 

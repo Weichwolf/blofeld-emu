@@ -499,6 +499,24 @@ unsigned McuBus::oscillator_cycles_until_rti() const {
   return clock_.oscillator_cycles_until_rti();
 }
 
+unsigned McuBus::cycles_until_peripheral_event(const bool waiting) const {
+  const auto gates = waiting ? wait_clock_gates() : McuWaitClockGates{};
+  unsigned next = gates.timer ? timer_.cycles_until_event() : 0;
+  if (!gates.sci) { return next; }
+  std::optional<bool> receive;
+  if (sci_.receiver_enabled() && sci_.bus_cycles_until_sample() != 0) {
+    const bool small_package = (gpio_.read(hc12::modrr) & 1U) != 0;
+    const auto mask = static_cast<std::uint8_t>(small_package ? 16 : 4);
+    const auto pins = gpio_.observe_pads(small_package ? McuPort::s : McuPort::r, mask);
+    if ((pins.known & mask) == mask && (pins.conflicts & mask) == 0) {
+      receive = (pins.levels & mask) != 0;
+    }
+  }
+  const auto serial = sci_.bus_cycles_until_event(receive);
+  if (serial != 0 && (next == 0 || serial < next)) { next = serial; }
+  return next;
+}
+
 void McuBus::sync_peripheral_pins() {
   const PeripheralPinState state{.routing = gpio_.read(hc12::modrr),
                                  .timer = timer_.pins(),

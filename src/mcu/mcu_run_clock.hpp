@@ -5,6 +5,7 @@
 #include "mcu/mcu_bus.hpp"
 
 #include <cstdint>
+#include <optional>
 
 namespace blofeld {
 
@@ -39,6 +40,14 @@ public:
   // One enabled IPBus period during native WAI, honoring SCI/TIM wait gates.
   // CRG clock/PLL shutdown modes remain explicitly unqualified.
   void advance_wait_cycle(McuBus &bus, ExecutionContext context);
+  // Commit a held-input interval, shortened to the first local device event.
+  // The owner must additionally bound it by peer/input events and synchronize
+  // before register writes. This does not execute CPU work or admit interrupts.
+  // Returns completed IPBus periods; a COP timeout retains its partial period.
+  unsigned
+  advance(McuBus &bus, ExecutionContext context, unsigned maximum_cycles, bool waiting = false);
+  [[nodiscard]] std::optional<std::uint64_t> cycles_until_event(const McuBus &bus,
+                                                                bool waiting = false) const;
   // Pure duration offer for a board scheduler; no clock, input or peripheral advance.
   [[nodiscard]] std::uint64_t next_cycle_ticks(const McuBus &bus) const;
   // A COP deadline preempts the IPBus period, including a timeout at its end.
@@ -70,6 +79,7 @@ private:
   void finish_reset();
   void advance_to_cop_deadline(McuBus &bus, unsigned edges);
   void advance_cycle(McuBus &bus, ExecutionContext context, bool waiting);
+  void advance_quiet(McuBus &bus, unsigned cycles, bool waiting);
   std::uint32_t oscillator_hz_;
   std::uint64_t timebase_hz_;
   std::uint64_t oscillator_period_;
