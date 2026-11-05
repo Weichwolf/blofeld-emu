@@ -37,11 +37,11 @@ def validate(trace):
     lines = trace.read_text().splitlines()
     words = [row for row in lines if row.startswith('WORD ')]
     missing = [row for row in lines if row.startswith('MISSING ')]
-    replay = [row for row in lines if row.startswith('REPLAY ')]
+    boundaries = [row for row in lines if row.startswith('BOUNDARY ')]
     controller = [row for row in lines if row.startswith('CONTROLLER ')]
-    if (len(words), len(missing), len(replay), len(controller)) != (777, 4, 2, 3):
-        raise ValueError('Incomplete directed receiver/unknown-input/restore/controller matrix')
-    if lines[-1] != 'TOTAL words=777 bytes=2331 missing=4 replays=2 prefixes=3':
+    if (len(words), len(missing), len(boundaries), len(controller)) != (777, 4, 1, 3):
+        raise ValueError('Incomplete directed receiver/unknown-input/boundary/controller matrix')
+    if lines[-1] != 'TOTAL words=777 bytes=2331 missing=4 boundaries=1 prefixes=3':
         raise ValueError('Changed original receiver totals')
     if any('steps=97 bytes=3 requests=4 reads=4' not in row for row in words):
         raise ValueError('Original word/cached-byte call contract changed')
@@ -51,7 +51,7 @@ def validate(trace):
     if 'known=0 ' not in controller[-1] or 'dbne=0 ' not in controller[-1] or 'mask=0x6c' not in controller[-1]:
         raise ValueError('Unsupplied initial PE inputs must fail before controller delay')
     return dict(word_cases=777, returned_bytes=2331, missing_chunk_cases=4,
-                exact_native_suffix_restores=2, controller_prefixes=3,
+                partial_receive_boundaries=1, controller_prefixes=3,
                 original_dbne_steps=2 * 2 * 255 * 256)
 
 

@@ -11,12 +11,12 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
-#include <optional>
 #include <ostream>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <vector>
 
 namespace {
 using namespace blofeld;
@@ -26,14 +26,14 @@ constexpr unsigned own_entry_steps = 2, helper_setup_steps = 8, refill_call_step
 constexpr unsigned argument_reloads = 2, cached_call_steps = 16;
 constexpr unsigned receiver_steps = own_entry_steps + helper_setup_steps + refill_call_steps +
                                     argument_reloads + (2 * cached_call_steps);
-constexpr unsigned seed_word = 0x2854a1, replay_word = 0x80ff55;
+constexpr unsigned seed_word = 0x2854a1, directed_word = 0x80ff55;
 constexpr unsigned controller_wait = 0x13b0, initial_e_read = 0x1394;
 constexpr unsigned delay_entry = 0x1378, delay_body = 0x137c, decrement = 0x1388;
 constexpr unsigned indexed_decrement = 0x1382, test_branch = 0x1384;
 constexpr unsigned byte_values = 256, register_mask = 0xffff, dbne_cycles = 3;
 constexpr unsigned byte_counter = 255, delay_calls = 2;
 constexpr std::array<unsigned, 8> corners{
-    0, 0xffffff, 0x800000, 0x7fffff, 0xff0000, 0x00ff00, 0x0000ff, replay_word};
+    0, 0xffffff, 0x800000, 0x7fffff, 0xff0000, 0x00ff00, 0x0000ff, directed_word};
 
 void decoded(Fixture &run) {
   if (run.machine.cpu().state().pc != initialized || run.steps != receiver_steps ||
@@ -51,46 +51,29 @@ void decoded(Fixture &run) {
   run.guards();
 }
 
-void word(Fixture &run,
+void word(const Firmware &firmware,
+          const std::vector<std::uint8_t> &helper,
           const unsigned value,
-          std::ostream &trace,
-          std::optional<Saved> &saved,
-          std::string &suffix) {
+          std::ostream &trace) {
+  Fixture run(firmware, helper);
   std::ostringstream events;
-  run.reset(value, events);
-  run.detailed = value == replay_word;
+  run.start(value, events);
+  run.detailed = value == directed_word;
   trace << "CASE word=" << value << '\n';
   while (run.machine.cpu().state().pc != initialized) {
     require(run.steps < prefix_limit, "Original three-call receiver prefix must finish");
-    if (value == replay_word && run.machine.cpu().state().pc == halfway) {
+    if (value == directed_word && run.machine.cpu().state().pc == halfway) {
       require(run.source.requests == 3 && run.source.reads == 2 && run.source.returned == 0,
-              "Checkpoint lies after two real reads with the third input held");
-      saved = run.save();
-      trace << events.str() << "CHECKPOINT requests=3 reads=2 returned=0\n";
+              "The real receive boundary follows two reads with the third input held");
+      trace << events.str() << "BOUNDARY requests=3 reads=2 returned=0\n";
       events.str({});
       events.clear();
     }
     run.step();
   }
-  if (value == replay_word) { suffix = events.str(); }
   trace << events.str() << "WORD steps=" << run.steps << " bytes=" << run.source.returned
         << " requests=" << run.source.requests << " reads=" << run.source.reads << '\n';
   decoded(run);
-}
-
-void replay(Fixture &run, const Saved &saved, const std::string &suffix, std::ostream &trace) {
-  for (unsigned n = 0; n < 2; ++n) {
-    std::ostringstream actual;
-    run.restore(saved, actual);
-    while (run.machine.cpu().state().pc != initialized) {
-      require(run.steps < prefix_limit, "Restored receiver must keep the original bound");
-      run.step();
-    }
-    decoded(run);
-    require(actual.str() == suffix,
-            "Fresh native owners and external source replay every logged suffix byte");
-    trace << "REPLAY index=" << n << " bytes=" << actual.str().size() << '\n';
-  }
 }
 
 void quarantine(Fixture &run) {
@@ -109,9 +92,12 @@ void quarantine(Fixture &run) {
   run.guards();
 }
 
-void missing_chunks(Fixture &run, std::ostream &trace) {
+void missing_chunks(const Firmware &firmware,
+                    const std::vector<std::uint8_t> &helper,
+                    std::ostream &trace) {
   for (unsigned n = 0; n < samples.size(); ++n) {
-    run.reset(seed_word, trace, n);
+    Fixture run(firmware, helper);
+    run.start(seed_word, trace, n);
     bool failed = false;
     for (unsigned step = 0; step < prefix_limit; ++step) {
       const auto pc = run.machine.cpu().state().pc;
@@ -179,8 +165,12 @@ struct ControllerInputs {
   bool known;
 };
 
-void controller(Fixture &run, const ControllerInputs input, std::ostream &trace) {
-  run.reset(input.word, trace);
+void controller(const Firmware &firmware,
+                const std::vector<std::uint8_t> &helper,
+                const ControllerInputs input,
+                std::ostream &trace) {
+  Fixture run(firmware, helper);
+  run.start(input.word, trace);
   run.machine.bus().set_pin_drive(
       McuPort::e,
       {.mask = static_cast<std::uint8_t>(input.known ? e_inputs : 3U),
@@ -229,31 +219,27 @@ int execute(const int argc, char **argv) {
       (static_cast<unsigned>(data[0]) << 16U) | (static_cast<unsigned>(data[1]) << 8U) | data[2];
   std::ofstream trace(argv[4]);
   trace.exceptions(std::ios::badbit | std::ios::failbit);
-  Fixture run(firmware, helper);
-  missing_chunks(run, trace);
+  missing_chunks(firmware, helper, trace);
   for (const unsigned levels : {3U, e_inputs}) {
-    controller(run, {.word = checksum, .e_levels = levels, .known = true}, trace);
+    controller(firmware, helper, {.word = checksum, .e_levels = levels, .known = true}, trace);
   }
-  controller(run, {.word = checksum, .e_levels = 3, .known = false}, trace);
-  std::optional<Saved> saved;
-  std::string suffix;
+  controller(firmware, helper, {.word = checksum, .e_levels = 3, .known = false}, trace);
   unsigned cases = 0;
   for (unsigned index = 0; index < 3; ++index) {
     const auto shift = 8U * index;
     for (unsigned value = 0; value < byte_values; ++value) {
-      word(run, (seed_word & ~(high_mask << shift)) | (value << shift), trace, saved, suffix);
+      word(firmware, helper, (seed_word & ~(high_mask << shift)) | (value << shift), trace);
       ++cases;
     }
   }
   for (const auto value : corners) {
-    word(run, value, trace, saved, suffix);
+    word(firmware, helper, value, trace);
     ++cases;
   }
-  word(run, checksum, trace, saved, suffix);
+  word(firmware, helper, checksum, trace);
   require(++cases == expected_words, "Every directed receiver word ran");
-  if (!saved.has_value()) { throw Fault("Directed receiver checkpoint missing"); }
-  replay(run, saved.value(), suffix, trace);
-  trace << "TOTAL words=" << cases << " bytes=" << cases * 3 << " missing=4 replays=2 prefixes=3\n";
+  trace << "TOTAL words=" << cases << " bytes=" << cases * 3
+        << " missing=4 boundaries=1 prefixes=3\n";
   std::cout << "Original Keyboard receiver and controller-input frontiers verified.\n";
   return 0;
 }

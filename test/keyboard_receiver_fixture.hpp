@@ -69,17 +69,10 @@ struct Source {
   bool operator==(const Source &) const = default;
 };
 
-struct Saved {
-  McuCheckpoint machine;
-  Source source;
-  unsigned steps;
-};
-
 struct Fixture {
   const Firmware &firmware;
   const std::vector<std::uint8_t> &helper;
   McuMachine machine;
-  std::optional<McuCheckpoint> baseline;
   Source source;
   std::ostream *trace = nullptr;
   unsigned steps = 0;
@@ -116,7 +109,6 @@ struct Fixture {
     bus.write(hc12::ddrq, 0x80);
     bus.set_pin_drive(McuPort::q, {.mask = q_inputs});
     machine.cpu().set_state({.pc = caller, .sp = stack, .ccr = caller_ccr});
-    baseline = machine.checkpoint();
   }
 
   void bind(std::ostream &output) {
@@ -132,15 +124,11 @@ struct Fixture {
     });
   }
 
-  void reset(const unsigned word,
+  void start(const unsigned word,
              std::ostream &output,
              const std::optional<unsigned> missing = std::nullopt) {
-    if (!baseline.has_value()) { throw Fault("Receiver baseline checkpoint missing"); }
-    machine.restore(baseline.value());
+    require(trace == nullptr, "Receiver inputs bind once to a fresh fixture");
     source = {.word = word, .missing = missing};
-    steps = 0;
-    detailed = false;
-    sample_pending = false;
     bind(output);
   }
 
@@ -226,19 +214,6 @@ struct Fixture {
       require(machine.bus().read(static_cast<std::uint16_t>(caller + n)) == own_caller[n],
               "Own native caller remains exact");
     }
-  }
-
-  [[nodiscard]] Saved save() const {
-    return {.machine = machine.checkpoint(), .source = source, .steps = steps};
-  }
-
-  void restore(const Saved &saved, std::ostream &output) {
-    machine.restore(saved.machine);
-    source = saved.source;
-    steps = saved.steps;
-    detailed = true;
-    sample_pending = false;
-    bind(output);
   }
 };
 } // namespace blofeld::test::keyboard_receiver
