@@ -51,37 +51,27 @@ rendering throughput is a host-performance property to measure after functional
 instrument audio works. This later workflow does not replace initial instrument
 acceptance or require development of alternative manufacturer firmware.
 
-Immediate engineering priority: finish migrating the regular standalone/GUI
-execution path, build and retained tests to our independent ~/Git/dsp56300 core,
-then remove the foreign-core dependency and obsolete integration. Research runs
-using the independent core do not by themselves complete that migration. Extend
-the independent core for general CPU, JIT and checkpoint interfaces when required;
-keep board wiring, device clocks and manufacturer programs in the emulator's
-local reference scope. Commit and push verified increments in each affected
-project to its configured remote. Performance and visual/audio bring-up use
-optimized Release builds while this migration proceeds; the complete instrument
-acceptance scope remains unchanged.
+Current order: optimize CPU12 first to >=80% of matched optimized host-ASM
+throughput on each representative warm fixture, then optimize and simplify
+DSP56300 to the same threshold. Preserve equivalent inputs, ISA effects and
+verified outputs; trivial cases and averages cannot establish this gate.
+Defer further emulator integration, optimization and dependency-pin adoption
+until both cores pass. Keep strict checks, short Release comparisons and focused
+semantic validation; broaden validation as performance improves. Keep code small,
+with complexity justified by correctness or measured speed.
 
-Highest current performance priority: use the independent core's fast native
-execution in the connected emulator. dsp56300 must automatically select its
-fastest correctly supported path; ordinary memory/I/O integration must not
-silently replace native JIT execution with a diagnostic interpreter. Replace
-the connected instruction/effect/cycle replay bottleneck with bounded native
-regions and functional event scheduling that preserve original DSP audio,
-MIDI, peripheral side effects and emulated clocks. Keep slow reference and
-instrumented paths explicit diagnostic choices. Measure native/helper counts
-and whole-emulator throughput; isolated JIT benchmark speed does not establish
-that the instrument uses the JIT. Keep integration as simple as constructing
-a CPU with memory/peripherals and running to an event budget. MCU and DSP data
-exchange uses direct storage, registers and bounded
-serial/FIFO state; avoid unnecessary abstraction and per-cycle bookkeeping in
-the hot path. This priority does not waive the migration,
-unmodified firmware or full instrument acceptance requirements.
-Correct discovered slow DSP helpers and similar performance defects promptly
-in the independent dsp56300 library, with scoped correctness and actual native
-execution evidence. Commit and push verified core increments there, then adopt
-the qualified dependency revision here. Application-side workarounds do not
-replace an efficient core implementation.
+Then complete the regular standalone/GUI path with the independent native cores,
+removing foreign-core and transitional integration. Construct each core with
+memory/peripherals and run to bounded event limits. Use direct storage and bounded
+register/FIFO state for MCU/DSP communication; preserve peripheral side effects,
+original DSP audio, MIDI and guest clocks without per-cycle replay. Core defects
+belong in the independent libraries; application workarounds do not replace them.
+Core benchmarks alone do not establish connected-instrument performance.
+
+The complete instrument must sustain >=4x offline real-time throughput on this
+host under representative high load; 10x is the stretch target. Preserve guest
+time, every required audio frame and bounded live latency. Full Desktop/Keyboard
+functionality, unmodified firmware and the acceptance scope remain required.
 After the old backend is removed, replace transitional OwnDsp/own_dsp names in
 classes, files, build targets, configuration and documentation with normal DSP
 names. No permanent parallel implementation or backend-selection option is part
