@@ -44,4 +44,10 @@ One build-free same-CPU pair takes67.19s before and65.74s after; descriptive
 only,no confidence interval or realtime claim. INC A tests independently check
 three dependency plus one native period,split offers and an earlier real timer
 deadline. Event/DMA,deferred IRQ and native MCU integration checks also pass.
-Full Main evidence above predates coalescing; its full cold replay is pending.
+The full original cold replay after coalescing matches177 distinct boundaries,
+all MCU registers,5120 RAM bytes and319017 startup PCM frames. A subsequent
+standard-tool A4/Identity/C0 01 chain returns to Main/fault0:14 input bytes,
+15 reply bytes,11715 new nonzero frames/lane,A4 model440.16Hz and30 changed LCD
+pixels (A001 Init -> A002 Init !). Host admission changes note/capture lengths;
+this is not realtime/live-audio or complete instrument acceptance. See
+original-midi-controls-reference.json (reservation_coalescing_replay).

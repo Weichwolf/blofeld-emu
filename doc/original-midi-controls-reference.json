@@ -306,5 +306,75 @@
     "host_synthesis": false,
     "fuzz": false,
     "complete_instrument": false
+  },
+  "reservation_coalescing_replay": {
+    "scope": "Actual original1.25 POR/Main and ordinary MIDI after c5dd4ed finite reservation coalescing; same functional board, native CPU12 and DSP core as native_mcu_replay",
+    "runtime_change_commit": "c5dd4ed7e1105cd61d1b7930a07c8db685f25624",
+    "ELF_sha256": "4ec1b783f25d455008d6527c8578342a2b231d32f1fc6a2b1524349acc8b66ea",
+    "distinct_shared_cold_boundaries_exact": 177,
+    "all_MCU_registers_and_5120_RAM_bytes_exact": true,
+    "Main_RAM_sha256": "12a76724f8083bfebfda890785cccd8dcb9d32c3347dfc00d977c62a6f03a756",
+    "startup_PCM_frames_exact": 319017,
+    "startup_PCM_payload_sha256": "de2ba344f75b3d3497a1acd1fe7e4dd09f796d63414d22e1af5674cc7761c1b3",
+    "MIDI": {
+      "input_bytes": 14,
+      "output_bytes": 15,
+      "commands": [
+        "90 45 64",
+        "80 45 00",
+        "f0 7e 7f 06 01 f7",
+        "c0 01"
+      ],
+      "minimum_virtual_dwell_ms": 100,
+      "baseline_frames": 319027,
+      "voice_capture_frames": 331029,
+      "new_nonzero_frames_per_channel": [
+        11715,
+        11715
+      ],
+      "voice_WAV_sha256": "da788f3006f38c987cc18b9f51798dabce5f1e3f1346b1e6af881eca9ec9cbd8",
+      "identity_reply": "f0 7e 00 06 02 3e 13 00 00 00 31 2e 32 34 f7",
+      "reply_version_quirk_preserved": "1.24",
+      "program_labels": [
+        "A001 / Init",
+        "A002 / Init !"
+      ],
+      "changed_LCD_pixels": 30,
+      "recording_prefixes_retained": true
+    },
+    "A4_model_rate_check": {
+      "expected_hz": 440.0,
+      "relative_tolerance": 0.002,
+      "Hann_window_frames": 4096,
+      "selection": "Maximum exact AC energy among actual new4096-frame windows at256-frame steps",
+      "channels": [
+        {
+          "new_PCM_window_start": 256,
+          "frequency_hz": 440.1566853731916,
+          "relative_error": 0.00035610312088995113
+        },
+        {
+          "new_PCM_window_start": 256,
+          "frequency_hz": 440.1566853731916,
+          "relative_error": 0.00035610312088995113
+        }
+      ],
+      "physical_clock_or_tuning_qualified": false
+    },
+    "audit_sha256": {
+      "independent-main-review.json": "0c08aab5d136ad04499374e4e1c21b0a402ea670e68a31292b6466b13027cef7",
+      "midi-controls-audit.json": "1ad903a3aa8a10dca36f942baeb3eafcb430accf0672a363930ecda1bbaf2a8a",
+      "display-visual-review.json": "7b589efa6a8d6f9b0055bb07dd0522e7195fed9658f3dab328c152ed1a67129f"
+    },
+    "private_evidence": "doc/local/native-region-coalesce-r1/main-r1",
+    "limits": [
+      "Asynchronous host admission changes note/capture lengths; cold-start PCM comparison is exact",
+      "Single short note, Identity and program change; envelope completion, polyphony, function matrix, factorySL, live audio and realtime remain unqualified"
+    ],
+    "firmware_patched": false,
+    "checkpoint_replay": false,
+    "host_synthesis": false,
+    "fuzz": false,
+    "complete_instrument": false
   }
 }
