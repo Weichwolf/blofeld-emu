@@ -32,3 +32,13 @@ part of McuMachine checkpoint identity; native execution does not consume it.
 Unsupported ISA, STOP board clocks, normal standalone startup, active factory SL,
 full function coverage and realtime operation remain open. Extensive sanitizer
 matrices are deferred until realtime; fuzzing requires an explicit request.
+
+Host profiling of a separate 3M-operation original-reset prefix preserves all
+seven emitted states,5120-byte RAM captures and393 PCM frames across four
+diagnostic variants. MCU JIT:304 compiled entries,zero cache resets. The DSP
+scheduler invokes9,818,898 positive-capacity regions for7,092,248 instructions;
+3,353,404 calls retire no instruction,maximum offered capacity7 cycles,no bulk
+batches. After DSP release,final MCU clock/peripheral work takes about85% of
+sampled Hc12::step time. This prioritizes region/clock overhead investigation;
+it neither isolates DSP Core cost nor establishes a runtime speedup. Sampling
+includes host scheduling/instrumentation; this prefix does not reach Main.
