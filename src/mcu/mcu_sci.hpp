@@ -37,6 +37,9 @@ public:
   [[nodiscard]] bool runs_in_wait() const;
   [[nodiscard]] bool interrupt_pending() const;
   [[nodiscard]] unsigned bus_cycles_until_sample() const;
+  // Visible RX-idle/transfer or conservative active-sampling deadline while
+  // the supplied RX level is held. Zero means no event under that stable input.
+  [[nodiscard]] unsigned bus_cycles_until_event(std::optional<bool> receive_level) const;
   [[nodiscard]] std::optional<bool> transmit_level() const;
 
 private:
@@ -94,6 +97,8 @@ private:
   void transfer_receive(ReceiveTransfer frame);
   void schedule_receive_transfer();
   void advance_reference(SciClockSlice slice);
+  [[nodiscard]] bool idle_clock(bool receive_level) const;
+  [[nodiscard]] bool advance_idle(unsigned ticks, bool receive_level);
   void track_idle(bool level);
   void write_control2(std::uint8_t value);
   void write_data(std::uint8_t value);

@@ -465,6 +465,14 @@ void McuSci::advance(const SciClockSlice slice) {
   if (ticks != 0 && receiver_enabled() && !slice.receive_level) {
     throw Fault("Unknown SCI RX pad level");
   }
+  if (ticks == 0 && !receive_transfer_) {
+    divider_phase_ += slice.bus_cycles;
+    return;
+  }
+  if (advance_idle(ticks, slice.receive_level.value_or(false))) {
+    divider_phase_ = (divider_phase_ + slice.bus_cycles) % baud_;
+    return;
+  }
   if (receive_reference_) {
     advance_reference(slice);
     return;
@@ -504,6 +512,50 @@ void McuSci::advance_reference(const SciClockSlice slice) {
 unsigned McuSci::bus_cycles_until_sample() const {
   if (!generator_started_ || baud_ == 0) { return 0; }
   return baud_ - divider_phase_;
+}
+
+bool McuSci::idle_clock(const bool receive_level) const {
+  const bool tx_idle =
+      !transmitting_ && !prepared_ &&
+      ((control2_ & transmitter_enable) == 0 || (!preamble_queued_ && (status_ & data_empty) != 0));
+  return tx_idle && !receive_transfer_ && !next_start_ &&
+         (!receiver_enabled() || (receive_level && receiver_.stage == RxStage::idle));
+}
+
+bool McuSci::advance_idle(const unsigned ticks, const bool receive_level) {
+  if (!idle_clock(receive_level)) { return false; }
+  if (ticks == 0) { return true; }
+  // Empty TX still keeps its16-sample launch phase for a later data write.
+  transmitter_phase_ = (transmitter_phase_ + ticks) % oversampling;
+  if (!receiver_enabled()) { return true; }
+  auto &receiver = receiver_;
+  receiver.preceding_ones = std::min(receiver.preceding_ones + ticks, 3U);
+  receiver.falling_age = std::min(receiver.falling_age + ticks, oversampling);
+  receiver.previous_level = true;
+  const auto threshold = (character_bits() + 2) * oversampling;
+  if (receiver.idle_ticks < threshold) {
+    receiver.idle_ticks = std::min(receiver.idle_ticks + ticks, threshold);
+  }
+  if (receiver.idle_ticks == threshold) {
+    receiver.active = false;
+    if (receiver.idle_armed) { status_ = static_cast<std::uint8_t>(status_ | idle_flag); }
+  }
+  return true;
+}
+
+unsigned McuSci::bus_cycles_until_event(const std::optional<bool> receive_level) const {
+  const auto sample = bus_cycles_until_sample();
+  if (sample == 0) { return 0; }
+  if (receive_transfer_) { return std::min(sample, receive_transfer_->remaining_bus_cycles); }
+  if (!idle_clock(receive_level.value_or(false))) { return sample; }
+  if (!receiver_enabled() ||
+      (!receiver_.active && (!receiver_.idle_armed || (status_ & idle_flag) != 0))) {
+    return 0;
+  }
+  const auto threshold = (character_bits() + 2) * oversampling;
+  if (receiver_.idle_ticks > threshold) { return 0; }
+  if (receiver_.idle_ticks == threshold) { return sample; }
+  return ((threshold - receiver_.idle_ticks) * baud_) - divider_phase_;
 }
 
 }

@@ -111,6 +111,8 @@ void test_each_bus_boundary_and_error_vector() {
         advance(sci, delay - 1, frame.stop);
         require(flags(sci) == 0 && !sci.interrupt_pending(),
                 "Data/flags/request stay pending through the period before the chosen edge");
+        require(sci.bus_cycles_until_event(frame.stop) == 1,
+                "The pending transfer advertises its exact final IPBus edge");
         advance(sci, 1, frame.stop);
       }
       check_transfer(sci, frame);

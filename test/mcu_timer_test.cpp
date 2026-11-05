@@ -383,6 +383,26 @@ void test_unknown_peripheral_pad_latches() {
   gpio.set_function(blofeld::McuPort::s, {.outputs = 1, .levels = 1});
   require(gpio.read_pad(blofeld::McuPort::s, 1) == 1, "A known output resolves the peripheral pad");
 }
+
+void test_bus_compare_deadline_contention() {
+  const std::array<std::uint8_t, 32768> flash{};
+  blofeld::McuBus bus(flash);
+  bus.set_pin_drive(blofeld::McuPort::t, {.mask = 1, .levels = 1});
+  bus.write(tios, 1);
+  bus.write(outputs_low, 3); // Set channel0 high before selecting toggle mode.
+  bus.write(force, 1);
+  bus.write(outputs_low, 1);
+  constexpr unsigned first_compare = 16;
+  bus.write(channel0, 0);
+  bus.write(channel0 + 1, first_compare);
+  bus.write(control1, timer_on);
+  reject([&bus] { bus.advance_timer(word_wrap + 32); },
+         "A contested intermediate toggle must not disappear when the final level agrees");
+  bus.set_pin_drive(blofeld::McuPort::t, {});
+  require(
+      read_word(bus, counter_address) == first_compare,
+      "A failed large timer grant stops at the first compare, before the later restoring toggle");
+}
 }
 
 int main() {
@@ -398,6 +418,7 @@ int main() {
     test_overflow_toggle_and_unsupported_cases();
     test_bus_capture_routing_and_mux_ownership();
     test_unknown_peripheral_pad_latches();
+    test_bus_compare_deadline_contention();
     std::cout << "Timer counting, captures, compare actions, flags and routing checks passed\n";
     return 0;
   } catch (const std::exception &error) {

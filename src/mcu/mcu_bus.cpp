@@ -551,18 +551,26 @@ void McuBus::advance_sci(const unsigned bus_cycles) {
   const auto tx_mask = static_cast<std::uint8_t>(small_package ? small_tx : 8);
   const auto port = small_package ? McuPort::s : McuPort::r;
   unsigned remaining = bus_cycles;
+  bool validated = false;
   while (remaining != 0) {
     const auto until_sample = sci_.bus_cycles_until_sample();
-    const auto count = until_sample == 0 ? remaining : std::min(remaining, until_sample);
+    auto count = until_sample == 0 ? remaining : std::min(remaining, until_sample);
     std::optional<bool> receive;
     if (until_sample != 0 && count == until_sample && sci_.receiver_enabled()) {
       receive = (gpio_.read_pad(port, rx_mask) & rx_mask) != 0;
+    }
+    if (validated) {
+      const auto until_event = sci_.bus_cycles_until_event(receive);
+      count = until_event == 0 ? remaining : std::min(remaining, until_event);
     }
     const auto previous = sci_.transmit_level();
     sci_.advance({.bus_cycles = count, .receive_level = receive});
     remaining -= count;
     if (sci_.transmit_level() != previous) { sync_peripheral_pins(); }
     if (sci_.transmit_level()) { static_cast<void>(gpio_.read_pad(port, tx_mask)); }
+    // Preserve the first pin-validation/failure boundary. Further idle time
+    // can skip internal samples while this call holds the same physical input.
+    validated = true;
   }
 }
 
@@ -597,13 +605,15 @@ void McuBus::advance_timer(const unsigned bus_cycles) {
     constexpr unsigned maximum_cycles = 1048576;
     if (bus_cycles > maximum_cycles) { throw Fault("Timer board clock slice exceeds cycle limit"); }
     unsigned remaining = bus_cycles;
+    bool validated = false;
     while (remaining != 0) {
-      const auto until_tick = timer_.cycles_until_tick();
-      const auto count = until_tick == 0 ? remaining : std::min(remaining, until_tick);
+      const auto until_event = validated ? timer_.cycles_until_event() : timer_.cycles_until_tick();
+      const auto count = until_event == 0 ? remaining : std::min(remaining, until_event);
       timer_.advance(count);
       remaining -= count;
       sync_peripheral_pins();
       check_timer_outputs();
+      validated = true;
     }
   } catch (const Fault &fault) {
     throw Fault("MCU timer advance at " + hex(hc12::timer_base) + " pc=" + hex(context_.pc) +

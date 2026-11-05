@@ -432,6 +432,62 @@ void test_peripheral_function_masks() {
   reject([&gpio] { static_cast<void>(gpio.read_pad(blofeld::McuPort::t, 0x80)); },
          "Pad sampling cannot create nonexistent inputs");
 }
+
+void test_idle_event_spans() {
+  constexpr unsigned idle_status = 0xd0;
+  constexpr unsigned rx_idle_interrupt = 0x14;
+  constexpr unsigned idle_divisor = 3;
+  constexpr unsigned idle_boundary = frame_ticks * idle_divisor;
+  for (const bool reference : {false, true}) {
+    blofeld::McuSci sci;
+    configure(sci, rx_idle_interrupt);
+    sci.write({.address = baud_low, .value = idle_divisor});
+    if (reference) {
+      sci.set_receive_reference(blofeld::SciReceiveReference{.baud_divisor = idle_divisor});
+    }
+    require(sci.bus_cycles_until_event(true) == idle_boundary,
+            "A stable eight-bit RX idle character expires after160 samples at divisor3");
+    samples(sci, true, idle_boundary - 1);
+    require(sci.read(status1) == idle_transmitter && !sci.interrupt_pending() &&
+                sci.bus_cycles_until_event(true) == 1,
+            "Idle status and interrupt remain clear before the final sample");
+    samples(sci, true, 1);
+    require(sci.read(status1) == idle_status && sci.interrupt_pending() &&
+                (sci.read(status2) & 1U) == 0 && sci.bus_cycles_until_event(true) == 0,
+            "The final sample publishes idle/IRQ and retires receiver activity exactly once");
+    static_cast<void>(sci.read(data_low));
+    samples(sci, true, 1024);
+    require(sci.read(status1) == idle_transmitter && !sci.interrupt_pending() &&
+                sci.bus_cycles_until_event(true) == 0 && sci.bus_cycles_until_sample() == 2,
+            "Acknowledged idle stays disarmed across a long span with the correct divider phase");
+    sci.advance({.bus_cycles = 1});
+    require(sci.bus_cycles_until_event({}) == 1,
+            "Unknown input retains a sample deadline even after stable idle was acknowledged");
+    reject([&sci] { sci.advance({.bus_cycles = 1}); },
+           "An unknown pad is still rejected at the first real receive sample");
+    require(sci.bus_cycles_until_sample() == 1,
+            "Failed unknown sampling cannot consume divider phase");
+  }
+}
+
+void test_idle_transmitter_phase() {
+  blofeld::McuSci sci;
+  configure(sci, 8);
+  sci.advance({.bus_cycles = frame_ticks});
+  require(sci.read(status1) == idle_transmitter && sci.bus_cycles_until_event({}) == 0,
+          "Completed preamble leaves an idle transmitter without a pending wire event");
+  constexpr unsigned quiet_ticks = 37;
+  sci.advance({.bus_cycles = quiet_ticks});
+  static_cast<void>(sci.read(status1));
+  sci.write({.address = data_low, .value = pattern});
+  require(sci.bus_cycles_until_event({}) == 1, "Queued data withdraws the idle-span grant");
+  sci.advance({.bus_cycles = 10});
+  require(sci.read(status1) == 0 && sci.transmit_level() == true,
+          "TX launch waits for the remaining11 ticks of its16-sample phase");
+  sci.advance({.bus_cycles = 1});
+  require(sci.read(status1) == empty && sci.transmit_level() == false,
+          "The next tick transfers the queued byte and drives its actual start bit");
+}
 }
 
 int main() {
@@ -450,6 +506,8 @@ int main() {
     test_bus_pin_routing();
     test_bus_receive_waveform_and_transient_contention();
     test_peripheral_function_masks();
+    test_idle_event_spans();
+    test_idle_transmitter_phase();
     std::cout << "SCI register, serial waveform, sampling, flag and routing checks passed\n";
     return 0;
   } catch (const std::exception &error) {
