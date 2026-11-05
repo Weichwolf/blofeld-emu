@@ -107,15 +107,6 @@ Fixture::Fixture(const Case policy, const std::uint64_t at, std::vector<std::uin
   attach();
 }
 
-void Fixture::restore(const McuDspRuntimeCheckpoint &saved, const SourceState source) {
-  runtime.reset();
-  cursor = source.cursor;
-  levels = source.levels;
-  trace.clear();
-  runtime = std::make_unique<McuDspRuntime>(saved, mcu, dsp, events());
-  attach();
-}
-
 Fixture::~Fixture() {
   mcu.set_cycle_observer({});
   mcu.bus().set_observer({});

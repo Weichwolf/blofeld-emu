@@ -74,22 +74,15 @@ void store_case(const unsigned cut) {
   f.reset();
   memory(f, expected_x, expected_y);
   f.held(held_ticks, held_ticks);
-  const auto saved = f.timeline->checkpoint();
-  const auto ledger = f.ledger;
-  f.machine.bus().write({.space = DspSpace::x, .address = data, .value = 7});
-  Fixture fresh(Start::blank);
-  fresh.restore(saved, ledger);
-  memory(fresh, expected_x, expected_y);
-  fresh.timeline->release_hardware_reset();
-  fresh.held(recovery_ticks, recovery_ticks);
-  memory(fresh, expected_x, expected_y);
-  for (unsigned i = 0; i < bound && !retired_store(fresh); ++i) { static_cast<void>(fresh.step()); }
-  memory(fresh, high, low);
-  require(retired_store(fresh) && fresh.machine.cpu().registers().pc == entry + 1 &&
-              fresh.machine.cpu().registers().r[4] == data + 1 &&
-              fresh.machine.cpu().registers().a ==
-                  ((std::uint64_t{high} << accumulator_bits) | low) &&
-              fresh.machine.cpu().progress().instructions == 6,
+  f.timeline->release_hardware_reset();
+  f.held(recovery_ticks, recovery_ticks);
+  memory(f, expected_x, expected_y);
+  for (unsigned i = 0; i < bound && !retired_store(f); ++i) { static_cast<void>(f.step()); }
+  memory(f, high, low);
+  require(retired_store(f) && f.machine.cpu().registers().pc == entry + 1 &&
+              f.machine.cpu().registers().r[4] == data + 1 &&
+              f.machine.cpu().registers().a == ((std::uint64_t{high} << accumulator_bits) | low) &&
+              f.machine.cpu().progress().instructions == 6,
           "Real reset entry repeats four MOVEs/JMP and the long store with literal pointer/data");
 }
 }

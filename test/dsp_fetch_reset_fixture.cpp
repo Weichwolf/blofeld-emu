@@ -15,7 +15,6 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
-#include <utility>
 
 namespace blofeld::test::fetch_reset {
 OwnDspResetInputs pins() {
@@ -189,17 +188,6 @@ void Fixture::advance(const unsigned count) {
     const auto result = step();
     if (result.native && result.native->retired) { oracle(); }
   }
-}
-
-void Fixture::restore(const OwnDspTimelineCheckpoint &checkpoint, const Ledger &saved) {
-  const auto previous = std::move(timeline);
-  timeline = std::make_unique<OwnDspTimeline>(machine, checkpoint);
-  ledger = saved;
-  trace.clear();
-  if (previous) {
-    static_cast<void>(rejects([&] { static_cast<void>(previous->checkpoint()); }));
-  }
-  time();
 }
 
 void Fixture::gated() {

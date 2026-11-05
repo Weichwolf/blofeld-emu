@@ -138,11 +138,4 @@ void Fixture::run(const unsigned count) {
   for (unsigned i = 0; i < count; ++i) { step(); }
 }
 
-void Fixture::restore(const McuDspRuntimeCheckpoint &snapshot, const unsigned cursor) {
-  runtime.reset();
-  source.cursor = cursor;
-  source.log.clear();
-  runtime = std::make_unique<McuDspRuntime>(snapshot, mcu, dsp, source.events());
-  bind();
-}
 }

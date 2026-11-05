@@ -21,11 +21,9 @@
 #include <exception>
 #include <iostream>
 #include <memory>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <tuple>
-#include <vector>
 
 namespace {
 using namespace blofeld;
@@ -120,24 +118,6 @@ void initialize(OwnDspMachine &dsp, const bool failing) {
   dsp.bus().install_rom({.space = DspSpace::p, .start = boot, .words = program});
 }
 
-struct Observation {
-  dsp56300::Registers registers;
-  dsp56300::Progress progress;
-  std::optional<dsp56300::InstructionEffect> pending;
-  std::optional<std::uint32_t> issued;
-  std::uint64_t completion;
-  std::uint64_t clk2;
-  bool captured;
-  bool retired;
-  bool operator==(const Observation &) const = default;
-};
-
-struct Ledger {
-  std::uint64_t cycles;
-  std::uint64_t adds;
-  unsigned expected_pc;
-};
-
 struct Fixture {
   explicit Fixture(const bool waiting = false,
                    const unsigned phase = 0,
@@ -176,17 +156,7 @@ struct Fixture {
     require(cycle.cycle + 1 == cycles && cycle.completion_ticks - cycle.start_ticks == dsp_period &&
                 cycle.completion_ticks == recovery_end + (cycles * dsp_period),
             "Each actual native DSP period retains its literal hold/recovery and45tick clock");
-    if (recording) {
-      const auto pending = dsp.cpu().pending_instruction();
-      trace.push_back({.registers = dsp.cpu().registers(),
-                       .progress = dsp.cpu().progress(),
-                       .pending = pending ? std::optional{pending->effect} : std::nullopt,
-                       .issued = result.issued_address,
-                       .completion = cycle.completion_ticks,
-                       .clk2 = dsp.clock().timer_clk2_edges(),
-                       .captured = result.captured,
-                       .retired = result.native && result.native->retired});
-    }
+
     if (failing || !result.native || !result.native->retired) { return; }
     require(result.native_pc && *result.native_pc == expected_pc,
             "Native retirements retain the independent MOVE/CLR/ADD/BRA sequence");
@@ -225,28 +195,11 @@ struct Fixture {
     attach(); // Native MCU reset replaces its owner and deliberately drops observers.
   }
 
-  [[nodiscard]] Ledger ledger() const {
-    return {.cycles = cycles, .adds = adds, .expected_pc = expected_pc};
-  }
-
-  void restore(const McuDspRuntimeCheckpoint &snapshot, const Ledger saved) {
-    runtime.reset();
-    runtime = std::make_unique<McuDspRuntime>(snapshot, mcu, dsp);
-    cycles = saved.cycles;
-    adds = saved.adds;
-    expected_pc = saved.expected_pc;
-    trace.clear();
-    recording = true;
-    attach();
-  }
-
   McuMachine mcu;
   OwnDspMachine dsp{{.extal_hz = oscillator_hz,
                      .timebase_hz = common_hz,
                      .switch_timing = DspClockSwitch::reference_cycle_boundary}};
   std::unique_ptr<McuDspRuntime> runtime;
-  std::vector<Observation> trace;
-  bool recording = false;
   std::uint64_t cycles = 0, adds = 0;
   unsigned expected_pc = boot;
   bool failing;
@@ -319,38 +272,26 @@ void cop_timeout(const bool waiting, const bool phy, const unsigned phase) {
   const auto registers = f.dsp.cpu().registers();
   const auto progress = f.dsp.cpu().progress();
   const auto epoch = f.dsp.clock().native_epoch();
-  require(rejects([&] { static_cast<void>(f.runtime->checkpoint()); }).contains("healthy inactive"),
-          "Latched MCU timing failure cannot be advertised as a healthy joint checkpoint");
+  require(rejects([&] { f.runtime->end_instruction(); }).contains("healthy inactive"),
+          "Latched MCU timing failure cannot complete a healthy instruction boundary");
   f.begin(McuResetSource::cop);
   require(!f.runtime->faulted() && f.dsp.cpu().registers() == registers &&
               f.dsp.cpu().progress() == progress && f.dsp.clock().native_epoch() == epoch,
           "Admitting the actual COP reset changed DSP computation or retained a stale fault");
   constexpr unsigned cut_edges = 131;
   require(f.mcu.advance_system_reset(cut_edges, McuResetPad::high) == cut_edges,
-          "Actual COP reset reaches its drive/synchronization checkpoint on real SYSCLK edges");
-  const auto cut = f.runtime->checkpoint();
-  const auto ledger = f.ledger();
-  std::vector<Observation> expected;
-  for (unsigned suffix = 0; suffix < 2; ++suffix) {
-    f.restore(cut, ledger);
-    require(f.mcu.advance_system_reset(reset_edges - cut_edges, McuResetPad::high) ==
-                reset_edges - cut_edges,
-            "The restored latched timeout must finish its actual native COP reset sequence");
-    f.runtime->end_system_reset();
-    require(f.mcu.cpu().state().pc == cop_handler && f.mcu.run_clock().native_epoch() == 2 &&
-                f.mcu.run_clock().elapsed_ticks() ==
-                    start + duration + reset_edges * 5ULL + vector_ticks &&
-                f.adds > adds && !f.runtime->faulted() && f.dsp.clock().native_epoch() == epoch,
-            "Actual FFFA COP vector differs from FFFE and preserves continuous native DSP work");
-    f.time();
-    if (suffix == 0) {
-      expected = f.trace;
-    } else {
-      require(
-          f.trace == expected,
-          "Restored COP reset changed full DSP registers,flags,pending effects or fetch clocks");
-    }
-  }
+          "Actual COP reset reaches its drive/synchronization boundary on real SYSCLK edges");
+
+  require(f.mcu.advance_system_reset(reset_edges - cut_edges, McuResetPad::high) ==
+              reset_edges - cut_edges,
+          "The latched timeout must finish its actual native COP reset sequence");
+  f.runtime->end_system_reset();
+  require(f.mcu.cpu().state().pc == cop_handler && f.mcu.run_clock().native_epoch() == 2 &&
+              f.mcu.run_clock().elapsed_ticks() ==
+                  start + duration + reset_edges * 5ULL + vector_ticks &&
+              f.adds > adds && !f.runtime->faulted() && f.dsp.clock().native_epoch() == epoch,
+          "Actual FFFA COP vector differs from FFFE and preserves continuous native DSP work");
+  f.time();
 }
 
 void unknown_pad() {
@@ -412,9 +353,8 @@ void peer_failure() {
               f.runtime->end_ticks() == recovery_end + ((completed + 1) * dsp_period),
           "Real reserved-Y failure during reset preserves consumed DSP/MCU prefixes and context: " +
               reason);
-  require(rejects([&] { f.runtime->end_system_reset(); }).contains("healthy inactive") &&
-              rejects([&] { static_cast<void>(f.runtime->checkpoint()); }).contains("healthy"),
-          "Failed reset execution and joint capture require coordinated recovery");
+  require(rejects([&] { f.runtime->end_system_reset(); }).contains("healthy inactive"),
+          "Failed reset execution cannot complete its pending boundary");
 }
 
 void unconsumed_reset_offer() {

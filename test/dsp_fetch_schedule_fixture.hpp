@@ -59,7 +59,6 @@ public:
   void bind();
   void step();
   void run(unsigned count);
-  void restore(const McuDspRuntimeCheckpoint &snapshot, unsigned cursor);
   McuMachine mcu;
   OwnDspMachine dsp;
   Source source;
@@ -70,5 +69,5 @@ public:
 
 void guards();
 void pin_capture();
-void checkpoints();
+void boundary_checks();
 }

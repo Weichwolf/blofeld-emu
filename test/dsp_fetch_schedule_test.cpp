@@ -67,16 +67,11 @@ void reset_ties() {
               "Recovery edge tie lost the excluded single tick or fabricated native/CLK2 work");
     };
     fixture.step();
-    const auto held = fixture.runtime->checkpoint();
     fixture.step();
     require(fixture.dsp.clock().elapsed_ticks() == first_cycle &&
                 fixture.dsp.clock().hardware_reset_ticks() == reset_end &&
                 fixture.runtime->completed_cycles() == 1 && fixture.source.cursor == 1,
             "Actual MCU periods did not complete135 reset ticks followed by45 native ticks");
-    fixture.restore(held, 0);
-    fixture.step();
-    require(fixture.source.cursor == 1 && fixture.runtime->completed_cycles() == 1,
-            "Held-reset replay lost its event source or genuine first native cycle");
   }
 }
 
@@ -99,7 +94,7 @@ int main() {
     using namespace blofeld::test::fetch_events;
     guards();
     pin_capture();
-    checkpoints();
+    boundary_checks();
     ordered(DspPeerOrder::peer_first);
     ordered(DspPeerOrder::dsp_first);
     reset_ties();

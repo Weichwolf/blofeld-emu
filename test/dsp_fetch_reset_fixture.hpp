@@ -67,7 +67,6 @@ struct Fixture {
   OwnDspFetchCycleResult step();
   void advance(unsigned count);
   void oracle();
-  void restore(const OwnDspTimelineCheckpoint &checkpoint, const Ledger &saved);
   [[nodiscard]] Observation observe(const OwnDspFetchCycleResult *cycle = nullptr);
 
   OwnDspMachine machine{clocks};

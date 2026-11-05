@@ -37,11 +37,6 @@ struct Case {
   std::array<char, 3> order;
 };
 
-struct SourceState {
-  unsigned cursor;
-  unsigned levels;
-};
-
 McuFlashImage image();
 McuRunContract mcu_contract();
 McuDspRuntimeInputs settings(Case order);
@@ -68,7 +63,6 @@ struct Fixture {
   Fixture(const Fixture &) = delete;
   Fixture &operator=(const Fixture &) = delete;
   DspRuntimeEvents events();
-  void restore(const McuDspRuntimeCheckpoint &saved, SourceState source);
   void attach();
   void step(unsigned instructions);
   void drive();

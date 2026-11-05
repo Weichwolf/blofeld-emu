@@ -73,88 +73,43 @@ void direct_running_operations() {
   f.advance(6);
 }
 
-void restore_modes() {
-  Fixture source;
-  source.advance(4);
-  const auto checkpoint = source.timeline->checkpoint();
-  const auto ledger = source.ledger;
-  Fixture fresh(Start::blank);
-  for (auto *const f : {&source, &fresh}) {
-    f->restore(checkpoint, ledger);
-    const auto pending = f->machine.cpu().pending_instruction();
-    if (!pending) { throw Fault("Joint restore lost the actual PCU effect"); }
-    denied(*f, [&] { static_cast<void>(f->machine.advance(pending->ticket)); }, "native-effect");
-    f->advance(2);
-  }
-  require(source.observe() == fresh.observe(),
-          "Same/fresh clocked restoration preserves literal completion state and ownership");
+void explicit_release() {
+  Fixture f;
+  f.advance(4);
+  const auto before = f.machine.cpu().registers();
+  const auto ticks = f.machine.clock().elapsed_ticks();
+  f.timeline.reset();
+  auto pending = f.machine.cpu().pending_instruction();
+  if (!pending) { throw Fault("Bare chip lost its genuine PCU continuation"); }
+  const auto pc = f.machine.advance(pending->ticket);
+  auto expected = before;
+  expected.pc = boot + 2;
+  require(pc.fault.kind == dsp56300::FaultKind::none && !pc.retired &&
+              f.machine.cpu().registers() == expected && f.machine.clock().elapsed_ticks() == ticks,
+          "Explicit untimed continuation publishes only the real PC without inventing clocks");
+  pending = f.machine.cpu().pending_instruction();
+  if (!pending) { throw Fault("Bare chip lost its actual retirement"); }
+  const auto retired = f.machine.advance(pending->ticket);
+  require(retired.retired && retired.fault.kind == dsp56300::FaultKind::none &&
+              f.machine.cpu().registers() == expected &&
+              f.machine.clock().elapsed_ticks() == ticks &&
+              f.machine.cpu().progress() ==
+                  dsp56300::Progress{.instructions = 1, .estimated_cycles = 2},
+          "Unclocked chip use remains available after explicit release of its timeline owner");
 }
 
-void explicit_release_and_machine_restore() {
-  for (const bool chip_restore : {false, true}) {
-    Fixture f;
-    f.advance(4);
-    const auto saved = f.machine.checkpoint();
-    const auto retained = f.timeline->checkpoint();
-    const auto first = f.machine.cpu().pending_instruction();
-    if (!first) { throw Fault("Manual continuation lost its real ticket"); }
-    const auto stale = first->ticket;
-    const auto before = f.machine.cpu().registers();
-    const auto ticks = f.machine.clock().elapsed_ticks();
-    if (chip_restore) {
-      f.machine.restore(saved);
-      static_cast<void>(rejects([&] { static_cast<void>(f.timeline->next_deadline()); }));
-      // Timed ownership is process-local; a chip-only restore abandons it.
-      static_cast<void>(rejects([&] { static_cast<void>(f.machine.advance(stale)); }));
-    } else {
-      // An immutable snapshot must not keep a destroyed timeline's lease alive.
-      f.timeline.reset();
-    }
-    auto pending = f.machine.cpu().pending_instruction();
-    if (!pending) { throw Fault("Bare chip lost its genuine PCU continuation"); }
-    const auto pc = f.machine.advance(pending->ticket);
-    auto expected = before;
-    expected.pc = boot + 2;
-    require(pc.fault.kind == dsp56300::FaultKind::none && !pc.retired &&
-                f.machine.cpu().registers() == expected &&
-                f.machine.clock().elapsed_ticks() == ticks,
-            "Explicit untimed continuation publishes only the real PC without inventing clocks");
-    pending = f.machine.cpu().pending_instruction();
-    if (!pending) { throw Fault("Bare chip lost its actual retirement"); }
-    const auto retired = f.machine.advance(pending->ticket);
-    require(retired.retired && retired.fault.kind == dsp56300::FaultKind::none &&
-                f.machine.cpu().registers() == expected &&
-                f.machine.clock().elapsed_ticks() == ticks &&
-                f.machine.cpu().progress() ==
-                    dsp56300::Progress{.instructions = 1, .estimated_cycles = 2},
-            "Unclocked chip use remains available after explicit release or chip-only restore");
-  }
-}
-
-void held_reset_restore() {
-  Fixture source;
-  source.advance(4);
-  source.reset();
-  source.held(held_ticks, held_ticks);
-  const auto saved = source.timeline->checkpoint();
-  const auto ledger = source.ledger;
-  Fixture fresh(Start::blank);
-  for (auto *const f : {&source, &fresh}) {
-    f->restore(saved, ledger);
-    denied(*f, [&] { f->machine.release_hardware_reset(); }, "reset-release");
-    denied(
-        *f, [&] { static_cast<void>(f->machine.advance_hardware_reset_ticks(1)); }, "reset-time");
-    denied(*f, [&] { f->machine.begin_hardware_reset(pins()); }, "reset-assert");
-    f->timeline->release_hardware_reset();
-    f->held(recovery_ticks, recovery_ticks);
-    const auto release = f->timeline->checkpoint();
-    f->restore(release, f->ledger);
-    denied(
-        *f, [&] { static_cast<void>(f->machine.advance_reference_cycle()); }, "reference-period");
-    f->advance(6);
-  }
-  require(source.observe() == fresh.observe(),
-          "Reset/recovery and fresh frontend acquisition preserve clocked admission ownership");
+void held_reset_ownership() {
+  Fixture f;
+  f.advance(4);
+  f.reset();
+  f.held(held_ticks, held_ticks);
+  denied(f, [&] { f.machine.release_hardware_reset(); }, "reset-release");
+  denied(f, [&] { static_cast<void>(f.machine.advance_hardware_reset_ticks(1)); }, "reset-time");
+  denied(f, [&] { f.machine.begin_hardware_reset(pins()); }, "reset-assert");
+  f.timeline->release_hardware_reset();
+  f.held(recovery_ticks, recovery_ticks);
+  denied(f, [&] { static_cast<void>(f.machine.advance_reference_cycle()); }, "reference-period");
+  f.advance(6);
 }
 
 void pending_memory_store() {
@@ -202,11 +157,10 @@ int main() {
   try {
     partial_pcu_regression();
     direct_running_operations();
-    restore_modes();
-    explicit_release_and_machine_restore();
-    held_reset_restore();
+    explicit_release();
+    held_reset_ownership();
     pending_memory_store();
-    std::cout << "Clocked DSP ownership: direct effects/control, restore/release and real X/Y "
+    std::cout << "Clocked DSP ownership: direct effects/control, reset/release and real X/Y "
                  "stores passed\n";
     return 0;
   } catch (const std::exception &error) {

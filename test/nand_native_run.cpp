@@ -32,19 +32,6 @@ NandNativeCpu native_cpu(const OwnDspMachine &machine) {
   return {.cpu = machine.cpu().registers(), .progress = machine.cpu().progress()};
 }
 
-struct NandNativeCheckpoint::Storage {
-  OwnDspTimelineCheckpoint timeline;
-  PeripheralCalendarCheckpoint calendar;
-  NandNativeState state;
-  const NandNativeRun *owner;
-  std::weak_ptr<const bool> lifetime;
-};
-
-NandNativeCheckpoint::NandNativeCheckpoint(std::shared_ptr<const Storage> storage)
-    : storage_(std::move(storage)) {}
-
-NandNativeCheckpoint::~NandNativeCheckpoint() = default;
-
 NandNativeRun::NandNativeRun(OwnDspMachine &machine, NandPeer &peer, NandPeerEvents inherited)
     : machine_(machine),
       peer_(peer),
@@ -145,34 +132,6 @@ OwnDspFetchCycleResult NandNativeRun::tick() {
   state_.horizon = deadline;
   faulted_ = false;
   return *cycle;
-}
-
-NandNativeCheckpoint NandNativeRun::checkpoint() const {
-  verify();
-  return NandNativeCheckpoint(std::make_shared<const NandNativeCheckpoint::Storage>(
-      NandNativeCheckpoint::Storage{.timeline = timeline_->checkpoint(),
-                                    .calendar = calendar_.checkpoint(),
-                                    .state = state_,
-                                    .owner = this,
-                                    .lifetime = lifetime_}));
-}
-
-void NandNativeRun::restore(const NandNativeCheckpoint &snapshot) {
-  if (!snapshot.storage_ || snapshot.storage_->owner != this ||
-      snapshot.storage_->lifetime.lock() != lifetime_ ||
-      snapshot.storage_->state.external_identity != inherited_.identity ||
-      snapshot.storage_->state.next_external != inherited_.next_ticks()) {
-    throw Fault("NAND native restore requires its original live owner and restored input cursor");
-  }
-  const auto &saved = *snapshot.storage_;
-  const auto events = peer_.events();
-  faulted_ = true;
-  calendar_.restore(
-      saved.calendar, events.identity, events.next_ticks(), {.ticks = saved.state.horizon});
-  timeline_ = std::make_unique<OwnDspTimeline>(machine_, saved.timeline);
-  state_ = saved.state;
-  faulted_ = false;
-  verify();
 }
 
 PeripheralCalendarState NandNativeRun::peripheral_state() const {

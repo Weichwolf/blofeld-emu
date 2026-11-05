@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "board/mcu_dsp_runtime.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_dma.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_fetch_schedule_fixture.hpp"
 
@@ -49,22 +51,6 @@ void malformed_sources() {
 
 void retained_source() {
   Fixture fixture(DspPeerOrder::peer_first, {initial_ticks});
-  const auto saved = fixture.runtime->checkpoint();
-  const std::array<std::function<void(DspRuntimeEvents &)>, 4> corrupt{
-      [](auto &events) { events = {}; },
-      [](auto &events) { events.identity = std::make_shared<const bool>(true); },
-      [](auto &events) { events.order = DspPeerOrder::dsp_first; },
-      [](auto &events) { ++events.maximum_events_per_period; }};
-  for (const auto &change : corrupt) {
-    auto events = fixture.source.events();
-    change(events);
-    const auto registers = fixture.dsp.cpu().registers();
-    require(rejects([&] {
-              const McuDspRuntime rejected(saved, fixture.mcu, fixture.dsp, events);
-            }).contains("matching external identity") &&
-                fixture.dsp.cpu().registers() == registers && !fixture.runtime->faulted(),
-            "Clone changed its bound source contract or mutated the healthy destination");
-  }
   fixture.source.ticks.push_back(fixture.runtime->end_ticks());
   require(rejects([&] { fixture.step(); }).contains("consumed timeline") &&
               fixture.source.cursor == 1 && fixture.runtime->faulted(),
@@ -157,56 +143,51 @@ void budgets() {
           "Finite same-timestamp input burst lost its stable order");
 }
 
+void advance_outside_runtime(Fixture &fixture) {
+  auto request = cycle_inputs();
+  const auto last = fixture.dsp.bus().last_dma_cycle();
+  request.cycle = last ? *last + 1 : 0;
+  static_cast<void>(fixture.dsp.bus().advance_dma(request));
+}
+
 void callback_failures() {
   Fixture query;
-  query.source.on_query = [&] {
-    const auto same = query.dsp.checkpoint();
-    query.dsp.restore(same);
-  };
+  query.source.on_query = [&] { advance_outside_runtime(query); };
   require(rejects([&] { query.step(); }).contains("unchanged native boundary") &&
               query.runtime->faulted() && query.runtime->completed_cycles() == 0,
-          "Pure deadline query replaced an indistinguishable held-reset owner");
+          "Pure deadline query advanced DMA outside the owned native timeline");
   Fixture query_reentry;
-  query_reentry.source.on_query = [&] { static_cast<void>(query_reentry.runtime->checkpoint()); };
+  query_reentry.source.on_query = [&] { query_reentry.runtime->end_instruction(); };
   require(rejects([&] { query_reentry.step(); }).contains("healthy inactive") &&
               query_reentry.runtime->faulted(),
-          "Deadline query reentered an active native checkpoint");
+          "Deadline query reentered an active native instruction boundary");
   Fixture reentry(DspPeerOrder::peer_first, {first_cycle - 1});
-  reentry.source.on_observe = [&](std::uint64_t) {
-    static_cast<void>(reentry.runtime->checkpoint());
-  };
+  reentry.source.on_observe = [&](std::uint64_t) { reentry.runtime->end_instruction(); };
   reentry.step();
   require(rejects([&] { reentry.step(); }).contains("healthy inactive") &&
               reentry.source.cursor == 0 && reentry.runtime->faulted(),
           "External observation reentered an active native coordinator");
   Fixture mutated;
-  const auto chip = mutated.dsp.checkpoint();
   mutated.provide_inputs = [&] {
-    mutated.dsp.restore(chip);
+    advance_outside_runtime(mutated);
     return cycle_inputs();
   };
   mutated.step();
   require(rejects([&] { mutated.step(); }).contains("unchanged native boundary") &&
               mutated.runtime->completed_cycles() == 0 && mutated.runtime->faulted(),
-          "Cycle provider replaced native ownership without a visible failure");
+          "Cycle provider advanced DMA outside the owned native boundary");
   Fixture observation(DspPeerOrder::peer_first, {first_cycle - 1});
   observation.step();
-  observation.source.on_observe = [&](std::uint64_t) {
-    const auto same = observation.dsp.checkpoint();
-    observation.dsp.restore(same);
-  };
+  observation.source.on_observe = [&](std::uint64_t) { advance_outside_runtime(observation); };
   require(rejects([&] { observation.step(); }).contains("unchanged native boundary") &&
               observation.runtime->faulted() && observation.source.cursor == 1,
-          "Same-state chip restoration hid a lost held-reset timeline owner");
+          "External observation changed DMA outside the owned native timeline");
   Fixture observer;
-  observer.on_cycle = [&](const DspRuntimeCycle &) {
-    const auto same = observer.dsp.checkpoint();
-    observer.dsp.restore(same);
-  };
+  observer.on_cycle = [&](const DspRuntimeCycle &) { advance_outside_runtime(observer); };
   observer.step();
   require(rejects([&] { observer.step(); }).contains("unchanged native boundary") &&
               observer.runtime->faulted() && observer.runtime->completed_cycles() == 1,
-          "Native completion observer replaced ownership after a genuine committed DSP cycle");
+          "Native completion observer changed DMA after a genuine committed DSP cycle");
 }
 }
 

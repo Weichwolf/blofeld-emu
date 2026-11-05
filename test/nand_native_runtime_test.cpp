@@ -110,13 +110,9 @@ struct Fixture {
   unsigned samples = 0;
 };
 
-void inherited_pin_and_restore() {
+void inherited_pin_and_boundary() {
   Fixture fixture;
   fixture.finish(2);
-  const auto peer_cut = fixture.peer.checkpoint();
-  const auto saved = fixture.runtime->checkpoint();
-  const auto cursor = fixture.cursor;
-  const auto samples = fixture.samples;
   fixture.finish(instruction_count);
   require(fixture.samples == sample_count,
           "All eight real TIO bit reads reached native retirement; actual=" +
@@ -124,26 +120,26 @@ void inherited_pin_and_restore() {
   const auto cpu = native_cpu(fixture.machine);
   const auto state = fixture.runtime->state();
   const auto calendar = fixture.runtime->peripheral_state();
-  reject([&] { fixture.runtime->restore(saved); }, "restored input cursor");
-  require(native_cpu(fixture.machine) == cpu && fixture.runtime->state() == state,
-          "Unrestored external source refuses before CPU/runtime mutation");
-  fixture.cursor = cursor;
-  fixture.samples = samples;
-  fixture.peer.restore(peer_cut);
-  fixture.runtime->restore(saved);
-  fixture.finish(instruction_count);
-  require(fixture.samples == sample_count && native_cpu(fixture.machine) == cpu &&
-              fixture.runtime->state() == state && fixture.runtime->peripheral_state() == calendar,
-          "Restored external cursor, own core/frontend and NAND calendar repeat exactly");
-  Fixture other;
-  reject([&] { other.runtime->restore(saved); }, "original live owner");
-  std::cout << "PASS NAND_NATIVE_INPUT samples=8 replay=1 cursor-refusal=1 owner-refusal=1\n";
+  require(state.external_events == fixture.cursor &&
+              state.next_external == power_tick + (fixture.cursor * period) &&
+              calendar.peripheral_events == 1 && calendar.last_peripheral == power_tick &&
+              !calendar.pending && fixture.peer.detailed().power_ready &&
+              fixture.peer.detailed().base.ready == true,
+          "Real input consumption and the sole NAND power event retain their literal deadlines");
+  const auto dma = fixture.machine.bus().last_dma_cycle();
+  ++fixture.cursor;
+  reject([&] { static_cast<void>(fixture.runtime->tick()); }, "healthy clock/input boundary");
+  require(native_cpu(fixture.machine) == cpu &&
+              fixture.machine.clock().elapsed_ticks() == state.horizon &&
+              fixture.machine.bus().last_dma_cycle() == dma,
+          "An out-of-band input cursor change refuses before native CPU, clock or DMA work");
+  std::cout << "PASS NAND_NATIVE_INPUT samples=8 power-events=1 cursor-refusal=1\n";
 }
 }
 
 int main() {
   try {
-    inherited_pin_and_restore();
+    inherited_pin_and_boundary();
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

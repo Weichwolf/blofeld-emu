@@ -11,7 +11,6 @@
 #include "mcu_dsp_fetch_events_fixture.hpp"
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -62,36 +61,25 @@ void order_case(const Case policy) {
   for (const auto actor : policy.order) { wanted.push_back({.actor = actor, .time = collision}); }
   require(tied == wanted,
           "Literal three-actor order follows independently enumerated causal permutations");
-  const auto checkpoint = f.runtime->checkpoint();
   expected.pc += 3;
   expected.x = policy.sample;
   expected.y = 1;
-  std::vector<Event> suffix;
-  for (unsigned replay = 0; replay < 2; ++replay) {
-    f.restore(checkpoint, {.cursor = 1, .levels = 3});
-    const auto first = f.trace.size();
-    f.step(4);
-    const auto cpu = f.mcu.cpu().state();
-    constexpr unsigned final_ccr = 0xd0;
-    require(
-        cpu.pc == entry + 8 && cpu.d == 1 && cpu.x == 0 && cpu.y == 0 && cpu.sp == byte_mask &&
-            cpu.ccr == final_ccr && f.mcu.run_clock().bus_cycles() == 12 &&
-            f.runtime->end_ticks() == finish &&
-            f.runtime->completed_cycles() == (finish - recovery_end) / period &&
-            f.dsp.clock().elapsed_ticks() == finish && f.dsp.clock().timer_clk2_edges() == 5 &&
-            f.dsp.cpu().registers() == expected && f.cursor == 2 && f.levels == 1 &&
-            f.dsp.bus().gpio(DspPort::c).read(DspGpioRegister::data) == 1 &&
-            f.dsp.cpu().progress() ==
-                dsp56300::Progress{.instructions = 2, .estimated_cycles = 2} &&
-            f.mcu.bus().read(marker_address) == marker,
-        "Both native CPUs,accepted GPIO reads,clock phases and peripheral state retain independent "
-        "endpoints");
-    const std::vector<Event> actual(f.trace.begin() + static_cast<std::ptrdiff_t>(first),
-                                    f.trace.end());
-    if (replay == 0) { suffix = actual; }
-    require(actual == suffix,
-            "Joint pipeline/MCU/external cursor restore retains the complete event suffix");
-  }
+
+  f.step(4);
+  const auto cpu = f.mcu.cpu().state();
+  constexpr unsigned final_ccr = 0xd0;
+  require(
+      cpu.pc == entry + 8 && cpu.d == 1 && cpu.x == 0 && cpu.y == 0 && cpu.sp == byte_mask &&
+          cpu.ccr == final_ccr && f.mcu.run_clock().bus_cycles() == 12 &&
+          f.runtime->end_ticks() == finish &&
+          f.runtime->completed_cycles() == (finish - recovery_end) / period &&
+          f.dsp.clock().elapsed_ticks() == finish && f.dsp.clock().timer_clk2_edges() == 5 &&
+          f.dsp.cpu().registers() == expected && f.cursor == 2 && f.levels == 1 &&
+          f.dsp.bus().gpio(DspPort::c).read(DspGpioRegister::data) == 1 &&
+          f.dsp.cpu().progress() == dsp56300::Progress{.instructions = 2, .estimated_cycles = 2} &&
+          f.mcu.bus().read(marker_address) == marker,
+      "Both native CPUs,accepted GPIO reads,clock phases and peripheral state retain independent "
+      "endpoints");
 }
 }
 

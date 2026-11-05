@@ -29,28 +29,12 @@ struct NandNativeState {
   bool operator==(const NandNativeState &) const = default;
 };
 
-class NandNativeCheckpoint {
-public:
-  NandNativeCheckpoint(const NandNativeCheckpoint &) = default;
-  NandNativeCheckpoint &operator=(const NandNativeCheckpoint &) = default;
-  ~NandNativeCheckpoint();
-
-private:
-  friend class NandNativeRun;
-  struct Storage;
-  explicit NandNativeCheckpoint(std::shared_ptr<const Storage> storage);
-  std::shared_ptr<const Storage> storage_;
-};
-
 // Test-only reference order: inherited input, NAND deadline, actual own-core
 // effect/F2 cycle, then resulting GPIO observations. No silicon phase claim.
 class NandNativeRun {
 public:
   NandNativeRun(OwnDspMachine &machine, NandPeer &peer, NandPeerEvents inherited);
   [[nodiscard]] OwnDspFetchCycleResult tick();
-  [[nodiscard]] NandNativeCheckpoint checkpoint() const;
-  // Restore the peer payload first. External input cursors remain caller-owned.
-  void restore(const NandNativeCheckpoint &snapshot);
   [[nodiscard]] PeripheralCalendarState peripheral_state() const;
   [[nodiscard]] NandNativeState state() const;
 
@@ -64,7 +48,6 @@ private:
   NandNativeState state_;
   PeripheralCalendar calendar_;
   std::unique_ptr<OwnDspTimeline> timeline_;
-  const std::shared_ptr<const bool> lifetime_ = std::make_shared<const bool>(true);
   bool faulted_ = false;
 };
 }

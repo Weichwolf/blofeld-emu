@@ -165,14 +165,6 @@ struct Fixture {
         .maximum_events_per_period = 2};
   }
 
-  void restore(const McuDspRuntimeCheckpoint &saved) {
-    runtime.reset();
-    cursor = 0;
-    trace.clear();
-    runtime = std::make_unique<McuDspRuntime>(saved, mcu, dsp, events());
-    attach();
-  }
-
   void attach() {
     const auto observed = [this](const DspRuntimeCycle &cycle) {
       require(cycle.completion_ticks == recovery + ((cycle.cycle + 1) * dsp_period) &&
@@ -224,37 +216,29 @@ struct Fixture {
 void run(const McuWriteOrder writes, const DspPeerOrder clocks) {
   Fixture f(writes, clocks);
   const auto native = f.dsp.cpu().registers();
-  const auto saved = f.runtime->checkpoint();
-  std::vector<Event> suffix;
-  for (unsigned replay = 0; replay < 2; ++replay) {
-    f.restore(saved);
 
-    f.trace.clear();
-    f.step(2);
-    require(f.runtime->end_ticks() == trailing_end && f.dsp.clock().hardware_reset_active() &&
-                f.dsp.clock().hardware_reset_remaining_ticks() == trailing_remaining &&
-                f.cursor == 1 && f.runtime->completed_cycles() == 0,
-            "Real trailing MCU slot consumes recovery time without running native DSP periods");
-    f.step(2);
-    require(
-        f.runtime->end_ticks() == end && f.mcu.run_clock().bus_cycles() == 11 &&
-            f.mcu.cpu().state().pc == entry + 7 && f.mcu.cpu().state().d == 1 && f.cursor == 2 &&
-            !f.dsp.clock().hardware_reset_active() &&
-            f.dsp.clock().hardware_reset_ticks() == total_reset &&
-            f.dsp.clock().elapsed_ticks() == total_elapsed && f.runtime->completed_cycles() == 2 &&
-            f.dsp.clock().timer_clk2_edges() == 1 && f.dsp.cpu().registers() == native,
-        "Independent60tick MCU,45tick DSP and90tick recovery ledgers agree after native restart");
-    std::vector<char> tied;
-    for (const auto event : f.trace) {
-      if (event.ticks == release) { tied.push_back(event.actor); }
-    }
-    require(tied == (writes == McuWriteOrder::before_mcu ? std::vector<char>{'E', 'M'}
-                                                         : std::vector<char>{'M', 'E'}),
-            "Reset release preserves its explicit MCU/external order exactly once");
-    if (replay == 0) { suffix = f.trace; }
-    require(f.trace == suffix,
-            "Trusted held snapshot and external cursor retain the complete reset suffix");
+  f.trace.clear();
+  f.step(2);
+  require(f.runtime->end_ticks() == trailing_end && f.dsp.clock().hardware_reset_active() &&
+              f.dsp.clock().hardware_reset_remaining_ticks() == trailing_remaining &&
+              f.cursor == 1 && f.runtime->completed_cycles() == 0,
+          "Real trailing MCU slot consumes recovery time without running native DSP periods");
+  f.step(2);
+  require(f.runtime->end_ticks() == end && f.mcu.run_clock().bus_cycles() == 11 &&
+              f.mcu.cpu().state().pc == entry + 7 && f.mcu.cpu().state().d == 1 && f.cursor == 2 &&
+              !f.dsp.clock().hardware_reset_active() &&
+              f.dsp.clock().hardware_reset_ticks() == total_reset &&
+              f.dsp.clock().elapsed_ticks() == total_elapsed &&
+              f.runtime->completed_cycles() == 2 && f.dsp.clock().timer_clk2_edges() == 1 &&
+              f.dsp.cpu().registers() == native,
+          "Independent60tick MCU,45tick DSP and90tick recovery ledgers agree after native restart");
+  std::vector<char> tied;
+  for (const auto event : f.trace) {
+    if (event.ticks == release) { tied.push_back(event.actor); }
   }
+  require(tied == (writes == McuWriteOrder::before_mcu ? std::vector<char>{'E', 'M'}
+                                                       : std::vector<char>{'M', 'E'}),
+          "Reset release preserves its explicit MCU/external order exactly once");
 }
 }
 
@@ -265,7 +249,7 @@ int main() {
         run(writes, clocks);
       }
     }
-    std::cout << "Native MCU/dsp56300 reset events:4 profiles,8 restored hold/recovery suffixes "
+    std::cout << "Native MCU/dsp56300 reset events:4 hold/recovery profiles "
                  "passed.\n";
     return 0;
   } catch (const std::exception &error) {

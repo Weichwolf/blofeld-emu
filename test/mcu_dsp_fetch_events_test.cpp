@@ -9,7 +9,7 @@ int main() {
     blofeld::test::joint_events::guard_cases();
     blofeld::test::joint_events::order_cases();
     blofeld::test::joint_events::early_events();
-    std::cout << "Native MCU/dsp56300 events:20 cases,12 positive and10 refusal suffixes passed.\n";
+    std::cout << "Native MCU/dsp56300 event order, causality and refusal checks passed.\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

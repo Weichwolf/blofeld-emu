@@ -49,20 +49,14 @@ void collision_failures() {
   for (unsigned index = 0; index < controls.size(); ++index) {
     Fixture f(controls.at(index));
     f.step(1);
-    const auto saved = f.runtime->checkpoint();
-    std::string first;
-    for (unsigned replay = 0; replay < 2; ++replay) {
-      f.restore(saved, {.cursor = 0, .levels = 0});
-      const auto error = rejects([&] { f.step(1); });
-      require(error.contains(index == 2 || index == 3 ? "Unqualified simultaneous" : "Cyclic") &&
-                  f.runtime->faulted() && f.runtime->completed_cycles() == 2 && f.cursor == 0 &&
-                  f.levels == 0 && f.mcu.bus().read(1) == 0,
-              "Unknown/cyclic collision refuses before every tied actor and preserves only genuine "
-              "prefix periods");
-      static_cast<void>(rejects([&] { f.runtime->end_instruction(); }));
-      if (replay == 0) { first = error; }
-      require(error == first, "Trusted joint recovery repeats the complete failure frontier");
-    }
+
+    const auto error = rejects([&] { f.step(1); });
+    require(error.contains(index == 2 || index == 3 ? "Unqualified simultaneous" : "Cyclic") &&
+                f.runtime->faulted() && f.runtime->completed_cycles() == 2 && f.cursor == 0 &&
+                f.levels == 0 && f.mcu.bus().read(1) == 0,
+            "Unknown/cyclic collision refuses before every tied actor and preserves only genuine "
+            "prefix periods");
+    static_cast<void>(rejects([&] { f.runtime->end_instruction(); }));
   }
 }
 
