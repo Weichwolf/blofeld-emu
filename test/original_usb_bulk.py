@@ -55,7 +55,7 @@ def main():
     report.write_text(json.dumps({"passed": True, **totals,
                                   "DEVLIST_sha256": hashlib.sha256(reply.read_bytes()).hexdigest(),
                                   "scope": "Conditional untimed MCU original startup/USB/TCP/peer; no coupled DSP synthesis, kernel attachment, physical timing or complete instrument qualification",
-                                  "fuzz": False, "physical_traffic": False}, indent=2) + "\n")
+                                  "physical_traffic": False}, indent=2) + "\n")
     print("Original firmware TCP discovery/import, two bulk OUT notes, six native peer bytes, "
           "initial IN ZLP/ACK and three actual completion IRQs verified.")
     return 0

@@ -47,7 +47,7 @@ Legacy DSP test harness only (not the regular runtime):
   The reference data-bus patch also corrects scaled selected-source S growth
   from DSP56300FM 5-13; numeric transfer operations and notices stay intact.
   Remaining component tests use this legacy reference harness during migration.
-  BUILD_TESTING=OFF with fuzzing disabled neither configures nor builds it.
+  BUILD_TESTING=OFF neither configures nor builds it.
 
 Native session audio client:
   PulseAudio 17.0 client, upstream authors and contributors.

@@ -60,7 +60,7 @@ def main():
                 hardware_equivalence=False,physical_timing_qualified=False,actual_ICG_rate_established=False,
                 declared_ADC=dict(bus_hz=12000000,supply_uv=3300000,channel0_uv=0),declared_timer_phases=[0,127],
                 trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
-                input_sha256={str(path):value for path,value in pins.items()},fuzz_execution=False,physical_traffic=False)
+                input_sha256={str(path):value for path,value in pins.items()},physical_traffic=False)
     trace.with_suffix('.json').write_text(json.dumps(report,indent=2)+'\n')
     print('Verified unmodified original reset through production foreground/SPI ownership with strict inputs and FSTAT refusal.')
     return 0

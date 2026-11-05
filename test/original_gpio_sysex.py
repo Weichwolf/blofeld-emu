@@ -205,7 +205,7 @@ def main():
     totals = validate(report.read_text(), trace.read_text(), expected_spares)
     controls = negative_controls(report.read_text(), trace.read_text(), expected_spares)
     receipt.write_text(json.dumps(dict(passed=True, **totals, fixed_oracle_corruptions=controls,
-        board_qualified=False, full_boot=False, original_enumeration=False, fuzz_execution=False,
+        board_qualified=False, full_boot=False, original_enumeration=False,
         physical_traffic=False, padding_is_observed_caller_state=True,
         scope='Original Sound store/notify/real policy and DeviceID requests/SNDP chunk sender, '
               'native SCI and actual USB endpoint ACK/IRQ. Disabled and unmapped CC-only paths '

@@ -107,7 +107,7 @@ def synthetic():
     finally:
         wpc.MAX_BYTES = old_limit
     require(wpc.catalogue(data) == (programs, samples), 'Checks must not mutate decoded input')
-    print('Verified own WPC key/PCM/loop spans and 22 directed rejection controls; no fuzzing.')
+    print('Verified own WPC key/PCM/loop spans and 22 directed rejection controls.')
 
 
 def reference(output):
@@ -124,7 +124,7 @@ def reference(output):
     observed = wpc.summary(programs, samples)
     require(json.loads(json.dumps(observed)) == manifest['catalogue'],
             'Changed pinned original WPC catalogue/PCM identity')
-    output.write_text(json.dumps(dict(passed=True, **observed, fuzz_execution=False,
+    output.write_text(json.dumps(dict(passed=True, **observed,
                                      physical_traffic=False,
                                      qualification='Logical original Spectre WPC catalogue/PCM '
                                      'identities only; no native client execution, physical NAND '

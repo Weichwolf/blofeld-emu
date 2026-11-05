@@ -57,7 +57,7 @@ def main():
                                   "firmware_zip_sha256": hashlib.sha256(firmware.read_bytes()).hexdigest(),
                                   "trace_sha256": hashlib.sha256(trace.read_bytes()).hexdigest(),
                                   "scope": "Conditional native DSP setup/clear/ready callbacks with authored caller and declared no-interference inputs; not connected instrument, hardware invalid-domain AGU or audio timing qualification",
-                                  "fuzz": False, "physical_traffic": False}, indent=2) + "\n")
+                                  "physical_traffic": False}, indent=2) + "\n")
     print("Original Reverb: 48 firmware-pointer clear calls then two ready calls per scene; "
           "18 scenes, 864 clears, 900 actual callback RTS returns and 432 real X reads. "
           "Cursor16000 and the first actual discarded store are preserved.")

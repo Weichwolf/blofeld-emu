@@ -91,7 +91,7 @@ def main():
     totals = validate(text, xdata, ydata, program, reference)
     negative_controls(text, xdata, ydata, program, reference)
     report.write_text(json.dumps({'passed': True, 'streams': 32, **totals,
-                                  'serial_negative_controls': 2, 'fuzz_execution': False,
+                                  'serial_negative_controls': 2,
                                   'physical_audio': False,
                                   'scope': 'Unchanged original voice/copy/mix/master to finite DMA '
                                   'and ESAI_1 pins/PCM. Own native setup, paused core, explicit '

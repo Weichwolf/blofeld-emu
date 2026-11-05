@@ -160,7 +160,7 @@ def main():
     report.write_text(json.dumps({'passed': True, 'iterations': 32, **totals,
                                   'active_transitions': 16, 'settled_transitions': 16,
                                   'idle_iterations': 256, 'idle_controller_messages': 32,
-                                  'oracle_negative_controls': 8, 'fuzz_execution': False,
+                                  'oracle_negative_controls': 8,
                                   'physical_traffic': False,
                                   'scope': 'One real original foreground iteration per declared '
                                   'Effects Off context. Original MIDI, voice and scheduler '

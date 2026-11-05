@@ -167,7 +167,7 @@ def playback(binary, firmware, artifacts, directory, xdata, ydata, program,
                 'release_midi': release, 'sustain_midi': sustain,
                 'monitor_negative_controls': count, 'monitor_offsets_bytes': offsets,
                 'reference_sample_rate': 48000, 'reference_timebase': 24576000,
-                'fuzz_execution': False, 'physical_audio': False,
+                'physical_audio': False,
                 'scope': f'{count} independently initialized original foreground/repeating DMA/'
                 'ESAI sources, each delivering real decoded frames directly to its own '
                 'source-owned AudioRuntime and exact private monitor. Explicit untimed '

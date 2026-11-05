@@ -156,7 +156,7 @@ def reference_check(report_path):
         rejects(lambda row=row: pages.page(row), 'Unknown declared sample page')
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(dict(passed=True, **summary, scope=reference['qualification'],
-                                         fuzz_execution=False, physical_traffic=False), indent=2)+'\n')
+                                         physical_traffic=False), indent=2)+'\n')
     print('Verified original MIDI declared page map, logical catalogue/PCM and explicit unresolved references')
     return 0
 

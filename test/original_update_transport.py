@@ -191,7 +191,7 @@ def main():
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         main_first_additional_address=0x144b9, main_additional_words=2,
         full_boot=False, complete_update=False, helper_bodies_executed=False,
-        fuzz_execution=False, physical_traffic=False,
+        physical_traffic=False,
         scope='Six isolated original DSP command transfers with exact official packet bodies '
               'in a declared high-aligned input buffer and own linear/unscaled native caller. '
               'Original RAM stores, live patches, full padding words, sequence wrap, packet-boundary '

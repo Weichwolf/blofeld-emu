@@ -92,7 +92,7 @@ def main():
                   trace_sha256=digest(trace), original_instruction_bytes_modified=False,
                   host_instruction_or_PC_substitution=False, full_controller_boot=False,
                   physical_matrix_or_clock_qualified=False, host_MIDI_audio=False,
-                  hardware_equivalence=False, fuzz_execution=False, physical_traffic=False)
+                  hardware_equivalence=False, physical_traffic=False)
     trace.with_suffix('.json').write_text(json.dumps(report, indent=2)+'\n')
     print(f'Verified original {profile} stores and fresh CPU/SPI/ADC checkpoint suffixes.')
     return 0

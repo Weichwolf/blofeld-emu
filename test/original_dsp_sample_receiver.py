@@ -94,7 +94,7 @@ def main():
         'fault_cuts': [0, 1, 71, 72, 527], 'trusted_replays': 10,
         'input_sha256': hashlib.sha256(inputs.read_bytes()).hexdigest(),
         'trace_sha256': hashlib.sha256(trace.read_bytes()).hexdigest(),
-        'scope': reference['qualification'], 'fuzz_execution': False, 'physical_traffic': False,
+        'scope': reference['qualification'], 'physical_traffic': False,
     }, indent=2) + '\n')
     print('Verified136 original GPIO page receives,100 real preparation/refill/sample paths, '
           '36 native silent callbacks and five partial-byte faults with ten trusted replays.')

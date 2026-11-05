@@ -109,7 +109,7 @@ def main():
         handler_PC_or_frame_injected=False, instruction_queue_consumption_qualified=False,
         physical_clock_or_bus_phase_qualified=False, full_controller_boot_qualified=False,
         full_update_recovery_qualified=False, native_DSP_firmware_executed=False,
-        firmware_modified=False, fuzz_execution=False, physical_traffic=False,
+        firmware_modified=False, physical_traffic=False,
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         input_sha256={str(p): sha for p, sha in frozen.items()})
     trace.with_suffix('.json').write_text(json.dumps(report, indent=2)+'\n')

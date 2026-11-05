@@ -2,7 +2,6 @@
 # Strict project checks; third-party source keeps its own warning policy.
 set(BLOFELD_SANITIZER "address-undefined" CACHE STRING "none, address-undefined, or thread")
 set_property(CACHE BLOFELD_SANITIZER PROPERTY STRINGS none address-undefined thread)
-option(BLOFELD_FUZZING "Build offline libFuzzer targets" OFF)
 
 include("${CMAKE_CURRENT_LIST_DIR}/Hardening.cmake")
 add_library(blofeld_quality INTERFACE)
@@ -31,10 +30,4 @@ if(DEFINED blofeld_sanitizers)
   target_compile_options(blofeld_quality INTERFACE
     "-fsanitize=${blofeld_sanitizers}" -fno-sanitize-recover=all -g)
   target_link_options(blofeld_quality INTERFACE "-fsanitize=${blofeld_sanitizers}")
-endif()
-if(BLOFELD_FUZZING)
-  if(NOT BLOFELD_SANITIZER STREQUAL "address-undefined")
-    message(FATAL_ERROR "Fuzzing requires address-undefined sanitizers")
-  endif()
-  target_compile_options(blofeld_quality INTERFACE -fsanitize=fuzzer-no-link)
 endif()

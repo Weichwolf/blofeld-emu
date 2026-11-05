@@ -47,7 +47,7 @@ def main():
                         "inputs": item["files"], "output": identity(target)})
     (output / "verification.json").write_text(json.dumps({
         "scope": record["scope"], "binary": frozen_binary, "regressions": reports,
-        "fuzz_execution": False, "physical_traffic": False}, indent=2) + "\n")
+        "physical_traffic": False}, indent=2) + "\n")
     print("Both fixed native operand regressions reject before host UB with exact PC/OMR/control.")
     return 0
 

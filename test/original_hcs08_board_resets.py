@@ -76,7 +76,7 @@ def main():
                   declared_ADC=dict(bus_hz=12000000, supply_uv=3300000, channel0_uv=0),
                   declared_timer_phase=0, actual_ICG_rate_established=False,
                   physical_reset_timing_qualified=False, original_code_modified=False,
-                  fuzz_execution=False, physical_traffic=False,
+                  physical_traffic=False,
                   input_sha256={str(path): digest for path, digest in pins.items()})
     trace.with_suffix('.json').write_text(json.dumps(report, indent=2) + '\n')
     print('Verified original warm/cold board reset cuts with strict physical-input limits.')

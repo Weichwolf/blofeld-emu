@@ -64,7 +64,7 @@ def main():
         NVM_unchanged=True, NVM_operating_rate_supplied=False,
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         full_boot=False, clock_status_qualified=False, physical_timing_qualified=False,
-        physical_traffic=False, fuzz_execution=False), indent=2)+'\n')
+        physical_traffic=False, ), indent=2)+'\n')
     print('Verified original FLASH/GPIO/ICG startup and strict clock-status boundary.')
     return 0
 

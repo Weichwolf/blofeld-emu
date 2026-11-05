@@ -41,7 +41,7 @@ def main():
     trace.write_text(result.stdout)
     report = dict(passed=True, retired=6197, endpoint_pc=0xe1ca, untimed=True,
                   full_boot=False, hardware_equivalence=False, original_code_modified=False,
-                  ICG_ready_or_rate_supplied=False, fuzz_execution=False, physical_traffic=False,
+                  ICG_ready_or_rate_supplied=False, physical_traffic=False,
                   input_sha256={str(path): digest for path, digest in pins.items()})
     trace.with_suffix('.json').write_text(json.dumps(report, indent=2) + '\n')
     print('Verified conservative original ICG status and strict live timer frontier.')

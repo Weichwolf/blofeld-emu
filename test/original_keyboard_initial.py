@@ -272,7 +272,7 @@ def main():
     trace.with_suffix('.json').write_text(json.dumps(dict(passed=True, **totals,
         fixed_oracle_corruptions=corruptions, frame_sha256=FRAME_SHA256,
         independent_assembler=provenance, trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
-        full_boot=False, complete_update=False, controller_executed=False, fuzz_execution=False,
+        full_boot=False, complete_update=False, controller_executed=False,
         physical_traffic=False, scope='Original first Keyboard packet bodies, sender, XIRQ/resident '
         'copy/display-helper/return and two restored resident trailer suffixes. Explicit caller, '
         'reset LCD, logical Port-C bias, clocks/routes/pads; no full SMF interleaving, later '

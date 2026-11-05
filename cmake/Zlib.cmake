@@ -54,9 +54,6 @@ function(blofeld_add_zlib)
       "-fsanitize=${blofeld_dependency_sanitizers}" -fno-sanitize-recover=all
       -fno-omit-frame-pointer -g)
   endif()
-  if(BLOFELD_FUZZING)
-    target_compile_options(zlibstatic PRIVATE -fsanitize=fuzzer-no-link)
-  endif()
 endfunction()
 
 blofeld_add_zlib()

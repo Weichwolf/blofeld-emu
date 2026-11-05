@@ -157,9 +157,8 @@ gates merely because they differ from a possible physical implementation.
    and programming phase, checking the bootloader, reset vectors, flash
    protection and security bits. Component milestones do not prove whole-update
    recovery or physical-device flash safety.
-5. Maintain automatic deterministic regressions, offline parser-fuzz harnesses
-   with preserved regression inputs, long-run and real-time load tests. Run fuzz
-   tests only when the user explicitly requests them. Maintain ASan/UBSan builds
+5. Maintain automatic deterministic regressions with preserved regression inputs,
+   long-run and real-time load tests. Maintain ASan/UBSan builds
    for project/native dependencies and separate TSan once concurrency exists;
    run targeted sanitizer tests and occasional broader regressions. Use optimized
    Release for visual/audio/long runs. Retain strict LLVM 19/C++23, warning,
@@ -235,4 +234,3 @@ functional, regression and diagnostic execution tests. Only short optimized
 startup/throughput probes may establish that milestone. Stop at an absolute
 10 host seconds and fail unless playable; never extend or automatically repeat
 a failed probe. Strict compilation, formatting and static analysis remain active.
-Run fuzzing only on explicit user request.

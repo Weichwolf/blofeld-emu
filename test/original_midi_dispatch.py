@@ -72,7 +72,7 @@ def main():
         print(result.stdout + result.stderr)
         return result.returncode
     report.write_text(json.dumps({"passed": True, **validate(result.stdout), "scope": reference["qualification"],
-                                  "fuzz_execution": False, "physical_traffic": False}, indent=2) + "\n")
+                                  "physical_traffic": False}, indent=2) + "\n")
     print("Verified original MIDI dispatcher, actual queues/IRQs and explicit native caller replays.")
     return 0
 

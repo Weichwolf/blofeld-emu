@@ -125,7 +125,7 @@ void run(const Inputs &inputs) {
           "Every file byte reaches original handlers without modifying any NVM state");
   std::cout << "Eight host-file bytes reached actual original SCI/ISR/RTI/main-WAI from the "
                "conditional untimed cold-start fixture. No live device, scheduled board, complete "
-               "message processing, DSP/audio, physical timing or fuzzing claim.\n";
+               "message processing, DSP/audio, physical timing claim.\n";
 }
 }
 

@@ -1181,7 +1181,7 @@ void run(const Inputs &inputs) {
          "packet admission retains raw NISOF and raises real completion IRQs. All ordinary/overrun "
          "SETUP profiles execute retained-byte reads, real data/status ACK and native "
          "completion IRQs/RTI/WAI. No full board, "
-         "physical USB timing, host USB or fuzzing claim.\n";
+         "physical USB timing, host USB claim.\n";
 }
 }
 

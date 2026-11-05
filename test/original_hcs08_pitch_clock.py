@@ -68,7 +68,7 @@ def validate(text):
 def controls(text):
     examples = [text.rstrip('\n'), text+'EXTRA value=1\n']
     lines = text.splitlines()
-    # Finite directed collector controls, never randomized parser/fuzz traffic.
+    # Finite directed collector controls.
     for tag, field in [('CASE','packet'), ('CASE','tx'), ('CASE','rx'), ('CASE','pc'),
                        ('CASE','filter'), ('CASE','last'), ('CASE','offset'), ('CASE','emitted'),
                        ('CLOCK','periods'), ('CLOCK','instructions'), ('CLOCK','retired'),
@@ -122,7 +122,7 @@ def main():
                   collector_controls=negative,observed_poll_period_range=[min(c['periods'] for c in clocks),
                   max(c['periods'] for c in clocks)],physical_clock_or_SPI_timing_qualified=False,
                   boot_origin_calibration=False,native_DSP_firmware_executed=False,full_boot=False,
-                  physical_traffic=False,fuzz_execution=False,
+                  physical_traffic=False,
                   trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
                   input_sha256={str(p):d for p,d in frozen.items()})
     trace.with_suffix('.json').write_text(json.dumps(report,indent=2)+'\n')

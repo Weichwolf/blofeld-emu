@@ -52,7 +52,7 @@ def main():
         "dependent_blocks": len(streams), "dependent_streams": 6,
         "total_calls": totals[0][0], "restores": totals[0][1], "strict_failures": totals[0][2],
         "independent_output_words": totals[0][0] * 32,
-        "scope": reference["qualification"], "fuzz_execution": False,
+        "scope": reference["qualification"],
         "physical_audio": False}, indent=2) + "\n")
     print("Verified 6169 unmodified master-output calls, 197408 independent words, six dependent "
           "streams, 18 restores and five strict read failures; no boot or physical audio claim.")

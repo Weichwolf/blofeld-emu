@@ -235,7 +235,7 @@ def main():
     receipt.write_text(json.dumps(dict(
         passed=True, **totals, frame_sha256=FRAME_SHA256, fixed_oracle_corruptions=fixed,
         full_boot=False, complete_update=False, helper_returned=False,
-        fuzz_execution=False, physical_traffic=False,
+        physical_traffic=False,
         scope='Actual original DSP error delivery and MCU helper drawing after own native '
               'LCD GPIO/display setup. Independent original-font raster and clear/text/stream '
               'effects; strict first missing post-object Y144b9 read quarantines both owners. '

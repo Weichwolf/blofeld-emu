@@ -81,7 +81,7 @@ def main():
         return result.returncode
     totals = validate(result.stdout)
     report.write_text(json.dumps({"passed": True, **totals, "scope": reference["qualification"],
-                                  "fuzz_execution": False, "physical_traffic": False}, indent=2) + "\n")
+                                  "physical_traffic": False}, indent=2) + "\n")
     print("Verified original MIDI forwarding through real UART/USB queues, IRQs and joint restores.")
     return 0
 

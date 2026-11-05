@@ -187,7 +187,7 @@ def main():
         full_boot=False, complete_update=False, full_caller_history=False,
         physical_timing_qualified=False, active_background_BUSCLK_qualified=False,
         original_reset_SYNC_executed=False, full_DSP_transport=False,
-        hardware_equivalence=False, physical_traffic=False, fuzz_execution=False,
+        hardware_equivalence=False, physical_traffic=False,
         input_sha256={str(p): pin for p, pin in frozen.items()},
         scope='Original HC12 post-display prepare/complete RAM upload, original byte buffer helpers '
         'and contiguous pointer/PC/SP/GO/start-poll code through actual GPIO/BDC into native HCS08. '

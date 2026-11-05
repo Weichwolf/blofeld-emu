@@ -124,7 +124,7 @@ def main():
                                   'native_reduced_drive_setup': True,
                                   'native_input_pull_setup': True,
                                   'reduced_drive_output_mask': 255,
-                                  'fuzz_execution': False, 'physical_traffic': False,
+                                  'physical_traffic': False,
                                   'scope': 'Unmodified original MCU request/strobe helpers after '
                                   'the original clock prefix and isolated native drive-setup '
                                   'suffix, with explicit caller/RAM and '

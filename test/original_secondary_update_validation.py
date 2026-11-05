@@ -145,7 +145,7 @@ def main():
         raise ValueError('Secondary validation input identity changed')
     report.write_text(json.dumps(dict(
         passed=True, cases=len(CASES), **totals, checksummed_words=COUNT, extra_prefetch_words=1,
-        fixed_oracle_corruptions=7, fuzz_execution=False, physical_traffic=False,
+        fixed_oracle_corruptions=7, physical_traffic=False,
         scope='Unchanged original secondary checksum instructions after declared '
               'post-identification entry. Own native caller/register/RAM context; no preceding '
               'GPIO/NAND identification, delay, programming, helper transfer or complete update '

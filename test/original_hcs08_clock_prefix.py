@@ -74,7 +74,7 @@ def main():
                   fresh_bounded_joint_replays=2, collector_controls=rejected,
                   whole_original_resets=4, original_code_modified=False,
                   actual_ICG_rate_established=False, physical_timing_qualified=False,
-                  fuzz_execution=False, physical_traffic=False,
+                  physical_traffic=False,
                   input_sha256={str(path): digest for path, digest in pins.items()},
                   trace_sha256=hashlib.sha256(result.stdout.encode()).hexdigest())
     trace.with_suffix('.json').write_text(json.dumps(report, indent=2) + '\n')

@@ -63,7 +63,7 @@ def main():
         smf_channel_events_executed=False, hc12_objects=reference['hc12_objects'],
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         full_boot=False, complete_update=False, helper_bodies_executed=False,
-        keyboard_controller_executed=False, fuzz_execution=False, physical_traffic=False,
+        keyboard_controller_executed=False, physical_traffic=False,
         scope='Four isolated original keyboard update transfers through the stock1.25 DSP '
               'command handler with declared input buffer and own linear/unscaled native caller. '
               'Actual destination stores, complete padding, live instruction patches, sequence '

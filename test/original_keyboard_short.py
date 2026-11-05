@@ -95,7 +95,7 @@ def main():
               'message copies, under declared linear/unscaled callers and stale RAM. No wire '
               'timing, interleaved sender/helper transaction, complete update, controller '
               'execution, full boot or hardware-equivalence qualification.',
-        fuzz_execution=False, physical_traffic=False), indent=2) + '\n')
+        physical_traffic=False), indent=2) + '\n')
     print('Verified144 original raw messages, deferred secondary F7 and strict stale overreads.')
     return 0
 

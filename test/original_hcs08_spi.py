@@ -95,7 +95,7 @@ def main():
         transmitted_bytes=24,received_bytes=24,DSP24_bit_words=8,collector_controls=negative,
         own_IRQ_frame=True,actual_CPU_IRQ_entry=False,physical_wiring_qualified=False,
         physical_timing_qualified=False,ICG_clock_supplied=False,full_boot=False,
-        native_DSP_firmware_executed=False,firmware_modified=False,fuzz_execution=False,
+        native_DSP_firmware_executed=False,firmware_modified=False,
         physical_traffic=False,hardware_equivalence=False,
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         input_sha256={str(p): sha for p, sha in frozen.items()},

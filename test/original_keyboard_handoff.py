@@ -123,7 +123,7 @@ def main():
     receipt.write_text(json.dumps(dict(passed=True, **counts, fixed_oracle_corruptions=corruptions,
         independent_assembler=provenance, trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         full_boot=False, complete_update=False, external_controller_executed=False,
-        fuzz_execution=False, physical_traffic=False,
+        physical_traffic=False,
         scope='Original two stage2 packet bodies, DSP sender, XIRQ/resident MCU copy/JSR and '
               'initial helper checksum-word receiver calls on one clocked pair. Own callers, '
               'declared clocks/routes/pads; no stage1/short-message outer dispatch, controller '

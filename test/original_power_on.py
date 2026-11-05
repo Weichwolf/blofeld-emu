@@ -54,7 +54,7 @@ def main():
     report.write_text(json.dumps({"passed": True, **totals, "binary_sha256": digest,
                                  "scope": reference["qualification"],
                                  "complete_instrument_boot": False,
-                                 "fuzz_execution": False, "physical_traffic": False}, indent=2) + "\n")
+                                 "physical_traffic": False}, indent=2) + "\n")
     print("Verified two original MCU bootstrap suffixes from held POR with a held DSP; "
           "laboratory inputs, full instrument boot remains open.")
     return 0

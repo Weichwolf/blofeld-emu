@@ -58,7 +58,7 @@ Configure/build use verified local dependency inputs. Ccache is selected when
 available. Release retains strict compiler and static-analysis checks; `strict`
 uses ASan/UBSan and `thread` uses separate TSan. Until real-time operation is
 established, execution tests are suspended; only optimized startup/throughput
-probes of at most 10 host seconds are allowed. Fuzzing requires an explicit request.
+probes of at most 10 host seconds are allowed.
 
 ## Local references
 

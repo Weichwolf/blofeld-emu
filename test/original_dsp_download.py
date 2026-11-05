@@ -89,7 +89,7 @@ def main():
         "passed": True, "cases": 144, "calls": 1240, "observed_steps": int(totals[0]),
         "prefetches": 1088, "target_stores": 96, "launches": 6, "records": selected,
         "independent_assembler": provenance, "trace_sha256": hashlib.sha256(trace.read_bytes()).hexdigest(),
-        "fuzz_execution": False, "physical_traffic": False,
+        "physical_traffic": False,
         "qualification": "Unchanged original command record with declared linear/unscaled own caller; "
                          "independent full accumulators/header/end arithmetic, exact payload/bank guards, "
                          "self-modification, sequence failure/disabled/wrap/reconfiguration and SC=0 zero groups. "

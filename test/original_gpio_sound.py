@@ -143,7 +143,7 @@ def main():
     totals = validate(text, pin_trace)
     controls = negative_controls(text, pin_trace)
     receipt.write_text(json.dumps(dict(passed=True, **totals, fixed_oracle_corruptions=controls,
-        board_qualified=False, full_boot=False, fuzz_execution=False, physical_traffic=False,
+        board_qualified=False, full_boot=False, physical_traffic=False,
         scope='Declared continuous original MCU/DSP sound write/parser/callback/read path. '
               'One own matching entry, Noise Color accepted, off-grid Octave rejected; actual '
               'notification policy lookup/cache insertion with Ctrl Send disabled. '

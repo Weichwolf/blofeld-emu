@@ -83,7 +83,7 @@ def main():
         passed=True, **counts, reference_alignment=layout,
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         full_boot=False, complete_update=False, keyboard_controller_executed=False,
-        fuzz_execution=False, physical_traffic=False,
+        physical_traffic=False,
         scope='Unchanged1018-byte MCU helper under an own native caller and declared GPIO/OSC/TIM '
               'conditions. Four actual six-bit pin reads and three original byte returns; '
               'independent byte/cache/frame expectations and native delay-instruction checks. '

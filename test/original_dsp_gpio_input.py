@@ -44,7 +44,7 @@ def main():
     report.write_text(json.dumps({
         'passed': True, 'records': reference['records'], **observed,
         'trace_sha256': hashlib.sha256(trace.read_bytes()).hexdigest(),
-        'qualification': reference['qualification'], 'fuzz_execution': False,
+        'qualification': reference['qualification'],
         'physical_traffic': False}, indent=2) + '\n')
     print('Verified 255 original GPIO input bytes through native IRQA and RTI')
     return 0

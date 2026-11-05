@@ -112,7 +112,7 @@ def playback(binary, firmware, trace, directory, xdata, ydata, program, referenc
             return {'passed': True, **native, 'host_streams': len(offsets),
                     'exact_host_frames': 4096, 'monitor_offsets_bytes': offsets,
                     'reference_sample_rate': 48000, 'reference_timebase': 24576000,
-                    'fuzz_execution': False, 'physical_audio': False,
+                    'physical_audio': False,
                     'scope': 'Offline original synthesis/DMA/ESAI captures through AudioRuntime '
                     'to a private no-rewind service monitor. Declared reference clock; '
                     'full boot, live MIDI, realtime production and physical rate remain open.'}

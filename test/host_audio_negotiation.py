@@ -121,7 +121,7 @@ def main():
             require(all(0 < item["minimum_request"] <= item["target"]
                         for case in results for item in case["snapshots"]),
                     "The service must resolve automatic request granularity to a usable grant")
-            result = {"cases": results, "fuzz_execution": False, "physical_audio": False,
+            result = {"cases": results, "physical_audio": False,
                       "original_firmware_audio_qualified": False}
             (directory / "result.json").write_text(json.dumps(result, indent=2) + "\n")
             print(json.dumps(result, indent=2))

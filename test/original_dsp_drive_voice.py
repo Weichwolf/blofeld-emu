@@ -89,7 +89,7 @@ def main():
     totals = validate(trace.read_text(), xdata, ydata, reference)
     report.write_text(json.dumps({'passed': True, 'scope': reference['qualification'],
                                   'streams': reference['streams'], **totals,
-                                  'fuzz_execution': False, 'physical_traffic': False}, indent=2) + '\n')
+                                  'physical_traffic': False}, indent=2) + '\n')
     print('Verified complete original nonzero-Drive voices; full boot, live MIDI/PCM and physical timing remain open.')
     return 0
 

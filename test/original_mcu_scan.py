@@ -94,7 +94,7 @@ def main():
     totals = validate(trace.read_text())
     report.write_text(json.dumps({"passed": True, **totals,
                                   "scope": reference["qualification"],
-                                  "fuzz_execution": False, "physical_traffic": False}, indent=2) + "\n")
+                                  "physical_traffic": False}, indent=2) + "\n")
     print(f"Verified {totals['cases']} original delay/scan calls and independent CPU/core-cycle "
           "expectations. No physical timing, full scan, interrupts or boot qualification.")
     return 0

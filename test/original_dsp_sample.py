@@ -177,7 +177,7 @@ def main():
         'native_instructions': count * 36, 'coefficient_reads': count * 8,
         'sample_reads': count * 8, 'input_sha256': hashlib.sha256(vectors_path.read_bytes()).hexdigest(),
         'trace_sha256': hashlib.sha256(trace.read_bytes()).hexdigest(),
-        'scope': reference['qualification'], 'fuzz_execution': False, 'physical_audio': False,
+        'scope': reference['qualification'], 'physical_audio': False,
     }, indent=2) + '\n')
     print(f'Verified {count} unchanged native sampler calls, all fractional phases/four banks, '
           '136 official logical PCM sources and independent phase/output/access expectations.')

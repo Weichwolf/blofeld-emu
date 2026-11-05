@@ -96,7 +96,7 @@ def main():
         unknown_input_cases=1, ideal_stable_inputs=True, CPU_instruction_timing_qualified=False,
         boot_origin_CCR_or_clock_supplied=False, physical_ADC_accuracy_qualified=False,
         native_DSP_firmware_executed=False, full_boot=False, physical_traffic=False,
-        fuzz_execution=False, trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
+        trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         input_sha256={str(p): digest for p, digest in frozen.items()}), indent=2)+'\n')
     print('Verified original ADC startup, busy/ready polling and native channel arithmetic.')
     return 0

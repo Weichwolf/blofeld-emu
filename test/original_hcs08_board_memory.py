@@ -66,7 +66,7 @@ def main():
                   full_native_ram_peripheral_endpoint_match=True,
                   reference_retired=6197, endpoint_pc=0xe1ca, untimed=True,
                   collector_controls=rejected, original_code_modified=False, full_boot=False,
-                  hardware_equivalence=False, fuzz_execution=False, physical_traffic=False,
+                  hardware_equivalence=False, physical_traffic=False,
                   input_sha256={str(path): digest for path, digest in pins.items()})
     trace.with_suffix('.json').write_text(json.dumps(report, indent=2) + '\n')
     print('Verified original POR with strict board memory,pad/calibration controls and live-timer gate.')

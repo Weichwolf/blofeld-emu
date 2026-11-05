@@ -131,7 +131,7 @@ def main():
     totals = validate(report.read_text(), trace.read_text())
     controls = negative_controls(report.read_text(), trace.read_text())
     receipt.write_text(json.dumps(dict(passed=True, **totals, fixed_oracle_corruptions=controls,
-        board_qualified=False, full_boot=False, original_enumeration=False, fuzz_execution=False,
+        board_qualified=False, full_boot=False, original_enumeration=False,
         physical_traffic=False, scope='Original Sound writes/notifications create UART bytes; own '
         'native caller invokes original mirror/USB producer. Real modeled IN/retry/ACK drives original '
         'USB ISR/flush while native SCI drains the same bytes. Declared own endpoint/decoder setup '

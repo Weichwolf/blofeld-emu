@@ -122,7 +122,7 @@ def verify(trace):
     return {"scope": "Declared PU0/reset-net source experiment; prior DSP power-on, physical routing/timing and full board boot unqualified",
             "held": held, "held_manual_costs": held_costs, "cases": cases,
             "known_unused_U_inputs_are_laboratory_only": True,
-            "fuzz_execution": False, "physical_traffic": False}
+            "physical_traffic": False}
 
 
 def main():

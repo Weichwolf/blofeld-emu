@@ -195,7 +195,7 @@ def main():
     report.write_text(json.dumps({'passed': True, 'streams': 8, **totals,
                                   'dma_words': 1536, 'decoded_frames': 768,
                                   'held_word_restores': 8, 'oracle_negative_controls': 4,
-                                  'fuzz_execution': False, 'physical_traffic': False,
+                                  'physical_traffic': False,
                                   'scope': 'Original persistent foreground and enabled repeating '
                                   'DMA/ESAI ring. Untimed native access admissions alternate '
                                   'with paused-core serial/grant phases. Effects Off, declared '

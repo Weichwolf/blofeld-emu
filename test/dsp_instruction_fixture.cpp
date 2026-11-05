@@ -78,10 +78,10 @@ void verify_fail_stop(DspCore &cpu) {
     cpu.step();
   } catch (const Fault &error) {
     require(std::string(error.what()).contains("requires reset after a rejected reference step"),
-            "A native fuzz fault must preserve the core's fail-stop contract");
+            "A native instruction fault must preserve the core's fail-stop contract");
     return;
   }
-  throw Fault("Native instruction fuzzing resumed a rejected CPU");
+  throw Fault("Native instruction execution resumed a rejected CPU");
 }
 
 void snapshot_data(DspBus &bus, InstructionResult &result) {

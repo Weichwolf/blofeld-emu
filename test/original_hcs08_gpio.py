@@ -74,7 +74,7 @@ def main():
         original_GPIO_writes=187, known_strap_patterns=16, initial_RAM_unknown=True,
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         full_boot=False, physical_straps_inferred=False, target_part_qualified=False,
-        clock_timing_qualified=False, physical_traffic=False, fuzz_execution=False), indent=2)+'\n')
+        clock_timing_qualified=False, physical_traffic=False, ), indent=2)+'\n')
     print('Verified original GPIO writes and every explicit Port E input pattern.')
     return 0
 

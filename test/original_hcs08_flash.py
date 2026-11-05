@@ -134,7 +134,7 @@ def main():
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         idle_launch_hardware_qualified=False, physical_timing_qualified=False,
         full_boot=False, complete_update=False, BDC_link=False, hardware_equivalence=False,
-        physical_traffic=False, fuzz_execution=False,
+        physical_traffic=False,
         scope='Candidate GT8A peripheral with explicit reference ignore-empty and external instruction-boundary '
         'milestones. Default idle launch remains a visible failure. Own complete preimage and declared '
         'debug/RAM entries; no BDC/HC12 transfer, calibrated clock/voltage, physical corruption bounds or '

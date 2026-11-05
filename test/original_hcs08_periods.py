@@ -76,7 +76,7 @@ def main():
         periods=22673, retired=6188, fresh_joint_replays=6, collector_controls=rejected,
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         physical_frequency_supplied=False, ICG_status_supplied=False,
-        full_boot=False, physical_traffic=False, fuzz_execution=False), indent=2)+'\n')
+        full_boot=False, physical_traffic=False, ), indent=2)+'\n')
     print('Verified original controller bus-period budgets and strict ICG status frontier.')
     return 0
 

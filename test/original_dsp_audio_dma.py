@@ -160,7 +160,7 @@ def main():
         fixed_collector_corruptions=mutations,
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         full_boot=False, original_complete_initialization=False, physical_traffic=False,
-        fuzz_execution=False, automatic_core_dma_timing=False,
+        automatic_core_dma_timing=False,
         scope='Two unchanged original DMA-enable instructions, own native configuration caller, '
               'declared source ring and coherent HCKT/ACI reference inputs. CPU remains paused; '
               'no original reserved access is accepted, no normal boot/live audio or hardware '

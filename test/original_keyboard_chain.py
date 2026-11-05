@@ -108,7 +108,7 @@ def main():
         full_boot=False, complete_update=False, target_application_executed=False,
         physical_wiring_qualified=False, physical_timing_qualified=False,
         exact_silicon_SYNC_detection_qualified=False, hardware_equivalence=False,
-        fuzz_execution=False, physical_traffic=False,
+        physical_traffic=False,
         scope='Original stage2 packet downloads, DSP sender, native MCU XIRQ/copy/helper/checksum, '
               'reset/SYNC, pending BACKGROUND and actual recursive saving-text LCD path. Two '
               'declared order/phase contexts and four fresh joint native suffix restorations. '

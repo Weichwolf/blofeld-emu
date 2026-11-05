@@ -140,7 +140,7 @@ def main():
     totals = validate(report.read_text(), trace.read_text())
     controls = negative_controls(report.read_text(), trace.read_text())
     receipt.write_text(json.dumps(dict(passed=True, **totals, fixed_oracle_corruptions=controls,
-        full_boot=False, board_qualified=False, fuzz_execution=False, physical_traffic=False,
+        full_boot=False, board_qualified=False, physical_traffic=False,
         scope='Original reserved Global34 write, nominally scheduled8-tick wait, actual CRG IRQ/'
               'INC/W1C/RTI and original two page-state queries/readback. Missing timer delivery '
               'must leave the native wait unfinished after9 elapsed periods. Full-record/RAM/'

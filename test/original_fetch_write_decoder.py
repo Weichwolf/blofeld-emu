@@ -139,7 +139,7 @@ def validate(trace):
                       'functional low-128K X/Y write decoder. All77824 selected words checked '
                       'zero and184320 actual unselected writes counted. Stops at the original '
                       'Port-C direction access; no GPIO/NAND completion or instrument audio.',
-                fuzz_execution=False, physical_traffic=False)
+                physical_traffic=False)
 
 
 def main():

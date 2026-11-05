@@ -110,7 +110,7 @@ def main():
         dax_frames=776, original_suffix_instructions_per_stream=4100,
         held_word_restores=8, fixed_oracle_corruptions=8,
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
-        full_boot=False, physical_traffic=False, fuzz_execution=False,
+        full_boot=False, physical_traffic=False,
         automatic_core_dma_timing=False,
         scope='Original persistent foreground/render/mix/master fills the actual repeating '
               'DMA0/3 ring. Original enable/REP/NOP/BSET/RTS suffix with own preloads. '

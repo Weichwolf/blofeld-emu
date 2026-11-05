@@ -159,7 +159,7 @@ def main():
         declared_NVM_trim_profiles=4, warm_register_histories=0 if cold else 2, physical_straps_inferred=False,
         original_code_modified=False, full_boot=False, complete_update=False,
         physical_timing_qualified=False, hardware_equivalence=False, cold_reset=cold,
-        fuzz_execution=False, physical_traffic=False, input_sha256={str(p): h for p,h in frozen.items()},
+        physical_traffic=False, input_sha256={str(p): h for p,h in frozen.items()},
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest())
     trace.with_suffix('.json').write_text(json.dumps(report, indent=2)+'\n')
     print('Verified original warm reset, actual FLASH/GPIO/ICG stores and strict status frontier.')

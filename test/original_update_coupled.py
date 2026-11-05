@@ -324,7 +324,7 @@ def main():
         frame_sha256=FRAME_SHA256, independent_assembler=provenance,
         damaged_marker_words=1, input_packet_checksum_recomputed=True,
         full_boot=False, complete_update=False, helper_returned=False, watchdog_reset_executed=True, whole_board_reset=False, dsp_reset_executed=False, joint_reset_clocking=True,
-        fuzz_execution=False, physical_traffic=False,
+        physical_traffic=False,
         scope='Same clocked DSP executes original main download/padding and helper launch without reset, '
               'then native GPIO/XIRQ/copy/MCU error-helper rendering and30000 delay iterations. '
               'One declared marker word is corrupted in the input packet with recomputed framing checksum. '

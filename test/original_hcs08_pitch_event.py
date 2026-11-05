@@ -123,7 +123,7 @@ def main():
         fresh_joint_replays=12, checkpoint_cuts=6, collector_controls=negative,
         physical_ADC_or_SPI_timing_qualified=False, boot_origin_calibration=False,
         native_DSP_firmware_executed=False, full_boot=False, physical_traffic=False,
-        fuzz_execution=False, trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
+        trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         input_sha256={str(p):digest for p,digest in frozen.items()})
     trace.with_suffix('.json').write_text(json.dumps(report,indent=2)+'\n')
     print('Verified original pitch arithmetic, change suppression and native SPI event delivery.')

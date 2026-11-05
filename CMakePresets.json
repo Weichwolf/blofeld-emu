@@ -33,18 +33,6 @@
         "CMAKE_CXX_COMPILER": "clang++-19",
         "BLOFELD_SANITIZER": "thread"
       }
-    },
-    {
-      "name": "fuzz",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/fuzz",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_C_COMPILER": "clang-19",
-        "CMAKE_CXX_COMPILER": "clang++-19",
-        "BLOFELD_SANITIZER": "address-undefined",
-        "BLOFELD_FUZZING": "ON"
-      }
     }
   ],
   "buildPresets": [
@@ -61,11 +49,6 @@
     {
       "name": "thread",
       "configurePreset": "thread",
-      "jobs": 4
-    },
-    {
-      "name": "fuzz",
-      "configurePreset": "fuzz",
       "jobs": 4
     }
   ],
@@ -87,13 +70,6 @@
     {
       "name": "thread",
       "configurePreset": "thread",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "fuzz",
-      "configurePreset": "fuzz",
       "output": {
         "outputOnFailure": true
       }

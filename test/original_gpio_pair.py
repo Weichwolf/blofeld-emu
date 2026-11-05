@@ -119,7 +119,7 @@ def main():
     controls = negative_controls(text, pin_trace)
     receipt.write_text(json.dumps(dict(
         passed=True, **totals, fixed_oracle_corruptions=controls,
-        board_qualified=False, full_boot=False, fuzz_execution=False, physical_traffic=False,
+        board_qualified=False, full_boot=False, physical_traffic=False,
         scope='Unchanged original MCU/DSP request handlers in declared caller/RAM, GPIO and '
               'nominal clock contexts. Includes the original signature data record. All native '
               'pad queries are known; unresolved intermediate drivers reject board qualification. '

@@ -28,7 +28,7 @@ def main():
     report.parent.mkdir(parents=True, exist_ok=True)
     digest = hashlib.sha256(binary.read_bytes()).hexdigest()
     state = {"status": "starting", "binary": str(binary), "binary_sha256": digest,
-             "fuzz_execution": False, "physical_traffic": False, "whole_goal_complete": False}
+             "physical_traffic": False, "whole_goal_complete": False}
     environment = os.environ.copy()
     environment["LC_ALL"] = "C"
     child = subprocess.Popen([str(binary), "--tool-input"], stdin=subprocess.PIPE,

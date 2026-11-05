@@ -117,7 +117,7 @@ def main():
         raise ValueError(f"Original NAND ID execution failed: {diagnostics}")
     totals = validate(trace.read_text(), reference)
     report.write_text(json.dumps({"passed": True, **totals, "scope": reference["qualification"],
-                                 "fuzz_execution": False, "physical_traffic": False}, indent=2) + "\n")
+                                 "physical_traffic": False}, indent=2) + "\n")
     print("Verified both original ID packing tails and joint restores under declared inputs; "
           "full original ID setup retains its turnaround failure. No boot or hardware qualification.")
     return 0

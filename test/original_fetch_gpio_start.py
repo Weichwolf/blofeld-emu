@@ -106,7 +106,7 @@ def validate(trace):
                 scope='Original MCU/DSP reset, SPI, full clear, GPIO and first NAND control '
                       'setup. All selected RAM and original stage words checked; NVM unchanged. '
                       'No NAND peer, ready response, completed NAND load or instrument audio.',
-                complete_instrument_boot=False, fuzz_execution=False, physical_traffic=False)
+                complete_instrument_boot=False, physical_traffic=False)
 
 
 def main():

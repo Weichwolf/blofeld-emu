@@ -54,7 +54,7 @@ def verify_reset(text, rows):
     return {"passed": True, "epochs": 2, "nominal_units": units * 2,
             "reference_ticks": ticks * 2, "original_stage_loads": 2,
             "original_stage_words_per_load": 94, "mapped_pairs_per_epoch": 8192,
-            "oracle_negative_controls": 5, "fuzz_execution": False, "physical_traffic": False,
+            "oracle_negative_controls": 5, "physical_traffic": False,
             "scope": "Original ROM/stage and two nominal instruction-boundary epochs; "
             "reserved Y:002000 still fails. No held-reset, physical latency or full boot claim."}
 

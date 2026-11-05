@@ -149,7 +149,7 @@ def main():
         full_boot=False, complete_update=False, physical_timing_qualified=False,
         reference_host_cycles_per_BDC=8, half_host_cycle_phase_offsets=list(range(1, 16, 2)),
         original_reset_SYNC_executed=False, HCS08_instructions_executed=0,
-        hardware_equivalence=False, physical_traffic=False, fuzz_execution=False,
+        hardware_equivalence=False, physical_traffic=False,
         scope='Original HC12 byte helpers, explicit post-SYNC delays9/12, active-reset BDC mode, '
         'eight host bus cycles per BDC reference clock and eight phases. Actual GPIO sends/reads '
         'reach target memory; target replies are independently seeded. No physical clock/wiring, '

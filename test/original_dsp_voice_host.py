@@ -182,7 +182,7 @@ def run(binary, firmware, directory, xdata, ydata, program, midi, stream):
                 "repeating_trace_negative_controls": 4 if stream else 0,
                 "original_foreground_iterations": 6 if stream else 0,
                 "declared_playback_rate": 48000, "physical_sample_clock_qualified": False,
-                "fuzz_execution": False, "physical_audio": False,
+                "physical_audio": False,
                 "scope": "One declared original voice/mix/master stream through actual "
                 "DMA, ESAI pins, serial receiver and bounded audio worker/private service. "
                 "Optional original repeating foreground uses untimed native access tickets "

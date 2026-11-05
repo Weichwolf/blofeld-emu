@@ -48,7 +48,7 @@ def main():
     totals = validate(trace.read_text(), cases, reference)
     report.write_text(json.dumps({"passed": True, "scope": reference["qualification"],
                                   "cases": len(cases), "guarded_ram_words": 77824,
-                                  "fuzz_execution": False, "physical_traffic": False,
+                                  "physical_traffic": False,
                                   **totals}, indent=2) + "\n")
     print(f"Verified {len(cases)} original workspace calls; all 93 module instruction starts, "
           "mapped RAM guards and two repeated joint snapshots. "

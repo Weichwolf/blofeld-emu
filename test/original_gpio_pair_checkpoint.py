@@ -113,7 +113,7 @@ def main():
     controls = negative_controls(text, pin_trace)
     receipt.write_text(json.dumps(dict(
         passed=True, **totals, fixed_oracle_corruptions=controls,
-        board_qualified=False, full_boot=False, fuzz_execution=False, physical_traffic=False,
+        board_qualified=False, full_boot=False, physical_traffic=False,
         scope='Original signature request in declared caller/RAM/clock/direct-link contexts. '
               'Three native event boundaries; actual unknown-read quarantine, detached callbacks, '
               'fresh reattachment and exact joint native suffix/state/time replay. '

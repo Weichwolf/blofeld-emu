@@ -79,7 +79,7 @@ def main():
         print(result.stdout + result.stderr)
         return result.returncode
     report.write_text(json.dumps({"passed": True, **validate(result.stdout), "scope": reference["qualification"],
-                                  "fuzz_execution": False, "physical_traffic": False}, indent=2) + "\n")
+                                  "physical_traffic": False}, indent=2) + "\n")
     print("Verified original OUT/peer GPIO execution, actual strobes, native faults and joint restores.")
     return 0
 

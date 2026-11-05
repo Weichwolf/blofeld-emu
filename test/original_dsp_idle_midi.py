@@ -152,7 +152,7 @@ def main():
     negative_controls(text, xdata, ydata, program)
     report.write_text(json.dumps({'passed': True, 'streams': 8, **totals, 'dma_words': 2560,
                                   'decoded_frames': 1280, 'input_ring_wraps': 8,
-                                  'oracle_negative_controls': 9, 'fuzz_execution': False,
+                                  'oracle_negative_controls': 9,
                                   'physical_traffic': False,
                                   'scope': 'Raw CC bytes enter the original ring while the '
                                   'foreground waits at the equal-half gate. Original parser, '

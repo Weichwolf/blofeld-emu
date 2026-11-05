@@ -175,7 +175,7 @@ def main():
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         full_boot=False, complete_update=False, physical_timing_qualified=False,
         original_reset_SYNC_executed=False, full_DSP_transport=False,
-        hardware_equivalence=False, physical_traffic=False, fuzz_execution=False,
+        hardware_equivalence=False, physical_traffic=False,
         scope='Original HC12 post-display prepare/complete RAM upload, original byte buffer helpers '
         'and contiguous pointer/PC/SP/GO/start-poll code through actual GPIO/BDC into native HCS08. '
         'Explicit post-SYNC/context/clock assumptions; documented six-form unstretched instruction '

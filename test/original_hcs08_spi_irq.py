@@ -114,7 +114,7 @@ def main():
         physical_wiring_qualified=False, physical_timing_qualified=False,
         RTI_irq_contract='reference_immediate', physical_RTI_latency_qualified=False,
         IRQ_cycle_timing_qualified=False, ICG_clock_supplied=False, full_boot=False,
-        native_DSP_firmware_executed=False, firmware_modified=False, fuzz_execution=False,
+        native_DSP_firmware_executed=False, firmware_modified=False,
         physical_traffic=False, hardware_equivalence=False,
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         input_sha256={str(p): sha for p, sha in frozen.items()},

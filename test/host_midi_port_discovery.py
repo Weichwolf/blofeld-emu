@@ -32,7 +32,7 @@ def main():
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              text=True, env=environment)
     report = {"status": "running", "pid": child.pid, "binary_sha256": digest,
-              "fuzz_execution": False, "physical_traffic": False,
+              "physical_traffic": False,
               "whole_goal_complete": False}
 
     def aconnect(*arguments):

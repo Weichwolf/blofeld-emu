@@ -179,7 +179,7 @@ def main():
                                   'native caller and declared original, damaged or incomplete RAM '
                                   'payloads. Stops at native success/error-helper selection; no '
                                   'GPIO helper transfer, NAND programming, complete update or boot.',
-                                  'fuzz_execution': False, 'physical_traffic': False}, indent=2) + '\n')
+                                  'physical_traffic': False}, indent=2) + '\n')
     print('Verified 13 original update validation cases and exact operand-read boundaries.')
     return 0
 

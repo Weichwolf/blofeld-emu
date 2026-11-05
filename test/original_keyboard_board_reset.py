@@ -99,7 +99,7 @@ def main():
                   trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
                   full_boot=False, complete_update=False, full_caller_history=False,
                   physical_timing_qualified=False, active_background_BUSCLK_qualified=False,
-                  hardware_equivalence=False, fuzz_execution=False, physical_traffic=False,
+                  hardware_equivalence=False, physical_traffic=False,
                   input_sha256={str(p): pin for p, pin in pins.items()})
     trace.with_suffix('.json').write_text(json.dumps(report, indent=2) + '\n')
     print('Verified original PE7/PB1 reset/SYNC with production target ownership and strict clock limits.')

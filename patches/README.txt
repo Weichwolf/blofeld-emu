@@ -232,8 +232,8 @@ an immutable strict-bus copy; no portable SDK object dump is exposed. See
 the corresponding independent tests under test/ for independent instruction and original-coupling checks.
 
 PulseAudio17 client callback types
-The pinned build copy receives pulseaudio-callback-types.patch with zero patch
-fuzz. Property destruction now accepts void*, matching pa_free_cb_t, instead
+The pinned build copy receives pulseaudio-callback-types.patch with exact context
+matching. Property destruction now accepts void*, matching pa_free_cb_t, instead
 of calling a typed-pointer function through an incompatible function pointer.
 JSON frees and dispatch-owned operation references use void* adapter functions
 that call the original typed functions. The first sanitized live stream close

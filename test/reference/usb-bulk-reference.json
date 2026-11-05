@@ -32,6 +32,5 @@
     "failure": "Reserved NISOF physical-endpoint=3"
   },
   "qualification_sha256": "06d6dc0baa924dc781fbcd1d4ce9dd15f776e7e9eee08cc4a33e94b032b0b6ea",
-  "private_evidence": "build/local/usb-bulk-integration-r1/qualification.json",
-  "fuzz": false
+  "private_evidence": "build/local/usb-bulk-integration-r1/qualification.json"
 }

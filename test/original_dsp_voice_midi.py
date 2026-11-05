@@ -150,7 +150,7 @@ def main():
     negative_controls(text, xdata, ydata, program, reference)
     report.write_text(json.dumps({'passed': True, 'streams': 32, **totals,
                                   'decoded_frames': 4096, 'oracle_negative_controls': 4,
-                                  'fuzz_execution': False, 'physical_traffic': False,
+                                  'physical_traffic': False,
                                   'scope': 'Original primary MIDI parser, CC7/CC1 destination '
                                   'switching and declared held voices through master, finite '
                                   'DMA and ESAI pins. Own transport/setup, paused-core serial '

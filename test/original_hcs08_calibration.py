@@ -147,7 +147,7 @@ def main():
                   queued_packets=2,fresh_joint_replays=4,checkpoint_cuts=2,collector_controls=negative,
                   final_center=2041,final_lower_gain=24,final_upper_gain=24,actual_IRQ_entries=0,
                   cold_RAM_origin=True,complete_board_boot=False,physical_clock_qualified=False,
-                  native_DSP_firmware_executed=False,physical_traffic=False,fuzz_execution=False,
+                  native_DSP_firmware_executed=False,physical_traffic=False,
                   trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),input_sha256={str(p):d for p,d in frozen.items()})
     trace.with_suffix('.json').write_text(json.dumps(report,indent=2)+'\n')
     print('Verified original300-step calibration from real ADC sample history and native cold RAM.')

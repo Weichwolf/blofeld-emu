@@ -76,7 +76,7 @@ def main():
         normal_warm_reset_cases=2, warm_initial_ram_unknown=True, cold_reset=False,
         checked_ram_bytes=4096, writes=12336, reads=8196,
         strict_peripheral_failures=6, full_boot=False, controller_link=False,
-        flash_programming=False, physical_traffic=False, fuzz_execution=False,
+        flash_programming=False, physical_traffic=False,
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         specification_sha256=frozen[specification]), indent=2) + '\n')
     print('Verified original HCS08 programmer and startup prefixes with explicit unknown peripherals.')

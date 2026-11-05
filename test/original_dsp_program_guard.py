@@ -40,7 +40,7 @@ def main():
         raise ValueError("Program-guard reference inputs changed")
     (directory / "result.json").write_text(json.dumps({
         "passed": True, "profiles": 2, "mutated_words": 2, "completed_blocks_per_profile": 1,
-        "rejected_before_next_block": True, "fuzz_execution": False, "physical_traffic": False,
+        "rejected_before_next_block": True, "physical_traffic": False,
         "scope": "Offline directed program-corruption controls; ordinary original-firmware "
         "qualification remains unmodified. No boot or hardware equivalence claim."
     }, indent=2) + "\n")

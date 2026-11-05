@@ -54,7 +54,7 @@ def controls():
         rejects(lambda: read_pinned(path, expected), "Changed reference size")
         path.write_bytes(b"x" + payload[1:])
         rejects(lambda: read_pinned(path, expected), "Changed reference SHA-256")
-    print("Verified eleven fixed page/segment/reference-identity controls; no fuzzing")
+    print("Verified eleven fixed page/segment/reference-identity controls")
 
 
 def correspondence(decoded, frames, reference):
@@ -105,7 +105,7 @@ def original(output):
     require(observed == reference["comparison"], "Changed exact WPC/MIDI page correspondence")
     require(summary["pages"] == observed["wpc_pages"], "Changed WPC page extent")
     output.write_text(json.dumps({"passed": True, **summary, **observed,
-                                  "fuzz_execution": False, "physical_traffic": False}, indent=2) + "\n")
+                                  "physical_traffic": False}, indent=2) + "\n")
     print(f"Verified {observed['matching_pages']} exact WPC/MIDI page matches and "
           f"{observed['unmatched_wpc_pages']} unresolved WPC pages; physical mapping remains open")
     return 0

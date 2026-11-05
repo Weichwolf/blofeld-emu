@@ -170,7 +170,7 @@ def main():
         raise ValueError('Original reset/SYNC inputs changed')
     trace.with_suffix('.json').write_text(json.dumps(dict(passed=True, cases=results,
         fixed_oracle_corruptions=negative, HCS08_instructions=0, physical_timing_qualified=False,
-        complete_update=False, full_boot=False, physical_traffic=False, fuzz_execution=False,
+        complete_update=False, full_boot=False, physical_traffic=False,
         scope='Own caller and declared source-derived locked nominal PHY/TIM state; reference '
         'passive RESET/BKGD circuit, weak other E inputs and candidate active-BDC initialization. '
         'Native target reset/ICG startup, prior target history, physical continuity and full '

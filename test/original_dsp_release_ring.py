@@ -248,7 +248,7 @@ def main():
     negative_controls(text, xdata, ydata, program)
     report.write_text(json.dumps({'passed': True, 'streams': 8, **totals, 'foreground_blocks': 80,
                                   'empty_blocks': 32, 'retirements': 8, 'decoded_frames': 1280,
-                                  'oracle_negative_controls': 10, 'fuzz_execution': False,
+                                  'oracle_negative_controls': 10,
                                   'physical_traffic': False,
                                   'scope': 'Raw original MIDI release during DMA wait, subsequent '
                                   'native envelopes/collection and enabled DMA/ESAI output. '

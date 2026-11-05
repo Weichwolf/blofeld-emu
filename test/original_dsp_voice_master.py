@@ -127,7 +127,7 @@ def main():
     report.write_text(json.dumps({'passed': True, 'streams': 32, **totals,
                                   'oracle_negative_controls': controls,
                                   'master_output_words': totals['master_blocks'] * 32,
-                                  'fuzz_execution': False, 'physical_audio': False,
+                                  'physical_audio': False,
                                   'scope': 'Own caller composition of unchanged original voice, '
                                   'copy, replacement mix and master routines. Original histories '
                                   'persist; no boot, scheduler, DMA, PCM or hardware claim.'},

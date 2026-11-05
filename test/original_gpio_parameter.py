@@ -132,7 +132,7 @@ def main():
     controls = negative_controls(text, pin_trace)
     receipt.write_text(json.dumps(dict(
         passed=True, **totals, fixed_oracle_corruptions=controls,
-        board_qualified=False, full_boot=False, fuzz_execution=False, physical_traffic=False,
+        board_qualified=False, full_boot=False, physical_traffic=False,
         scope='Own native MCU caller invokes original Multi-global field2 F5 writes and F4 reads. '
               'Original GPIO producer, secondary ring, parser and parameter writer execute on '
               'continuous nominally scheduled processors. Declared initial full runtime records, '

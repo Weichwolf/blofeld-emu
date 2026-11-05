@@ -87,7 +87,7 @@ def run(binary, firmware, trace, reference_name, validator, arguments=()):
     report.write_text(json.dumps({'passed': True, **totals,
                                   'trace_sha256': hashlib.sha256(trace.read_bytes()).hexdigest(),
                                   'qualification': reference['qualification'],
-                                  'fuzz_execution': False, 'physical_traffic': False}, indent=2) + '\n')
+                                  'physical_traffic': False}, indent=2) + '\n')
     print(f"Verified {totals['profiles']} original native MCU/GPIO/parser profiles and "
           f"{totals['replays']} joint snapshot replays")
     return 0

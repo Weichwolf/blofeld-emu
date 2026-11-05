@@ -135,7 +135,7 @@ def main():
                            'PE5/PE6 weak pull-downs', 'fresh PHY edges15 at8049', 'PR2 idle high'],
         modeled_irqa_route='PJ0; MCU drivers/biases and documented DSP internal pull-up',
         full_boot=False, physical_pin_routing_qualified=False, whole_board_reset=False,
-        live_midi_audio=False, complete_update_recovery=False, fuzz_execution=False,
+        live_midi_audio=False, complete_update_recovery=False,
         physical_traffic=False), indent=2) + '\n')
     print('Verified16 original joint reset/bootstrap suffixes,8 exact replays and strict baseline.')
     return 0

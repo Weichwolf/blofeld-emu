@@ -179,7 +179,7 @@ def main():
     totals = validate(text, coefficient)
     negative_controls(text, coefficient)
     report.write_text(json.dumps({'passed': True, **totals, 'oracle_negative_controls': 4,
-                                  'fuzz_execution': False, 'physical_traffic': False,
+                                  'physical_traffic': False,
                                   'scope': 'Original byte parser/release/prioritization, three '
                                   'envelope calls for the first declared held entry, original '
                                   'collection and mask-owner cleanup. Declared slot headers, '

@@ -133,7 +133,7 @@ def main():
         general_instruction_pipeline_qualified=False,active_BDC_clocking_qualified=False,
         host_injected_handler_PC_frame_instruction_or_SPI_byte=False,
         native_DSP_firmware_executed=False,firmware_modified=False,
-        physical_traffic=False,fuzz_execution=False,hardware_equivalence=False,
+        physical_traffic=False,hardware_equivalence=False,
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         input_sha256={str(p):d for p,d in frozen.items()})
     trace.with_suffix('.json').write_text(json.dumps(report,indent=2)+'\n')

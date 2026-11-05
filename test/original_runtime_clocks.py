@@ -109,7 +109,7 @@ def main():
                                   'mid_repeat_replay': True, 'nonintegral_fault_replays': 2,
                                   'fixed_oracle_corruptions': 5, 'nominal_mcu_bus_hz': 30000000,
                                   'nominal_dsp_hz': [12000000, 54000000, 216000000],
-                                  'reference_timebase_hz': 1080000000, 'fuzz_execution': False,
+                                  'reference_timebase_hz': 1080000000,
                                   'physical_traffic': False,
                                   'scope': 'Bounded unchanged MCU reset clock prefix with declared '
                                   'GPIO/PHY observations and original DSP clock entry with own '

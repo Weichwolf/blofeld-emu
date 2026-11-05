@@ -102,7 +102,7 @@ def main():
         timeout_service_race_qualified=False, original_clock_ADC_prefix_executed=False,
         original_SPI_and_flash_setup_executed=True, actual_CPU_IRQ_admission=False,
         original_idle_FSTAT_launch_qualified=False, serial_edges_supplied=False,
-        full_boot=False, physical_traffic=False, fuzz_execution=False), indent=2)+'\n')
+        full_boot=False, physical_traffic=False, ), indent=2)+'\n')
     print('Verified original timer threshold, real watchdog services and deadline admission.')
     return 0
 

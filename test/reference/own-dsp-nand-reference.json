@@ -171,7 +171,6 @@
     "local_audit_sha256": "e6af5bbc8444daf4c054c728a6320f5ca183c40ca9ba980d35ba374e0faab49b",
     "instrument_audio_proven": false,
     "whole_goal_complete": false,
-    "fuzzing": false,
     "physical_traffic": false
   },
   "functional_ready_capture_candidate": {
@@ -195,7 +194,6 @@
     "physical_synchronizer_delay_qualified": false,
     "instrument_audio_proven": false,
     "whole_goal_complete": false,
-    "fuzzing": false,
     "physical_traffic": false,
     "virtual_erased_state_candidate": {
       "scope": "Two explicitly erased virtual pages; not recovered manufacturer contents or a factory image",
@@ -242,7 +240,6 @@
     "live_parameter_values_measured": false,
     "instrument_audio_proven": false,
     "whole_goal_complete": false,
-    "fuzzing": false,
     "physical_traffic": false
   },
   "startup_page_candidate": {
@@ -270,7 +267,6 @@
     "original_instrument_audio_proven": false,
     "durable_storage_qualified": false,
     "whole_goal_complete": false,
-    "fuzzing": false,
     "physical_traffic": false
   },
   "timer2_reset_candidate": {
@@ -295,7 +291,6 @@
     "local_audit_sha256": "77084378340900c0f6f132c2d86dab84a3a4c7bb8936c29c65f4ee54eb89e822",
     "production_timer_reset_integration_qualified": false,
     "full_instrument_complete": false,
-    "fuzzing": false,
     "physical_traffic": false
   },
   "functional_gpio_preload_candidate": {
@@ -325,7 +320,6 @@
     "manufacturer_factory_image_claim": false,
     "instrument_audio_proven": false,
     "whole_goal_complete": false,
-    "fuzzing": false,
     "physical_traffic": false
   },
   "functional_timer_reset_integration": {
@@ -366,7 +360,6 @@
     "played_instrument_audio_proven": false,
     "complete_regular_runtime_qualified": false,
     "whole_goal_complete": false,
-    "fuzzing": false,
     "physical_traffic": false
   },
   "normal_baud_timer_input_clock_comparison": {
@@ -407,7 +400,6 @@
     "normal_host_midi_qualified": false,
     "whole_goal_complete": false,
     "firmware_patched": false,
-    "fuzzing": false,
     "physical_traffic": false,
     "connected_original_midi": {
       "scope": "Frozen connected original MCU/DSP cold startup and normal Timer0 MIDI input, not ordinary standalone Board qualification",
@@ -481,7 +473,6 @@
       "complete_regular_runtime_qualified": false,
       "whole_goal_complete": false,
       "firmware_patched": false,
-      "fuzzing": false,
       "physical_traffic": false,
       "clock_before_note_control": {
         "scope": "Same frozen unchanged firmware and virtual Init state; normal F8 precedes NoteOn; one functional suffix and independent diagnostic-decoder control",

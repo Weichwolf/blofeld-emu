@@ -126,7 +126,7 @@ def main():
         input_sha256={str(p):sha for p, sha in frozen.items()},
         full_boot=False, complete_update=False, original_HC12_helper_executed=False,
         physical_wire=False, physical_timing_qualified=False, target_part_qualified=False,
-        hardware_equivalence=False, physical_traffic=False, fuzz_execution=False,
+        hardware_equivalence=False, physical_traffic=False,
         scope='Actual warm pre-vector CPU reset and byte-level BDC background/trim/upload/PC/SP/GO, '
         'original eight-instruction programmer prefix with partial CCR and independent register/period/access expectations. '
         'Two boundary/mid-budget cuts and eight fresh joint fault continuations. '

@@ -42,7 +42,6 @@
     "sanitizer_matrix": "deferred until original firmware runs in real time, per AGENTS.md",
     "physical_wiring": false,
     "complete_instrument": false,
-    "fuzz": false,
     "native_NAND_mid_status_restores": 5,
     "current_optimized_core": "46dc05f38c79199b940c327913874e55f9ae674d"
   },
@@ -79,7 +78,6 @@
       "sha256": "1e6eed10db9a106c077a4e1d9bc7d261890d795ae7bfb789f3f794d60abdbc6f"
     },
     "MCU_flash_unchanged": true,
-    "complete_instrument": false,
-    "fuzz": false
+    "complete_instrument": false
   }
 }

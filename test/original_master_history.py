@@ -23,7 +23,7 @@ def validate(result, output):
             'original_instructions': 48720, 'log_sha256': hashlib.sha256(diagnostics.encode()).hexdigest(),
             'scope': 'Independent DSP core, original master stage, authored caller, unscaled transfers, '
                      'declared zero input/RAM and initial histories; no boot, CC7 ingress, DMA, host audio '
-                     'or physical timing claim', 'fuzz': False, 'physical_traffic': False}
+                     'or physical timing claim', 'physical_traffic': False}
 
 
 def execute(binary, firmware, output):

@@ -99,7 +99,7 @@ def main():
         physical_bus_phase_or_tie_qualified=False, boot_origin_CCR_or_clock_supplied=False,
         full_analog_event_path=False, physical_ADC_accuracy_qualified=False,
         native_DSP_firmware_executed=False, full_boot=False, physical_traffic=False,
-        fuzz_execution=False, trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
+        trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         input_sha256={str(p): digest for p, digest in frozen.items()}), indent=2)+'\n')
     print('Verified original ADC common-clock boundaries, native arithmetic and joint snapshots.')
     return 0

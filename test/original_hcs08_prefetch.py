@@ -95,7 +95,7 @@ def main():
         host_injected_handler_PC_frame_or_instruction=False, full_controller_boot=False,
         general_pipeline_qualified=False, physical_register_phase_qualified=False,
         native_DSP_firmware_executed=False, firmware_modified=False,
-        physical_traffic=False, fuzz_execution=False, hardware_equivalence=False,
+        physical_traffic=False, hardware_equivalence=False,
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         input_sha256={str(p): digest for p, digest in frozen.items()})
     trace.with_suffix('.json').write_text(json.dumps(report, indent=2)+'\n')

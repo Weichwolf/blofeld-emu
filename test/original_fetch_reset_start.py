@@ -137,7 +137,7 @@ def verify(trace):
     return {"scope": "Original reset-net/SPI with native DSP from initial held reset at zero; document ROM "
                      "and explicit lab inputs; actual DSP power-on, physical timing and full boot open",
             "held": held, "held_manual_costs": held_costs, "cases": cases,
-            "fuzz_execution": False, "physical_traffic": False,
+            "physical_traffic": False,
             "complete_instrument_boot": False, "native_core": "dsp56300"}
 
 

@@ -171,7 +171,7 @@ def main():
             listener.listen(1)
             invoke(binary, "timeout", "unix:" + str(endpoint), os.environ.copy())
         print(json.dumps({"cases": results, "missing_and_stalled_server": "passed",
-                          "fuzz_execution": False, "physical_audio": False,
+                          "physical_audio": False,
                           "original_firmware_audio_qualified": False}, indent=2))
     return 0
 

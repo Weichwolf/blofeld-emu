@@ -142,14 +142,14 @@ def main():
         raise ValueError(f"Original USB reset execution failed: {diagnostics}")
     totals = validate(trace.read_text())
     report.write_text(json.dumps({"passed": True, **totals, "scope": reference["qualification"],
-                                  "fuzz_execution": False, "physical_traffic": False}, indent=2) + "\n")
+                                  "physical_traffic": False}, indent=2) + "\n")
     print("Verified original cold-start USB reset/configuration and status-IN IRQs, actual "
           "DATA1/ZLP/ACK host completion and two joint restores, "
           "eight original SETUP branches, seven conditional descriptor sizes and sixteen "
           "pre-read restores. Ordinary/chained SETUP completes with retained accepted bytes; "
           "original bulk endpoints admit actual packets with real completion IRQs. Three fresh production runtime "
           "attempts return exact332-byte original-device TCP lists and retire on trusted restore. "
-          "no successful MIDI, physical USB timing, full board boot or fuzzing claim.")
+          "no successful MIDI, physical USB timing, full board boot claim.")
     return 0
 
 

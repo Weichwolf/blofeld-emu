@@ -127,7 +127,7 @@ def main():
     controls = negative_controls(text, pin_trace)
     receipt.write_text(json.dumps(dict(
         passed=True, **totals, fixed_oracle_corruptions=controls,
-        board_qualified=False, full_boot=False, fuzz_execution=False, physical_traffic=False,
+        board_qualified=False, full_boot=False, physical_traffic=False,
         scope='Four continuously scheduled native MCU/DSP request streams. An executed own caller '
               'supplies sixteen argument frames and stores actual original replies per stream; '
               'no per-request CPU, GPIO, IRQ, clock or DSP reinitialization. Declared initial '

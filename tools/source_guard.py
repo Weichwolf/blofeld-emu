@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Capture/check a developer source boundary without running builds or fuzzers."""
+"""Capture/check a developer source boundary without running builds."""
 
 import argparse
 import hashlib

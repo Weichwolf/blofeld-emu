@@ -189,7 +189,7 @@ def main():
     report.write_text(json.dumps({'passed': True, 'streams': 8, **totals, 'foreground_blocks': 96,
                                   'empty_blocks': 32, 'retirements': 8, 'decoded_frames': 1536,
                                   'idle_polls': 64, 'oracle_negative_controls': 12,
-                                  'fuzz_execution': False, 'physical_traffic': False,
+                                  'physical_traffic': False,
                                   'scope': 'Raw CC64 and release during the original DMA wait, '
                                   'deferred native callbacks, full voice/collection and enabled '
                                   'DMA/ESAI output. Declared held entry/RAM and untimed interleave; '

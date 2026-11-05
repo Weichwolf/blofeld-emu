@@ -103,7 +103,7 @@ def main():
                  'read-mode peer and raw TIO1 unknown/low/high/release profiles. Actual PCR_F '
                  'reserved transition remains rejected; no NAND/refill delivery, physical timing, '
                  'full boot or live MIDI/audio proof.',
-        'fuzz_execution': False, 'physical_traffic': False,
+        'physical_traffic': False,
     }, indent=2) + '\n')
     print('Verified142 real header entries and568 post-header refill windows; unknown inputs '
           'and reserved GPIO transitions fail, held-low polls stay healthy. No refill is fabricated.')

@@ -65,7 +65,7 @@ def main():
         'input_sha256': hashlib.sha256(inputs.read_bytes()).hexdigest(),
         'trace_sha256': hashlib.sha256(trace.read_bytes()).hexdigest(),
         'scope': reference['qualification'] + ' Native caller/receiver conditions: test/reference/dsp-sample-receiver-reference.json.',
-        'fuzz_execution': False, 'physical_traffic': False,
+        'physical_traffic': False,
     }, indent=2)+'\n')
     print('Verified142 original MIDI-page receives, preparation/refill/active sample callbacks, '
           'five missing-byte cuts and ten trusted replays; unresolved catalogue keys remain explicit.')

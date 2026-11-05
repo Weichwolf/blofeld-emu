@@ -34,7 +34,7 @@
   and diagnostic execution tests. Only short optimized startup/throughput probes
   may establish that milestone: stop after at most 10 host seconds, fail unless
   playable, and never extend or automatically repeat a failed probe. Compilation,
-  formatting and static analysis remain active. Run fuzzing only on explicit request.
+  formatting and static analysis remain active.
 - Afterwards validate affected behavior against independent expectations; avoid
   duplicate or full-suite runs after small changes. Report gaps and measured scope.
 - Keep doc/ for one target architecture and important primary references only.

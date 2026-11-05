@@ -137,7 +137,7 @@ def main():
     totals = validate(report.read_text(), trace.read_text())
     controls = negative_controls(report.read_text(), trace.read_text())
     receipt.write_text(json.dumps(dict(passed=True, **totals, fixed_oracle_corruptions=controls,
-        board_qualified=False, full_boot=False, fuzz_execution=False, physical_traffic=False,
+        board_qualified=False, full_boot=False, physical_traffic=False,
         scope='Declared original Sound write/read and notification with policies1/3; mapped CC '
               'uses original UART queue, real SCI IRQ/RTI and observed PR3 NRZ at nominal31250 baud. '
               'Rejected Octave writes still notify the incoming value. No USB mirroring, genuine '

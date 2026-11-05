@@ -165,7 +165,7 @@ def qualify(binary, worker, directory):
                 for mode in ("death", "stopped")]
     return {"routes": routes, "worker": paced, "negotiated_worker": granted,
             "service_failures": failures,
-            "fuzz_execution": False, "physical_audio": False,
+            "physical_audio": False,
             "original_firmware_audio_qualified": False, "suspend_notification_qualified": False}
 
 

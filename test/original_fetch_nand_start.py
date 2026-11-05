@@ -131,7 +131,7 @@ def validate(trace, log, expected):
                 scope='Original MCU reset/SPI, original DSP execution and causal NAND reads '
                       'through every known source byte. Unknown unused tail remains unknown.',
                 nvm_unchanged_qualified=False, loader_handoff=False,
-                complete_instrument_boot=False, fuzz_execution=False, physical_traffic=False)
+                complete_instrument_boot=False, physical_traffic=False)
 
 
 def main():

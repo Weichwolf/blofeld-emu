@@ -155,7 +155,7 @@ def main():
         NVM_frequency_supplied=False, full_boot=False, complete_update=False,
         original_HC12_helper_executed=False, physical_wire=False, physical_timing_qualified=False,
         target_part_qualified=False, hardware_equivalence=False, physical_traffic=False,
-        fuzz_execution=False, scope='Architectural power-on, logical BDC upload/PC/SP/GO and '
+        scope='Architectural power-on, logical BDC upload/PC/SP/GO and '
         'original native register definitions with reference instruction budgets. Fresh joint '
         'continuations include unknown reset/PC, unknown uploaded registers and pending first '
         'LDX/LDA effects. Actual strict idle-FSTAT refusal precedes any NVM command or transfer. '

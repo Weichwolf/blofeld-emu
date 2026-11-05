@@ -58,7 +58,7 @@ def main():
     report.write_text(json.dumps({
         'passed': True, 'records': reference['records'], **expected,
         'trace_sha256': digest, 'qualification': reference['qualification'],
-        'fuzz_execution': False, 'physical_traffic': False}, indent=2) + '\n')
+        'physical_traffic': False}, indent=2) + '\n')
     print(f'Verified {cases} original F4 cases with {expected["restores"]} joint restores; '
           'board boot, physical timing and later bulk response remain open')
     return 0

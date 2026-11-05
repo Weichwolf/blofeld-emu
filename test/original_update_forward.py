@@ -142,7 +142,7 @@ def main():
         raise ValueError('Original forwarding input identity changed')
     report.write_text(json.dumps(dict(
         passed=True, **totals, fixed_oracle_corruptions=controls, board_qualified=False,
-        full_boot=False, complete_update=False, fuzz_execution=False, physical_traffic=False,
+        full_boot=False, complete_update=False, physical_traffic=False,
         scope='Original main-updater bad-marker branch, DSP six-bit sender, native MCU XIRQ, '
               'receiver/copy and RAM call. Declared loaded records, own caller/RAM/clocks, '
               'initial Q7/PE9 outputs and direct C/Q plus PE9/XIRQ route. No per-group host '

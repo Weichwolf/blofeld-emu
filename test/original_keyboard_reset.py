@@ -215,7 +215,7 @@ def main():
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         full_boot=False, complete_update=False, physical_timing_qualified=False,
         full_caller_history=False, full_DSP_transport=False, hardware_equivalence=False,
-        physical_traffic=False, fuzz_execution=False,
+        physical_traffic=False,
         scope='Original HC12 reset/SYNC function beneath an own native JSR caller; actual GPIO reset/BKGD '
               'peer, warm native HCS08 reset effects and continuously clocked native TIM. Explicit nominal '
               '34/38/six reset-edge contract, reset recognition/setup/hold/wiring and4MHz target assumptions; '

@@ -134,7 +134,7 @@ def run(binary, generator, directory):
         listener.listen(1)
         invoke(binary, "timeout", "unix:" + str(endpoint), os.environ.copy())
     return {"cases": results, "missing_and_unresponsive_service": "passed",
-            "fuzz_execution": False, "physical_audio": False,
+            "physical_audio": False,
             "original_firmware_audio_qualified": False}
 
 

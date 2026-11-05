@@ -83,7 +83,7 @@ def main():
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         physical_wire=False, original_HC12_helper_executed=False,
         physical_timing_qualified=False, complete_update=False, full_boot=False,
-        hardware_equivalence=False, physical_traffic=False, fuzz_execution=False,
+        hardware_equivalence=False, physical_traffic=False,
         scope='Logical byte transactions, actual native HCS08 and explicit candidate/reference FLASH; '
         'own reset/debug register context and preimage. Saved trim is read and substituted through '
         'BDC test commands; actual HC12 bit transport, arbitration and complete update remain open.'), indent=2) + '\n')

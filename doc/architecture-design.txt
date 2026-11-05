@@ -78,7 +78,7 @@ Implementation gate
 Compile, format and statically analyze without weakening checks. Execution QA
 is deferred until real time. Only short optimized startup/throughput probes may
 establish that milestone; stop and fail if not playable within 10 host seconds.
-Do not extend or automatically repeat a failed probe. Fuzzing remains explicit.
+Do not extend or automatically repeat a failed probe.
 
 Established references
 

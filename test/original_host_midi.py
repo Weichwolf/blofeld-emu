@@ -47,7 +47,7 @@ def main():
                                   "source_sha256": hashlib.sha256(message).hexdigest(),
                                   "scope": "Conditional untimed original MCU cold-start and SCI byte "
                                            "handlers, not complete MIDI/board/DSP/audio or hardware",
-                                  "fuzz_execution": False, "physical_traffic": False}, indent=2) + "\n")
+                                  "physical_traffic": False}, indent=2) + "\n")
     print(diagnostics, end="")
     return 0
 
