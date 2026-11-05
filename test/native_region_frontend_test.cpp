@@ -321,6 +321,73 @@ void test_unknown_program_keeps_actual_fault() {
   require(failure && failure->cause && failure->address == 0 && failure->pc == 0,
           "The actual bus cause survives the Core/clock owner boundary");
 }
+
+void test_dependency_and_instruction_share_finite_offer() {
+  // Authored FM INC A: one native period, three conservative dependency periods.
+  constexpr unsigned increment_a = 0x000008;
+  constexpr unsigned dependency_cycles = 3;
+  constexpr unsigned total_cycles = dependency_cycles + 1;
+  constexpr std::array program{increment_a, 0U};
+  for (const unsigned first_span : {total_cycles, 2U}) {
+    Device device(program);
+    device.reach_ram_entry();
+    const auto before = device.chip.cpu().progress();
+    const auto started = device.chip.clock().elapsed_ticks();
+    const auto first = advance(device, first_span);
+    require(first && first->execution.fault.kind == dsp56300::FaultKind::none,
+            "The actual INC reservation accepts its finite initial clock offer");
+    if (first_span < total_cycles) {
+      require(device.chip.cpu().registers().a == 0 &&
+                  device.chip.cpu().progress().instructions == before.instructions &&
+                  device.chip.clock().elapsed_ticks() == started + (first_span * period),
+              "An incomplete dependency gap cannot publish the reserved INC early");
+      const auto second = advance(device, total_cycles - first_span);
+      require(second && second->execution.fault.kind == dsp56300::FaultKind::none,
+              "A second finite offer finishes the remaining gap and real instruction");
+    }
+    const auto state = device.chip.cpu().registers();
+    require(
+        state.a == 1 && state.pc == 1 &&
+            device.chip.cpu().progress().instructions == before.instructions + 1 &&
+            device.chip.cpu().progress().estimated_cycles == before.estimated_cycles + 1 &&
+            device.chip.clock().native_cycle_units() == before.estimated_cycles + 1 &&
+            device.chip.clock().elapsed_ticks() == started + (total_cycles * period),
+        "One genuine INC retires at cycle four within either a four or split two-plus-two offer");
+  }
+}
+
+void test_dependency_offer_stops_at_peripheral_deadline() {
+  constexpr unsigned increment_a = 0x000008;
+  constexpr unsigned timer_control = 0xffff8f;
+  constexpr unsigned timer_enable_compare = 5;
+  constexpr unsigned timer_compare_flag = 0x200000;
+  constexpr unsigned timer_load = 3;
+  constexpr unsigned timer_compare = 4;
+  constexpr std::array program{increment_a, 0U};
+  Device device(program);
+  device.reach_ram_entry();
+  auto &bus = device.chip.bus();
+  bus.write({.space = blofeld::DspSpace::x, .address = timer_control - 1, .value = timer_load});
+  bus.write({.space = blofeld::DspSpace::x, .address = timer_control - 2, .value = timer_compare});
+  bus.write(
+      {.space = blofeld::DspSpace::x, .address = timer_control, .value = timer_enable_compare});
+  const auto before = device.chip.cpu().progress();
+  const auto started = device.chip.clock().elapsed_ticks();
+  require(device.chip.clock().next_native_boundary_ticks(bus) == 3 * period,
+          "Two actual CLK2 edges from the odd bootstrap phase bound the offer to three periods");
+  const auto gap = advance(device, 4);
+  require(gap && device.chip.clock().elapsed_ticks() == started + (3 * period) &&
+              device.chip.cpu().registers().a == 0 &&
+              device.chip.cpu().progress().instructions == before.instructions &&
+              bus.timers().read(timer_control, timer_compare_flag) == timer_compare_flag,
+          "A larger host horizon cannot cross the real compare boundary or execute INC early");
+  const auto instruction = advance(device);
+  require(instruction && device.chip.cpu().registers().a == 1 &&
+              device.chip.cpu().registers().pc == 1 &&
+              device.chip.cpu().progress().instructions == before.instructions + 1 &&
+              device.chip.clock().elapsed_ticks() == started + (4 * period),
+          "The reserved INC completes on its genuine next period after the timer is observable");
+}
 }
 
 int main() {
@@ -331,6 +398,8 @@ int main() {
     test_unknown_program_keeps_actual_fault();
     test_cache_enabled_empty_profile_keeps_native_reservation();
     test_native_repeat_horizons_retain_actual_body();
+    test_dependency_and_instruction_share_finite_offer();
+    test_dependency_offer_stops_at_peripheral_deadline();
     std::cout << "Native region machine ownership: " << assertions << " assertions passed\n";
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

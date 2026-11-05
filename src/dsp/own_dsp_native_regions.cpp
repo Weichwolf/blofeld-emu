@@ -266,7 +266,9 @@ void OwnDspTimeline::consume_native_reservation(const NativeSlice &slice) {
     if (consumed == 0) { throw Fault("DSP dependency reservation lost its clock capacity"); }
     native_time(DspClockUnits{.interlocks = consumed}, slice.inputs);
     native_dependency_remaining_ -= consumed;
-    return;
+    // Keep the original horizon, device deadline and DMA limit for both phases.
+    available -= consumed;
+    if (available == 0 || native_dependency_remaining_ != 0) { return; }
   }
   const auto consumed = std::min(available, native_remaining_);
   if (consumed == 0) { throw Fault("DSP native reservation lost its positive clock capacity"); }

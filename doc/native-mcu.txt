@@ -33,12 +33,15 @@ Unsupported ISA, STOP board clocks, normal standalone startup, active factory SL
 full function coverage and realtime operation remain open. Extensive sanitizer
 matrices are deferred until realtime; fuzzing requires an explicit request.
 
-Host profiling of a separate 3M-operation original-reset prefix preserves all
-seven emitted states,5120-byte RAM captures and393 PCM frames across four
-diagnostic variants. MCU JIT:304 compiled entries,zero cache resets. The DSP
-scheduler invokes9,818,898 positive-capacity regions for7,092,248 instructions;
-3,353,404 calls retire no instruction,maximum offered capacity7 cycles,no bulk
-batches. After DSP release,final MCU clock/peripheral work takes about85% of
-sampled Hc12::step time. This prioritizes region/clock overhead investigation;
-it neither isolates DSP Core cost nor establishes a runtime speedup. Sampling
-includes host scheduling/instrumentation; this prefix does not reach Main.
+Host-only profiling reference: a separate 3M-operation original-reset prefix,
+7,092,248 DSP instructions,393 PCM frames; MCU JIT304 entries,no cache resets.
+Baseline DSP regions9,818,898,including3,353,404 without retirement; maximum
+offered capacity7 cycles,no bulk batches. Reservation coalescing consumes the
+remaining original capacity after dependency clocks,retaining device/DMA bounds.
+Regions fall to8,781,306 and empty calls to2,315,812. All seven emitted states,
+5120-byte RAM captures,complete PCM and MCU/DSP Core counters remain identical.
+One build-free same-CPU pair takes67.19s before and65.74s after; descriptive
+only,no confidence interval or realtime claim. INC A tests independently check
+three dependency plus one native period,split offers and an earlier real timer
+deadline. Event/DMA,deferred IRQ and native MCU integration checks also pass.
+Full Main evidence above predates coalescing; its full cold replay is pending.
