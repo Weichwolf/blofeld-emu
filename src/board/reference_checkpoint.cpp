@@ -121,6 +121,9 @@ void Board::advance() {
 }
 
 Checkpoint Board::checkpoint() const {
+  if (transmitter_clock_events()) {
+    throw Fault("Transmitter-event clock checkpoint restoration is not implemented");
+  }
   if (execution_.device_state || (native_->nand && native_->nand->durable())) {
     throw Fault("A live device state cannot be included in a RAM-only Board checkpoint");
   }
@@ -160,7 +163,7 @@ void Board::restore(const Checkpoint &checkpoint) {
                                                          replacement->mcu,
                                                          replacement->dsp,
                                                          runtime_events(),
-                                                         nand_events(*replacement));
+                                                         peripheral_events(*replacement));
   if (config_.gpio_peer) {
     replacement->gpio_peer =
         std::make_unique<McuDspGpioPeer>(replacement->mcu, replacement->dsp, *config_.gpio_peer);

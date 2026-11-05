@@ -217,6 +217,13 @@ public:
   [[nodiscard]] DspTimers &timers() { return timers_; }
 
   void observe_esai_transmit(DspEsaiInstance instance, DspEsaiInputs inputs);
+  // Functional periodic-clock owner: synchronize quiet spans before MMIO, then
+  // publish the next slot/status event. The serial monitor borrows pin values.
+  [[nodiscard]] std::optional<std::uint64_t>
+  esai_high_clock_edges_until_event(DspEsaiInstance instance) const;
+  void advance_esai_high_clock(DspEsaiInstance instance,
+                               std::uint64_t edges,
+                               DspEsaiClockObserver observer = {});
   void set_esai_configuration_contract(DspEsaiInstance instance,
                                        DspEsaiConfigurationContract contract);
   [[nodiscard]] DspEsaiOutputs esai_transmit_outputs(DspEsaiInstance instance) const;

@@ -6,6 +6,8 @@
 #include "dsp/dsp_gpio.hpp"
 
 #include <cstddef>
+#include <cstdint>
+#include <optional>
 
 namespace blofeld {
 namespace {
@@ -19,6 +21,22 @@ std::size_t index(const DspEsaiInstance instance) {
 DspPort port(const DspEsaiInstance instance) {
   static_cast<void>(index(instance));
   return instance == DspEsaiInstance::primary ? DspPort::c : DspPort::e;
+}
+
+void require_clock_mux(const DspEsaiInstance instance, const DspGpio &gpio, const DspEsai &serial) {
+  const auto selected = gpio.outputs().peripheral;
+  const auto required = serial.required_clock_pads();
+  constexpr unsigned external_pads = 0x18;
+  if ((selected & required) == required) { return; }
+  if (required != external_pads) {
+    throw Fault(
+        instance == DspEsaiInstance::primary
+            ? "DSP ESAI clock input at X:0xffffbf requires HCKT/FST peripheral mux selection"
+            : "DSP ESAI_1 clock input at Y:0xffff9f requires HCKT/FST peripheral mux selection");
+  }
+  throw Fault(instance == DspEsaiInstance::primary
+                  ? "DSP ESAI input at X:0xffffbf requires SCKT/FST peripheral mux selection"
+                  : "DSP ESAI_1 input at Y:0xffff9f requires SCKT/FST peripheral mux selection");
 }
 
 DspEsaiOutputs qualify(const DspGpio &gpio, DspEsaiOutputs output) {
@@ -100,22 +118,46 @@ void DspBus::set_esai_configuration_contract(const DspEsaiInstance instance,
 void DspBus::observe_esai_transmit(const DspEsaiInstance instance, const DspEsaiInputs inputs) {
   auto &serial = sync_esai(instance);
   const auto &gpio_port = gpio(port(instance));
-  const auto selected = gpio_port.outputs().peripheral;
-  const auto required = serial.required_clock_pads();
-  constexpr unsigned external_pads = 0x18;
-  if ((selected & required) != required) {
-    if (required != external_pads) {
-      throw Fault(
-          instance == DspEsaiInstance::primary
-              ? "DSP ESAI clock input at X:0xffffbf requires HCKT/FST peripheral mux selection"
-              : "DSP ESAI_1 clock input at Y:0xffff9f requires HCKT/FST peripheral mux selection");
-    }
-    throw Fault(instance == DspEsaiInstance::primary
-                    ? "DSP ESAI input at X:0xffffbf requires SCKT/FST peripheral mux selection"
-                    : "DSP ESAI_1 input at Y:0xffff9f requires SCKT/FST peripheral mux selection");
-  }
+  require_clock_mux(instance, gpio_port, serial);
   auto next = serial;
   next.observe_checked(inputs);
+  static_cast<void>(qualify(gpio_port, next.outputs()));
+  static_cast<void>(qualify_clock(gpio_port, next.clock_outputs()));
+  serial = next;
+}
+
+std::optional<std::uint64_t>
+DspBus::esai_high_clock_edges_until_event(const DspEsaiInstance instance) const {
+  return esai_.at(index(instance)).high_clock_edges_until_event();
+}
+
+void DspBus::advance_esai_high_clock(const DspEsaiInstance instance,
+                                     const std::uint64_t edges,
+                                     const DspEsaiClockObserver observer) {
+  auto &serial = sync_esai(instance);
+  const auto &gpio_port = gpio(port(instance));
+  require_clock_mux(instance, gpio_port, serial);
+
+  struct Context {
+    const DspGpio &gpio;
+    DspEsaiClockObserver observer;
+  } context{.gpio = gpio_port, .observer = observer};
+
+  auto next = serial;
+  next.advance_high_clock_checked(edges,
+                                  {.context = &context,
+                                   .transition = [](void *pointer,
+                                                    const std::uint64_t edge,
+                                                    const DspEsaiOutputs data,
+                                                    const DspEsaiClockOutputs clocks) {
+                                     const auto &call = *static_cast<Context *>(pointer);
+                                     const auto actual_data = qualify(call.gpio, data);
+                                     const auto actual_clocks = qualify_clock(call.gpio, clocks);
+                                     if (call.observer.transition != nullptr) {
+                                       call.observer.transition(
+                                           call.observer.context, edge, actual_data, actual_clocks);
+                                     }
+                                   }});
   static_cast<void>(qualify(gpio_port, next.outputs()));
   static_cast<void>(qualify_clock(gpio_port, next.clock_outputs()));
   serial = next;

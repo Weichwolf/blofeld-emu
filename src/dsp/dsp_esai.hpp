@@ -38,6 +38,14 @@ struct DspEsaiOutputs {
   bool operator==(const DspEsaiOutputs &) const = default;
 };
 
+// Borrowed serial monitor, called only on generated SCKT transitions. The edge
+// ordinal is relative to the supplied HCKT span, starting at one. The monitor
+// must not mutate this chip or advance another clock. No allocation is required.
+struct DspEsaiClockObserver {
+  void *context = nullptr;
+  void (*transition)(void *, std::uint64_t, DspEsaiOutputs, DspEsaiClockOutputs) = nullptr;
+};
+
 // DSP56371UM chapters8/9: normal/network transmitter with explicit clock inputs.
 // No implicit board clock, RX data, DMA timing or host audio synthesis.
 class DspEsai {
@@ -51,6 +59,14 @@ public:
   [[nodiscard]] std::uint32_t read(unsigned offset);
   void write(unsigned offset, std::uint32_t value);
   void observe(DspEsaiInputs inputs);
+  // Periodic HCKT transitions from the already observed level. The caller must
+  // stop at high_clock_edges_until_event() and synchronize before register/pad changes.
+  // Status, DMA requests and IRQs retain the existing transmitter implementation;
+  // only the divider is advanced arithmetically between SCKT transitions.
+  void advance_high_clock(std::uint64_t edges, DspEsaiClockObserver observer = {});
+  // Pure horizon to a slot load, frame/status transition or required external
+  // synchronization. nullopt means no running generator/transmitter event.
+  [[nodiscard]] std::optional<std::uint64_t> high_clock_edges_until_event() const;
 
   [[nodiscard]] DspEsaiOutputs outputs() const;
   [[nodiscard]] DspEsaiClockOutputs clock_outputs() const;
@@ -88,6 +104,9 @@ private:
   [[nodiscard]] unsigned high_clock_divisor() const;
   void rebaseline();
   void observe_high_clock(DspEsaiInputs inputs);
+  void advance_high_clock_checked(std::uint64_t edges, DspEsaiClockObserver observer);
+  [[nodiscard]] std::uint64_t high_edges_for_toggles(std::uint64_t toggles) const;
+  [[nodiscard]] unsigned launches_until_event() const;
   void observe_bit_clock(DspEsaiInputs inputs);
   void clock_edge(bool clock, std::optional<bool> sync);
   void generate_frame();

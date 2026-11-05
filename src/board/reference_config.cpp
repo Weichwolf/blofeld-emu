@@ -282,14 +282,21 @@ AudioClockRoute audio_clock(std::istringstream &line) {
   const auto level = dsp_level(line);
   if (!level) { throw Fault("Reference audio clock initial level must be known"); }
   const auto destinations = static_cast<unsigned>(number(line, 7));
-  literal(line, "reference-reset-edges");
+  const auto contract = token(line);
+  auto scheduling = AudioClockScheduling::reference_edges;
+  if (contract == "transmitter-events") {
+    scheduling = AudioClockScheduling::transmitter_events;
+  } else if (contract != "reference-reset-edges") {
+    throw Fault("Unknown DSP audio clock scheduling contract: " + contract);
+  }
   if (frequency == 0 || destinations == 0) {
     throw Fault("Reference audio clock frequency/destinations must be nonzero");
   }
   return {.frequency_hz = frequency,
           .epoch_ticks = epoch,
           .destinations = destinations,
-          .initial_level = *level};
+          .initial_level = *level,
+          .scheduling = scheduling};
 }
 
 void dsp_execution(Config &config, std::istringstream &line) {

@@ -94,6 +94,7 @@ void Board::observe_u0_release() {
         throw Fault("Missing MCU U0 DSP reset inputs operation=assert" + context());
       }
       try {
+        synchronize_audio_clock(schedule_ticks());
         native_->runtime->begin_dsp_reset(config_.dsp.initial_reset.value());
       } catch (const Fault &error) {
         throw Fault("MCU U0 DSP reset operation=assert" + context() + ": " + error.what());

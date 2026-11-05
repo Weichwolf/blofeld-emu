@@ -45,6 +45,16 @@ SquareClockLevel SquareClock::next() const {
   return {.ticks = current_.ticks + half_period_, .level = !current_.level};
 }
 
+SquareClockLevel SquareClock::after(const std::uint64_t edges) const {
+  if (edges == 0 ||
+      edges > (std::numeric_limits<std::uint64_t>::max() - current_.ticks) / half_period_) {
+    throw Fault("Reference square clock transition overflows after tick=" +
+                std::to_string(current_.ticks));
+  }
+  return {.ticks = current_.ticks + (edges * half_period_),
+          .level = current_.level != (edges % 2 != 0)};
+}
+
 bool SquareClock::level_at(const std::uint64_t ticks) const {
   if (ticks < config_.epoch_ticks) {
     throw Fault("Reference square clock queried before its declared epoch");
@@ -59,5 +69,12 @@ void SquareClock::consume(const std::uint64_t ticks) {
                 std::to_string(edge.ticks) + " actual=" + std::to_string(ticks));
   }
   current_ = edge;
+}
+
+void SquareClock::consume_span(const std::uint64_t ticks) {
+  if (ticks <= current_.ticks || (ticks - current_.ticks) % half_period_ != 0) {
+    throw Fault("Reference square clock span must end on a later source transition");
+  }
+  current_ = after((ticks - current_.ticks) / half_period_);
 }
 }

@@ -29,8 +29,11 @@ public:
   [[nodiscard]] SquareClockLevel current() const { return current_; }
 
   [[nodiscard]] SquareClockLevel next() const;
+  [[nodiscard]] SquareClockLevel after(std::uint64_t edges) const;
   [[nodiscard]] bool level_at(std::uint64_t ticks) const;
   void consume(std::uint64_t ticks);
+  // Advance a caller-proven quiet span ending on a source transition.
+  void consume_span(std::uint64_t ticks);
 
   [[nodiscard]] const SquareClockConfig &config() const { return config_; }
 

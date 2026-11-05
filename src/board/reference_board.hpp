@@ -14,6 +14,7 @@
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_esai.hpp"
+#include "dsp/dsp_peripheral_calendar.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_shi.hpp"
 #include "dsp/own_dsp_machine.hpp"
@@ -103,11 +104,14 @@ struct DspEsaiClock {
 
 // Declared laboratory routing: bits0/1 select ESAI0/1 HCKT; bit2 selects DAX ACI.
 // Matching divisors do not establish a physical shared clock net.
+enum class AudioClockScheduling : std::uint8_t { reference_edges, transmitter_events };
+
 struct AudioClockRoute {
   std::uint64_t frequency_hz = 0;
   std::uint64_t epoch_ticks = 0;
   unsigned destinations = 0;
   bool initial_level = false;
+  AudioClockScheduling scheduling = AudioClockScheduling::reference_edges;
 };
 
 struct PcmRoute {
@@ -471,6 +475,15 @@ private:
   void observe_dsp_input(std::uint64_t at);
   void prepare_audio_clock();
   void observe_audio_clock(std::uint64_t at);
+  [[nodiscard]] bool transmitter_clock_events() const;
+  [[nodiscard]] bool batch_audio_clock() const;
+  [[nodiscard]] std::optional<std::uint64_t> next_audio_clock_event() const;
+  void synchronize_audio_clock(std::uint64_t at);
+  void advance_audio_clock_span(std::uint64_t at);
+  void observe_clock_pcm(unsigned instance,
+                         std::uint64_t at,
+                         DspEsaiOutputs data,
+                         DspEsaiClockOutputs clocks);
   void trace_audio_clock(const AudioClockRoute &route,
                          SquareClockLevel event,
                          bool baseline,
@@ -482,6 +495,7 @@ private:
   void trace_dsp_midi(std::uint64_t at);
   void observe_sci_midi(std::uint64_t at);
   void observe_pcm(std::uint64_t at, std::string_view source);
+  void observe_pcm_pins(std::uint64_t at, SerialPcmPins pins, std::string_view source);
   void check_pcm_output() const;
   void retire_pcm_output() noexcept;
   void mark_fault() noexcept;
@@ -491,9 +505,9 @@ private:
                  std::string_view source,
                  const std::optional<SerialPcmFrame> &frame) const;
   [[nodiscard]] DspRuntimeEvents runtime_events();
-  [[nodiscard]] DspRuntimePeripheralEvents nand_events(Owners &owners) const;
+  [[nodiscard]] DspRuntimePeripheralEvents peripheral_events(Owners &owners);
   [[nodiscard]] unsigned runtime_event_budget() const;
-  [[nodiscard]] McuDspRuntime::CycleInputs runtime_inputs() const;
+  [[nodiscard]] McuDspRuntime::CycleInputs runtime_inputs();
   [[nodiscard]] McuDspRuntime::Observer runtime_observer();
   [[nodiscard]] std::uint64_t common_hz() const;
   [[nodiscard]] std::uint64_t dsp_ticks() const;
@@ -520,6 +534,8 @@ private:
   const Execution execution_;
   std::shared_ptr<const Identity> identity_;
   const std::shared_ptr<const bool> input_identity_ = std::make_shared<const bool>(true);
+  const std::shared_ptr<const PeripheralEventIdentity> clock_identity_ =
+      std::make_shared<const PeripheralEventIdentity>();
   std::unique_ptr<Owners> native_;
   Control control_;
   // External transport epochs must not rewind with a modeled-state restore.

@@ -171,6 +171,7 @@ void Board::apply(const Input &input) {
 }
 
 void Board::release(const std::uint64_t at) {
+  synchronize_audio_clock(at);
   control_.previous = sample();
   if (control_.previous.selected) { throw Fault("DSP release requires deasserted SPI SS"); }
   native_->dsp.bus().shi().observe_spi(control_.previous);

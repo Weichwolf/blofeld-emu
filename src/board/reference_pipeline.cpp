@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <ostream>
@@ -93,7 +94,7 @@ void Board::prepare_dsp() {
 void Board::connect_runtime() {
   control_.dsp_initial_pending = true;
   native_->runtime = std::make_unique<McuDspRuntime>(
-      config_.dsp, native_->mcu, native_->dsp, runtime_events(), nand_events(*native_));
+      config_.dsp, native_->mcu, native_->dsp, runtime_events(), peripheral_events(*native_));
 }
 
 unsigned Board::runtime_event_budget() const {
@@ -103,9 +104,35 @@ unsigned Board::runtime_event_budget() const {
   return config_.nand ? 8U : 1U;
 }
 
-DspRuntimePeripheralEvents Board::nand_events(Owners &owners) const {
-  if (!owners.nand) { return {}; }
-  const auto events = owners.nand->events();
+DspRuntimePeripheralEvents Board::peripheral_events(Owners &owners) {
+  if (!owners.nand && !transmitter_clock_events()) { return {}; }
+  const auto events = owners.nand ? owners.nand->events() : NandPeerEvents{};
+  if (transmitter_clock_events()) {
+    return {.identity = clock_identity_,
+            .next_ticks = [this, events]() -> std::optional<std::uint64_t> {
+              const auto nand = events.next_ticks ? events.next_ticks() : std::nullopt;
+              const auto audio = next_audio_clock_event();
+              return audio && (!nand || *audio < *nand) ? audio : nand;
+            },
+            .observe =
+                [this, events](const std::uint64_t at) {
+                  synchronize_audio_clock(at);
+                  bool observed = false;
+                  // Ready and audio are disjoint devices. A simultaneous batch
+                  // retains explicit NAND-ready, then transmitter ordering.
+                  if (events.next_ticks && events.next_ticks() == at) {
+                    events.observe(at);
+                    observed = true;
+                  }
+                  if (next_audio_clock_event() == at) {
+                    observe_audio_clock(at);
+                    observed = true;
+                  }
+                  if (!observed) { throw Fault("No device owns the offered peripheral time"); }
+                },
+            .order = DspPeerOrder::peer_first,
+            .maximum_events_per_period = runtime_event_budget()};
+  }
   return {.identity = events.identity,
           .next_ticks = events.next_ticks,
           .observe = events.observe,
@@ -155,8 +182,15 @@ bool Board::timing_faulted() const {
          (native_->runtime && native_->runtime->faulted());
 }
 
-McuDspRuntime::CycleInputs Board::runtime_inputs() const {
+McuDspRuntime::CycleInputs Board::runtime_inputs() {
   return [this] {
+    if (transmitter_clock_events()) {
+      const auto elapsed = dsp_ticks();
+      if (elapsed > std::numeric_limits<std::uint64_t>::max() - config_.dsp.epoch_ticks) {
+        throw Fault("Periodic audio synchronization exhausted common time");
+      }
+      synchronize_audio_clock(config_.dsp.epoch_ticks + elapsed);
+    }
     observe_held_dsp_tio();
     if (native_->nand) { native_->nand->before_native(native_->dsp.clock().elapsed_ticks()); }
     return DspDmaInputs{.timing = DspDmaTiming::reference_sampled_cycles,
@@ -166,6 +200,7 @@ McuDspRuntime::CycleInputs Board::runtime_inputs() const {
 
 McuDspRuntime::Observer Board::runtime_observer() {
   return [this](const DspRuntimeCycle &cycle) {
+    synchronize_audio_clock(cycle.completion_ticks);
     if (native_->nand) {
       native_->nand->after_native(cycle.completion_ticks, cycle.result.native_pc);
     }
@@ -211,6 +246,7 @@ DspRuntimeEvents Board::runtime_events() {
           },
           .observe =
               [this](const std::uint64_t at) {
+                synchronize_audio_clock(at);
                 if (control_.dsp_initial_pending) {
                   if (at != ticks()) {
                     throw Fault("Initial DSP inputs require the native attachment boundary");

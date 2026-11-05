@@ -9,8 +9,10 @@
 #include "dsp/dsp_esai.hpp"
 #include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_pll.hpp"
+#include "dsp/own_dsp_fetch.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <ostream>
 #include <string>
 
@@ -18,6 +20,11 @@ namespace blofeld::reference {
 void Board::prepare_audio_clock() {
   if (!config_.audio_clock) { return; }
   const auto &route = *config_.audio_clock;
+  if (transmitter_clock_events() &&
+      (config_.checkpoint ||
+       config_.dsp.timing != OwnDspAutomaticTiming::functional_native_regions)) {
+    throw Fault("Transmitter-event audio requires native regions without checkpoint replay");
+  }
   constexpr unsigned destinations = 7;
   if (route.destinations == 0 || (route.destinations & ~destinations) != 0) {
     throw Fault("Invalid reference audio clock destinations");
@@ -68,6 +75,10 @@ void Board::observe_audio_clock(const std::uint64_t at) {
   const auto &route = *config_.audio_clock;
   auto &source = *control_.audio_clock;
   const bool baseline = !control_.audio_clock_started;
+  if (!baseline && batch_audio_clock()) {
+    advance_audio_clock_span(at);
+    return;
+  }
   const auto event = baseline ? source.current() : source.next();
   if (event.ticks != at) { throw Fault("Reference audio clock event changed its timestamp"); }
   constexpr unsigned dax_aci = 4;
@@ -104,6 +115,145 @@ void Board::observe_audio_clock(const std::uint64_t at) {
   control_.audio_clock_started = true;
   trace_audio_clock(route, event, baseline, core_hz);
   observe_pcm(at, "audio-clock");
+}
+
+bool Board::transmitter_clock_events() const {
+  return config_.audio_clock &&
+         config_.audio_clock->scheduling == AudioClockScheduling::transmitter_events;
+}
+
+bool Board::batch_audio_clock() const {
+  // DAX keeps its existing edge contract while enabled. Its inactive source
+  // level is still caught up before a register/pad write can enable it.
+  return transmitter_clock_events() && control_.audio_clock_started &&
+         native_->dsp.bus().gpio(DspPort::d).outputs().peripheral == 0;
+}
+
+std::optional<std::uint64_t> Board::next_audio_clock_event() const {
+  if (!config_.audio_clock || !control_.audio_clock || !transmitter_clock_events()) {
+    return std::nullopt;
+  }
+  const auto &source = *control_.audio_clock;
+  if (!control_.audio_clock_started) { return source.current().ticks; }
+  if (!batch_audio_clock()) { return source.next().ticks; }
+  std::optional<std::uint64_t> edges;
+  if (config_.pcm && control_.pcm && !control_.pcm_stamp) {
+    // Prime the receiver on the first source edge at/after its attachment time,
+    // including a quiet SCKT level before the first sampled data transition.
+    const auto start = source.current().ticks;
+    const auto distance = config_.pcm->after_ticks > start ? config_.pcm->after_ticks - start : 1;
+    const auto half = source.half_period_ticks();
+    edges = (distance / half) + (distance % half != 0 ? 1U : 0U);
+  }
+  for (unsigned index = 0; index < 2; ++index) {
+    if ((config_.audio_clock->destinations & (1U << index)) == 0) { continue; }
+    const auto instance = index == 0 ? DspEsaiInstance::primary : DspEsaiInstance::secondary;
+    const auto next = native_->dsp.bus().esai_high_clock_edges_until_event(instance);
+    if (next && (!edges || *next < *edges)) { edges = next; }
+  }
+  return edges ? std::optional{source.after(*edges).ticks} : std::nullopt;
+}
+
+void Board::synchronize_audio_clock(const std::uint64_t at) {
+  if (!control_.audio_clock || !batch_audio_clock()) { return; }
+  auto through = at;
+  const auto event = next_audio_clock_event();
+  // A due status event belongs to the calendar's declared tie order. Only its
+  // preceding quiet transitions may be consumed during native preparation.
+  if (event && *event <= at) {
+    if (*event == 0) { return; }
+    through = *event - 1;
+  }
+  const auto &source = *control_.audio_clock;
+  if (through <= source.current().ticks) { return; }
+  const auto edges = (through - source.current().ticks) / source.half_period_ticks();
+  if (edges != 0) { advance_audio_clock_span(source.after(edges).ticks); }
+}
+
+void Board::observe_clock_pcm(const unsigned instance,
+                              const std::uint64_t at,
+                              const DspEsaiOutputs data,
+                              const DspEsaiClockOutputs clocks) {
+  if (!config_.pcm || config_.pcm->instance != instance || at < config_.pcm->after_ticks) {
+    return;
+  }
+  const auto port = instance == 0 ? DspPort::c : DspPort::e;
+  constexpr unsigned clock_pads = 0x18;
+  if ((native_->dsp.bus().gpio(port).outputs().peripheral & clock_pads) != clock_pads) {
+    throw Fault("PCM SCKT/FST peripheral mux is absent");
+  }
+  const auto level = [](const unsigned mask, const unsigned known, const unsigned bits) {
+    return (known & mask) == 0 ? std::nullopt : std::optional{(bits & mask) != 0};
+  };
+  const auto &input = control_.esai_inputs.at(instance);
+  observe_pcm_pins(
+      at,
+      {.clock = (clocks.driven & 1U) != 0 ? level(1, clocks.known, clocks.levels) : input.clock,
+       .frame_sync =
+           (clocks.driven & 2U) != 0 ? level(2, clocks.known, clocks.levels) : input.frame_sync,
+       .data = level(1U << config_.pcm->lane, data.driven & data.known, data.levels)},
+      "transmitter-clock");
+}
+
+void Board::advance_audio_clock_span(const std::uint64_t at) {
+  try {
+    if (!config_.audio_clock || !control_.audio_clock || !batch_audio_clock()) {
+      throw Fault("Periodic audio span has no functional clock owner");
+    }
+    auto &source = *control_.audio_clock;
+    const auto start = source.current().ticks;
+    const auto half_period = source.half_period_ticks();
+    if (at <= start || (at - start) % half_period != 0) {
+      throw Fault("Periodic audio span must end on a later HCKT transition");
+    }
+    const auto edges = (at - start) / half_period;
+    const auto event = source.after(edges);
+    for (unsigned index = 0; index < 2; ++index) {
+      if ((config_.audio_clock->destinations & (1U << index)) == 0) { continue; }
+      const auto instance = index == 0 ? DspEsaiInstance::primary : DspEsaiInstance::secondary;
+      constexpr unsigned hckt_pad = 0x20;
+      native_->dsp.bus()
+          .gpio(index == 0 ? DspPort::c : DspPort::e)
+          .update_drive(hckt_pad, {.mask = hckt_pad, .levels = event.level ? hckt_pad : 0U});
+
+      struct Context {
+        Board &board;
+        unsigned instance;
+        std::uint64_t start;
+        std::uint64_t half_period;
+      } context{.board = *this, .instance = index, .start = start, .half_period = half_period};
+
+      native_->dsp.bus().advance_esai_high_clock(
+          instance,
+          edges,
+          {.context = &context,
+           .transition = [](void *pointer,
+                            const std::uint64_t edge,
+                            const DspEsaiOutputs data,
+                            const DspEsaiClockOutputs clocks) {
+             const auto &call = *static_cast<Context *>(pointer);
+             call.board.observe_clock_pcm(
+                 call.instance, call.start + (edge * call.half_period), data, clocks);
+           }});
+    }
+    constexpr unsigned dax_aci = 4;
+    if ((config_.audio_clock->destinations & dax_aci) != 0) {
+      constexpr unsigned aci_pad = 1;
+      native_->dsp.bus()
+          .gpio(DspPort::d)
+          .update_drive(aci_pad, {.mask = aci_pad, .levels = event.level ? aci_pad : 0U});
+      native_->dsp.bus().observe_dax(
+          {.aci = event.level,
+           .rates = {.core_hz = audio_core_hz(), .aci_hz = config_.audio_clock->frequency_hz},
+           .timing = DspDaxTiming::reference_rising_edges});
+    }
+    source.consume_span(at);
+    observe_pcm(at, "transmitter-span");
+  } catch (const Fault &error) {
+    throw Fault("Periodic DSP audio clock operation=advance at=" + std::to_string(at) +
+                " mcu-pc=" + mcu_pc_context(native_->mcu) +
+                " dsp-pc=" + hex(native_->dsp.cpu().registers().pc, 6) + ": " + error.what());
+  }
 }
 
 void Board::trace_audio_clock(const AudioClockRoute &route,

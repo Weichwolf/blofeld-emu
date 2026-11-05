@@ -72,22 +72,7 @@ void Board::trace_pcm(const SerialPcmStamp stamp,
 void Board::observe_pcm(const std::uint64_t at, const std::string_view source) {
   if (!config_.pcm || !control_.pcm || at < config_.pcm->after_ticks) { return; }
   try {
-    auto stamp = SerialPcmStamp{.ticks = at};
-    if (control_.pcm_stamp && control_.pcm_stamp->ticks == at) {
-      if (control_.pcm_stamp->order == std::numeric_limits<std::uint64_t>::max()) {
-        throw Fault("PCM same-tick observation order exhausted");
-      }
-      stamp.order = control_.pcm_stamp->order + 1;
-    }
-    const auto pins = pcm_pins();
-    const auto frame = control_.pcm->observe_ordered(stamp, pins);
-    control_.pcm_stamp = stamp;
-    if (frame) {
-      if (control_.recording) { control_.recording.append(*frame); }
-      if (pcm_output_ != nullptr) { pcm_output_->accept(*frame); }
-      control_.last_pcm = frame;
-    }
-    trace_pcm(stamp, pins, source, frame);
+    observe_pcm_pins(at, pcm_pins(), source);
   } catch (const Fault &error) {
     const auto route = *config_.pcm;
     constexpr unsigned primary = 0xffffa0;
@@ -101,6 +86,27 @@ void Board::observe_pcm(const std::uint64_t at, const std::string_view source) {
                 " mcu-pc=" + mcu_pc_context(native_->mcu) +
                 " dsp-pc=" + hex(native_->dsp.cpu().registers().pc, 6) + ": " + error.what());
   }
+}
+
+void Board::observe_pcm_pins(const std::uint64_t at,
+                             const SerialPcmPins pins,
+                             const std::string_view source) {
+  if (!config_.pcm || !control_.pcm || at < config_.pcm->after_ticks) { return; }
+  auto stamp = SerialPcmStamp{.ticks = at};
+  if (control_.pcm_stamp && control_.pcm_stamp->ticks == at) {
+    if (control_.pcm_stamp->order == std::numeric_limits<std::uint64_t>::max()) {
+      throw Fault("PCM same-tick observation order exhausted");
+    }
+    stamp.order = control_.pcm_stamp->order + 1;
+  }
+  const auto frame = control_.pcm->observe_ordered(stamp, pins);
+  control_.pcm_stamp = stamp;
+  if (frame) {
+    if (control_.recording) { control_.recording.append(*frame); }
+    if (pcm_output_ != nullptr) { pcm_output_->accept(*frame); }
+    control_.last_pcm = frame;
+  }
+  trace_pcm(stamp, pins, source, frame);
 }
 
 void Board::save_audio() const {

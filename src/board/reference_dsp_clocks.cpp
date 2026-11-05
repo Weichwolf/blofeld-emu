@@ -63,7 +63,7 @@ std::optional<Board::DspOffer> Board::next_dsp_input() const {
                                       .timing = DspEsaiClockTiming::reference_reset_edges}},
                    .clock_index = clock.index});
   }
-  if (control_.audio_clock) {
+  if (control_.audio_clock && !transmitter_clock_events()) {
     const auto at = control_.audio_clock_started ? control_.audio_clock->next().ticks
                                                  : control_.audio_clock->current().ticks;
     offer(DspOffer{.input = {.ticks = at}, .audio_clock = true});
