@@ -226,5 +226,85 @@
     "voice_retirement_qualified": false,
     "private_audit": "doc/local/native-vacant-restart-r1/boot-midi-r2/pitch-audit.json",
     "audit_sha256": "009c364c99d2401cd7f05822a21a35c510697999240bb802a98694f18b320fe0"
+  },
+  "native_mcu_replay": {
+    "scope": "One actual original POR/Main and ordinary MIDI chain on the same explicit functional Board model, replacing only the MCU executor. No complete instrument or physical equivalence claim.",
+    "native_CPU12_revision": "769b9d09e7cfd95d2f2caecd3f7525be35729647",
+    "regular_CMake_CPU12_revision": "69bd36e70654a3112636128e9fed59d2d5d9c8db",
+    "regular_pin_difference": "Embedding CMake/README only; all45 CPP/API files unchanged",
+    "binding_source_sha256": "f14ba6bf8ebc38e4fd8b437dc96b918e6c65da59a9269be9177a7e30ffabc222",
+    "ELF_sha256": "109b4409dd9ee169afdee82b88ba70981fd71cc69cab8f558c49e25cf95b5d96",
+    "main": {
+      "operations": 88707072,
+      "instructions": 88693663,
+      "interrupts": 10725,
+      "ticks": 4761510731208,
+      "mcu-pc": 33557,
+      "mcu-d": 2080,
+      "dsp-pc": 410,
+      "dsp-sr": 213,
+      "dsp-omr": 6292361,
+      "dsp-steps": 732119428,
+      "pcm": 319017,
+      "midi-bytes": 0,
+      "midi-dsp-frames": 0,
+      "midi-output-bytes": 0,
+      "midi-output-queued": 0,
+      "waiting": 1,
+      "faulted": 0
+    },
+    "shared_cold_boundaries_exact": 177,
+    "all_MCU_registers_and_5120_RAM_bytes_exact": true,
+    "Main_RAM_sha256": "12a76724f8083bfebfda890785cccd8dcb9d32c3347dfc00d977c62a6f03a756",
+    "startup_PCM_payload_prefix_exact_frames": 319017,
+    "MIDI": {
+      "input_bytes": 14,
+      "output_bytes": 15,
+      "commands": [
+        "90 45 64",
+        "80 45 00",
+        "f0 7e 7f 06 01 f7",
+        "c0 01"
+      ],
+      "minimum_virtual_dwell_ms": 100,
+      "new_nonzero_frames_per_channel": [
+        11696,
+        11696
+      ],
+      "voice_WAV_sha256": "7fbbe43350020661a495ec156ffadcce9d83b072cdb5b1ea510b714aa92dee0f",
+      "identity_reply": "f0 7e 00 06 02 3e 13 00 00 00 31 2e 32 34 f7",
+      "reply_version_quirk_preserved": "1.24",
+      "program_labels": [
+        "A001 / Init",
+        "A002 / Init !"
+      ],
+      "changed_LCD_pixels": 30,
+      "all_recording_prefixes_retained": true
+    },
+    "A4_model_rate_check": {
+      "expected_hz": 440.0,
+      "observed_hz": [
+        440.12460459485254,
+        440.12460459485254
+      ],
+      "relative_tolerance": 0.002,
+      "window_frames": 4096,
+      "physical_clock_or_tuning_qualified": false
+    },
+    "audit_sha256": {
+      "native-main-audit.json": "9805ce1f5cf3c7b5dcfaf4c03b546f938aaa32b6afdf696691023641fe375a6c",
+      "midi-controls-audit.json": "95615e90cb83e368d2de3acf7ec443736f53812cdb628516a5e4cd9d9de89cc7",
+      "native-A4-audit.json": "28ab682a3d54635e2d2caf8ffba4abc68127db775f02b04fb2366ea38306415f"
+    },
+    "limitations": [
+      "Functional clock/wiring/vacant-data hypotheses remain; no recovered factory SL image",
+      "One channel, short note, Identity and one program change; no complete function matrix",
+      "Normal standalone startup, active factory SL, live audio, sustained realtime and hardware equivalence remain unqualified"
+    ],
+    "firmware_patched": false,
+    "checkpoint_replay": false,
+    "host_synthesis": false,
+    "fuzz": false,
+    "complete_instrument": false
   }
 }

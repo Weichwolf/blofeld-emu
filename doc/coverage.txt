@@ -11,17 +11,17 @@ in function-acceptance.tsv; its pending entries are not waived by component test
 Reference manifests pin specific source/input/test scopes, not an assertion that
 all functions or every current binary have passed.
 
-A frozen original reset with the qualified USB size-register correction and
-Corebd79 reaches genuine main WAI/A001 Init. All MCU registers and5120 RAM bytes
-match the prior reference. Actual aplaymidi on/off yields11642 nonzero stereo
-frames; aseqdump receives the original15-byte Identity reply, including its
-ASCII1.24 version quirk. A subsequent valid C0 01 program change is admitted but
-fails at DSP PC001f93 on unmapped X011cc1. Program selection, SL, polyphony,
-host audio and realtime remain open. See original-midi-runtime-reference.json;
-the older0319 failure remains historical in original-a4-runtime-reference.json.
-The separate vacant-data decoder hypothesis preserves selected-memory guards
-and the actual Reverb X access (dsp-vacant-data-read.txt). Fresh complete-reset
-program-selection/audio replay remains required.
+The original1.25 actual POR reaches Main/A001 Init on the declared functional
+board model. The optional native CPU12 replay matches177 cold boundaries,
+all MCU registers,5120 RAM bytes and319017 startup PCM frames. Standard
+aplaymidi on/off yields11696 new nonzero frames per stereo channel; the original
+15-byte Identity reply preserves ASCII1.24. C0 01 reaches A002 Init ! and
+returns to Main without a fault. This qualifies one short note, Identity and
+one program change, not factory SL, polyphony, live host audio or realtime.
+See original-midi-controls-reference.json (native_mcu_replay), native-mcu.txt
+and the explicit vacant-data/clock contracts in dsp-vacant-data-read.txt and
+reference-audio-clock.txt. Historical failures remain in
+original-midi-runtime-reference.json and original-a4-runtime-reference.json.
 The original Reverb callback now has a separate48-clear/two-ready regression:
 18 scenes,864 clears and900 actual RTS returns; the real16000 input cursor and
 first unselected store remain intact. Independent NXP software AGU observations

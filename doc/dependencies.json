@@ -141,6 +141,6 @@
     "source": "https://github.com/Weichwolf/cpu12",
     "revision": "69bd36e70654a3112636128e9fed59d2d5d9c8db",
     "license": "GPL-3.0-only",
-    "integration": "Optional experimental build-time MCU executor. Keeps the existing board bus, cycles, reset/IRQ acknowledgement and coordinated CPU checkpoints. No SLEIGH execution fallback. Three focused native binding consumers and the late-RTI refill regression are qualified; complete native original boot and instrument/realtime acceptance remain pending. See native-mcu.txt."
+    "integration": "Optional experimental build-time MCU executor. Keeps existing board bus, cycles, reset/IRQ acknowledgement and coordinated CPU checkpoints. No SLEIGH execution fallback. Three focused native binding consumers and actual original POR/Main/MIDI replay qualify the declared functional board profile; complete standalone Desktop-SL and realtime remain pending. See native-mcu.txt and original-midi-controls-reference.json."
   }
 }
