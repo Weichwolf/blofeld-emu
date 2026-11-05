@@ -6,10 +6,42 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <utility>
 
 namespace blofeld {
 namespace {
 constexpr unsigned byte_mask = 0xff;
+}
+
+NandArray::NandArray(const NandArray &other) : contents_(other.contents_), blocks_(other.blocks_) {}
+
+NandArray &NandArray::operator=(const NandArray &other) {
+  if (this != &other) {
+    clear_read_cache();
+    contents_ = other.contents_;
+    blocks_ = other.blocks_;
+  }
+  return *this;
+}
+
+NandArray::NandArray(NandArray &&other) noexcept
+    : contents_(std::move(other.contents_)), blocks_(std::move(other.blocks_)) {
+  other.clear_read_cache();
+}
+
+NandArray &NandArray::operator=(NandArray &&other) noexcept {
+  if (this != &other) {
+    clear_read_cache();
+    other.clear_read_cache();
+    contents_ = std::move(other.contents_);
+    blocks_ = std::move(other.blocks_);
+  }
+  return *this;
+}
+
+void NandArray::clear_read_cache() noexcept {
+  read_page_ = nullptr;
+  read_index_ = pages;
 }
 
 void NandArray::validate_page(const unsigned page) {
@@ -62,8 +94,12 @@ void NandArray::observe_block(const unsigned block, const NandBlock state) {
 
 NandByte NandArray::cell(const NandLocation location) const {
   validate_location(location);
+  if (read_index_ == location.page) { return read_page_->cells.at(location.column); }
   const auto found = contents_.find(location.page);
-  return found == contents_.end() ? NandByte{} : found->second.cells.at(location.column);
+  if (found == contents_.end()) { return {}; }
+  read_page_ = &found->second;
+  read_index_ = location.page;
+  return read_page_->cells.at(location.column);
 }
 
 NandArray::Page NandArray::snapshot(const unsigned page) const {

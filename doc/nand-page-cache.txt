@@ -1,0 +1,18 @@
+NAND selected-page cache
+
+NandArray retains a positive page pointer across sequential reads. Map insertion,
+rebalancing and Page replacement preserve its address. Missing pages stay unknown
+and uncached. Copy/move assignment clears transient pointers before map replacement;
+move also clears the source. Copies begin with an empty cache. Cached reads require
+one model owner. Image serialization excludes the cache; rebuild all NAND owners
+after this class-layout change.
+
+Validation:567 directed cache ownership/mutation/knowledge/refusal checks and five
+existing read/image/write/durable-store/power regression groups pass in Release.
+One coherent original factory POR prefix matches21 reported counter states;
+at operation10186752, all MCU registers,5120 RAM bytes,12288 X/8192 Y words and
+26477 complete stereo PCM frames match the existing capture exactly. No reference
+rerun. This establishes neither connected speedup nor complete boot/SL playback.
+
+  ctest --test-dir build/native-mcu --output-on-failure \
+    -R '^nand_(page_cache|read|image|write|store|power)$'

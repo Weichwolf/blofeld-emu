@@ -49,6 +49,11 @@ public:
 
   NandArray() = default;
   explicit NandArray(const NandImage &image);
+  NandArray(const NandArray &other);
+  NandArray &operator=(const NandArray &other);
+  NandArray(NandArray &&other) noexcept;
+  NandArray &operator=(NandArray &&other) noexcept;
+  ~NandArray() = default;
   [[nodiscard]] NandImage image() const;
 
   void observe_bytes(NandLocation start, std::span<const std::uint8_t> bytes);
@@ -67,7 +72,12 @@ private:
   static void validate_location(NandLocation location);
   static void validate_page(unsigned page);
   static void validate_block(unsigned block);
+  void clear_read_cache() noexcept;
   std::map<unsigned, Page> contents_;
   std::map<unsigned, NandBlock> blocks_;
+  // Map nodes survive insertion and page replacement. Whole-map replacement
+  // clears this transient observer cache; missing pages are never cached.
+  mutable const Page *read_page_ = nullptr;
+  mutable unsigned read_index_ = pages;
 };
 }
