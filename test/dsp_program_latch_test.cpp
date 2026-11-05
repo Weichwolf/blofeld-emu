@@ -19,10 +19,8 @@
 #include <exception>
 #include <iostream>
 #include <memory>
-#include <optional>
 #include <span>
 #include <string>
-#include <utility>
 
 namespace {
 using namespace blofeld;
@@ -132,18 +130,11 @@ struct Fixture {
             "Real DMA overwrites P-RAM without executing the held native instruction");
   }
 
-  void restore(const OwnDspFetchCheckpoint &saved) {
-    const auto old = std::move(fetch);
-    fetch = std::make_unique<OwnDspFetch>(machine, saved);
-    require(rejects([&] { static_cast<void>(old->view()); }).contains("Stale"),
-            "Coordinated restore invalidates the previous frontend capability");
-  }
-
   OwnDspMachine machine{native::native_clocks};
   std::unique_ptr<OwnDspFetch> fetch;
 };
 
-void opcode_and_restore() {
+void opcode_sampling() {
   const std::array words{short_first, long_jump, program};
   for (const bool latch : {false, true}) {
     Fixture fixture(words, {.value = short_second});
@@ -164,30 +155,26 @@ void opcode_and_restore() {
       require(fixture.fetch->view() == captured,
               "Duplicate F2 capture cannot replace its held word");
     }
-    const auto saved = fixture.fetch->checkpoint();
-    for (unsigned replay = 0; replay < 2; ++replay) {
-      fixture.restore(saved);
-      require(fixture.fetch->view().used == (latch ? 1U : 0U),
-              "Joint restore retains whether the real F2 read already happened");
-      fixture.overwrite({.value = short_second});
-      if (!latch) { fixture.fetch->capture(); }
-      execute(machine, *fixture.fetch);
-      auto expected = before;
-      expected.r[0] = latch ? first_r0 : second_r0;
-      expected.pc = program + 1;
-      require(
-          machine.cpu().registers() == expected &&
-              machine.cpu().progress().instructions == progress.instructions + 1 &&
-              machine.cpu().progress().estimated_cycles == progress.estimated_cycles + 1,
-          "Independent full registers and one base unit distinguish actual opcode capture time");
-      read_words(*fixture.fetch, 2);
-      execute(machine, *fixture.fetch);
-      read_words(*fixture.fetch);
-      execute(machine, *fixture.fetch);
-      require(machine.cpu().registers().r[0] == second_r0 &&
-                  machine.cpu().registers().pc == program + 1,
-              "A later genuine refetch observes the actual DMA-written opcode");
-    }
+
+    require(fixture.fetch->view().used == (latch ? 1U : 0U),
+            "The live frontend records whether the real F2 read already happened");
+    fixture.overwrite({.value = short_second});
+    if (!latch) { fixture.fetch->capture(); }
+    execute(machine, *fixture.fetch);
+    auto expected = before;
+    expected.r[0] = latch ? first_r0 : second_r0;
+    expected.pc = program + 1;
+    require(machine.cpu().registers() == expected &&
+                machine.cpu().progress().instructions == progress.instructions + 1 &&
+                machine.cpu().progress().estimated_cycles == progress.estimated_cycles + 1,
+            "Independent full registers and one base unit distinguish actual opcode capture time");
+    read_words(*fixture.fetch, 2);
+    execute(machine, *fixture.fetch);
+    read_words(*fixture.fetch);
+    execute(machine, *fixture.fetch);
+    require(machine.cpu().registers().r[0] == second_r0 &&
+                machine.cpu().registers().pc == program + 1,
+            "A later genuine refetch observes the actual DMA-written opcode");
   }
 }
 
@@ -231,23 +218,20 @@ void extension_sampling() {
     fixture.fetch->issue();
     fixture.source_read(program + 1);
     if (latch) { fixture.fetch->capture(); }
-    const auto saved = fixture.fetch->checkpoint();
-    for (unsigned replay = 0; replay < 2; ++replay) {
-      fixture.restore(saved);
-      fixture.overwrite({.value = second, .destination = program + 1});
-      if (!latch) { fixture.fetch->capture(); }
-      execute(machine, *fixture.fetch);
-      auto expected = before;
-      expected.r[0] = latch ? first : second;
-      expected.pc = program + 2;
-      require(machine.cpu().registers() == expected &&
-                  machine.cpu().progress().estimated_cycles == progress.estimated_cycles + 2,
-              "Extension data uses its own real F2 time, never a stale decode lookahead value");
-      read_words(*fixture.fetch);
-      execute(machine, *fixture.fetch);
-      require(machine.cpu().registers().pc == program + 3 && fixture.fetch->view().used == 0,
-              "Retirement releases both words before the following genuinely captured NOP");
-    }
+
+    fixture.overwrite({.value = second, .destination = program + 1});
+    if (!latch) { fixture.fetch->capture(); }
+    execute(machine, *fixture.fetch);
+    auto expected = before;
+    expected.r[0] = latch ? first : second;
+    expected.pc = program + 2;
+    require(machine.cpu().registers() == expected &&
+                machine.cpu().progress().estimated_cycles == progress.estimated_cycles + 2,
+            "Extension data uses its own real F2 time, never a stale decode lookahead value");
+    read_words(*fixture.fetch);
+    execute(machine, *fixture.fetch);
+    require(machine.cpu().registers().pc == program + 3 && fixture.fetch->view().used == 0,
+            "Retirement releases both words before the following genuinely captured NOP");
   }
 }
 
@@ -290,12 +274,11 @@ void nonprogram_and_ticket_guards() {
   const auto view = fetch.view();
   static_cast<void>(rejects([&] { static_cast<void>(machine.advance(wrong.pending->ticket)); }));
   static_cast<void>(rejects([&] { fetch.capture(); }));
-  static_cast<void>(rejects([&] { const OwnDspFetch empty(machine, OwnDspFetchCheckpoint{}); }));
   require(actual.pending->effect.kind == dsp56300::EffectKind::read &&
               actual.pending->effect.address == fifo && machine.cpu().registers() == before &&
               machine.cpu().progress() == progress && fetch.view() == view &&
               machine.bus().read({.space = DspSpace::x, .address = fifo}) == first,
-          "Foreign/empty capabilities and a nonprogram capture consume no actual FIFO word");
+          "Foreign capabilities and a nonprogram capture consume no actual FIFO word");
   finish(machine, machine.advance(actual.pending->ticket));
   fetch.synchronize();
   require(machine.cpu().registers().x == second,
@@ -325,68 +308,73 @@ unsigned prepare_unknown(OwnDspMachine &machine, const bool extension) {
   return address;
 }
 
-void held_unknown_snapshot(const bool extension) {
+void held_unknown_sample(const bool extension, const bool known_before_capture) {
   OwnDspMachine machine(native::native_clocks);
   const auto address = prepare_unknown(machine, extension);
-  const auto chip = machine.checkpoint();
-  auto fetch = std::make_unique<OwnDspFetch>(machine);
-  read_words(*fetch, extension ? 2U : 1U);
-  const auto captured = fetch->view();
+  if (known_before_capture) {
+    machine.bus().write({.address = address, .value = extension ? first : 0U});
+  }
+  OwnDspFetch fetch(machine);
+  read_words(fetch, extension ? 2U : 1U);
+  if (known_before_capture) {
+    execute(machine, fetch);
+    require(machine.cpu().registers().pc == program + (extension ? 2U : 1U) &&
+                (!extension || machine.cpu().registers().r[0] == first),
+            "Real memory supplied before F2 permits the independently expected native result");
+    return;
+  }
+  const auto captured = fetch.view();
   require(!captured.words.at(extension ? 1U : 0U).data,
-          "The actual F2 sample explicitly retains an unknown word, never a zero NOP");
-  const auto saved = fetch->checkpoint();
+          "Actual F2 explicitly captures an unknown word, never a zero NOP");
   const auto before = machine.cpu().registers();
   const auto progress = machine.cpu().progress();
-  for (unsigned replay = 0; replay < 2; ++replay) {
-    auto stale = std::move(fetch);
-    fetch = std::make_unique<OwnDspFetch>(machine, saved);
-    machine.bus().write({.address = address, .value = extension ? first : 0U});
-    const auto error = rejects([&] { static_cast<void>(fetch->begin()); });
-    require(error.contains("P:" + hex(address, 6)) && fetch->view() == captured &&
-                machine.cpu().registers() == before && machine.cpu().progress() == progress,
-            "Later known RAM and trusted replay cannot replace an already captured unknown word");
-  }
-  fetch.reset();
-  machine.restore(chip);
   machine.bus().write({.address = address, .value = extension ? first : 0U});
-  fetch = std::make_unique<OwnDspFetch>(machine);
-  read_words(*fetch, extension ? 2U : 1U);
-  execute(machine, *fetch);
-  require(machine.cpu().registers().pc == program + (extension ? 2U : 1U) &&
-              (!extension || machine.cpu().registers().r[0] == first),
-          "Restoring before F2 and recapturing real known memory permits the independent native "
-          "result");
+  const auto error = rejects([&] { static_cast<void>(fetch.begin()); });
+  require(error.contains("P:" + hex(address, 6)) && fetch.view() == captured &&
+              machine.cpu().registers() == before && machine.cpu().progress() == progress,
+          "Later known backing RAM cannot replace an already captured unknown word");
 }
 
-void unknown_program_and_recovery(const bool extension) {
+void unknown_program_and_failure(const bool extension, const bool known_before_capture) {
   OwnDspMachine machine(native::native_clocks);
   const auto address = prepare_unknown(machine, extension);
-  auto timeline =
-      std::make_unique<OwnDspTimeline>(machine, OwnDspAutomaticTiming::one_effect_per_cycle, 0);
-  std::optional<OwnDspTimelineCheckpoint> saved;
+  if (known_before_capture) {
+    machine.bus().write({.address = address, .value = extension ? first : 0U});
+  }
+  OwnDspTimeline timeline(machine, OwnDspAutomaticTiming::one_effect_per_cycle, 0);
   const auto before = machine.cpu().progress();
   const auto advance = [&]() {
     const auto last = machine.bus().last_dma_cycle();
-    return timeline->advance_one(timeline->next_deadline(),
-                                 OwnDspBoundary::through,
-                                 banks::inputs({.index = last ? *last + 1 : 0}));
+    return timeline.advance_one(timeline.next_deadline(),
+                                OwnDspBoundary::through,
+                                banks::inputs({.index = last ? *last + 1 : 0}));
   };
+  bool issued = false;
   bool failed = false;
-  for (unsigned cycle = 0; cycle < bound && !failed; ++cycle) {
+  for (unsigned cycle = 0;
+       cycle < bound && !failed && machine.cpu().progress().instructions == before.instructions;
+       ++cycle) {
     try {
       const auto result = advance();
-      if (result && result->issued_address == address) { saved = timeline->checkpoint(); }
+      issued = issued || (result && result->issued_address == address);
     } catch (const Fault &error) {
       const std::string text(error.what());
-      require(text.contains("P:" + hex(address, 6)) && text.contains("pc=0x000100") &&
-                  text.contains("omr=0x000305") && timeline->faulted() &&
-                  machine.cpu().progress() == before &&
-                  rejects([&] { static_cast<void>(timeline->checkpoint()); }).contains("healthy"),
-              "Unknown actual opcode/extension remains a contextual quarantined timeline failure");
+      require(!known_before_capture && text.contains("P:" + hex(address, 6)) &&
+                  text.contains("pc=0x000100") && text.contains("omr=0x000305") &&
+                  timeline.faulted() && machine.cpu().progress() == before,
+              "Unknown opcode/extension remains a contextual quarantined timeline failure");
       failed = true;
     }
   }
-  if (!failed || !saved) { throw Fault("Unknown instruction must fail after its saved F1 issue"); }
+  require(issued, "The actual program address must be issued before completion or failure");
+  if (known_before_capture) {
+    require(!failed && machine.cpu().progress().instructions == before.instructions + 1 &&
+                machine.cpu().registers().pc == program + (extension ? 2U : 1U) &&
+                (!extension || machine.cpu().registers().r[0] == first),
+            "A freshly reset owner executes real supplied memory through the native path");
+    return;
+  }
+  require(failed, "An unknown instruction must fail within the authored cycle bound");
   const auto stopped = machine.cpu().registers();
   const auto stopped_progress = machine.cpu().progress();
   const auto ticks = machine.clock().elapsed_ticks();
@@ -394,17 +382,6 @@ void unknown_program_and_recovery(const bool extension) {
   require(machine.cpu().registers() == stopped && machine.cpu().progress() == stopped_progress &&
               machine.clock().elapsed_ticks() == ticks,
           "A quarantined timeline cannot resume native work or consume another period");
-  timeline = std::make_unique<OwnDspTimeline>(machine, saved.value());
-  machine.bus().write({.address = address, .value = extension ? first : 0U});
-  for (unsigned cycle = 0;
-       cycle < bound && machine.cpu().progress().instructions == before.instructions;
-       ++cycle) {
-    static_cast<void>(advance());
-  }
-  require(machine.cpu().progress().instructions == before.instructions + 1 &&
-              machine.cpu().registers().pc == program + (extension ? 2U : 1U) &&
-              (!extension || machine.cpu().registers().r[0] == first),
-          "Trusted pre-F2 restore and real supplied memory permit only the original native path");
 }
 
 void program_data_and_clock_guards() {
@@ -456,17 +433,19 @@ void program_data_and_clock_guards() {
 
 int main() {
   try {
-    opcode_and_restore();
+    opcode_sampling();
     opcode_length_and_zero();
     extension_sampling();
     nonprogram_and_ticket_guards();
-    held_unknown_snapshot(false);
-    held_unknown_snapshot(true);
-    unknown_program_and_recovery(false);
-    unknown_program_and_recovery(true);
+    for (const bool extension : {false, true}) {
+      for (const bool known : {false, true}) {
+        held_unknown_sample(extension, known);
+        unknown_program_and_failure(extension, known);
+      }
+    }
     program_data_and_clock_guards();
-    std::cout
-        << "Actual program fetch latches, native decoding, DMA and coordinated restore passed.\n";
+    std::cout << "Actual program fetch latches, native decoding, DMA and unknown-input failures "
+                 "passed.\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

@@ -82,11 +82,6 @@ struct Fixture {
     throw Fault("Native budget instruction exceeded its bounded cycle count");
   }
 
-  void restore(const OwnDspFetchCheckpoint &checkpoint) {
-    fetch.reset();
-    fetch = std::make_unique<OwnDspFetch>(machine, checkpoint);
-  }
-
   OwnDspMachine machine{clocks};
   std::unique_ptr<OwnDspFetch> fetch;
 };
@@ -114,7 +109,7 @@ void cadence() {
   for (unsigned index = 0; index < 3; ++index) { loop.retire(DspRomProgram::boot + 2 + index, 1); }
 }
 
-void padding_restore_and_mixed_timing() {
+void padding_and_mixed_timing() {
   Fixture fixture{repeated()};
   const auto start = fixture.machine.clock().elapsed_ticks();
   const auto first = fixture.advance();
@@ -124,7 +119,6 @@ void padding_restore_and_mixed_timing() {
               fixture.machine.cpu().progress() == dsp56300::Progress{},
           "REP's computed genuine retirement remains pending while its native budget is unpaid");
   const auto state = fixture.machine.cpu().registers();
-  const auto saved = fixture.fetch->checkpoint();
   const auto dma = fixture.machine.bus().last_dma_cycle();
   require(!rejects([&] {
              static_cast<void>(fixture.fetch->advance_dma_automatic(
@@ -137,20 +131,17 @@ void padding_restore_and_mixed_timing() {
               fixture.machine.bus().last_dma_cycle() == dma &&
               fixture.machine.clock().elapsed_ticks() == start + period,
           "A pending budget rejects manual/reference timing before advancing clocks or DMA");
-  for (unsigned replay = 0; replay < 2; ++replay) {
-    fixture.restore(saved);
-    for (unsigned count = 0; count < 3; ++count) {
-      const auto held = fixture.advance();
-      require(
-          !held.native && fixture.machine.cpu().registers() == state &&
-              fixture.machine.cpu().progress() == dsp56300::Progress{},
-          "Restored padding advances actual clocks without fabricated CPU effects or retirement");
-    }
-    fixture.retire(DspRomProgram::boot, 1);
-    require(fixture.machine.clock().elapsed_ticks() == start + 5 * period,
-            "Both checkpoint suffixes retire REP at exactly its fifth native period");
-    fixture.retire(DspRomProgram::boot + 1, 1);
+
+  for (unsigned count = 0; count < 3; ++count) {
+    const auto held = fixture.advance();
+    require(!held.native && fixture.machine.cpu().registers() == state &&
+                fixture.machine.cpu().progress() == dsp56300::Progress{},
+            "Pending padding advances actual clocks without fabricated CPU effects or retirement");
   }
+  fixture.retire(DspRomProgram::boot, 1);
+  require(fixture.machine.clock().elapsed_ticks() == start + 5 * period,
+          "The real continuation retires REP at exactly its fifth native period");
+  fixture.retire(DspRomProgram::boot + 1, 1);
 }
 
 void bus_phases(const bool known) {
@@ -223,12 +214,11 @@ void gpio_cadence() {
 int main() {
   try {
     cadence();
-    padding_restore_and_mixed_timing();
+    padding_and_mixed_timing();
     bus_phases(true);
     bus_phases(false);
     gpio_cadence();
-    std::cout
-        << "Native cycle budgets, REP, real GPIO and memory phases, restore and refusals pass\n";
+    std::cout << "Native cycle budgets, REP, real GPIO and memory phases and refusals pass\n";
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
     return 1;

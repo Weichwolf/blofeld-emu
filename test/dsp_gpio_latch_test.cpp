@@ -15,7 +15,6 @@
 #include <exception>
 #include <iostream>
 #include <memory>
-#include <optional>
 #include <string>
 
 namespace {
@@ -142,7 +141,6 @@ void native_pin(const Port port, const unsigned index, const bool high, const bo
   require(run.machine().cpu().registers() == expected && gpio.outputs().mask == 0 &&
               gpio.observe_pads(pins).known == 0,
           "Real MOVEP stores and disconnect preserve all CPU registers without inventing pads");
-  auto checkpoint = clocked ? std::optional<OwnDspCheckpoint>{} : run.machine().checkpoint();
   expected.pc += 1;
   expected.sr = (expected.sr & ~1U) | static_cast<unsigned>(high);
   run.retire();
@@ -150,15 +148,7 @@ void native_pin(const Port port, const unsigned index, const bool high, const bo
               gpio.read(Register::data) == (initial | bit) && gpio.outputs().mask == 0 &&
               gpio.observe_pads(pins).known == 0,
           "Native BSET reports the literal old Carry and changes only retained selected storage");
-  if (checkpoint) {
-    OwnDspMachine copy(native::native_clocks);
-    copy.restore(*checkpoint);
-    native::step_native(copy);
-    require(copy.cpu().registers() == expected &&
-                copy.bus().gpio(port.kind).read(Register::data) == (initial | bit) &&
-                copy.bus().gpio(port.kind).observe_pads(pins).known == 0,
-            "Fresh-owner continuation retains the disconnected value and native flag effect");
-  }
+
   expected.pc += 2;
   run.retire();
   require(run.machine().cpu().registers() == expected && gpio.outputs().mask == pins &&
@@ -188,7 +178,7 @@ int main() {
       }
     }
     std::cout << "Functional disconnected GPIO storage guards=" << pins
-              << " native-BSET=" << native_cases << " fresh-owner-replays=70 passed.\n";
+              << " native-BSET=" << native_cases << " passed.\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

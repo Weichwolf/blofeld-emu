@@ -15,8 +15,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <utility>
-#include <vector>
 
 namespace {
 using blofeld::DspBus;
@@ -189,9 +187,6 @@ void all_transitions() {
                   "The shared X-to-P block remains available between switched layouts");
         }
         bus.advance_instruction_cycles(1);
-        const auto saved = bus;
-        bus.advance_instruction_cycles(2);
-        bus = saved;
         transition_data(bus, before, after);
         bus.advance_instruction_cycles(1);
         transition_data(bus, before, after);
@@ -293,11 +288,10 @@ void check_switch(DspBus &bus, const bool complete) {
   }
 }
 
-std::vector<Observation> suffix(blofeld::OwnDspMachine &machine,
-                                blofeld::OwnDspTimeline &timeline,
-                                const Layout layout,
-                                const unsigned remaining) {
-  std::vector<Observation> result{observe(machine, timeline)};
+void suffix(blofeld::OwnDspMachine &machine,
+            blofeld::OwnDspTimeline &timeline,
+            const Layout layout,
+            const unsigned remaining) {
   auto expected = machine.cpu().registers();
   expected.pc = p_y_begin;
   expected.omr = layout.omr;
@@ -305,7 +299,6 @@ std::vector<Observation> suffix(blofeld::OwnDspMachine &machine,
   for (unsigned cycle = 0; cycle < remaining; ++cycle) {
     advance(machine, timeline);
     check_switch(machine.bus(), cycle + 1 == remaining);
-    result.push_back(observe(machine, timeline));
   }
   constexpr unsigned bound = 128;
   constexpr unsigned instructions = 5;
@@ -314,7 +307,6 @@ std::vector<Observation> suffix(blofeld::OwnDspMachine &machine,
     try {
       advance(machine, timeline);
     } catch (const Fault &error) { failure = error.what(); }
-    result.push_back(observe(machine, timeline));
   }
   const std::string reason = layout.program_end == p_y_begin ? "Unmapped DSP memory read"
                                                              : "Y-to-P physical relocation read";
@@ -329,10 +321,10 @@ std::vector<Observation> suffix(blofeld::OwnDspMachine &machine,
   static_cast<void>(rejects([&] { advance(machine, timeline); }));
   require(observe(machine, timeline) == stopped,
           "An unsupported native mapping preserves fail-stop execution without further effects");
-  return result;
 }
 
-blofeld::OwnDspTimelineCheckpoint prepare(blofeld::OwnDspMachine &machine, const Layout layout) {
+std::unique_ptr<blofeld::OwnDspTimeline> prepare(blofeld::OwnDspMachine &machine,
+                                                 const Layout layout) {
   // Independent FM MOVEC immediate OMR, NOP and JMP absolute instruction fields.
   const std::array<std::uint32_t, 10> program{
       movec_omr, layout.omr, 0, 0, 0, jump_absolute, p_y_begin, 0, 0, 0};
@@ -340,61 +332,37 @@ blofeld::OwnDspTimelineCheckpoint prepare(blofeld::OwnDspMachine &machine, const
   machine.bus().write({.space = DspSpace::x, .address = x_moved, .value = cookie});
   constexpr blofeld::OwnDspResetInputs reset{
       .mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2};
-  blofeld::OwnDspTimeline timeline(machine, timing, 0, reset);
+  auto timeline = std::make_unique<blofeld::OwnDspTimeline>(machine, timing, 0, reset);
   constexpr unsigned hold_ticks = 90;
   constexpr unsigned recovery_end = 180;
   constexpr unsigned bound = 32;
-  require(timeline.advance_reset_to(hold_ticks) == hold_ticks, "Real native reset hold");
-  timeline.release_hardware_reset();
-  require(timeline.advance_reset_to(recovery_end) == recovery_end - hold_ticks,
+  require(timeline->advance_reset_to(hold_ticks) == hold_ticks, "Real native reset hold");
+  timeline->release_hardware_reset();
+  require(timeline->advance_reset_to(recovery_end) == recovery_end - hold_ticks,
           "Real mode-five bypass-PLL reset recovery");
   for (unsigned cycle = 0; cycle < bound && machine.cpu().registers().omr != layout.omr; ++cycle) {
-    advance(machine, timeline);
+    advance(machine, *timeline);
   }
   require(machine.cpu().registers().omr == layout.omr,
           "Actual native MOVEC publishes the independently authored memory mode");
   check_switch(machine.bus(), false);
-  return timeline.checkpoint();
+  return timeline;
 }
 
-void native_modes_and_snapshots() {
+void native_modes_and_boundaries() {
   unsigned contexts = 0;
   for (const auto layout : layouts) {
     if (layout.program_end == p_moved) { continue; }
-    blofeld::OwnDspMachine initial(clocks);
-    const auto start = prepare(initial, layout);
     for (unsigned cut = 0; cut <= switch_cycles; ++cut) {
       blofeld::OwnDspMachine source(clocks);
-      auto owner = std::make_unique<blofeld::OwnDspTimeline>(source, start);
+      const auto owner = prepare(source, layout);
       for (unsigned cycle = 0; cycle < cut; ++cycle) { advance(source, *owner); }
-      const auto saved = owner->checkpoint();
-      const auto before = observe(source, *owner);
-      const auto deadline = owner->next_deadline();
-      const auto old = std::move(owner);
-      owner = std::make_unique<blofeld::OwnDspTimeline>(source, saved);
-      require(!old->faulted(),
-              "The previous timeline is healthy before its identity is invalidated");
-      static_cast<void>(rejects([&] { static_cast<void>(old->next_deadline()); }));
-      require(observe(source, *owner) == before && owner->next_deadline() == deadline,
-              "Restoring invalidates a healthy old owner without changing the saved boundary");
-      const auto expected = suffix(source, *owner, layout, switch_cycles - cut);
-      owner = std::make_unique<blofeld::OwnDspTimeline>(source, saved);
-      require(observe(source, *owner) == before && owner->next_deadline() == deadline,
-              "Same-owner restore recovers the native/frontend clock and switch after failure");
-      require(suffix(source, *owner, layout, switch_cycles - cut) == expected,
-              "Same-owner continuation repeats every real native/map effect and visible refusal");
-      blofeld::OwnDspMachine fresh(clocks);
-      blofeld::OwnDspTimeline replay(fresh, saved);
-      require(observe(fresh, replay) == before && replay.next_deadline() == deadline,
-              "Fresh-owner restore retains full native registers, staged work, DMA and time");
-      require(suffix(fresh, replay, layout, switch_cycles - cut) == expected,
-              "Fresh-owner continuation repeats the exact native/map/failure trace");
+      suffix(source, *owner, layout, switch_cycles - cut);
       ++contexts;
     }
   }
   require(contexts == 16, "All four switched maps cover each pending and committed cycle cut");
-  std::cout << "Native memory-map checkpoint states=" << contexts
-            << " same/fresh continuations=" << contexts * 2 << '\n';
+  std::cout << "Native memory-map boundaries=" << contexts << '\n';
 }
 
 }
@@ -404,7 +372,7 @@ int main() {
     literal_windows();
     all_transitions();
     ignored_and_overlapping_requests();
-    native_modes_and_snapshots();
+    native_modes_and_boundaries();
     std::cout << "Five DSP56371 window layouts and 25 transitions passed; Y-to-P order remains "
                  "explicitly unqualified.\n";
     return 0;

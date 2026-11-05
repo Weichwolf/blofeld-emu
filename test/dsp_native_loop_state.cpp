@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "dma_native_fixture.hpp"
 #include "dsp/own_dsp_machine.hpp"
 #include "dsp_fetch_native_fixture.hpp"
 #include "dsp_native_loop_fixture.hpp"
@@ -31,7 +30,7 @@ void suffix(fixture::Fixture &f, const std::uint64_t target) {
           "The actual native suffix reaches its independent instruction bound");
 }
 
-void checkpoints() {
+void observed_boundaries() {
   for (const unsigned cut : {1U, 4U, 5U, 8U, 9U, 10U, 13U, total_periods}) {
     fixture::Fixture f(program());
     attach(f);
@@ -48,29 +47,28 @@ void checkpoints() {
       prefix.lc = count - completed / width;
     }
     require(f.machine.cpu().registers() == prefix,
-            "Each checkpoint cut has independently expected full loop and stack state");
+            "Each observed boundary has independently expected full loop and stack state");
     const auto pending = f.machine.cpu().pending_instruction();
-    const auto saved = f.fetch->checkpoint();
-    for (unsigned replay = 0; replay < 2; ++replay) {
-      f.restore(saved);
-      if (pending) {
-        OwnDspMachine clone(dma_test::native_clocks);
-        clone.restore(f.machine.checkpoint());
-        require(
-            !fixture::rejects([&] { static_cast<void>(clone.advance(pending->ticket)); }).empty(),
-            "A separately restored native owner rejects the original source effect ticket");
-        require(clone.cpu().registers() == prefix,
-                "The foreign-ticket refusal leaves the independently expected clone state intact");
-      }
-      require(f.machine.cpu().registers() == prefix,
-              "A refused old ticket leaves the literal restored prefix unchanged");
-      suffix(f, progress.instructions + instructions);
-      require(f.machine.cpu().registers() == finished(initial, {.count = count, .width = width}) &&
-                  f.machine.cpu().progress().estimated_cycles ==
-                      progress.estimated_cycles + total_periods &&
-                  f.machine.clock().elapsed_ticks() == ticks + total_periods * period,
-              "Both restored suffixes retain full native results and zero-overhead timing");
+
+    if (pending) {
+      fixture::Fixture foreign(program());
+      attach(foreign);
+      for (unsigned elapsed = 0; elapsed < cut; ++elapsed) { static_cast<void>(advance(foreign)); }
+      require(!fixture::rejects([&] {
+                 static_cast<void>(foreign.machine.advance(pending->ticket));
+               }).empty(),
+              "An independently reset native owner rejects the original source effect ticket");
+      require(foreign.machine.cpu().registers() == prefix,
+              "The foreign-ticket refusal leaves the independently expected foreign state intact");
     }
+    require(f.machine.cpu().registers() == prefix,
+            "A refused old ticket leaves the literal original prefix unchanged");
+    suffix(f, progress.instructions + instructions);
+    require(f.machine.cpu().registers() == finished(initial, {.count = count, .width = width}) &&
+                f.machine.cpu().progress().estimated_cycles ==
+                    progress.estimated_cycles + total_periods &&
+                f.machine.clock().elapsed_ticks() == ticks + total_periods * period,
+            "The real continuation retains full native results and zero-overhead timing");
   }
 }
 
@@ -143,11 +141,11 @@ void reset_opening() {
 } // namespace
 
 void state_checks() {
-  checkpoints();
+  observed_boundaries();
   changed_program();
   unknown_body();
   reset_opening();
   std::cout
-      << "Loop checkpoints, stale tickets, changed P-memory, unknown F2 and reset checks passed\n";
+      << "Loop boundaries, foreign tickets, changed P-memory, unknown F2 and reset checks passed\n";
 }
 } // namespace blofeld::test::native_loop

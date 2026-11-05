@@ -16,7 +16,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <variant>
 
 namespace blofeld::test::esai_irq {
 namespace {
@@ -43,8 +42,6 @@ struct CpuView {
   std::optional<std::uint64_t> dma;
   bool operator==(const CpuView &) const = default;
 };
-
-using Snapshot = std::variant<OwnDspCheckpoint, OwnDspTimelineCheckpoint>;
 
 struct NativeFixture {
   NativeFixture() {
@@ -100,20 +97,6 @@ struct NativeFixture {
     }
     require(machine.cpu().progress().instructions == before + 1,
             "Exactly one actual native instruction retires");
-  }
-
-  [[nodiscard]] Snapshot checkpoint() const {
-    if (timeline) { return timeline->checkpoint(); }
-    return machine.checkpoint();
-  }
-
-  void restore(const Snapshot &saved) {
-    if (const auto *value = std::get_if<OwnDspTimelineCheckpoint>(&saved)) {
-      timeline = std::make_unique<OwnDspTimeline>(machine, *value);
-    } else {
-      require(!timeline, "Manual checkpoint retains its execution owner");
-      machine.restore(std::get<OwnDspCheckpoint>(saved));
-    }
   }
 
   OwnDspMachine machine{clocks};
@@ -234,19 +217,7 @@ void service(NativeFixture &fixture, const Scenario input) {
 void native_case(const Scenario input) {
   NativeFixture fixture;
   install(fixture, input);
-  const auto saved = fixture.checkpoint();
-  std::optional<CpuView> result;
-  for (unsigned replay = 0; replay < 2; ++replay) {
-    fixture.restore(saved);
-    service(fixture, input);
-    const auto actual = fixture.view();
-    if (result) {
-      require(actual == result.value(),
-              "Trusted restore repeats every native register, stack, counter and clock");
-    } else {
-      result = actual;
-    }
-  }
+  service(fixture, input);
 }
 
 void native_unknown_clock(const bool second) {
@@ -256,25 +227,27 @@ void native_unknown_clock(const bool second) {
                                .address = priority_register,
                                .value = second ? secondary_priority : 1U});
   fixture.start_timeline();
-  const auto saved = fixture.checkpoint();
   const auto error = rejects([&] { fixture.step(); });
   require(error.contains(second ? "Y:0xffff93" : "X:0xffffb3") &&
               error.contains("pc=" + hex(boot + 2, 6)) && error.contains("omr=0x000305") &&
-              error.contains("ticks=") &&
-              rejects([&] { static_cast<void>(fixture.checkpoint()); }).contains("healthy"),
+              error.contains("ticks=") && fixture.timeline->faulted(),
           "Unknown eligible clock reports its actual status address, PC/OMR/time and quarantines "
           "the timeline");
   const auto failed = fixture.view();
   static_cast<void>(rejects([&] { fixture.step(); }));
   require(fixture.view() == failed,
           "Rejected owner cannot consume any vector, CPU state or clock period");
-  fixture.restore(saved);
-  fixture.machine.bus().observe_esai_transmit(instance(second),
-                                              {.clock = true, .frame_sync = false});
-  fixture.step();
-  require(fixture.machine.cpu().registers().pc == boot + 3 &&
-              !fixture.machine.bus().interrupt_request(0),
-          "Trusted recovery and actual clock baseline permit only the unrequested foreground NOP");
+  NativeFixture known;
+  setup(known.machine.bus(), second, 4, false);
+  known.machine.bus().write({.space = DspSpace::x,
+                             .address = priority_register,
+                             .value = second ? secondary_priority : 1U});
+  known.start_timeline();
+  known.machine.bus().observe_esai_transmit(instance(second), {.clock = true, .frame_sync = false});
+  known.step();
+  require(known.machine.cpu().registers().pc == boot + 3 &&
+              !known.machine.bus().interrupt_request(0),
+          "A fresh owner with an actual clock baseline executes the unrequested foreground NOP");
 }
 }
 
@@ -293,7 +266,7 @@ void native_checks() {
   }
   require(contexts == 12 && clock_refusals == 2,
           "Every independent native source/entry context completes");
-  std::cout << "PASS ESAI_NATIVE_IRQ contexts=" << contexts << " replays=" << contexts * 2
-            << " clock-refusals=" << clock_refusals << '\n';
+  std::cout << "PASS ESAI_NATIVE_IRQ contexts=" << contexts << " clock-refusals=" << clock_refusals
+            << '\n';
 }
 }

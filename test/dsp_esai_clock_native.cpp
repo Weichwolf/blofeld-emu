@@ -19,7 +19,6 @@
 #include <cstdint>
 #include <exception>
 #include <memory>
-#include <optional>
 #include <string>
 
 namespace blofeld::test::esai_clock {
@@ -125,12 +124,6 @@ struct Wire {
   }
 };
 
-struct ClockSnapshot {
-  OwnDspTimelineCheckpoint timeline;
-  Wire wire;
-  std::uint64_t cycles, horizon;
-};
-
 class ClockRun {
 public:
   ClockRun(const bool second,
@@ -191,18 +184,6 @@ public:
     throw Fault("Native ESAI clock experiment exceeded its period budget");
   }
 
-  [[nodiscard]] ClockSnapshot checkpoint() const {
-    return {
-        .timeline = timeline->checkpoint(), .wire = wire_, .cycles = cycles_, .horizon = horizon_};
-  }
-
-  void restore(const ClockSnapshot &saved) {
-    timeline = std::make_unique<OwnDspTimeline>(machine, saved.timeline);
-    wire_ = saved.wire;
-    cycles_ = saved.cycles;
-    horizon_ = saved.horizon;
-  }
-
   [[nodiscard]] const Wire &wire() const { return wire_; }
 
   [[nodiscard]] OwnDspMachine &chip() { return machine; }
@@ -244,36 +225,19 @@ void run_native(const bool second, const ClockOrder order) {
   require(run.wire().disabled_launch && run.wire().bits == "000100" &&
               run.chip().cpu().registers().x == esai::empty_even_frame &&
               run.next_deadline() > capture,
-          "Actual status/refill occurs in the first native word before a partial-phase snapshot");
-  const auto saved = run.checkpoint();
-
-  struct CpuView {
-    dsp56300::Registers registers;
-    dsp56300::Progress progress;
-    bool operator==(const CpuView &) const = default;
-  };
-
-  std::optional<CpuView> expected;
-  for (unsigned replay = 0; replay < 2; ++replay) {
-    run.restore(saved);
-    run.advance_to(finish);
-    require(run.wire().bits == word(false, true) + word(true, true) &&
-                run.wire().cursor == finish / half_period + 1,
-            "Native/timeline/divider/source restoration reproduces all64 independent bits");
-    // Actual reference periods, including four reset periods, end strictly
-    // before this final external edge; no pending future period may be charged.
-    constexpr unsigned periods = 514;
-    constexpr std::uint64_t completed = 5967360;
-    constexpr std::uint64_t next = 5978880;
-    require(run.chip().clock().native_cycle_units() == periods &&
-                run.chip().clock().elapsed_ticks() == completed && run.next_deadline() == next,
-            "The independent reference-period ledger preserves the final partial native period");
-    const CpuView actual{.registers = run.chip().cpu().registers(),
-                         .progress = run.chip().cpu().progress()};
-    if (!expected) { expected = actual; }
-    require(actual == expected.value(),
-            "Partial native execution and exact external phase restore complete CPU state");
-  }
+          "Actual status/refill occurs in the first native word at a partial external phase");
+  run.advance_to(finish);
+  require(run.wire().bits == word(false, true) + word(true, true) &&
+              run.wire().cursor == finish / half_period + 1,
+          "The native shifter and source produce all64 independent bits");
+  // Actual reference periods, including four reset periods, end strictly
+  // before this final external edge; no pending future period may be charged.
+  constexpr unsigned periods = 514;
+  constexpr std::uint64_t completed = 5967360;
+  constexpr std::uint64_t next = 5978880;
+  require(run.chip().clock().native_cycle_units() == periods &&
+              run.chip().clock().elapsed_ticks() == completed && run.next_deadline() == next,
+          "The independent reference-period ledger preserves the final partial native period");
 }
 
 void pad_contracts() {
@@ -313,7 +277,7 @@ void pad_contracts() {
           "Rejected clock/frame contention commits neither the divider edge nor the first bit");
 }
 
-void missing_clock_recovery() {
+void missing_clock_failure() {
   constexpr std::uint64_t setup_end = reset_end + (21 * unit_ticks);
   // SAISR read, destination publication, PCU publication, then retirement.
   constexpr unsigned read_periods = 25;
@@ -321,23 +285,30 @@ void missing_clock_recovery() {
   for (const bool second : {false, true}) {
     ClockRun run(second, ClockOrder::input_first, false, 0);
     run.advance_to(setup_end);
-    const auto saved = run.checkpoint();
     const auto error = rejects([&] { run.advance_to(read_end); });
     require(error.contains("pc=0xff000c") && error.contains(second ? "Y:0xffff93" : "X:0xffffb3") &&
                 error.contains("timing") && run.faulted(),
             "The actual native status read retains missing-clock operation/address/PC/time");
-    run.restore(saved);
-    run.chip().bus().observe_esai_transmit(second ? DspEsaiInstance::secondary
-                                                  : DspEsaiInstance::primary,
-                                           {.high_clock = false, .timing = timing});
-    run.advance_to(read_end);
+    const auto stopped = run.chip().cpu().registers();
+    const auto progress = run.chip().cpu().progress();
+    const auto ticks = run.chip().clock().elapsed_ticks();
+    static_cast<void>(rejects([&] { run.advance_to(read_end); }));
+    require(run.chip().cpu().registers() == stopped && run.chip().cpu().progress() == progress &&
+                run.chip().clock().elapsed_ticks() == ticks,
+            "A failed clock owner cannot execute another period or repeat native effects");
+    ClockRun known(second, ClockOrder::input_first, false, 0);
+    known.advance_to(setup_end);
+    known.chip().bus().observe_esai_transmit(second ? DspEsaiInstance::secondary
+                                                    : DspEsaiInstance::primary,
+                                             {.high_clock = false, .timing = timing});
+    known.advance_to(read_end);
     constexpr unsigned instructions = 7;
     constexpr unsigned base_cost = 13;
-    require(run.chip().cpu().registers().x == 0 &&
-                run.chip().cpu().progress().instructions == instructions &&
-                run.chip().cpu().progress().estimated_cycles == base_cost &&
-                run.chip().clock().native_cycle_units() == read_periods,
-            "Trusted restore and an explicit frozen baseline recover only real reset status");
+    require(known.chip().cpu().registers().x == 0 &&
+                known.chip().cpu().progress().instructions == instructions &&
+                known.chip().cpu().progress().estimated_cycles == base_cost &&
+                known.chip().clock().native_cycle_units() == read_periods,
+            "A fresh reset owner with an explicit frozen baseline reads the real reset status");
   }
 }
 }
@@ -348,6 +319,6 @@ void native_clock() {
     run_native(true, order);
   }
   pad_contracts();
-  missing_clock_recovery();
+  missing_clock_failure();
 }
 }

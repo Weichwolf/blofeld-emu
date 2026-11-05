@@ -18,7 +18,6 @@
 #include <memory>
 #include <span>
 #include <string>
-#include <utility>
 
 namespace blofeld::test::fetch_native {
 namespace native = dma_test;
@@ -121,13 +120,6 @@ struct Fixture {
                         : fetch->advance_dma_pipeline(inputs, false, model);
     healthy(result);
     return result;
-  }
-
-  void restore(const OwnDspFetchCheckpoint &saved) {
-    const auto old = std::move(fetch);
-    fetch = std::make_unique<OwnDspFetch>(machine, saved);
-    require(rejects([&] { static_cast<void>(old->view()); }).contains("Stale"),
-            "Joint restore abandons the prior frontend capability");
   }
 
   [[nodiscard]] std::uint64_t elapsed() const {

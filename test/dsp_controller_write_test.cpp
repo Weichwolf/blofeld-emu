@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
-#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_run_clock.hpp"
@@ -155,15 +154,7 @@ void execute(const Case input) {
   fixture::Fixture f(words,
                      {.transfer = {.source = source, .destination = destination, .control = 0}});
   prepare(f, input.mode);
-  const auto saved = f.fetch->checkpoint();
   suffix(f.machine, *f.fetch, input);
-  for (const bool fresh : {false, true}) {
-    OwnDspMachine new_machine(blofeld::test::dma_test::native_clocks);
-    auto &target = fresh ? new_machine : f.machine;
-    f.fetch.reset();
-    OwnDspFetch restored(target, saved);
-    suffix(target, restored, input);
-  }
 }
 
 void run_case(const Case input) {
@@ -196,8 +187,7 @@ int main() {
       run_case({.address = status, .mode = Mode::quiet, .timing = timing});
       ++cases;
     }
-    std::cout << cases << " authored controller writes and " << cases * 2
-              << " same/fresh-owner restores preserve native DMA/F2 effects\n";
+    std::cout << cases << " authored controller writes preserve native DMA/F2 effects\n";
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
     return 1;

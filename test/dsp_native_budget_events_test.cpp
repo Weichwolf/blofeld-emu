@@ -51,7 +51,7 @@ void attach(fixture::Fixture &f, const unsigned prefill = 8) {
   }
 }
 
-void dma_padding_restore(const bool conflict) {
+void dma_padding(const bool conflict) {
   std::array<std::uint32_t, words> code{};
   code[0] = repeat_immediate;
   const auto destination = conflict ? program_destination : native::destination;
@@ -72,33 +72,29 @@ void dma_padding_restore(const bool conflict) {
   require(sampled.dma.phase && sampled.dma.phase->kind == DspDmaPhaseKind::source_read &&
               !sampled.dma.core_stall && !sampled.dma.word && f.machine.cpu().progress() == before,
           "Actual DMA source sampling shares a pending REP budget without early retirement");
-  const auto saved = f.fetch->checkpoint();
-  for (unsigned replay = 0; replay < 2; ++replay) {
-    f.restore(saved);
-    const auto waited = advance(f, {.grant = DspDmaGrant::wait});
-    require(waited.dma.core_stall == conflict && !waited.native && !waited.dma.word &&
-                f.machine.bus().read({.space = space, .address = destination}) == sentinel,
-            "A held DMA destination stalls native work only for its actual F2 memory conflict");
-    const auto committed = advance(f);
-    require(committed.dma.core_stall == conflict && !committed.native && committed.dma.word &&
-                committed.dma.word->value == payload &&
-                f.machine.bus().read({.space = space, .address = destination}) == payload,
-            "Restored DMA commits its real word with the same independent/conflicting ownership");
-    for (unsigned index = 0; index < (conflict ? 2U : 0U); ++index) {
-      const auto held = advance(f);
-      require(!held.native && f.machine.cpu().progress() == before,
-              "The unpaid REP budget remains pending after the completed DMA destination");
-    }
-    const auto retired = advance(f);
-    const unsigned expected_periods = conflict ? 7U : 5U;
-    require(
-        retired.native && retired.native->retired && retired.native_pc == fixture::program &&
-            f.machine.cpu().progress().instructions == before.instructions + 1 &&
-            f.machine.cpu().progress().estimated_cycles == before.estimated_cycles + 5 &&
-            f.machine.clock().elapsed_ticks() == start + expected_periods * period &&
-            f.machine.clock().timer_clk2_edges() - edges == expected_periods / 2,
-        "Each restored suffix retains five native periods plus only its actual stalled periods");
+
+  const auto waited = advance(f, {.grant = DspDmaGrant::wait});
+  require(waited.dma.core_stall == conflict && !waited.native && !waited.dma.word &&
+              f.machine.bus().read({.space = space, .address = destination}) == sentinel,
+          "A held DMA destination stalls native work only for its actual F2 memory conflict");
+  const auto committed = advance(f);
+  require(committed.dma.core_stall == conflict && !committed.native && committed.dma.word &&
+              committed.dma.word->value == payload &&
+              f.machine.bus().read({.space = space, .address = destination}) == payload,
+          "DMA commits its real word with the same independent/conflicting ownership");
+  for (unsigned index = 0; index < (conflict ? 2U : 0U); ++index) {
+    const auto held = advance(f);
+    require(!held.native && f.machine.cpu().progress() == before,
+            "The unpaid REP budget remains pending after the completed DMA destination");
   }
+  const auto retired = advance(f);
+  const unsigned expected_periods = conflict ? 7U : 5U;
+  require(retired.native && retired.native->retired && retired.native_pc == fixture::program &&
+              f.machine.cpu().progress().instructions == before.instructions + 1 &&
+              f.machine.cpu().progress().estimated_cycles == before.estimated_cycles + 5 &&
+              f.machine.clock().elapsed_ticks() == start + expected_periods * period &&
+              f.machine.clock().timer_clk2_edges() - edges == expected_periods / 2,
+          "The real continuation retains five native periods plus only its actual stalled periods");
 }
 
 void interrupt_padding(const bool missing_second) {
@@ -189,12 +185,12 @@ void reset_padding() {
 
 int main() {
   try {
-    dma_padding_restore(false);
-    dma_padding_restore(true);
+    dma_padding(false);
+    dma_padding(true);
     interrupt_padding(false);
     interrupt_padding(true);
     reset_padding();
-    std::cout << "Native budgets preserve actual DMA, interrupt vector reads, reset and restore\n";
+    std::cout << "Native budgets preserve actual DMA, interrupt vector reads and reset\n";
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
     return 1;

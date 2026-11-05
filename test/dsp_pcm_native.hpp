@@ -21,26 +21,12 @@ struct DspPcmConfig {
   bool secondary = false;
 };
 
-// Trusted in-process fixture state. Host audio sessions are not part of it.
-struct DspPcmSnapshot {
-  DspPcmConfig config;
-  OwnDspTimelineCheckpoint timeline;
-  SerialPcmReceiver receiver;
-  std::vector<SerialPcmFrame> frames;
-  std::uint64_t cursor;
-  std::uint64_t cycles;
-  std::uint64_t horizon;
-  unsigned events_in_period;
-};
-
 // Real authored DSP execution and finite external ESAI clock observations.
 // Reference effect periods and input-first ties are explicit fixture choices.
 class DspPcmRun {
 public:
   explicit DspPcmRun(DspPcmConfig config);
-  explicit DspPcmRun(const DspPcmSnapshot &saved);
   void advance_to(std::uint64_t horizon, unsigned maximum_cycles);
-  [[nodiscard]] DspPcmSnapshot checkpoint() const;
 
   [[nodiscard]] const OwnDspMachine &machine() const { return machine_; }
 

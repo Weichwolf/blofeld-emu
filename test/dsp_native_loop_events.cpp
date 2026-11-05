@@ -49,26 +49,23 @@ void dma(const bool conflict) {
   require(sampled.dma.phase && sampled.dma.phase->kind == DspDmaPhaseKind::source_read &&
               !sampled.dma.core_stall && !sampled.dma.word,
           "The real DMA source phase shares the held native DO setup");
-  const auto saved = f.fetch->checkpoint();
-  for (unsigned replay = 0; replay < 2; ++replay) {
-    f.restore(saved);
-    const auto waited = advance(f, 0, DspDmaGrant::wait);
-    require(waited.dma.core_stall == conflict && !waited.dma.word &&
-                f.machine.bus().read({.space = space, .address = destination}) == sentinel,
-            "Actual conflicting P DMA waits retain both loop ownership and the unwritten cell");
-    const auto committed = advance(f);
-    require(committed.dma.core_stall == conflict && committed.dma.word &&
-                committed.dma.word->value == payload &&
-                f.machine.bus().read({.space = space, .address = destination}) == payload,
-            "Only the real DMA destination phase commits its independently expected word");
-    finish(f, progress.instructions + instructions);
-    const auto expected_periods = total_periods + (conflict ? 2U : 0U);
-    require(f.machine.cpu().registers() == finished(initial, {.count = count, .width = width}) &&
-                f.machine.cpu().progress().estimated_cycles ==
-                    progress.estimated_cycles + total_periods &&
-                f.machine.clock().elapsed_ticks() == ticks + expected_periods * period,
-            "Restored loops add only the actual conflicting DMA periods to their native budget");
-  }
+
+  const auto waited = advance(f, 0, DspDmaGrant::wait);
+  require(waited.dma.core_stall == conflict && !waited.dma.word &&
+              f.machine.bus().read({.space = space, .address = destination}) == sentinel,
+          "Actual conflicting P DMA waits retain both loop ownership and the unwritten cell");
+  const auto committed = advance(f);
+  require(committed.dma.core_stall == conflict && committed.dma.word &&
+              committed.dma.word->value == payload &&
+              f.machine.bus().read({.space = space, .address = destination}) == payload,
+          "Only the real DMA destination phase commits its independently expected word");
+  finish(f, progress.instructions + instructions);
+  const auto expected_periods = total_periods + (conflict ? 2U : 0U);
+  require(f.machine.cpu().registers() == finished(initial, {.count = count, .width = width}) &&
+              f.machine.cpu().progress().estimated_cycles ==
+                  progress.estimated_cycles + total_periods &&
+              f.machine.clock().elapsed_ticks() == ticks + expected_periods * period,
+          "Native loops add only the actual conflicting DMA periods to their native budget");
 }
 
 void nested() {

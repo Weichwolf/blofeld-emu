@@ -36,7 +36,7 @@ void unknown_pinit() {
           "Unknown PINIT/reset contract refuses before frontend, native, DMA or clock mutation");
 }
 
-void invalid_period_recovery() {
+void invalid_period_failure() {
   const std::array<std::uint32_t, 16> words{};
   auto clocks = native::native_clocks;
   clocks.timebase_hz = clocks.extal_hz;
@@ -47,7 +47,6 @@ void invalid_period_recovery() {
       timeline->advance_one(first_deadline, OwnDspBoundary::through, banks::inputs({.index = 1}))
           .has_value(),
       "Integral one-tick period admits one actual F1/reference cycle");
-  const auto saved = timeline->checkpoint();
   const auto attempted = timeline->next_deadline();
   fixture.machine.bus().pll().write(faster);
   const auto before = fixture.machine.cpu().registers();
@@ -62,14 +61,25 @@ void invalid_period_recovery() {
               fixture.machine.cpu().progress() == progress,
           "Nonintegral period quarantines attempted timeline execution without rounding, DMA or "
           "CPU effects");
-  static_cast<void>(rejects([&] { static_cast<void>(timeline->checkpoint()); }));
-  timeline = std::make_unique<OwnDspTimeline>(fixture.machine, saved);
-  require(timeline->advance_one(timeline->next_deadline(),
-                                OwnDspBoundary::through,
-                                banks::inputs({.index = 2}))
-                  .has_value() &&
-              fixture.elapsed() == 2,
-          "Joint restore recovers the actual prior PLL command and exact integral period");
+  static_cast<void>(rejects([&] {
+    static_cast<void>(
+        timeline->advance_one(attempted, OwnDspBoundary::through, banks::inputs({.index = 2})));
+  }));
+  require(fixture.elapsed() == 1 && fixture.machine.bus().last_dma_cycle() == 1 &&
+              fixture.machine.cpu().registers() == before &&
+              fixture.machine.cpu().progress() == progress,
+          "A quarantined period cannot resume execution or repeat device effects");
+  Fixture valid(words, {.clocks = clocks});
+  OwnDspTimeline integral(valid.machine, timing, 0);
+  for (unsigned index = 1; index <= 2; ++index) {
+    require(integral
+                .advance_one(integral.next_deadline(),
+                             OwnDspBoundary::through,
+                             banks::inputs({.index = index}))
+                .has_value(),
+            "An independently reset owner retains its genuine integral period");
+  }
+  require(valid.elapsed() == 2, "Two valid reference cycles advance exactly two ticks");
 }
 
 void owner_and_contract_guards() {
@@ -80,26 +90,16 @@ void owner_and_contract_guards() {
     const OwnDspTimeline invalid(fixture.machine, OwnDspAutomaticTiming::unqualified, 0);
   }));
   auto timeline = std::make_unique<OwnDspTimeline>(fixture.machine, timing, 0);
-  const auto saved = timeline->checkpoint();
   static_cast<void>(rejects([&] { const OwnDspTimeline duplicate(fixture.machine, timing, 0); }));
-  // Checkpoints are intentionally portable; validate a genuine independent clone.
-  OwnDspTimeline clone(foreign.machine, saved);
+  OwnDspTimeline clone(foreign.machine, timing, 0);
   const auto result = clone.advance_one(
       clone.next_deadline(), OwnDspBoundary::through, banks::inputs({.index = 1}));
-  require(
-      result && result->issued_address == program && foreign.elapsed() == base_period &&
-          fixture.elapsed() == 0 && fixture.machine.bus().last_dma_cycle() == 0,
-      "Fresh-owner restore permits a real independent continuation without mutating its source");
+  require(result && result->issued_address == program && foreign.elapsed() == base_period &&
+              fixture.elapsed() == 0 && fixture.machine.bus().last_dma_cycle() == 0,
+          "A fresh owner permits a real independent continuation without mutating its source");
   static_cast<void>(native::dma(fixture.machine, banks::inputs({.index = 1}), banks::use()));
   static_cast<void>(rejects([&] { static_cast<void>(timeline->next_deadline()); }));
   require(fixture.elapsed() == 0, "Out-of-band DMA cannot create an unobserved clock hole");
-  timeline = std::make_unique<OwnDspTimeline>(fixture.machine, saved);
-  require(timeline->advance_one(timeline->next_deadline(),
-                                OwnDspBoundary::through,
-                                banks::inputs({.index = 1}))
-                  .has_value() &&
-              fixture.elapsed() == base_period,
-          "Trusted joint restore recovers actual prior DMA index and first F1 period");
 }
 
 void completion_owner() {
@@ -127,7 +127,7 @@ void completion_owner() {
 
 void guard_checks() {
   unknown_pinit();
-  invalid_period_recovery();
+  invalid_period_failure();
   owner_and_contract_guards();
   completion_owner();
 }

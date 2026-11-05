@@ -87,17 +87,6 @@ DspPcmRun::DspPcmRun(const DspPcmConfig config) : config_(config), machine_(cloc
   horizon_ = recovered;
 }
 
-DspPcmRun::DspPcmRun(const DspPcmSnapshot &saved)
-    : config_(saved.config),
-      machine_(clocks(config_)),
-      timeline_(std::make_unique<OwnDspTimeline>(machine_, saved.timeline)),
-      receiver_(saved.receiver),
-      frames_(saved.frames),
-      cursor_(saved.cursor),
-      cycles_(saved.cycles),
-      horizon_(saved.horizon),
-      events_in_period_(saved.events_in_period) {}
-
 std::optional<std::uint64_t> DspPcmRun::next_input() const {
   if (cursor_ == 0) { return config_.baseline; }
   if (cursor_ == config_.observations + 1) { return std::nullopt; }
@@ -185,15 +174,4 @@ void DspPcmRun::advance_to(const std::uint64_t horizon, const unsigned maximum_c
   faulted_ = false;
 }
 
-DspPcmSnapshot DspPcmRun::checkpoint() const {
-  if (faulted_) { throw Fault("A failed DSP PCM fixture cannot supply a trusted checkpoint"); }
-  return {.config = config_,
-          .timeline = timeline_->checkpoint(),
-          .receiver = receiver_,
-          .frames = frames_,
-          .cursor = cursor_,
-          .cycles = cycles_,
-          .horizon = horizon_,
-          .events_in_period = events_in_period_};
-}
 }

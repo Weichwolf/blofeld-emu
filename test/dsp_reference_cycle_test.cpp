@@ -20,7 +20,6 @@
 #include <memory>
 #include <span>
 #include <string>
-#include <utility>
 
 namespace {
 using namespace blofeld;
@@ -146,13 +145,6 @@ struct Fixture {
     throw Fault("Native instruction never reached its data effect");
   }
 
-  void restore(const OwnDspFetchCheckpoint &saved) {
-    const auto abandoned = std::move(fetch);
-    fetch = std::make_unique<OwnDspFetch>(machine, saved);
-    require(rejects([&] { static_cast<void>(abandoned->view()); }).contains("Stale"),
-            "Coordinated restore invalidates the previous captured-fetch owner");
-  }
-
   void complete() {
     finish(machine);
     if (fetch) { fetch->synchronize(); }
@@ -205,34 +197,32 @@ void held_destination_load() {
   require(held.dma.core_stall && !held.dma.word && !held.native &&
               machine.cpu().registers() == before && machine.cpu().progress() == progress,
           "A held DMA destination prevents the actual native read and all CPU publication");
-  const auto saved = machine.checkpoint();
-  const auto stale = pending(machine).ticket;
-  for (unsigned replay = 0; replay < 2; ++replay) {
-    machine.restore(saved);
-    const auto ticks = machine.clock().elapsed_ticks();
-    static_cast<void>(rejects([&] { static_cast<void>(machine.advance(stale)); }));
-    require(machine.clock().elapsed_ticks() == ticks && machine.bus().last_dma_cycle() == 2,
-            "Abandoned capabilities cannot sample another DMA cycle");
-    machine.bus().write({.space = DspSpace::x, .address = native::ring_start, .value = third});
-    const auto written = native_cycle(machine, {.index = 3, .requests = 1});
-    require(
-        written.dma.word && written.dma.word->value == first && written.dma.core_stall &&
-            !written.native && machine.cpu().registers() == before &&
-            machine.cpu().progress() == progress,
-        "Actual destination commit preserves the latched source and still holds the native CPU");
-    const auto loaded = native_cycle(machine, {.index = 4});
-    require(!loaded.dma.core_stall && loaded.native && !loaded.native->retired &&
-                machine.cpu().progress() == progress,
-            "A later native data read is an actual effect, separate from result "
-            "publication/retirement");
-    fixture.complete();
-    auto expected = before;
-    expected.x = first;
-    expected.pc = program + 2;
-    require(machine.cpu().registers() == expected &&
-                machine.cpu().progress().instructions == progress.instructions + 1,
-            "Independent complete registers and one retirement observe the committed DMA word");
-  }
+  Fixture foreign(words);
+  foreign.until_data(dsp56300::EffectKind::read);
+  const auto stale = pending(foreign.machine).ticket;
+
+  const auto ticks = machine.clock().elapsed_ticks();
+  static_cast<void>(rejects([&] { static_cast<void>(machine.advance(stale)); }));
+  require(machine.clock().elapsed_ticks() == ticks && machine.bus().last_dma_cycle() == 2,
+          "Foreign effect capabilities cannot sample another DMA cycle");
+  machine.bus().write({.space = DspSpace::x, .address = native::ring_start, .value = third});
+  const auto written = native_cycle(machine, {.index = 3, .requests = 1});
+  require(written.dma.word && written.dma.word->value == first && written.dma.core_stall &&
+              !written.native && machine.cpu().registers() == before &&
+              machine.cpu().progress() == progress,
+          "Actual destination commit preserves the latched source and still holds the native CPU");
+  const auto loaded = native_cycle(machine, {.index = 4});
+  require(!loaded.dma.core_stall && loaded.native && !loaded.native->retired &&
+              machine.cpu().progress() == progress,
+          "A later native data read is an actual effect, separate from result "
+          "publication/retirement");
+  fixture.complete();
+  auto expected = before;
+  expected.x = first;
+  expected.pc = program + 2;
+  require(machine.cpu().registers() == expected &&
+              machine.cpu().progress().instructions == progress.instructions + 1,
+          "Independent complete registers and one retirement observe the committed DMA word");
 }
 
 void native_store_wins_source() {
@@ -292,32 +282,29 @@ void fetch_wait_and_admit() {
   require(held.dma.core_stall && !held.captured && fixture.fetch->view().used == 0 &&
               machine.cpu().registers() == before && machine.cpu().progress() == progress,
           "A conflicting held DMA destination prevents the real F2 sample");
-  const auto saved = fixture.fetch->checkpoint();
-  for (unsigned replay = 0; replay < 2; ++replay) {
-    fixture.restore(saved);
-    const auto committed = fetch_cycle(fixture, {.index = 3, .requests = 1}, false);
-    require(committed.dma.word && committed.dma.word->value == short_move &&
-                committed.dma.core_stall && !committed.captured && fixture.fetch->view().used == 0,
-            "The actual DMA destination write cannot also sample the conflicting P word");
-    const auto fetched = fetch_cycle(fixture, {.index = 4}, false);
-    require(fetched.captured && fixture.fetch->view().words.front().data == short_move &&
-                machine.cpu().registers() == before && machine.cpu().progress() == progress,
-            "A later F2 reads DMA's actual replacement before any native instruction starts");
-    healthy(fixture.fetch->begin());
-    require(pending(machine).effect.kind == dsp56300::EffectKind::move_update,
-            "An already captured ordinary opcode needs CPU publication, not another P read");
-    const auto published =
-        fixture.fetch->advance_dma_pipeline(banks::inputs({.index = 5}), true, model);
-    require(published.native && !published.native->retired && !published.dma.core_stall,
-            "Captured instruction publication has no fabricated extra program-bus access");
-    fixture.complete();
-    auto expected = before;
-    expected.pc = program + 1;
-    expected.r[0] = copied_r0;
-    require(machine.cpu().registers() == expected &&
-                machine.cpu().progress().instructions == progress.instructions + 1,
-            "Actual publication and retirement execute the captured DMA-written word exactly once");
-  }
+
+  const auto committed = fetch_cycle(fixture, {.index = 3, .requests = 1}, false);
+  require(committed.dma.word && committed.dma.word->value == short_move &&
+              committed.dma.core_stall && !committed.captured && fixture.fetch->view().used == 0,
+          "The actual DMA destination write cannot also sample the conflicting P word");
+  const auto fetched = fetch_cycle(fixture, {.index = 4}, false);
+  require(fetched.captured && fixture.fetch->view().words.front().data == short_move &&
+              machine.cpu().registers() == before && machine.cpu().progress() == progress,
+          "A later F2 reads DMA's actual replacement before any native instruction starts");
+  healthy(fixture.fetch->begin());
+  require(pending(machine).effect.kind == dsp56300::EffectKind::move_update,
+          "An already captured ordinary opcode needs CPU publication, not another P read");
+  const auto published =
+      fixture.fetch->advance_dma_pipeline(banks::inputs({.index = 5}), true, model);
+  require(published.native && !published.native->retired && !published.dma.core_stall,
+          "Captured instruction publication has no fabricated extra program-bus access");
+  fixture.complete();
+  auto expected = before;
+  expected.pc = program + 1;
+  expected.r[0] = copied_r0;
+  require(machine.cpu().registers() == expected &&
+              machine.cpu().progress().instructions == progress.instructions + 1,
+          "Actual publication and retirement execute the captured DMA-written word exactly once");
 }
 
 void simultaneous_fetch_and_redirect() {
@@ -380,7 +367,6 @@ void failed_required_read_keeps_dma_prefix() {
   auto &machine = fixture.machine;
   fixture.start_fetch(2);
   fixture.fetch->issue();
-  const auto saved = fixture.fetch->checkpoint();
   const auto before = machine.cpu().registers();
   const auto progress = machine.cpu().progress();
   const auto result = fetch_cycle(fixture, {.index = 1, .requests = 1}, true);
@@ -407,37 +393,40 @@ void failed_required_read_keeps_dma_prefix() {
           "Accepted DMA source remains active while its destination is still unchanged");
   require(failure_cause(machine).contains("Unknown DSP memory read at Y:0x000020"),
           "Failure preserves its actual bus operation/address");
-  static_cast<void>(rejects([&] { static_cast<void>(fixture.fetch->checkpoint()); }));
   const auto ticks = machine.clock().elapsed_ticks();
   static_cast<void>(rejects(
       [&] { static_cast<void>(fixture.fetch->advance_dma_capture(banks::inputs({.index = 2}))); }));
   require(machine.clock().elapsed_ticks() == ticks && machine.bus().last_dma_cycle() == 1,
           "Faulted execution cannot silently advance another reference cycle");
-  fixture.restore(saved);
-  machine.bus().write({.space = DspSpace::y, .address = unknown, .value = third});
-  machine.bus().write({.address = program + 2});
-  machine.bus().write({.address = program, .value = short_move});
-  const auto recovered = fetch_cycle(fixture, {.index = 1, .requests = 1}, true);
-  require(recovered.native && recovered.native->fault.kind == dsp56300::FaultKind::none &&
-              !recovered.native->retired && recovered.captured,
-          "Trusted joint restore reoffers the original actual data effect and F2 address");
-  fixture.complete();
-  auto expected = before;
+  Fixture known_fixture(words);
+  auto &known = known_fixture.machine;
+  known_fixture.start_fetch(2);
+  known_fixture.fetch->issue();
+  const auto known_before = known.cpu().registers();
+  const auto known_progress = known.cpu().progress();
+  known.bus().write({.space = DspSpace::y, .address = unknown, .value = third});
+  known.bus().write({.address = program + 2});
+  known.bus().write({.address = program, .value = short_move});
+  const auto loaded = fetch_cycle(known_fixture, {.index = 1, .requests = 1}, true);
+  require(loaded.native && loaded.native->fault.kind == dsp56300::FaultKind::none &&
+              !loaded.native->retired && loaded.captured,
+          "The fresh owner accepts its actual data read and separately issued F2 address");
+  known_fixture.complete();
+  auto expected = known_before;
   expected.pc = program + 2;
   expected.x = third;
-  require(
-      machine.cpu().registers() == expected &&
-          machine.cpu().progress().instructions == progress.instructions + 1,
-      "Captured original load executes despite changed code and uses explicitly initialized data");
+  require(known.cpu().registers() == expected &&
+              known.cpu().progress().instructions == known_progress.instructions + 1,
+          "Captured original load executes despite changed code and uses explicitly known data");
 }
 
 void protocol_preflight() {
   const std::array words{0U, 0U};
   Fixture fixture(words);
   fixture.start_fetch(1);
-  const auto stale = pending(fixture.machine).ticket;
-  const auto saved = fixture.fetch->checkpoint();
-  fixture.restore(saved);
+  Fixture foreign(words);
+  foreign.start_fetch(1);
+  const auto stale = pending(foreign.machine).ticket;
   const auto before = fixture.machine.cpu().registers();
   const auto progress = fixture.machine.cpu().progress();
   const auto ticks = fixture.machine.clock().elapsed_ticks();

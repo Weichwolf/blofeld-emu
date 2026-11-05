@@ -22,7 +22,6 @@
 #include <memory>
 #include <span>
 #include <string>
-#include <utility>
 #include <vector>
 
 namespace {
@@ -145,13 +144,6 @@ struct Fixture {
     fetch = std::make_unique<OwnDspFetch>(machine);
   }
 
-  void restore(const OwnDspFetchCheckpoint &saved) {
-    const auto previous = std::move(fetch);
-    fetch = std::make_unique<OwnDspFetch>(machine, saved);
-    require(rejects([&] { static_cast<void>(previous->view()); }).contains("Stale"),
-            "Joint restore invalidates the abandoned frontend capability");
-  }
-
   void read_words(const std::size_t count) {
     for (std::size_t i = 0; i < count; ++i) { fetch_word(machine, *fetch); }
   }
@@ -209,41 +201,33 @@ void overlapped_dma(const bool extension_word, const bool before_capture) {
   } else {
     fixture.read_words(1);
   }
-  const auto saved_fetch = fixture.fetch->view();
-  const auto saved = fixture.fetch->checkpoint();
-  for (unsigned replay = 0; replay < 2; ++replay) {
-    fixture.restore(saved);
-    require(fixture.fetch->view() == saved_fetch, "Restore retains ready words and pending F1");
-    static_cast<void>(rejects([&] { static_cast<void>(machine.advance(held.ticket)); }));
-    fixture.overwrite(replacement);
-    if (before_capture) { fixture.fetch->capture(); }
-    while (fixture.fetch->view().next_address < program + words.size()) { fixture.read_words(1); }
-    auto expected = machine.cpu().registers();
-    const auto before = machine.cpu().progress();
-    finish(machine, *fixture.fetch);
-    expected.pc = program + 1;
-    expected.x = first;
-    require(machine.cpu().registers() == expected &&
-                machine.cpu().progress().instructions == before.instructions + 1 &&
-                machine.bus().read({.space = DspSpace::x, .address = fifo}) == second,
-            "Exactly the admitted native FIFO read consumes the first real serial word");
-    const auto moves = machine.cpu().progress();
-    execute(machine, *fixture.fetch);
-    execute(machine, *fixture.fetch);
-    expected.r[0] = !extension_word && before_capture ? new_r0 : old_r0;
-    expected.r[1] = extension_word && before_capture ? changed_extension : first;
-    expected.pc = program + 4;
-    require(
-        machine.cpu().registers() == expected &&
-            machine.cpu().progress().instructions == moves.instructions + 2 &&
-            machine.cpu().progress().estimated_cycles == moves.estimated_cycles + 3 &&
-            fixture.fetch->view().used == 1,
-        "Literal full registers, two retirements and three base units distinguish real F2 time");
-    execute(machine, *fixture.fetch);
-    ++expected.pc;
-    require(machine.cpu().registers() == expected && fixture.fetch->view().used == 0,
-            "The queued zero executes as a real NOP after both earlier instructions");
-  }
+  fixture.overwrite(replacement);
+  if (before_capture) { fixture.fetch->capture(); }
+  while (fixture.fetch->view().next_address < program + words.size()) { fixture.read_words(1); }
+  auto expected = machine.cpu().registers();
+  const auto before = machine.cpu().progress();
+  finish(machine, *fixture.fetch);
+  expected.pc = program + 1;
+  expected.x = first;
+  require(machine.cpu().registers() == expected &&
+              machine.cpu().progress().instructions == before.instructions + 1 &&
+              machine.bus().read({.space = DspSpace::x, .address = fifo}) == second,
+          "Exactly the admitted native FIFO read consumes the first real serial word");
+  const auto moves = machine.cpu().progress();
+  execute(machine, *fixture.fetch);
+  execute(machine, *fixture.fetch);
+  expected.r[0] = !extension_word && before_capture ? new_r0 : old_r0;
+  expected.r[1] = extension_word && before_capture ? changed_extension : first;
+  expected.pc = program + 4;
+  require(machine.cpu().registers() == expected &&
+              machine.cpu().progress().instructions == moves.instructions + 2 &&
+              machine.cpu().progress().estimated_cycles == moves.estimated_cycles + 3 &&
+              fixture.fetch->view().used == 1,
+          "Literal full registers, two retirements and three base units distinguish real F2 time");
+  execute(machine, *fixture.fetch);
+  ++expected.pc;
+  require(machine.cpu().registers() == expected && fixture.fetch->view().used == 0,
+          "The queued zero executes as a real NOP after both earlier instructions");
 }
 
 void branch_redirects() {
@@ -254,25 +238,22 @@ void branch_redirects() {
     fixture.read_words(5);
     fixture.fetch->issue();
     healthy(fixture.fetch->begin());
-    const auto saved = fixture.fetch->checkpoint();
-    for (unsigned replay = 0; replay < 2; ++replay) {
-      fixture.restore(saved);
-      auto expected = fixture.machine.cpu().registers();
-      fixture.overwrite({.address = destination, .value = short_new});
-      finish(fixture.machine, *fixture.fetch);
-      const auto fetch = fixture.fetch->view();
-      expected.pc = destination;
-      require(fixture.machine.cpu().registers() == expected && fetch.active && fetch.used == 0 &&
-                  !fetch.pending_address && fetch.next_address == destination &&
-                  fetch.consume_address == destination,
-              "Actual JMP flushes queued F2 and pending F1, including a fallthrough target");
-      fixture.read_words(1);
-      execute(fixture.machine, *fixture.fetch);
-      expected.pc = destination + 1;
-      expected.r[0] = new_r0;
-      require(fixture.machine.cpu().registers() == expected,
-              "Fresh branch-target F2 observes the actual DMA-written instruction");
-    }
+
+    auto expected = fixture.machine.cpu().registers();
+    fixture.overwrite({.address = destination, .value = short_new});
+    finish(fixture.machine, *fixture.fetch);
+    const auto fetch = fixture.fetch->view();
+    expected.pc = destination;
+    require(fixture.machine.cpu().registers() == expected && fetch.active && fetch.used == 0 &&
+                !fetch.pending_address && fetch.next_address == destination &&
+                fetch.consume_address == destination,
+            "Actual JMP flushes queued F2 and pending F1, including a fallthrough target");
+    fixture.read_words(1);
+    execute(fixture.machine, *fixture.fetch);
+    expected.pc = destination + 1;
+    expected.r[0] = new_r0;
+    require(fixture.machine.cpu().registers() == expected,
+            "Fresh branch-target F2 observes the actual DMA-written instruction");
   }
 }
 
@@ -328,23 +309,21 @@ void capacity_and_protocol() {
           "A fresh post-reset owner samples the actual retained boot ROM");
 }
 
-void unknown_read_and_recovery() {
+void unknown_read_and_failure() {
   const std::array words{0U};
-  Fixture fixture(words, {.address = program, .value = 0});
-  auto &machine = fixture.machine;
-  fixture.read_words(1);
-  fixture.fetch->issue();
-  const auto saved = fixture.fetch->checkpoint();
-  const auto before = machine.cpu().registers();
-  const auto progress = machine.cpu().progress();
-  fixture.fetch->capture();
-  const auto unknown = fixture.fetch->view();
-  require(unknown.used == 2 && unknown.words[1].address == program + 1 && !unknown.words[1].data &&
-              machine.cpu().registers() == before && machine.cpu().progress() == progress,
-          "Actual F2 can retain an explicitly absent value without executing it");
-  const auto captured = fixture.fetch->checkpoint();
   for (const bool rewrite : {false, true}) {
-    fixture.restore(captured);
+    Fixture fixture(words, {.address = program, .value = 0});
+    auto &machine = fixture.machine;
+    fixture.read_words(1);
+    fixture.fetch->issue();
+    const auto before = machine.cpu().registers();
+    const auto progress = machine.cpu().progress();
+    fixture.fetch->capture();
+    const auto unknown = fixture.fetch->view();
+    require(unknown.used == 2 && unknown.words[1].address == program + 1 &&
+                !unknown.words[1].data && machine.cpu().registers() == before &&
+                machine.cpu().progress() == progress,
+            "Actual F2 retains an explicitly absent value without executing it");
     if (rewrite) { machine.bus().write({.address = program + 1}); }
     execute(machine, *fixture.fetch);
     auto expected = before;
@@ -356,15 +335,19 @@ void unknown_read_and_recovery() {
                 machine.cpu().progress() ==
                     dsp56300::Progress{.instructions = progress.instructions + 1,
                                        .estimated_cycles = progress.estimated_cycles + 1},
-            "Unknown consumption fails contextually; later RAM and restore cannot resolve old F2");
+            "Unknown consumption fails contextually despite later writes to backing RAM");
   }
-  fixture.restore(saved);
-  machine.bus().write({.address = program + 1});
-  fixture.fetch->capture();
-  require(fixture.fetch->view().words[1] == DspProgramWord{.address = program + 1},
-          "A restored pending F1 permits a fresh F2 of explicitly initialized memory");
-  execute(machine, *fixture.fetch);
-  execute(machine, *fixture.fetch);
+  Fixture known(words, {.address = program, .value = 0});
+  known.read_words(1);
+  known.fetch->issue();
+  known.machine.bus().write({.address = program + 1});
+  known.fetch->capture();
+  require(known.fetch->view().words[1] == DspProgramWord{.address = program + 1},
+          "Explicit memory initialization before F2 supplies a genuinely captured zero opcode");
+  execute(known.machine, *known.fetch);
+  execute(known.machine, *known.fetch);
+  require(known.machine.cpu().registers().pc == program + 2,
+          "The fresh owner executes both actual captured NOPs");
 }
 
 void program_data_is_not_prefetch() {
@@ -479,18 +462,15 @@ void conditional_flow() {
     require((fixture.machine.cpu().registers().sr & zero) == 0,
             "Literal Z=0 selects JNE and rejects JEQ");
     healthy(fixture.fetch->begin());
-    const auto saved = fixture.fetch->checkpoint();
-    for (unsigned replay = 0; replay < 2; ++replay) {
-      fixture.restore(saved);
-      auto expected = fixture.machine.cpu().registers();
-      finish(fixture.machine, *fixture.fetch);
-      expected.pc = program + (taken ? 4U : 1U);
-      const auto fetch = fixture.fetch->view();
-      require(fixture.machine.cpu().registers() == expected &&
-                  fetch.used == (taken ? 0U : words.size() - 1) &&
-                  fetch.next_address == program + (taken ? 4U : words.size()),
-              "Actual taken Jcc discards younger samples; untaken fallthrough preserves them");
-    }
+
+    auto expected = fixture.machine.cpu().registers();
+    finish(fixture.machine, *fixture.fetch);
+    expected.pc = program + (taken ? 4U : 1U);
+    const auto fetch = fixture.fetch->view();
+    require(fixture.machine.cpu().registers() == expected &&
+                fetch.used == (taken ? 0U : words.size() - 1) &&
+                fetch.next_address == program + (taken ? 4U : words.size()),
+            "Actual taken Jcc discards younger samples; untaken fallthrough preserves them");
   }
 }
 
@@ -499,9 +479,9 @@ struct ConditionalCase {
   bool bit_operand;
 };
 
-void conditional_dma_replay(Fixture &fixture,
-                            const ConditionalCase scenario,
-                            const Replacement replacement) {
+void conditional_dma_continuation(Fixture &fixture,
+                                  const ConditionalCase scenario,
+                                  const Replacement replacement) {
   constexpr unsigned operand = 0x20;
   auto &machine = fixture.machine;
   auto expected = machine.cpu().registers();
@@ -567,11 +547,8 @@ void conditional_dma_case(const ConditionalCase scenario) {
   fixture.read_words(words.size());
   fixture.fetch->issue();
   healthy(fixture.fetch->begin());
-  const auto saved = fixture.fetch->checkpoint();
-  for (unsigned replay = 0; replay < 2; ++replay) {
-    fixture.restore(saved);
-    conditional_dma_replay(fixture, scenario, {.address = destination, .value = short_new});
-  }
+
+  conditional_dma_continuation(fixture, scenario, {.address = destination, .value = short_new});
 }
 
 void clocked_owner_guard() {
@@ -656,7 +633,7 @@ int main() {
     }
     branch_redirects();
     capacity_and_protocol();
-    unknown_read_and_recovery();
+    unknown_read_and_failure();
     program_data_is_not_prefetch();
     repeat_control();
     wait_control();
@@ -669,7 +646,7 @@ int main() {
     }
     clocked_owner_guard();
     call_and_return();
-    std::cout << "Native queued program fetch, DMA, control and restored-owner checks passed\n";
+    std::cout << "Native queued program fetch, DMA, control and unknown-input checks passed\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
