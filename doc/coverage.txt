@@ -35,6 +35,14 @@ Declared RAM, source-initial thresholds and functional NAND timing remain
 premises. Full receiver, factory SL, installed image and playback are pending
 (sample-nand.txt;sample-nand-reference.json).
 
+One connected original-POR prefix mounts copied full factory preset/sample media.
+Its actual sixteen request-window limits satisfy the source-derived direct-row
+condition; catalogue cursor and the original seven-bit report agree with42
+accepted declared pages. This is observed virtual state before Main, not only
+offline input arithmetic. Factory provisioning, physical mapping, normalized
+bank selection and real sample header/refill/audio remain unqualified. See
+sample-midi-reference.json (native_factory_prefix).
+
 The bounded optimized original-reset measurement in instrument-performance.txt
 reaches 3M MCU operations and 393 original DSP PCM frames at RTF 0.0021272 with
 core 3903224. Profiler-on/off outputs match exactly, including the earlier

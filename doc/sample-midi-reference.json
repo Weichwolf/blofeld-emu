@@ -47,5 +47,23 @@
       "upper_bound_reached": false
     }
   },
-  "qualification": "Declared original sample-MIDI target rows and explicit41-program reference extent. Native end fields and a separate Spectre-style client PCM view are retained distinctly; that client view is not a proven MIDI playback-length contract. Unknown pages and unresolved references stay explicit. No physical NAND/address translation, bad-block/ECC map, installation or full boot/playback proof. Separate source-derived catalogue scan assumes these declared pages as completed ordinary1900 X-byte replies; no actual request/IRQ run or physical mapping is inferred."
+  "qualification": "Declared original sample-MIDI target rows and explicit41-program reference extent. Native end fields and a separate Spectre-style client PCM view are retained distinctly; that client view is not a proven MIDI playback-length contract. Unknown pages and unresolved references stay explicit. No physical NAND/address translation, bad-block/ECC map, installation or full boot/playback proof. Separate source-derived catalogue scan assumes these declared pages as completed ordinary1900 X-byte replies; no actual request/IRQ run or physical mapping is inferred.",
+  "native_factory_prefix": {
+    "emulator_source_commit": "7c30c81458c3af585e62dc5df1b9e0d83b261403",
+    "ELF_sha256": "28a87666c7344713e556d95fbbd98db47a04672a977f5669f9da0ce212f45dba",
+    "initial_NVM_sha256": "93b6c8cb062bdbcdb6463459a805909fabe323352640f648322e21c92eec501c",
+    "initial_NAND_sha256": "e3de840b0befb096e7890564aec3d2971bb15fa6c2a16a8d813df0094c332587",
+    "capture_operations": 10186752,
+    "capture_common_ticks": 548932820184,
+    "known_X_words": 12288,
+    "X_snapshot_sha256": "b3521792d0146d726a72e35b2244282b49075c426ed36eea7b02adf937be65b0",
+    "request_window_limits_packed24_sha256": "1c1593893cc5164af449f703df980cb33087ab9fcc1bc16b5b3f7cf00ed67f2e",
+    "declared_geometry_rows": 131072,
+    "source_rule_on_observed_table_has_no_row_offset": true,
+    "catalogue_end_cursor": 12330,
+    "catalogue_report_packed24_sha256": "a4ffe2304cbb1b6e604dec16d9a36b6bf3b6382851fb26c6a096847491f9039c",
+    "catalogue_report_matches_42_accepted_pages": true,
+    "MIDI_input_bytes": 0,
+    "qualification": "Actual original1.25 reset prefix with copied factory preset/sample image; live pure DSP storage observation. The observed table satisfies the source-derived direct-row condition and the original catalogue count matches the declared-page reference. Image provisioning is hypothetical installed factory data; physical mapping, Main, normalized sample-bank selection, header/refill bytes and sample playback are not established by this prefix."
+  }
 }
