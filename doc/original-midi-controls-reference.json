@@ -1,5 +1,5 @@
 {
-  "qualification": "Frozen diagnostic observer linked to production Board/runtime: unchanged original1.25 actual POR, Main, standard-tool A4 on/off, PCM, Identity and one Program Change/UI response. Complete fixed Desktop-SL instrument remains unqualified.",
+  "qualification": "Frozen diagnostic observer linked to production Board/runtime: unchanged original1.25 actual POR/Main, standard-tool A4/CC7 PCM observations, Identity, one Program Change/UI response and one edit Sound dump. Complete fixed Desktop-SL instrument remains unqualified.",
   "runtime_source_revision": "0b18bbaf64bcf5e5bb8ece59d7d4d5522c263122",
   "Core_revision": "82467d22bd93470fbf0c47971b9dc6d04317025e",
   "native_ELF_sha256": "a352e511d65bc2327dffb1e326d175a7ccd8758b492a90a9c4c4598238145534",
@@ -71,9 +71,96 @@
   "physical_traffic": false,
   "complete_instrument": false,
   "limits": [
-    "One short note and one Program Change; full banks/programs/controllers and envelope retirement unqualified",
+    "Two A4 witnesses and one Program Change; full banks/programs/controllers, envelope retirement and voice ownership unqualified",
     "Supplied functional board/clock/decoder profile; no physical timing or hardware equivalence claim",
     "Factory SL image, full samples, kernel USB, normal launcher, host audio and sustained realtime unqualified",
     "Host polling chooses admission/dwell beyond the minimum; PCM hashes identify this witness, not cross-host golden outputs"
-  ]
+  ],
+  "volume_sequence": {
+    "program": "A002 Init",
+    "wire_hex": [
+      "90 45 64",
+      "b0 07 00",
+      "b0 07 7f",
+      "80 45 00"
+    ],
+    "minimum_virtual_dwells_ms": [
+      200,
+      600,
+      600,
+      600
+    ],
+    "capture_frames": [
+      415985,
+      425834,
+      453897,
+      481965,
+      510116
+    ],
+    "capture_WAV_sha256": [
+      "116009cf563584f73fcdb018be7cf4a09011b7d81a720fd017be898d2b779edf",
+      "e30d5e4ecf07ac464bfbdd821618abe97834c6a821771dbf4d0878b76581d08d",
+      "7cce3020bf53c01748cc89bad88ec5789e87f251d1d661752cea49cdabeae41b",
+      "56e3ee41ff3159426d90975183a7eb5317a06ea390ac06f62d463bd0f7c1ebf0",
+      "ac892d9f8e65ead1ee1eb40edaf6d3a943c0fe25a6d68bde63cffac869f51258"
+    ],
+    "input_bytes_before_after": [
+      14,
+      26
+    ],
+    "output_bytes": 15,
+    "tail_frames_per_channel": 4096,
+    "CC7zero_constant_S24": [
+      -15,
+      -15
+    ],
+    "NoteOff_constant_S24": [
+      -30,
+      -30
+    ],
+    "held_zero_restored_AC_effect_observed": true,
+    "NoteOff_tail_AC_zero_observed": true,
+    "initial_bit_zero_expectation_passed": false,
+    "failed_expectation_preserved": true,
+    "specific_live_residual_cause_proven": false,
+    "independent_component": "dsp-master-history-reference.json",
+    "audit_sha256": "c216476683fedd152ec1a1df516dab46ed15f5917b0eeec12d02d6598c1033f1",
+    "private_verification": "doc/local/native-vacant-restart-r1/boot-midi-r2/volume-controls-verification.json"
+  },
+  "edit_sound_request": {
+    "wire_hex": "f0 3e 13 7f 00 7f 00 f7",
+    "input_retransmissions": 0,
+    "logical_reply_bytes": 392,
+    "observed_ALSA_fragments": [
+      255,
+      137
+    ],
+    "reply_sha256": "d19f89c4fa4b2f9c61b1604aa819e54dbf46d87a049dffe09b38d58f69a7aaba",
+    "checksum_valid": true,
+    "name": "Init !",
+    "oscillator_bend_raw": [
+      66,
+      66,
+      66
+    ],
+    "raw_UART_reply_bytes": 393,
+    "raw_trailing_byte_value_directly_captured": false,
+    "source_padding_byte_before_after": [
+      140,
+      140
+    ],
+    "original_observation_driver_exit": 1,
+    "one_virtual_second_timeout_preserved": true,
+    "completion_observation": "Two passive readers retained the one delayed response; same original owner later Main/WAI,fault0. No retransmission or restart.",
+    "delay_scope": "Observed original USB queue capacity/flush PCs with no USB IN consumer; not qualified physical response timing.",
+    "after_capture": {
+      "operations": 235569152,
+      "ticks": 8832126741480,
+      "frames": 601699,
+      "midi_input_bytes": 34,
+      "midi_output_bytes": 408
+    },
+    "private_audit": "doc/local/native-vacant-restart-r1/boot-midi-r2/edit-sound-audit.json",
+    "audit_sha256": "792518c0204ab62bcfcf2db6d866d1ef74be8b09405844f468770dad97c34bf9"
+  }
 }

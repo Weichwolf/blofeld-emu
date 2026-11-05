@@ -1,0 +1,43 @@
+{
+  "qualification": "Unchanged original master stage on the current independent DSP core; declared zero inputs/RAM, unscaled transfers, linear modifiers and authored caller. Not full boot, CC7 ingress, DMA/audio or hardware validation.",
+  "Core_revision": "82467d22bd93470fbf0c47971b9dc6d04317025e",
+  "program_record": {
+    "record": 44,
+    "space": 0,
+    "address": 285,
+    "words": 793,
+    "sha256": "1d89ccd829af81c3e1f6ed53f00094f9ad830db6d64d34fe4737a44a2e9f0f64"
+  },
+  "fixture_source_sha256": "a2417adeefa097d387636645a28d0faa57af02dc9a003965a81cb8d6d348b860",
+  "native_ELF_sha256": "c2e61d003c81491ed00231e60a143c3b57d75ecd7f67291f9769f6f99abf1eb0",
+  "calls": 336,
+  "output_words": 10752,
+  "original_instructions": 48720,
+  "master_volume_values": [
+    0,
+    1,
+    32,
+    64,
+    96,
+    127
+  ],
+  "fixed_word_range": [
+    -30,
+    0
+  ],
+  "fixed_word_count": 31,
+  "sharp_settling_updates": 389,
+  "endpoint_values_at_388": [
+    -31,
+    1
+  ],
+  "dependent_blocks_per_gain": 25,
+  "actual_exit": 0,
+  "reaped": true,
+  "private_qualification": "doc/local/master-history-r1/qualification.json",
+  "qualification_sha256": "a18a20ca24f2b4754af0cc8b632c8aaa2f42ec065742e1c52a4aac9106d85c81",
+  "native_log_sha256": "b104a743d6d60f4a6e300105fb1c7313ac49277a713713aa7d7e0d7646ec3627",
+  "validation": "Focused optimized Release, strict compile/tidy0, CMake build/discovery, PIE/RELRO/NX; guarded actual execution. No duplicate native CTest run. Sanitizer matrices deferred under pre-realtime policy.",
+  "fuzz": false,
+  "physical_traffic": false
+}

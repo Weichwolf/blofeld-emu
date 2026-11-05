@@ -26,10 +26,22 @@ linked to production Board/runtime accepts A4 on/off through aplaymidi and
 produces 11,560 new nonzero original DSP frames per channel. Its 15-byte Identity
 reply reaches aseqdump, retaining the original ASCII1.24 quirk. Under the explicit
 vacant-data decoder profile, C0 01 returns to Main without fault and the actual
-LCD changes A001 to A002. Original MIDI input/output totals are 14/15 bytes.
+LCD changes A001 to A002. Initial note/Identity/selection input/output totals
+are14/15 bytes.
 Counts, hashes and limits: original-midi-controls-reference.json. The earlier
 X011cc1 program-change refusal remains in original-midi-runtime-reference.json.
-This single-note/selection path does not qualify all programs/controllers,
+The A002 Init volume witness holds A4, sends CC7zero/max, then NoteOff. Its
+4096-frame tails retain constant signed24 -15/-30 after zero/release; changing
+audio returns at CC7max without another NoteOn. The bit-zero expectation remains
+failed. The separate independent-Core master-history test preserves the original
+fixed words; the specific live residual cause remains unproven (dsp-master-history.txt).
+One edit Sound Request also returns392 original bytes with valid checksum/name.
+Two passive readers retain its255/137-byte ALSA fragments after the first
+one-virtual-second observation expires. The same instrument returns to Main;
+the timed-out controller remains failed. Configured USB IN has no host consumer
+in this witness, and observed MCU PCs enter its original capacity/flush loops.
+Physical response timing and all dump/transport variants remain unqualified.
+These note/volume/selection witnesses do not qualify all programs/controllers,
 factory SL, normal-profile launch, host audio or realtime instrument operation.
 
 Execution ownership

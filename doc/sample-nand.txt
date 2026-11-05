@@ -1,5 +1,13 @@
 Original sample helper through the runtime NAND queue
 
+Separate frozen USB experiment:453 original SMF messages/3469 OUT packets
+traverse actual MCU IRQ/forwarder, shared GPIO and original DSP receiver/helper
+into256 durable pages. Fresh no-seed reopen checks135168 target/50688 guard bytes
+and the complete cold image. Source timing is unchanged; no ring-alias or
+helper-counter pacing workaround is supplied. Supplied USB configuration/RAM,
+authored callers and inactive DMA remain premises. This is not yet a maintained
+public USB regression or full-POR/SL/library proof (sample-usb-reference.json).
+
   cmake --build --preset release --target blofeld-original-sample-nand-test
   ctest --test-dir build/release -R '^original_sample_nand$' --output-on-failure
 

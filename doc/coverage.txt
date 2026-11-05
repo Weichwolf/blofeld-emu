@@ -335,6 +335,17 @@ This supersedes the earlier vacant-data program-change refusal for this profile.
 All banks/programs, stored names/sounds, controllers and normal-profile operation
 remain pending. Counts/hashes: original-midi-controls-reference.json; see also
 runtime.txt and MIDI-BANK-PROGRAM/UI-SELECT in function-acceptance.tsv.
+The A002 Init CC7zero/max/NoteOff witness additionally verifies a disappearing
+and restored AC signal. Constant raw24 -15/-30 tails contradict its initial
+bit-zero expectation, which remains recorded as failed. The current independent
+Core separately passes336 original-master calls/10752 words across31 fixed
+histories and six gains; this does not prove the specific live residual cause
+or whole controller/voice behavior (dsp-master-history.txt).
+One actual edit-buffer SNDR returns392 valid original SNDD bytes through two
+passive ALSA fragments; later Main/WAI remains fault0. Its initial one-second
+virtual observation timeout is retained, with no request retry. Configured USB
+IN lacks a host consumer in this witness; full dump/transport timing and all
+other scopes remain pending (original-midi-controls-reference.json).
 
 10. Native LCD and viewer — partial
 The emulated controller publishes complete display.pbm/display.txt files.

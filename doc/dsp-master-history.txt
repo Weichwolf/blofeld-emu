@@ -1,0 +1,23 @@
+Original master output: silent-input histories
+
+  cmake --build --preset release --target blofeld-original-master-history-test
+  ctest --test-dir build/release -R '^original_master_history$' --output-on-failure
+
+Missing local original firmware skips77; all127 records are hash-checked before
+execution. The current independent DSP core executes unchanged P:027b..0297,
+with an authored MOVE/JSR/JMP caller, linear modifiers, unscaled transfers,
+declared readable RAM and zero current/previous input samples.
+
+Each lane follows y'=floor(K*y/2^23), using the pinned original coefficient.
+The31 fixed words are -30..0. Monotone extreme histories reach the fixed band
+after389 updates; their388th values -31/+1 establish the sharp bound.
+Six gains, every fixed word in both lanes and25 retained extreme-history blocks
+per gain require336 calls,10752 output words and48720 original instructions.
+The caller genuinely returns/restarts; host stores never repair dependent history.
+
+The actual-reset MIDI witness separately retains -15 after CC7zero and -30
+after NoteOff (original-midi-controls-reference.json). These are compatible
+observations; this isolated test does not establish their particular live cause.
+No zeroing, changed firmware, full-boot/DMA/host-audio or hardware claim follows.
+Counts/hashes: dsp-master-history-reference.json. Sanitizer matrices remain
+deferred under the pre-realtime policy; the focused optimized Release run passes.
