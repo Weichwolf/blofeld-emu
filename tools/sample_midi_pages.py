@@ -18,6 +18,8 @@ STAGING = (0x10000, 0x11610, 0x12c20, 0x14230)
 MAX_FRAME_BYTES = 32 * 1024 * 1024
 MAX_PCM_BYTES = 64 * 1024 * 1024
 ROW_LIMIT = 1 << 24  # Native helper argument width; not an established NAND geometry.
+CATALOGUE_FIRST = 0x3000
+CATALOGUE_LAST = 0x32ff
 
 
 def require(condition, message):
@@ -44,6 +46,32 @@ class PreparedPages:
             else:
                 result.append((row, row + 1))
         return tuple(result)
+
+
+@dataclass(frozen=True)
+class CatalogueScan:
+    accepted_pages: int
+    end_cursor: int
+    last_requested: int
+    upper_bound_reached: bool
+
+
+def scan_catalogue(pages):
+    """Source-derived scan assuming declared pages become ordinary $1900 X-byte replies.
+
+    The receiver zero-extends each byte: the scan's $808080 test therefore sees
+    only bit7 of the FIRST byte, not the first packed24 word or a name length.
+    Address translation, bus completion and summary-buffer modifier modes are
+    outside this diagnostic. No physical NAND or executed firmware is inferred.
+    """
+    for row in range(CATALOGUE_FIRST, CATALOGUE_LAST + 1):
+        page = pages.page(row)
+        require(len(page) == PAGE_BYTES, 'Incomplete catalogue reply page')
+        if page[0] & 0x80:
+            return CatalogueScan(row - CATALOGUE_FIRST, row, row, False)
+    # The firmware advances its stored cursor but retains OLD Y1 for its summary.
+    return CatalogueScan(CATALOGUE_LAST - CATALOGUE_FIRST + 1,
+                         CATALOGUE_LAST + 1, CATALOGUE_LAST, True)
 
 
 def parse_frames(frames):

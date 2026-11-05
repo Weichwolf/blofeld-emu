@@ -11,7 +11,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
-from sample_midi_pages import catalogue, parse_frames, sample_at, FRAME_BYTES, PAGE_BYTES, STAGING
+from sample_midi_pages import (PreparedPages, catalogue, parse_frames, sample_at, scan_catalogue,
+                               FRAME_BYTES, PAGE_BYTES, STAGING)
 from original_sample_preparation import load_reference, sample_blocks, extract_inputs
 
 
@@ -82,6 +83,44 @@ def controls():
     print('Directed sample-row, unknown-page, reference, PCM and bounded rejection controls pass')
 
 
+def catalogue_scan_controls():
+    def reply(first):
+        return bytes([first]) + bytes(PAGE_BYTES - 1)
+
+    for count in (0, 1, 41, 42, 127, 128, 767):
+        mapping = {0x3000 + offset: reply(0) for offset in range(count)}
+        mapping[0x3000 + count] = reply(0x80)
+        scan = scan_catalogue(PreparedPages(mapping, ()))
+        assert scan.accepted_pages == count
+        assert scan.end_cursor == scan.last_requested == 0x3000 + count
+        assert not scan.upper_bound_reached
+
+    # The raw packed24 first word has high bits in two lanes. The actual generic
+    # receiver exposes its leading zero byte alone, so the scan must accept it.
+    mapping = {0x3000: b'\x00\xff\xff' + bytes(PAGE_BYTES - 3), 0x3001: reply(0x80)}
+    scan = scan_catalogue(PreparedPages(mapping, ()))
+    assert scan.accepted_pages == 1 and scan.end_cursor == 0x3001
+    mapping[0x3000] = reply(0x7f)
+    assert scan_catalogue(PreparedPages(mapping, ())).accepted_pages == 1
+    mapping[0x3000] = reply(0xff)
+    assert scan_catalogue(PreparedPages(mapping, ())).accepted_pages == 0
+
+    mapping = {0x3000 + offset: reply(0) for offset in range(768)}
+    scan = scan_catalogue(PreparedPages(mapping, ()))
+    assert (scan.accepted_pages, scan.end_cursor, scan.last_requested,
+            scan.upper_bound_reached) == (768, 0x3300, 0x32ff, True)
+    mapping[0x32ff] = reply(0x80)
+    scan = scan_catalogue(PreparedPages(mapping, ()))
+    assert (scan.accepted_pages, scan.end_cursor, scan.last_requested,
+            scan.upper_bound_reached) == (767, 0x32ff, 0x32ff, False)
+    del mapping[0x3001]
+    rejects(lambda: scan_catalogue(PreparedPages(mapping, ())),
+            'Unknown declared sample page at row0x003001')
+    mapping[0x3000] = bytes(PAGE_BYTES - 1)
+    rejects(lambda: scan_catalogue(PreparedPages(mapping, ())), 'Incomplete catalogue reply')
+    print('Catalogue scan: byte-reply semantics, empty names, exact upper exits and unknown pages pass')
+
+
 def reference_inputs():
     reference = json.loads((ROOT / 'doc/sample-midi-reference.json').read_text())
     preparation = json.loads((ROOT / 'doc/sample-preparation-reference.json').read_text())
@@ -110,6 +149,7 @@ def reference_check(report_path):
                    catalogue_sha256=hashlib.sha256(json.dumps(identities, sort_keys=True,
                         separators=(',', ':')).encode('ascii')).hexdigest(),
                    payload_sha256=hashlib.sha256(b''.join(pages.page(n) for n in sorted(pages.pages))).hexdigest())
+    summary['catalogue_scan'] = asdict(scan_catalogue(pages))
     if json.loads(json.dumps(summary)) != reference['expected']:
         raise ValueError('Changed fixed MIDI declared-page/catalogue reference: ' + json.dumps(summary))
     for row in (0, 0x3040, 0x33ff, 0xedc0, 0xffffff):
@@ -124,6 +164,7 @@ def reference_check(report_path):
 if __name__ == '__main__':
     if len(sys.argv) == 1:
         controls()
+        catalogue_scan_controls()
     elif len(sys.argv) == 3 and sys.argv[1] == '--reference':
         sys.exit(reference_check(Path(sys.argv[2])))
     else:

@@ -13,7 +13,17 @@ The 24-bit row domain is the helper argument width, not a hardware geometry clai
 An explicit fixed 41-program extent yields 142 referenced sample headers and
 13 unresolved key ranges covering 265 keys, with targets0/ffffff. Unresolved
 references stay separate from known samples; reading either target still fails.
-The extent does not establish a general firmware directory-termination protocol.
+The extent is the retained client-style view, not the firmware scan count.
+
+The separate source-derived scan requests3000..32ff using header1900. Its generic
+receiver stores zero-extended bytes, so the later808080 mask tests only the first
+byte. Empty names and high bits in later bytes do not stop it. Given the declared
+pages as completed replies,42 pages are accepted:3000..3029;302a rejects. The
+additional3029 entry is retained separately from the41-program client view.
+Directed controls cover byte/packed-word differences,missing pages and both
+upper exits: full acceptance stores3300 but retains32ff for the summary; rejection
+at32ff retains32ff in both roles. This is offline source/data evidence,not a
+native request/IRQ run,physical address map,SL authorization or installed library.
 
 The native end field (header word13) and the separate client-style extent field
 (word16) differ in 76 headers. Both are retained. The Spectre-style client PCM
