@@ -346,6 +346,10 @@ passive ALSA fragments; later Main/WAI remains fault0. Its initial one-second
 virtual observation timeout is retained, with no request retry. Configured USB
 IN lacks a host consumer in this witness; full dump/transport timing and all
 other scopes remain pending (original-midi-controls-reference.json).
+The A002 Init minimum-Pitch-Bend/center witness matches the two-semitone range
+read from its original Sound dump within0.2% relative-frequency tolerance.
+This qualifies one interval/return, not all14-bit values, individual oscillator
+isolation or physical tuning (original-midi-controls-reference.json).
 
 10. Native LCD and viewer — partial
 The emulated controller publishes complete display.pbm/display.txt files.

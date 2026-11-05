@@ -1,5 +1,5 @@
 {
-  "qualification": "Frozen diagnostic observer linked to production Board/runtime: unchanged original1.25 actual POR/Main, standard-tool A4/CC7 PCM observations, Identity, one Program Change/UI response and one edit Sound dump. Complete fixed Desktop-SL instrument remains unqualified.",
+  "qualification": "Frozen diagnostic observer linked to production Board/runtime: unchanged original1.25 actual POR/Main, standard-tool A4/CC7/Pitch-Bend PCM observations, Identity, one Program Change/UI response and one edit Sound dump. Complete fixed Desktop-SL instrument remains unqualified.",
   "runtime_source_revision": "0b18bbaf64bcf5e5bb8ece59d7d4d5522c263122",
   "Core_revision": "82467d22bd93470fbf0c47971b9dc6d04317025e",
   "native_ELF_sha256": "a352e511d65bc2327dffb1e326d175a7ccd8758b492a90a9c4c4598238145534",
@@ -71,7 +71,7 @@
   "physical_traffic": false,
   "complete_instrument": false,
   "limits": [
-    "Two A4 witnesses and one Program Change; full banks/programs/controllers, envelope retirement and voice ownership unqualified",
+    "Three A4 witnesses, one Program Change and one edit Sound request; full banks/programs/controllers, envelope retirement and voice ownership unqualified",
     "Supplied functional board/clock/decoder profile; no physical timing or hardware equivalence claim",
     "Factory SL image, full samples, kernel USB, normal launcher, host audio and sustained realtime unqualified",
     "Host polling chooses admission/dwell beyond the minimum; PCM hashes identify this witness, not cross-host golden outputs"
@@ -162,5 +162,69 @@
     },
     "private_audit": "doc/local/native-vacant-restart-r1/boot-midi-r2/edit-sound-audit.json",
     "audit_sha256": "792518c0204ab62bcfcf2db6d866d1ef74be8b09405844f468770dad97c34bf9"
+  },
+  "pitch_bend_sequence": {
+    "program": "A002 Init",
+    "wire_hex": [
+      "90 45 64",
+      "e0 00 00",
+      "e0 00 40",
+      "80 45 00"
+    ],
+    "minimum_virtual_dwells_ms": [
+      200,
+      300,
+      300,
+      300
+    ],
+    "prior_actual_sound_bend_raw": [
+      66,
+      66,
+      66
+    ],
+    "documented_bend_semitones": 2,
+    "tail_FFT_frames": 4096,
+    "relative_ratio_tolerance": 0.002,
+    "relative_ratios": {
+      "lowered": {
+        "expected": 0.8908987181403393,
+        "actual": [
+          0.8914039538416274,
+          0.8914039538416274
+        ]
+      },
+      "centered": {
+        "expected": 1,
+        "actual": [
+          1.00000027296981,
+          1.00000027296981
+        ]
+      }
+    },
+    "capture_frames": [
+      646733,
+      656823,
+      671268,
+      685782,
+      700318
+    ],
+    "capture_WAV_sha256": [
+      "d8e84321225284ffd287b129c7a5622af3c70efab2823107aff8325342999034",
+      "435c94c5dc7d49e00677269a5efb5eadf7bd7e1413395abd11aef21011d00160",
+      "dff03418b1de1c08d60d65c01f9d7c927d3cca925bb5ffd4201c30d2887da9d9",
+      "d3235e349eb1da30ceabc6d169745bf2e38bede1f81cb5d98a174a9035876af4",
+      "215e7e1599fac8816e2d72e319e7f56affddd6231fcbcfd245327be8b5bb5fd4"
+    ],
+    "MIDI_input_bytes_before_after": [
+      34,
+      46
+    ],
+    "MIDI_output_bytes": 408,
+    "passed": true,
+    "physical_pitch_or_clock_qualified": false,
+    "full_14bit_sweep_qualified": false,
+    "voice_retirement_qualified": false,
+    "private_audit": "doc/local/native-vacant-restart-r1/boot-midi-r2/pitch-audit.json",
+    "audit_sha256": "009c364c99d2401cd7f05822a21a35c510697999240bb802a98694f18b320fe0"
   }
 }
