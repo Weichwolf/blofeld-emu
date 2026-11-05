@@ -233,15 +233,15 @@ controllers/channels, bank/program selection, bidirectional host MIDI or both
 hardware profiles. See original-notes-reference.json and function-acceptance.tsv.
 Passive MCU serial output is now captured from resolved PR3/PS5 pads into a
 bounded queue, including WAI and joint snapshots. Ten scoped native cases pass
-under both sanitizer configurations. This supports Board output capture; original
-firmware replies and USB remain unqualified. A subsequent HostMidiSession adapter
-now delivers authored native SCI output through the same owned host port; both
+under both sanitizer configurations. This supports Board output capture.
+HostMidiSession additionally delivers authored native SCI output through the same owned host port; both
 sanitizer profiles pass independent kernel-record and affected input-session
 checks. The ordinary reference-config CLI now exposes --midi-port NAME and the
 common-time SCI route. Authored actual-reset receive/reply cases on both routes,
 14 fixed refusal cases and affected file-input regressions pass both sanitizer
 profiles; independent standard ALSA tools observe only owned virtual ports.
-Normal-profile integration and original bidirectional transfers remain open.
+Normal-profile integration and comprehensive original bidirectional coverage
+remain open; a focused Identity reply is qualified below.
 See midi-output.txt, midi-output-reference.json, host-midi-session.txt,
 host-midi-output-session-reference.json and reference-midi-session-cli-reference.json.
 The CLI now also binds the existing live audio worker. Authored native DSP/ESAI
@@ -329,8 +329,12 @@ The executable currently exposes explicit reference configurations, file inputs,
 render/export facilities and separate host adapters. A complete fixed Desktop-SL
 normal device launcher, sustained original instrument operation, all
 MIDI/SysEx controls, live audio and their failure behavior are not qualified.
-Bank/program selection with original name/number/audio changes is specifically
-pending. See runtime.txt and MIDI-BANK-PROGRAM/UI-SELECT in function-acceptance.tsv.
+A fresh original POR now qualifies one A4 on/off, original PCM/Identity and
+C0 01 returning to Main without fault; the actual LCD changes A001 to A002.
+This supersedes the earlier vacant-data program-change refusal for this profile.
+All banks/programs, stored names/sounds, controllers and normal-profile operation
+remain pending. Counts/hashes: original-midi-controls-reference.json; see also
+runtime.txt and MIDI-BANK-PROGRAM/UI-SELECT in function-acceptance.tsv.
 
 10. Native LCD and viewer — partial
 The emulated controller publishes complete display.pbm/display.txt files.
@@ -338,7 +342,9 @@ The GTK file viewer is under src/gui; it does not execute firmware or send MIDI.
 Actual ordinary Board output and authored/conditional LCD tests are distinct
 from the separate paused MCU-only preview that can show Play Sound/A001/Init.
 That preview is not proof of coupled DSP, live MIDI or normal full-device startup.
-See display-export.txt. MIDI-triggered original UI changes remain unqualified.
+See display-export.txt. One actual MIDI Program Change updates the original
+connected LCD (A001 to A002); the complete UI matrix remains unqualified
+(original-midi-controls-reference.json).
 
 Runtime telemetry and optimized integration
 

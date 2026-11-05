@@ -10,8 +10,8 @@ The required dsp-execution setting selects reference-effects, native-cycles or
 native-regions. Native-cycles uses computed native instruction budgets with
 CPU-only publication grouping (dsp-native-budget.txt). Native-regions couples
 bounded native CPU/RAM work to MCU/peripheral horizons and deferred IRQs
-(dsp-native-regions.txt). These diagnostic configurations do not qualify full
-complete normal Desktop SL startup.
+(dsp-native-regions.txt). These diagnostic configurations do not qualify the
+complete normal Desktop SL instrument.
 
   blofeld-headless --firmware update.zip --reference-board scenario.bfboard \
     --dsp-rom packed24.bin --device-state /private/existing-dir/unit.bfnvm \
@@ -21,14 +21,16 @@ Manufacturer firmware, reconstructed reference ROM and storage images stay local
 --device-state owns a persistent virtual identity and native MCU flash, not a
 replacement normal profile (device-identity.txt, mcu-flash-clock.txt).
 Bounded WAV export, traces, inspection and sample tools are development facilities.
-Original1.25 has reached its main WAI loop from actual reset with live stores,
-accepted MIDI note input and produced nonzero original DSP PCM. After the USB
-size-register correction, the real original Identity response reaches aseqdump
-(15 bytes, original ASCII1.24 quirk retained). A valid program change then fails
-at DSP PC001f93 reading unmapped X011cc1. Complete normal operation remains
-unqualified. See original-midi-runtime-reference.json and coverage.txt for scope.
-The NAND reference profile now selects an explicit vacant-data read hypothesis
-(dsp-vacant-data-read.txt); fresh complete program-change replay remains required.
+Original 1.25 reaches Main from actual POR with live stores. A frozen observer
+linked to production Board/runtime accepts A4 on/off through aplaymidi and
+produces 11,560 new nonzero original DSP frames per channel. Its 15-byte Identity
+reply reaches aseqdump, retaining the original ASCII1.24 quirk. Under the explicit
+vacant-data decoder profile, C0 01 returns to Main without fault and the actual
+LCD changes A001 to A002. Original MIDI input/output totals are 14/15 bytes.
+Counts, hashes and limits: original-midi-controls-reference.json. The earlier
+X011cc1 program-change refusal remains in original-midi-runtime-reference.json.
+This single-note/selection path does not qualify all programs/controllers,
+factory SL, normal-profile launch, host audio or realtime instrument operation.
 
 Execution ownership
 One emulation owner advances MCU and DSP against the common board timeline.
@@ -52,8 +54,9 @@ or sending MIDI. Its default source is $XDG_RUNTIME_DIR/blofeld-emu/;
 --runtime-dir selects the XDG root, not the final frame directory.
 Atomic file replacement permits redraw at complete-frame boundaries. Abandoned
 files remain snapshots, not evidence that the producer is running.
-The separate paused MCU-only preview can show Play Sound/A001/Init; it is not
-the connected Board runtime. See display-export.txt for actual Board publication.
+A separate paused MCU-only preview can show Play Sound/A001/Init. The connected
+original runtime additionally shows the MIDI-driven A001-to-A002 response above;
+these scopes remain distinct. See display-export.txt for Board publication.
 
 Host adapters
 The reference API accepts owned ALSA sequencer input through a common-time SCI
@@ -62,9 +65,9 @@ With configured native output capture, HostMidiSession also delivers SCI bytes
 through the same port. --midi-port NAME selects it in the ordinary CLI, publishes
 the actual kernel address/grants, and requires one input route plus midi-output.
 The common-time midi-sci-timed route supports POR/WAI; see host-midi-session.txt.
-One frozen original-runtime profile has produced a complete Identity reply
-(original-midi-runtime-reference.json). This does not qualify all SysEx replies
-or the pending normal-profile launcher.
+The frozen original-runtime control profile produces a complete Identity reply
+(original-midi-controls-reference.json). All SysEx replies and the normal-profile
+launcher remain separate requirements.
 Separate MIDI port negotiation and refusal tests are in host-midi-port.txt.
 The normal instrument must expose bidirectional MIDI/SysEx; input acceptance
 alone does not establish output, bank/program changes or USB enumeration.

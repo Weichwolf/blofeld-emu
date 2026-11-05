@@ -1,0 +1,79 @@
+{
+  "qualification": "Frozen diagnostic observer linked to production Board/runtime: unchanged original1.25 actual POR, Main, standard-tool A4 on/off, PCM, Identity and one Program Change/UI response. Complete fixed Desktop-SL instrument remains unqualified.",
+  "runtime_source_revision": "0b18bbaf64bcf5e5bb8ece59d7d4d5522c263122",
+  "Core_revision": "82467d22bd93470fbf0c47971b9dc6d04317025e",
+  "native_ELF_sha256": "a352e511d65bc2327dffb1e326d175a7ccd8758b492a90a9c4c4598238145534",
+  "firmware_ZIP_sha256": "095c760a576dcb04fe3e379bed1b95a0360002295ab42b29e3335a39514f0c72",
+  "firmware_patched": false,
+  "checkpoint_replay": false,
+  "model_contracts": [
+    "dsp-vacant-data-read.txt",
+    "nand-functional-timing-reference.json",
+    "reference-audio-clock.txt"
+  ],
+  "main": {
+    "operations": 88707072,
+    "instructions": 88693663,
+    "interrupts": 10725,
+    "ticks": 4761510731208,
+    "mcu-pc": 33557,
+    "mcu-d": 2080,
+    "dsp-pc": 410,
+    "dsp-steps": 732119428,
+    "pcm": 319017,
+    "midi-bytes": 0,
+    "midi-dsp-frames": 0,
+    "midi-output-bytes": 0,
+    "midi-output-queued": 0,
+    "waiting": 1,
+    "faulted": 0
+  },
+  "host_tools": [
+    "aplaymidi",
+    "aseqdump"
+  ],
+  "note_on_hex": "90 45 64",
+  "note_off_hex": "80 45 00",
+  "minimum_virtual_dwell_ms": 100,
+  "baseline_frames": 319151,
+  "voice_capture_frames": 331001,
+  "voice_nonzero_per_channel": [
+    11560,
+    11560
+  ],
+  "voice_WAV_sha256": "c3acc52f9092f7905d4ce6e52a86884789fa436451303562aab18b8adba7cb92",
+  "descriptive_peak_Hz": 439.91260874513733,
+  "physical_pitch_qualified": false,
+  "identity_reply_hex": "f0 7e 00 06 02 3e 13 00 00 00 31 2e 32 34 f7",
+  "identity_version_quirk": "Original1.25 retains ASCII1.24 in its reply",
+  "program_change_hex": "c0 01",
+  "program_capture": {
+    "operations": 98353152,
+    "ticks": 5036118178392,
+    "frames": 338087,
+    "midi_input_bytes": 14,
+    "midi_output_bytes": 15
+  },
+  "program_guest_faulted": 0,
+  "program_guest_waiting": 1,
+  "display_labels_before_after": [
+    "A001",
+    "A002"
+  ],
+  "display_changed_pixels": 30,
+  "display_before_sha256": "5afe43c47fc03a83190af23d1a46822c7fad5c00c5952f7a8062f80d22386393",
+  "display_after_sha256": "da3d2e5fd01794338261883493d04e571b6f585301d25681e928f98bf69451f3",
+  "actual_native_input_bytes": 14,
+  "actual_native_output_bytes": 15,
+  "audit_sha256": "f3d8924e836d3f2373079bcf759a69d762f40fd065f3653c50510588b534947c",
+  "private_evidence": "doc/local/native-vacant-restart-r1/boot-midi-r2/midi-controls-audit.json",
+  "fuzz": false,
+  "physical_traffic": false,
+  "complete_instrument": false,
+  "limits": [
+    "One short note and one Program Change; full banks/programs/controllers and envelope retirement unqualified",
+    "Supplied functional board/clock/decoder profile; no physical timing or hardware equivalence claim",
+    "Factory SL image, full samples, kernel USB, normal launcher, host audio and sustained realtime unqualified",
+    "Host polling chooses admission/dwell beyond the minimum; PCM hashes identify this witness, not cross-host golden outputs"
+  ]
+}
