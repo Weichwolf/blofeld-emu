@@ -610,6 +610,16 @@ std::uint32_t DspBus::inspect_program(const std::uint32_t address) const {
   return memory.words.at(location.offset);
 }
 
+std::optional<std::uint32_t> DspBus::inspect_memory(const DspAddress access) const {
+  if (dsp_io_selection(access) != DspIoSelection::outside) {
+    throw Fault("DSP storage inspection refuses I/O at " + address_text(access));
+  }
+  const auto location = locate(access);
+  const auto &memory = (location.rom ? rom_ : ram_).at(location.bank);
+  if (memory.known.at(location.offset) == 0) { return std::nullopt; }
+  return memory.words.at(location.offset);
+}
+
 void DspBus::install_rom(const DspRom image) {
   const auto index = bank(image.space);
   const auto base = image.space == DspSpace::p ? program_rom_base : data_rom_base;

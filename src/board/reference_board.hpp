@@ -11,6 +11,7 @@
 #include "common/bus.hpp"
 #include "display/lcd_image.hpp"
 #include "display/st7565_parallel.hpp"
+#include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_esai.hpp"
 #include "dsp/dsp_run_clock.hpp"
@@ -337,6 +338,10 @@ public:
   // This observes storage knowledge; it does not qualify a timed memory read.
   [[nodiscard]] std::vector<McuMemoryByte> inspect_mcu_memory(std::uint16_t address,
                                                               std::uint32_t count) const;
+  // Pure inactive-boundary storage copy; absent words stay unknown. I/O and
+  // unqualified maps are refused rather than acknowledged or substituted.
+  [[nodiscard]] std::vector<std::optional<std::uint32_t>>
+  inspect_dsp_memory(DspAddress first, std::uint32_t count) const;
   [[nodiscard]] std::optional<NandPeerDetailed> nand_status() const;
   [[nodiscard]] std::optional<NandImage> nand_image() const;
   [[nodiscard]] MidiInputWindow midi_window() const;

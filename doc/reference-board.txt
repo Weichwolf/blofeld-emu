@@ -296,3 +296,13 @@ files match independent complete wire expectations. Host-only query timings have
 no threshold and do not establish whole-instrument real-time performance.
 Source/ELF/log pins: reference-runtime-status-reference.json. Full original boot,
 Desktop/Keyboard functions and storage/update/recovery remain open in coverage.txt.
+
+Host storage inspection
+
+Board::inspect_dsp_memory copies P/X/Y storage at an inactive boundary, including
+a faulted one. Unknown words stay absent. I/O, vacant or switching maps and
+wrapping ranges fail visibly; no guest read, clock or acknowledgement occurs.
+It follows the current physical memory alias, without returning borrowed memory.
+reference_memory_inspection checks literal RAM/ROM/alias/unknown results, pending
+switches, selected/unselected I/O refusal, range checks and failed-boundary purity.
+This diagnostic API does not establish factory-image mapping or sample playback.

@@ -168,6 +168,9 @@ public:
   [[nodiscard]] std::uint32_t peek_program(std::uint32_t address) const;
   // Strict, side-effect-free P-space observation, including map/knowledge checks.
   [[nodiscard]] std::uint32_t inspect_program(std::uint32_t address) const;
+  // Host-only storage observation: unknown words stay absent; I/O and invalid
+  // or switching maps fail without invoking a peripheral or guest read.
+  [[nodiscard]] std::optional<std::uint32_t> inspect_memory(DspAddress access) const;
   // Pure compiler lookahead: unknown, unmapped or switching code is absent.
   // Actual execution still uses the strict mapped bus and contextual failures.
   [[nodiscard]] std::optional<std::uint32_t>

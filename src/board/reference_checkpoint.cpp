@@ -4,6 +4,7 @@
 #include "board/nand_peer.hpp"
 #include "board/reference_board.hpp"
 #include "common/bus.hpp"
+#include "dsp/dsp_bus.hpp"
 #include "mcu/hc12.hpp"
 #include "mcu/mcu_machine.hpp"
 #include "mcu/mcu_memory.hpp"
@@ -233,6 +234,23 @@ std::vector<McuMemoryByte> Board::inspect_mcu_memory(const std::uint16_t address
   for (std::uint32_t offset = 0; offset < count; ++offset) {
     result.push_back(
         native_->mcu.bus().inspect_memory(static_cast<std::uint16_t>(address + offset)));
+  }
+  return result;
+}
+
+std::vector<std::optional<std::uint32_t>>
+Board::inspect_dsp_memory(const DspAddress first, const std::uint32_t count) const {
+  require_idle();
+  constexpr std::uint32_t address_space_size = 1U << 24U;
+  if (first.address >= address_space_size || count > address_space_size - first.address) {
+    throw Fault("Reference DSP inspection range wraps at " + hex(first.address, 6) +
+                " count=" + std::to_string(count));
+  }
+  std::vector<std::optional<std::uint32_t>> result;
+  result.reserve(count);
+  const auto &bus = native_->dsp.bus();
+  for (std::uint32_t offset = 0; offset < count; ++offset) {
+    result.push_back(bus.inspect_memory({.space = first.space, .address = first.address + offset}));
   }
   return result;
 }
