@@ -66,6 +66,8 @@ public:
   [[nodiscard]] std::uint64_t slots_started() const { return slots_; }
 
 private:
+  friend class DspBus;
+
   enum class Configuration : std::uint8_t { common, transmit_clock };
 
   struct Format {

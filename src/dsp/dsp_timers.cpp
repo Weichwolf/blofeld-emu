@@ -73,6 +73,10 @@ DspTimerPin DspTimers::observe_tio(const unsigned index) const {
 
 void DspTimers::set_tio_drive(const unsigned index, const std::optional<bool> level) {
   if (index >= external_.size()) { throw Fault("Invalid DSP timer TIO drive index"); }
+  if (external_.at(index) == level) {
+    static_cast<void>(observe_tio(index));
+    return;
+  }
   auto next = *this;
   if (next.external_.at(index) != level) { next.timers_.at(index).synchronized_qualified = false; }
   next.external_.at(index) = level;

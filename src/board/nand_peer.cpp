@@ -548,14 +548,14 @@ void NandPeer::set_telemetry(std::ostream *output) {
 }
 
 void NandPeer::before_native(const std::uint64_t common_ticks) {
-  impl_->bind(lifetime_);
+  if (impl_->needs_binding_) { impl_->bind(lifetime_); }
   const auto cpu = impl_->machine_.cpu().registers();
   impl_->before(common_ticks, {.pc = cpu.pc, .omr = cpu.omr});
 }
 
 void NandPeer::after_native(const std::uint64_t common_ticks,
                             const std::optional<std::uint32_t> native_pc) {
-  impl_->bind(lifetime_);
+  if (impl_->needs_binding_) { impl_->bind(lifetime_); }
   if (native_pc) { impl_->state_->context.pc = *native_pc; }
   impl_->after(common_ticks);
 }

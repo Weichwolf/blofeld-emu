@@ -115,7 +115,7 @@ void DspBus::observe_esai_transmit(const DspEsaiInstance instance, const DspEsai
                     : "DSP ESAI_1 input at Y:0xffff9f requires SCKT/FST peripheral mux selection");
   }
   auto next = serial;
-  next.observe(inputs);
+  next.observe_checked(inputs);
   static_cast<void>(qualify(gpio_port, next.outputs()));
   static_cast<void>(qualify_clock(gpio_port, next.clock_outputs()));
   serial = next;
