@@ -27,6 +27,8 @@ constexpr unsigned op_edivs = 0x14;
 constexpr unsigned op_idivs = 0x15;
 constexpr unsigned op_sba = 0x16;
 constexpr unsigned op_cba = 0x17;
+constexpr unsigned op_stop = 0x3e;
+constexpr unsigned stop_disabled = 0x80;
 
 constexpr unsigned first_minmax = 0x18;
 constexpr unsigned last_minmax = 0x1f;
@@ -163,6 +165,9 @@ Hc12CyclePlan hc12_page2_cycle_plan(const Bus &bus, const ExecutionContext conte
     return {.slots = hc12_cycle_branch(opcode & low_nibble, context) ? "OPPP" : "OPO", .bytes = 4};
   }
   switch (opcode) {
+    // S12CPUV2 STOP access detail: two fetches, then the genuine context frame.
+    case op_stop:
+      return {.slots = (context.ccr & stop_disabled) != 0 ? "OO" : "OOSSSSsf", .bytes = 2};
     case op_aba:
     case op_tab:
     case op_tba:

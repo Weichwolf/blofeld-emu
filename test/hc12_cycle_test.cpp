@@ -24,6 +24,7 @@ constexpr unsigned flags = 0xc0;
 constexpr unsigned nop = 0xa7;
 constexpr unsigned rts = 0x3d;
 constexpr unsigned prefix = 0x18;
+constexpr unsigned stop = 0x3e;
 constexpr unsigned unsupported_mac = 0x12;
 constexpr unsigned accumulator = 0xa500;
 
@@ -215,10 +216,28 @@ void test_irq_during_rti_refill() {
     require(!accepted.instruction_executed && accepted.interrupt_vector == irq_vector &&
                 !accepted.stack_reused && cpu.state().pc == handler &&
                 cpu.state().sp == stack - frame_bytes &&
-                bus.cycles() == reset_cycles + return_cycles + 2 * entry_cycles &&
+                bus.cycles() == reset_cycles + return_cycles + (2 * entry_cycles) &&
                 memory.generation == writes + frame_bytes,
             "A late IRQ needs normal nine-cycle entry and nine actual frame writes");
   }
+}
+
+void test_stop_entry_slots() {
+  FlatBus memory;
+  constexpr std::array<std::uint8_t, 2> code{prefix, stop};
+  memory.program(code);
+  const auto disabled = blofeld::hc12_cycle_plan(memory, {.pc = entry, .ccr = flags});
+  const auto enabled = blofeld::hc12_cycle_plan(memory, {.pc = entry, .ccr = 0});
+  require(disabled.bytes == 2 && disabled.slots == "OO" && enabled.bytes == 2 &&
+              enabled.slots == "OOSSSSsf",
+          "S12CPUV2 STOP uses two fetches and conditionally stacks four words and CCR");
+  blofeld::Hc12CycleBus bus(memory, [](auto /*cycle*/) {});
+  blofeld::Hc12 cpu(bus, BLOFELD_DEFAULT_SLA);
+  cpu.set_state({.pc = entry, .sp = stack, .ccr = flags});
+  cpu.step();
+  require(cpu.state().pc == entry + 2 && cpu.state().sp == stack && bus.cycles() == 2 &&
+              memory.generation == 0,
+          "Disabled STOP consumes exactly two cycles without stack writes");
 }
 
 void test_visible_rejection_and_precommit_clocks() {
@@ -255,6 +274,7 @@ int main() {
     test_constant_address_word_operands();
     test_rti_order_and_chaining();
     test_irq_during_rti_refill();
+    test_stop_entry_slots();
     test_visible_rejection_and_precommit_clocks();
     std::cout
         << "Native HC12 cycle boundaries, IRQ/RTI order, chaining and failure context passed.\n";
