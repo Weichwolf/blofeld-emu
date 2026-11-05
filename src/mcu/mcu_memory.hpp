@@ -29,6 +29,15 @@ struct McuMemoryByte {
   bool operator==(const McuMemoryByte &) const = default;
 };
 
+// Borrowed physical RAM and live byte knowledge, selected by the current decoder.
+// A native store updates bytes and sets the corresponding known byte to one.
+// Read/fetch of a zero known byte must fault through the owning MCU bus.
+struct McuRamWindow {
+  std::uint16_t first = 0;
+  std::span<std::uint8_t> bytes;
+  std::span<std::uint8_t> known;
+};
+
 // Normal single-chip MC9S12UF32 mapping. Power-on RAM is unknown until written.
 class McuMemory {
 public:
@@ -36,6 +45,10 @@ public:
   explicit McuMemory(const McuFlashImage &image);
   [[nodiscard]] McuFlashImage flash_image() const;
   [[nodiscard]] McuLocation locate(std::uint16_t address) const;
+  // Sorted, disjoint grants; unused entries are empty. Refresh the descriptors
+  // after mapping retirement/reset. Storage stays borrowed until owner replacement;
+  // ordinary stores and power cycling update the existing knowledge views.
+  [[nodiscard]] std::array<McuRamWindow, 5> ram_windows();
   // Pure inspection: no read transaction, initialization or register side effect.
   [[nodiscard]] McuMemoryByte inspect(std::uint16_t address) const;
   [[nodiscard]] std::uint8_t read(std::uint16_t address) const;
@@ -67,8 +80,8 @@ private:
   std::bitset<flash_size / 2> flash_fresh_;
   std::array<std::uint8_t, smram_size> smram_{};
   std::array<std::uint8_t, qram_size> qram_{};
-  std::bitset<smram_size> smram_initialized_;
-  std::bitset<qram_size> qram_initialized_;
+  std::array<std::uint8_t, smram_size> smram_initialized_{};
+  std::array<std::uint8_t, qram_size> qram_initialized_{};
   std::array<std::uint8_t, map_register_count> registers_{};
   std::array<std::uint8_t, map_register_count> pending_{};
   std::bitset<map_register_count> pending_writes_;

@@ -29,6 +29,7 @@ constexpr unsigned flash_alias = 0x4000;
 constexpr unsigned flash_hole = 0x20;
 constexpr unsigned reserved_ram = 0x0800;
 constexpr unsigned unmapped = 0x3000;
+constexpr unsigned system_ram_size = 0x0e00;
 
 void require(const bool condition, const std::string_view message) {
   if (!condition) { throw Fault(std::string(message)); }
@@ -126,6 +127,83 @@ void no_storage_or_mapping_side_effects() {
           "Inspection changes no cold cells, knowledge, flash programming history or mapping");
   require(!memory.retire_instruction(), "Inspection creates no pending mapping work");
 }
+
+void native_ram_knowledge() {
+  const auto image = flash();
+  McuMemory memory(image);
+  auto windows = memory.ram_windows();
+  constexpr unsigned visible_qram_size = 0x0200;
+  require(windows[0].first == old_qram && windows[0].bytes.size() == visible_qram_size &&
+              windows[1].first == first_ram && windows[1].bytes.size() == system_ram_size &&
+              windows[2].bytes.empty() && windows[3].bytes.empty() && windows[4].bytes.empty(),
+          "Reset grants expose only QRAM0400..05ff and SMRAM1200..1fff");
+  require(windows[0].known.size() == visible_qram_size &&
+              windows[1].known.size() == system_ram_size && windows[1].known.front() == 0,
+          "Cold native RAM has explicit unknown-byte knowledge");
+  windows[1].bytes.front() = first_value;
+  rejects([&] { static_cast<void>(memory.read(first_ram)); });
+  windows[1].known.front() = 1;
+  require(memory.read(first_ram) == first_value,
+          "A native store publishes the actual physical byte and its knowledge");
+  memory.write({.address = next_ram, .value = next_value});
+  require(windows[1].bytes[1] == next_value && windows[1].known[1] == 1,
+          "Ordinary stores update the same borrowed byte and knowledge arrays");
+  memory.reset();
+  require(windows[1].known.front() == 1 && memory.read(first_ram) == first_value,
+          "Reset retains physical RAM and live knowledge");
+  auto copy = memory;
+  auto copied = copy.ram_windows();
+  copied[1].bytes.front() = next_value;
+  require(copied[1].bytes.data() != windows[1].bytes.data() &&
+              copied[1].known.data() != windows[1].known.data() &&
+              memory.read(first_ram) == first_value && copy.read(first_ram) == next_value,
+          "Copied owners expose independent storage and knowledge");
+  memory.power_cycle();
+  require(windows[1].known.front() == 0 && windows[1].bytes.front() == first_value,
+          "Power cycling withdraws live knowledge without inventing initialized contents");
+  rejects([&] { static_cast<void>(memory.read(first_ram)); });
+}
+
+void native_ram_decoder() {
+  const auto image = flash();
+  McuMemory memory(image);
+  constexpr unsigned moved_registers = 0x18;
+  constexpr unsigned split_first = 0x1800;
+  constexpr unsigned split_end = 0x1c00;
+  constexpr unsigned first_split_size = 0x0600;
+  constexpr unsigned last_split_size = 0x0400;
+  memory.write_register({.address = hc12::initrg, .value = moved_registers});
+  require(memory.ram_windows()[1].bytes.size() == system_ram_size,
+          "Pending mapping writes cannot change native grants before retirement");
+  require(memory.retire_instruction(), "The register relocation commits");
+  const auto split = memory.ram_windows();
+  require(split[0].first == 0 && split[0].bytes.size() == first_split_size &&
+              split[1].first == first_ram && split[1].bytes.size() == split_first - first_ram &&
+              split[2].first == split_end && split[2].bytes.size() == last_split_size &&
+              split[3].bytes.empty(),
+          "Register1800..1bff splits SMRAM and reveals all QRAM0000..05ff");
+  constexpr unsigned hidden_qram = 0x11;
+  memory.write_register({.address = hc12::initee, .value = hidden_qram});
+  require(memory.retire_instruction(), "The overlapping QRAM relocation commits");
+  const auto hidden = memory.ram_windows();
+  require(hidden[0].first == first_ram && hidden[0].bytes.size() == first_split_size &&
+              hidden[1].first == split_end && hidden[1].bytes.size() == last_split_size &&
+              hidden[2].bytes.empty(),
+          "The entire SMRAM decode window hides QRAM, including its reserved prefix");
+  McuMemory high(image);
+  constexpr unsigned high_mapping = 0xe1;
+  constexpr unsigned high_first = 0xf200;
+  high.write_register({.address = hc12::initrm, .value = high_mapping});
+  require(high.retire_instruction(), "The high SMRAM mapping commits");
+  auto upper = high.ram_windows();
+  require(upper[1].first == high_first && upper[1].bytes.size() == system_ram_size,
+          "A native RAM grant may end exactly at the16-bit address-space boundary");
+  upper[1].bytes.back() = first_value;
+  upper[1].known.back() = 1;
+  constexpr unsigned last_address = 0xffff;
+  require(high.read(last_address) == first_value,
+          "RAM decoder priority over high flash is retained for the final byte");
+}
 }
 
 int main() {
@@ -133,7 +211,9 @@ int main() {
     unknown_and_storage_classes();
     mapping_and_lifetime();
     no_storage_or_mapping_side_effects();
-    std::cout << "Storage inspection: literal knowledge/alias/reset/copy and purity cases passed\n";
+    native_ram_knowledge();
+    native_ram_decoder();
+    std::cout << "MCU storage inspection and native RAM grant cases passed\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

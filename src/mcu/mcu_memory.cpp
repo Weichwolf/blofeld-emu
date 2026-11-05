@@ -5,8 +5,10 @@
 #include "mcu/hc12_registers.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -53,8 +55,8 @@ void McuMemory::reset() {
 }
 
 void McuMemory::power_cycle() {
-  smram_initialized_.reset();
-  qram_initialized_.reset();
+  smram_initialized_.fill(0);
+  qram_initialized_.fill(0);
   reset();
 }
 
@@ -88,10 +90,45 @@ McuLocation McuMemory::locate(const std::uint16_t address) const {
   return {};
 }
 
+std::array<McuRamWindow, 5> McuMemory::ram_windows() {
+  // One register window can split SMRAM into two grants; QRAM can be split
+  // into three by registers and the higher-priority full SMRAM decode window.
+  std::array<McuRamWindow, 5> result{};
+  std::size_t count = 0;
+  constexpr auto end = std::uint32_t{std::numeric_limits<std::uint16_t>::max()} + 1;
+  std::uint32_t address = 0;
+  while (address < end) {
+    const auto location = locate(static_cast<std::uint16_t>(address));
+    if (location.space != McuSpace::smram && location.space != McuSpace::qram) {
+      ++address;
+      continue;
+    }
+    const auto first = address;
+    do {
+      ++address;
+      if (address == end) { break; }
+      const auto next = locate(static_cast<std::uint16_t>(address));
+      if (next.space != location.space || next.offset != location.offset + address - first) {
+        break;
+      }
+    } while (true);
+    const auto size = address - first;
+    const auto bytes = location.space == McuSpace::smram ? std::span<std::uint8_t>{smram_}
+                                                         : std::span<std::uint8_t>{qram_};
+    const auto known = location.space == McuSpace::smram
+                           ? std::span<std::uint8_t>{smram_initialized_}
+                           : std::span<std::uint8_t>{qram_initialized_};
+    result.at(count++) = {.first = static_cast<std::uint16_t>(first),
+                          .bytes = bytes.subspan(location.offset, size),
+                          .known = known.subspan(location.offset, size)};
+  }
+  return result;
+}
+
 bool McuMemory::initialized(const McuLocation location) const {
   switch (location.space) {
-    case McuSpace::smram: return smram_initialized_.test(location.offset);
-    case McuSpace::qram: return qram_initialized_.test(location.offset);
+    case McuSpace::smram: return smram_initialized_.at(location.offset) != 0;
+    case McuSpace::qram: return qram_initialized_.at(location.offset) != 0;
     case McuSpace::flash: return flash_known_.test(location.offset);
     case McuSpace::reserved:
     case McuSpace::registers:
@@ -135,11 +172,11 @@ void McuMemory::write(const ByteWrite write) {
   switch (location.space) {
     case McuSpace::smram:
       smram_[location.offset] = value;
-      smram_initialized_.set(location.offset);
+      smram_initialized_[location.offset] = 1;
       return;
     case McuSpace::qram:
       qram_[location.offset] = value;
-      qram_initialized_.set(location.offset);
+      qram_initialized_[location.offset] = 1;
       return;
     case McuSpace::reserved: throw Fault("Reserved MCU memory write at " + hex(address));
     case McuSpace::flash:
