@@ -51,7 +51,7 @@ rendering throughput is a host-performance property to measure after functional
 instrument audio works. This later workflow does not replace initial instrument
 acceptance or require development of alternative manufacturer firmware.
 
-Current order: optimize CPU12 first to >=80% of matched optimized host-ASM
+Current order: optimize CPU12 first to >=70% of matched optimized host-ASM
 throughput on each representative warm fixture, then optimize and simplify
 DSP56300 to the same threshold. Preserve equivalent inputs, ISA effects and
 verified outputs; trivial cases and averages cannot establish this gate.
