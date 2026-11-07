@@ -150,7 +150,7 @@ std::uint64_t Board::dsp_ticks() const {
 }
 
 std::uint64_t Board::dsp_steps() const {
-  return native_->dsp.cpu().state().progress.instructions;
+  return native_->dsp.cpu().progress().instructions;
 }
 
 std::uint64_t Board::schedule_ticks() const {

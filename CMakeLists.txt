@@ -1433,6 +1433,9 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-echo-cli" echo)
   set_tests_properties(reference_echo_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_executable(blofeld-startup-probe EXCLUDE_FROM_ALL test/instrument/startup_probe.cpp)
+  target_link_libraries(blofeld-startup-probe PRIVATE blofeld_reference_board blofeld_device_identity)
+
   add_executable(blofeld-mcu-dsp-execution-test test/board/mcu_dsp_execution_test.cpp)
   target_include_directories(blofeld-mcu-dsp-execution-test PRIVATE test
     "${BLOFELD_CPU12_ROOT}/test/support" "${BLOFELD_DSP56300_ROOT}/test")
@@ -2077,7 +2080,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check
+  DEPENDS format-check blofeld-startup-probe
   USES_TERMINAL)
 
 endif()

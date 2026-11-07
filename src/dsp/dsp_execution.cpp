@@ -24,7 +24,7 @@ DspExecution::DspExecution(DspMachine &machine,
   }
   if (initial_reset) { start_reset(*initial_reset); }
   machine_.clocked_owner_ = identity_;
-  accounted_base_ = machine_.cpu_.state().progress.estimated_cycles;
+  accounted_base_ = machine_.cpu_.progress().estimated_cycles;
   static_cast<void>(now());
 }
 

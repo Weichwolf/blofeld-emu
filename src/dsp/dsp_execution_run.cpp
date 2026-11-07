@@ -38,7 +38,7 @@ void DspExecution::native_time(unsigned cycles) {
 }
 
 void DspExecution::synchronize_prefix(const unsigned pc) {
-  const auto cycles = machine_.cpu_.state().progress.estimated_cycles;
+  const auto cycles = machine_.cpu_.progress().estimated_cycles;
   if (cycles < accounted_base_ || cycles - accounted_base_ > available_cycles_) {
     throw Fault("DSP I/O prefix crossed its device deadline pc=" + hex(pc, 6));
   }
