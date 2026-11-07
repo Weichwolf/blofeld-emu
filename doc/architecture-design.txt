@@ -75,10 +75,14 @@ artifacts outside doc/. No activity diary is maintained in the repository.
 
 Implementation gate
 
-Compile, format and statically analyze without weakening checks. Execution QA
-is deferred until real time. Only short optimized startup/throughput probes may
-establish that milestone; stop and fail if not playable within 10 host seconds.
-Do not extend or automatically repeat a failed probe.
+Prioritize connected instrument execution. Core benchmark percentages do not
+block integration; fix and optimize the responsible core for measured defects
+or instrument bottlenecks. Scalar and SIMD execution are options, not mandates.
+Compile, format and statically analyze without weakening checks. Keep affected
+core correctness and sanitizer tests active. Until real time, suspend long
+firmware runs. Short optimized startup/throughput probes stop and fail unless
+playable within 10 host seconds; do not extend or automatically repeat a failed
+probe.
 
 Established references
 

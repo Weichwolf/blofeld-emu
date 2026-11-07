@@ -51,16 +51,21 @@ rendering throughput is a host-performance property to measure after functional
 instrument audio works. This later workflow does not replace initial instrument
 acceptance or require development of alternative manufacturer firmware.
 
-Current order: optimize CPU12 first to >=70% of matched optimized host-ASM
-throughput on each representative warm fixture, then optimize and simplify
-DSP56300 to the same threshold. Preserve equivalent inputs, ISA effects and
-verified outputs; trivial cases and averages cannot establish this gate.
-Defer further emulator integration, optimization and dependency-pin adoption
-until both cores pass. Keep strict checks, short Release comparisons and focused
-semantic validation; broaden validation as performance improves. Keep code small,
-with complexity justified by correctness or measured speed.
+Current priority: complete the connected Blofeld instrument with the independent
+CPU12 and DSP56300 cores. Continue original-firmware boot, display, MIDI/USB,
+original DSP audio and persistent-storage integration. Fix generic core defects
+in their own libraries and optimize the responsible core when a measured
+instrument workload exposes a throughput or latency bottleneck.
 
-Then complete the regular standalone/GUI path with the independent native cores,
+The >=70% matched host-ASM target remains an optimization reference, not a
+prerequisite for emulator work or dependency-pin adoption. Preserve comparable
+inputs, relevant ISA semantics and independent results; report each shortfall.
+Choose scalar or SIMD execution by measured benefit; SIMD is optional. Core
+benchmarks remain diagnostic tools and cannot replace connected-instrument
+correctness, throughput and latency measurements. Keep code small and strict
+checks active, with focused correctness/sanitizer validation for core changes.
+
+Complete the regular standalone/GUI path with the independent native cores,
 removing foreign-core and transitional integration. Construct each core with
 memory/peripherals and run to bounded event limits. Use direct storage and bounded
 register/FIFO state for MCU/DSP communication; preserve peripheral side effects,
@@ -116,7 +121,7 @@ coverage explicit; the Desktop SL path remains the immediate integration target.
 External instrument flow is MIDI <-> blofeld-emu -> audio, including USB-MIDI.
 SL-capable factory storage and original sample behavior must be reconstructed;
 no firmware patch or host-provided license-success response substitutes for it.
-The independent CPU12/HC12 native JIT core is developed in the private cpu12
+The independent CPU12/HC12 native JIT core is developed in the public cpu12
 repository; board peripherals and original manufacturer programs stay here.
 
 Acceptance requirements (current coverage catalogue: test/function-acceptance.tsv):
@@ -219,8 +224,9 @@ successful boot, real-time operation or device equivalence.
 
 Current execution budget
 
-Until real-time instrument operation is established, suspend component,
-functional, regression and diagnostic execution tests. Only short optimized
-startup/throughput probes may establish that milestone. Stop at an absolute
+Core tests in cpu12 and dsp56300 remain required before the real-time milestone.
+Run affected correctness and sanitizer checks for core changes. Until real-time
+instrument operation is established, suspend long original-firmware runs; short
+optimized startup/throughput probes may establish that milestone. Stop at an absolute
 10 host seconds and fail unless playable; never extend or automatically repeat
 a failed probe. Strict compilation, formatting and static analysis remain active.
