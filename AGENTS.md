@@ -13,6 +13,9 @@
 - Prioritize the connected instrument. Fix and optimize the responsible core for
   generic defects or measured instrument bottlenecks; core benchmark percentages
   do not block integration. SIMD is optional and needs measured benefit.
+- External transport is USB-MIDI <-> instrument -> audio. Use direct audio RAM
+  and USB/MIDI buffer/FIFO mappings with correct flags, lengths and IRQs. No
+  external DIN/virtual MIDI ports, UART-bit path or serial-PCM decoding for output.
 - Query audio/MIDI capabilities separately and read actual grants; keep bounded
   queues, visible overload/disconnect errors and unchanged virtual clocks. Audio
   callbacks must not allocate, throw, lock or access files. Native SLEIGH requires
@@ -21,6 +24,11 @@
   All issue communication belongs in private Weichwolf/blofeld-src; no emulator
   issues or routine status spam. Gearmulator is read-only reference; copy no code.
   Preserve GPL dependency notices; do not import GPL-2.0-only octa-capture code.
+
+- The instrument CLI defaults to live MIDI/audio with the default local profile.
+  MIDI-file plus WAV selects unpaced offline rendering with unchanged musical
+  event timing. Profiles select firmware, memory images and persistent identity.
+  No instruction-budget, wiring or chip-clock parameters in blofeld-headless.
 
 ## Working rules
 

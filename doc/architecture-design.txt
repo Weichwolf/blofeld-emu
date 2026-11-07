@@ -26,6 +26,28 @@ performance. Original firmware and DSP synthesis remain the instrument.
        Host event loop: MIDI, optional UI, commands and shutdown
        Host input -> bounded input queue -> MCU worker
 
+Application modes and profiles
+
+No arguments select the default local profile and start the live instrument.
+A profile names local firmware, persistent memory/sample images and unit
+identity. Profile selection changes assets, not the execution architecture.
+The instrument CLI exposes no wiring, chip-clock or instruction-budget controls.
+
+A Standard MIDI File plus WAV destination selects offline rendering. Merge tracks
+and tempo changes onto the audio timeline before dispatch; a fast render keeps
+identical musical spacing. Render completion follows the requested musical range
+and release/effect tail. Stream output to disk without a fixed capture-frame
+ceiling. Live output uses the same execution and MIDI timing path, paced by
+actual audio consumption. Both cores always execute at maximum performance;
+only due events, stop and consumer backpressure bound runahead.
+
+Progress reporting belongs to the host event loop. Offline completion prints
+actual audio duration, monotonic elapsed time and throughput, with startup and
+transport failures separate. Live mode refreshes one status line at a bounded
+rate using frame counts, queue fill and measured latency; redirected output is
+plain text. No instruction-by-instruction telemetry or core-state copying is
+required for these measurements. Unknown quantities remain unknown.
+
 Execution
 
 Initialization loads local images once, creates stable memory views and device
@@ -38,8 +60,14 @@ accesses use direct native loads/stores. Selected MMIO accesses run the required
 local side effects. Unknown accesses remain explicit faults with PC/context.
 Do not replace firmware routines, synthesize host audio or fabricate replies.
 
-Generated blocks chain directly where code identity and execution state permit.
-Code changes invalidate affected translations/links. Exit generated execution for
+Translations follow natural control-flow boundaries, without a fixed 64/256
+instruction cap. Generated blocks chain directly where execution state permits.
+Assume original Blofeld code remains immutable during normal instrument operation;
+this is a working assumption, not a hardware-verified fact. The emulator owns
+firmware loading and updates; it supplies new memory and resets/recreates cores
+and their translation caches. Core libraries have no firmware-update protocol.
+Do not continuously check for self-modification in the normal instrument path.
+Exit generated execution for
 pending interrupts, actual I/O effects, due device events, stop or backpressure;
 do not return through board-control code for every instruction or clock edge.
 

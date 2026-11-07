@@ -2,7 +2,7 @@ id	profiles	source	function_and_variants	stimulus_and_required_observation	emula
 BOOT-START	D	M18;F-D	Power on/off and firmware/profile indication	Cold start with retained NVM; original version/display and usable MIDI/audio; no bad-DSP success	pending	pending
 BOOT-RESET-ACTIONS	D	F-D	Documented startup encoder, repeated Shift+Multi and five power cycles	Replay each documented input sequence offline; record actual original reset/recovery behavior and retained settings, never replace it with a host reset shortcut	pending	pending
 BOOT-LICENSE	D	F-D;S2	Fixed Desktop identity with active SL sample capability	Qualified persisted SL-capable unit data enables original sample functions and startup indication; no model switch, firmware patch or host license-success response	pending	pending
-HOST-MIDI	D	M14-16	DIN input and bidirectional USB MIDI	External host enumerates original descriptors; independent note/CC/SysEx traffic and replies; no USB audio	pending	pending
+HOST-MIDI	D	M14-16	Bidirectional USB MIDI	External host enumerates original descriptors; independent note/CC/SysEx traffic and replies; no USB audio	pending	pending
 OUTPUT-LEVEL	D	M8;M10;M15;M18	System Volume and stereo/headphone/mono output behavior	Sweep modeled volume; compare routed original PCM and documented connector behavior with stock capture	pending	pending
 UI-SELECT	D	M18-19	Sound program and bank selection	Traverse A-H and program1-128, bank transitions and endpoints; original name/number and selected sound	pending	pending
 UI-CATEGORY	D	M19;M23	Category filter off and each stored category	Use independently catalogued own programs; selection includes only matching categories without renumbering slots	pending	pending

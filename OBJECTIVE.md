@@ -1,5 +1,41 @@
 # Objective
 
+User-facing execution
+
+`blofeld-headless` without arguments opens the default local instrument profile,
+starts MIDI and real-time audio, and remains playable until shutdown. A host
+controller, keyboard or DAW uses the instrument through its normal MIDI
+connection. The original firmware receives USB-MIDI endpoint/FIFO traffic;
+external DIN ports and electrical UART/USB simulation are outside this scope.
+
+`blofeld-headless --midi-file song.mid --wav-out song.wav` renders a Standard
+MIDI File offline at maximum throughput. Preserve tempo changes, track ordering,
+SysEx and musical event times against the same audio/device timeline. Faster
+host execution must not compress musical intervals. Stop by the musical render
+range and its release/effect tail, never by an instruction count. Stream WAV
+output rather than imposing an in-memory capture-frame ceiling. Live and WAV
+are distinct consumers; host audio consumption paces live time, while file
+output drains as fast as execution permits. The cores always use their fastest
+native execution path. Device deadlines and queue backpressure are required
+synchronization, not user-selectable instruction budgets or chip-clock tuning.
+
+Render completion reports delivered audio duration, monotonic host duration,
+valid stereo frames per second and real-time factor, startup/warm-up separately,
+plus underruns, queue overload and MIDI delivery lateness. Live mode refreshes
+one terminal status line at a bounded human-readable rate, including throughput
+reserve, queue fill, actual audio latency and transport errors. Do not infer
+unknown latency or CPU costs from nominal settings; use actual grants and
+measurements. Non-terminal output must remain readable without terminal escapes.
+Collect outside native hot paths, without per-instruction telemetry. Distinguish
+paced live output RTF from measured active-processing headroom; wall time spent
+waiting for audio consumption does not measure compute reserve.
+
+Named local profiles select firmware, persistent memory/sample images and unit
+identity. There is one default profile; selecting another needs only --profile.
+Profiles retain assets locally and do not publish manufacturer inputs. Do not
+expose wiring, pipeline, clock-grant or instruction-budget parameters in the
+instrument CLI. Keep diagnostics runtime-selectable and disabled by default.
+
 Complete acceptance objective
 
 Build a complete Blofeld Desktop and Keyboard instrument emulator with active SL sample
@@ -106,6 +142,16 @@ clock rates, MIDI timestamps and every required audio frame. Report warm-up,
 host/build configuration, output mode, overload and the measured interval.
 Faster offline processing does not run a physical audio device at 100x its rate.
 
+Use delivered original-firmware PCM as the primary instrument throughput measure.
+At the 44,100 Hz stereo output reference, RTF = complete valid stereo frames /
+(44,100 * monotonic host seconds): 1x is 44,100 frames/s and 4x is 176,400 frames/s.
+A stereo frame counts once; do not count channels separately or count repeated,
+missing or fabricated frames. Measure offline without playback pacing. Report
+startup, warm-up, processing time, output format/rate, frame counts, underruns
+and live MIDI/audio latency separately. Preserve the original device clocks;
+report any explicit output-rate conversion and include its processing cost.
+The instrument-function acceptance requirements remain unchanged.
+
 Use the fastest validated optimized Release build for visual/audio bring-up,
 long firmware experiments and performance measurements. ASan/UBSan and separate
 TSan builds are for targeted tests and occasional broader regressions; do not
@@ -118,7 +164,19 @@ checks and contextual unsupported-access failures are not optional telemetry.
 
 The current supplied acceptance scope includes Desktop and Keyboard. Keep profile
 coverage explicit; the Desktop SL path remains the immediate integration target.
-External instrument flow is MIDI <-> blofeld-emu -> audio, including USB-MIDI.
+External instrument flow is USB-MIDI <-> blofeld-emu -> audio. Do not implement
+external DIN-MIDI ports or a separate virtual MIDI-port transport. Preserve MIDI
+messages, SysEx, sample transfers and original USB descriptors/endpoint behavior
+through the firmware's USB interface. Internal UART/timer/register initialization
+must still behave correctly when the unchanged firmware accesses it.
+
+Use direct borrowed memory for audio payloads and direct memory/FIFO mappings
+for USB-MIDI. Read the final original-firmware audio ring, not a pre-master mix.
+Preserve device-visible DMA positions, readiness, lengths, interrupts and bounded
+queue ownership. Host audio does not pass through a simulated serial wire and
+PCM bit decoder; host MIDI does not pass through UART bit signaling. Keep USB
+at control/endpoint transaction and buffer semantics, without electrical or bit
+line simulation. Preserve observable instrument timing and explicit failures.
 SL-capable factory storage and original sample behavior must be reconstructed;
 no firmware patch or host-provided license-success response substitutes for it.
 The independent CPU12/HC12 native JIT core is developed in the public cpu12
