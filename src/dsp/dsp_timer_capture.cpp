@@ -25,6 +25,8 @@ void DspTimers::observe_synchronized_tio(const unsigned index, const bool level)
     throw Fault("DSP capture has no synchronized TIO at index " + hex(index, 1));
   }
   auto &timer = timers_.at(index);
+  if (timer.synchronized_qualified && timer.synchronized == level) { return; }
+  clk2_boundary_valid_ = false;
   const auto mode = timer.control & mode_mask;
   const bool event = mode == event_mode && (timer.control & pce) == 0;
   if (mode != capture_mode && !event) {

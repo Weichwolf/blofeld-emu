@@ -27,6 +27,7 @@ void DspEsai::set_configuration_contract(const DspEsaiConfigurationContract cont
         address(esai::tcr));
   }
   configuration_contract_ = contract;
+  high_clock_event_valid_ = false;
 }
 
 std::string DspEsai::address(const unsigned offset) const {
@@ -39,6 +40,7 @@ std::string DspEsai::address(const unsigned offset) const {
 }
 
 void DspEsai::reset_paths() {
+  high_clock_event_valid_ = false;
   status_ = 0;
   known_ = 0;
   shift_known_ = 0;
@@ -81,6 +83,7 @@ void DspEsai::reset() {
 }
 
 void DspEsai::set_active(const bool active) {
+  if (active_ != active) { high_clock_event_valid_ = false; }
   if (active_ && !active) { reset_paths(); }
   const bool activate = active && !active_;
   active_ = active;
@@ -369,6 +372,7 @@ void DspEsai::write_checked(const unsigned offset, const std::uint32_t value) {
 void DspEsai::write(const unsigned offset, const std::uint32_t value) {
   auto next = *this;
   next.write_checked(offset, value);
+  next.high_clock_event_valid_ = false;
   *this = next;
 }
 }

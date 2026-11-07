@@ -105,6 +105,7 @@ void DspTimers::advance_timer(Timer &timer, const std::size_t index, std::uint64
 }
 
 void DspTimers::advance_clk2(const std::uint64_t edges) {
+  if (edges == 0) { return; }
   auto next = *this;
   const auto prescaled = next.advance_prescaler(edges);
   for (std::size_t index = 0; index < next.timers_.size(); ++index) {
@@ -118,6 +119,10 @@ void DspTimers::advance_clk2(const std::uint64_t edges) {
       continue;
     }
     advance_timer(timer, index, (timer.control & pce) != 0 ? prescaled : edges);
+  }
+  if (next.clk2_boundary_valid_ && next.clk2_boundary_) {
+    next.clk2_boundary_valid_ = edges < *next.clk2_boundary_;
+    if (next.clk2_boundary_valid_) { *next.clk2_boundary_ -= edges; }
   }
   *this = next;
 }

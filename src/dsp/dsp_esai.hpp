@@ -111,6 +111,7 @@ private:
   void advance_high_clock_checked(std::uint64_t edges);
   [[nodiscard]] std::uint64_t high_edges_for_toggles(std::uint64_t toggles) const;
   [[nodiscard]] unsigned launches_until_event() const;
+  [[nodiscard]] std::optional<std::uint64_t> compute_high_clock_event() const;
   void skip_quiet_clock_toggles(std::uint64_t toggles);
   void observe_bit_clock(DspEsaiInputs inputs);
   void clock_edge(bool clock, std::optional<bool> sync);
@@ -169,5 +170,7 @@ private:
   bool skip_ = false;
   bool clear_armed_ = false;
   DspEsaiOutputs output_;
+  mutable std::optional<std::uint64_t> high_clock_event_;
+  mutable bool high_clock_event_valid_ = false;
 };
 }

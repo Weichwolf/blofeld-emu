@@ -68,6 +68,7 @@ private:
   void validate_control(std::size_t index, std::uint32_t value) const;
   void write_control(std::size_t index, std::uint32_t value);
   [[nodiscard]] bool prescaler_enabled() const;
+  [[nodiscard]] std::optional<std::uint64_t> compute_clk2_boundary() const noexcept;
   [[nodiscard]] std::uint64_t advance_prescaler(std::uint64_t edges);
   static void advance_timer(Timer &timer, std::size_t index, std::uint64_t edges);
   static void advance_free(Timer &timer, CounterAdvance advance);
@@ -81,6 +82,8 @@ private:
   std::array<std::optional<bool>, 2> external_{};
   std::uint32_t prescaler_load_ = 0;
   std::uint32_t prescaler_count_ = 0;
+  mutable std::optional<std::uint64_t> clk2_boundary_;
+  mutable bool clk2_boundary_valid_ = false;
 };
 
 }

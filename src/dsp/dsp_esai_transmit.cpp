@@ -122,6 +122,7 @@ void DspEsai::launch() {
 }
 
 void DspEsai::observe_checked(const DspEsaiInputs inputs) {
+  high_clock_event_valid_ = false;
   validate();
   if (inputs.timing != DspEsaiClockTiming::unqualified &&
       inputs.timing != DspEsaiClockTiming::reference_reset_edges) {

@@ -259,6 +259,39 @@ void test_shared_prescaler_and_earliest_timer() {
   first.deadline(4); // Starting the stopped global prescaler reloads its full period.
 }
 
+void test_reset_and_requalification() {
+  Timer timer(0);
+  timer.deadline(std::nullopt);
+  timer.timers.observe_synchronized_tio(0, false);
+  timer.configure({.load = word_max - 1, .compare = 0, .control = enable | capture | overflow_irq});
+  timer.deadline(3);
+  timer.timers.set_tio_drive(0, false);
+  timer.deadline(1); // The drive is now known, but has not been synchronized yet.
+  const auto before = timer.timers.read(timer.csr - 3);
+  bool rejected = false;
+  try {
+    timer.timers.advance_clk2(1);
+  } catch (const blofeld::Fault &) { rejected = true; }
+  require(rejected && timer.timers.read(timer.csr - 3) == before,
+          "A failed input check cannot consume its deadline or update the timer count");
+  timer.deadline(1);
+  timer.timers.observe_synchronized_tio(0, false);
+  timer.deadline(3); // Same level, newly qualified: the old check deadline is gone.
+  timer.timers.advance_clk2(1);
+  timer.deadline(2);
+  timer.timers.observe_synchronized_tio(0, true);
+  timer.deadline(std::nullopt); // The actual capture halts the running counter.
+  timer.timers.reset();
+  timer.deadline(std::nullopt);
+  timer.configure({.load = 3, .compare = 5, .control = enable | compare_irq});
+  timer.deadline(3);
+  timer.timers.advance_clk2(2);
+  timer.deadline(1);
+  timer.timers.advance_clk2(1);
+  timer.deadline(std::nullopt);
+  timer.pending(0);
+}
+
 void test_large_deadline() {
   Timer timer(2);
   timer.timers.write({.address = prescaler_load, .value = prescaler_max});
@@ -285,6 +318,7 @@ int main() {
     }
     test_capture_and_unknown_inputs();
     test_shared_prescaler_and_earliest_timer();
+    test_reset_and_requalification();
     test_large_deadline();
     std::cout << "Timer native-region boundaries: " << assertions << " assertions passed\n";
   } catch (const std::exception &error) {

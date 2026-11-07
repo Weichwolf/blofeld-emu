@@ -40,6 +40,7 @@ void same(DspEsai &fast, DspEsai &edges) {
 void span_case(const unsigned format, const unsigned options) {
   DspEsai fast(DspEsaiInstance::secondary);
   constexpr auto timing = DspEsaiClockTiming::reference_reset_edges;
+  require(!fast.high_clock_edges_until_event(), "Cold inactive hardware has no event");
   fast.observe({.high_clock = false, .timing = timing});
   const auto polarity = ((options & 1U) != 0 ? esai::clock_polarity : 0U) |
                         ((options & 2U) != 0 ? esai::frame_polarity : 0U) |
@@ -52,6 +53,7 @@ void span_case(const unsigned format, const unsigned options) {
                        ((options & 64U) != 0 ? esai::shift_lsb : 0U) | 1U;
   fast.write(esai::tcr, control);
   fast.write(0, first_word);
+  require(!fast.high_clock_edges_until_event(), "Configuration alone does not connect the clock");
   fast.set_active(true);
   auto edges = fast;
   bool level = false;
@@ -76,10 +78,65 @@ void span_case(const unsigned format, const unsigned options) {
     ++iteration;
   }
 }
+
+void configuration_horizons() {
+  DspEsai serial(DspEsaiInstance::secondary);
+  constexpr auto timing = DspEsaiClockTiming::reference_reset_edges;
+  constexpr unsigned two_slots = 0x200;
+  constexpr unsigned two_bit_divider = 0x4000;
+  const auto control = esai::network | esai::bit_sync | 1U;
+  require(!serial.high_clock_edges_until_event(),
+          "Inactive event absence can be queried repeatedly");
+  serial.observe({.high_clock = false, .timing = timing});
+  serial.write(esai::tccr, clock_base | two_slots);
+  serial.write(esai::tcr, control);
+  require(!serial.high_clock_edges_until_event(), "Inactive configuration retains no deadline");
+  serial.set_active(true);
+  // HCKT /2 needs two rising edges: rises 1 and 3 launch the first generated bit.
+  require(serial.high_clock_edges_until_event() == 3,
+          "Activation replaces an absent deadline with the literal first launch edge");
+  bool rejected = false;
+  try {
+    serial.write(esai::saicr, 1); // Unsupported common-control bit.
+  } catch (const Fault &) { rejected = true; }
+  require(rejected && serial.high_clock_edges_until_event() == 3,
+          "A rejected configuration preserves the previous actual deadline");
+  auto copy = serial;
+  copy.advance_high_clock(1);
+  require(copy.high_clock_edges_until_event() == 2 && serial.high_clock_edges_until_event() == 3,
+          "A copied quiet countdown advances independently without moving the original event");
+  serial.observe({.high_clock = true, .timing = timing});
+  require(serial.high_clock_edges_until_event() == 2,
+          "An actual input observation replaces the previous countdown");
+  serial.observe({.high_clock = false, .timing = timing});
+  require(serial.high_clock_edges_until_event() == 1,
+          "A falling edge retains the next rising edge's literal position");
+  serial.set_active(false);
+  require(!serial.high_clock_edges_until_event(), "Disconnection withdraws the previous deadline");
+  serial.set_active(true);
+  require(serial.high_clock_edges_until_event() == 3,
+          "Reconnection starts from reset divider state and the actual current clock level");
+  serial.write(esai::tcr, control | esai::personal_reset);
+  require(!serial.high_clock_edges_until_event(), "Personal reset withdraws a running event");
+  serial.write(esai::tcr, control);
+  require(serial.high_clock_edges_until_event() == 3,
+          "Reset release restores the first real event");
+  serial.set_active(false);
+  serial.reset();
+  require(!serial.high_clock_edges_until_event(), "Hardware reset discards a retained countdown");
+  serial.write(esai::tccr, clock_base | two_slots | two_bit_divider);
+  serial.write(esai::tcr, control);
+  serial.set_active(true);
+  // Four rises (1,3,5,7) are now required for the first generated bit.
+  require(serial.high_clock_edges_until_event() == 7,
+          "A new clock divider cannot reuse the earlier first-launch deadline");
+}
+
 }
 
 int main() {
   try {
+    configuration_horizons();
     for (const unsigned format : {0U, 2U, 30U, 31U}) {
       for (unsigned options = 0; options < 128; ++options) { span_case(format, options); }
     }

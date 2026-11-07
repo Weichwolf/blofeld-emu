@@ -38,6 +38,14 @@ std::uint64_t DspEsai::high_edges_for_toggles(const std::uint64_t toggles) const
 }
 
 std::optional<std::uint64_t> DspEsai::high_clock_edges_until_event() const {
+  if (!high_clock_event_valid_) {
+    high_clock_event_ = compute_high_clock_event();
+    high_clock_event_valid_ = true;
+  }
+  return high_clock_event_;
+}
+
+std::optional<std::uint64_t> DspEsai::compute_high_clock_event() const {
   validate();
   if (!generator_running() && !needs_transmit_clock()) { return std::nullopt; }
   if (!clock_generator()) {
@@ -96,6 +104,8 @@ void DspEsai::advance_high_clock_checked(const std::uint64_t edges) {
     auto final = observed_;
     final.high_clock = final_level;
     observe_checked(final);
+    high_clock_event_ = std::nullopt;
+    high_clock_event_valid_ = true;
     return;
   }
   // Apply the same baseline/configuration checks once for this owned span.
@@ -125,6 +135,9 @@ void DspEsai::advance_high_clock_checked(const std::uint64_t edges) {
     generated_clock_ = !generated_clock_;
     clock_edge(generated_clock_, observed_.frame_sync);
   }
+  // Quiet prefixes retain the same next event; only its remaining distance changes.
+  high_clock_event_valid_ = edges < *deadline;
+  if (high_clock_event_valid_) { high_clock_event_ = *deadline - edges; }
 }
 
 void DspEsai::advance_high_clock(const std::uint64_t edges) {

@@ -80,6 +80,14 @@ std::optional<std::uint64_t> DspTimers::counting_boundary(const Timer &timer,
 }
 
 std::optional<std::uint64_t> DspTimers::next_clk2_boundary() const noexcept {
+  if (!clk2_boundary_valid_) {
+    clk2_boundary_ = compute_clk2_boundary();
+    clk2_boundary_valid_ = true;
+  }
+  return clk2_boundary_;
+}
+
+std::optional<std::uint64_t> DspTimers::compute_clk2_boundary() const noexcept {
   std::optional<std::uint64_t> result;
   for (const auto &timer : timers_) {
     auto candidate = timer_boundary(timer);

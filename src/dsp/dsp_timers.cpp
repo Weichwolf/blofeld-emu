@@ -44,6 +44,7 @@ DspTimers::DspTimers() {
 }
 
 void DspTimers::reset() {
+  clk2_boundary_valid_ = false;
   timers_ = {};
   prescaler_load_ = 0;
   prescaler_count_ = 0;
@@ -80,6 +81,7 @@ void DspTimers::set_tio_drive(const unsigned index, const std::optional<bool> le
   auto next = *this;
   if (next.external_.at(index) != level) { next.timers_.at(index).synchronized_qualified = false; }
   next.external_.at(index) = level;
+  next.clk2_boundary_valid_ = false;
   static_cast<void>(next.observe_tio(index));
   *this = next;
 }
@@ -208,6 +210,7 @@ void DspTimers::write_checked(const DspTimerWrite access) {
 void DspTimers::write(const DspTimerWrite access) {
   auto next = *this;
   next.write_checked(access);
+  next.clk2_boundary_valid_ = false;
   *this = next;
 }
 
@@ -237,6 +240,7 @@ void DspTimers::acknowledge_interrupt(const std::uint32_t vector) {
     throw Fault("DSP timer acknowledgement has no pending enabled source");
   }
   timer.flags &= ~flag;
+  clk2_boundary_valid_ = false;
 }
 
 }
