@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Explicit audio source parsing, native ESAI output, replay and visible refusals."""
+"""Explicit audio source parsing, native ESAI output and visible refusals."""
 
 import hashlib
 import json
@@ -8,7 +8,7 @@ import subprocess
 import sys
 import unittest
 
-from test_reference_cli import CONFIG, image, replay_sections
+from test_reference_cli import CONFIG, image
 
 BINARY, FIXTURE, FIRMWARE, ARTIFACTS = map(Path, sys.argv[1:5])
 ROOT = Path(__file__).resolve().parents[1]
@@ -81,17 +81,11 @@ class AudioClockCli(unittest.TestCase):
         expected = (FIRST * ((len(samples) + len(FIRST) - 1) // len(FIRST)))[:len(samples)]
         self.assertEqual("".join(samples), expected)
 
-    def test_native_maps_and_checkpoint_source_replay(self):
+    def test_native_maps(self):
         for index in (0, 1):
             result, trace = self.invoke(f"native-{index}", config(index), index)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.verify(trace, index)
-        result, trace = self.invoke("replay", config() + "checkpoint 300 2\n")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        prefix, suffixes = replay_sections(trace)
-        self.assertEqual(len(suffixes), 3)
-        self.assertTrue(all(suffix == suffixes[0] for suffix in suffixes))
-        self.verify(prefix + suffixes[0], 1)
 
     def test_invalid_declared_sources_are_visible(self):
         base = config()

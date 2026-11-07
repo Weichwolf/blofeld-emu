@@ -14,10 +14,10 @@
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_esai.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_peripheral_calendar.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_shi.hpp"
-#include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "mcu/hc12_cycles.hpp"
 #include "mcu/mcu_bus.hpp"
@@ -77,11 +77,6 @@ struct ReturnRoute {
   McuPort destination = McuPort::a;
   std::uint8_t mask = 0;
   bool inverted = false;
-};
-
-struct ReplayPlan {
-  std::uint64_t operation = 0;
-  unsigned replays = 0;
 };
 
 enum class DspInputKind : std::uint8_t { tio, esai };
@@ -191,11 +186,9 @@ struct Config {
   std::optional<Loopback> loopback;
   std::optional<ReturnRoute> hreq;
   std::optional<ReturnRoute> miso;
-  std::optional<ReplayPlan> checkpoint;
   std::vector<Input> initial;
   std::vector<Input> events;
   DspPeerOrder dsp_input_order = DspPeerOrder::unqualified;
-  unsigned maximum_dsp_inputs_per_advance = 0;
   std::vector<DspInput> dsp_initial;
   std::vector<DspInput> dsp_events;
   std::vector<DspEsaiClock> dsp_clocks;
@@ -259,19 +252,6 @@ struct Execution {
 };
 
 class Board;
-
-// Immutable, owner-bound trusted memory snapshot; not a portable state file.
-class Checkpoint {
-public:
-  Checkpoint(const Checkpoint &) = default;
-  Checkpoint &operator=(const Checkpoint &) = default;
-
-private:
-  friend class Board;
-  struct Storage;
-  explicit Checkpoint(std::shared_ptr<const Storage> storage);
-  std::shared_ptr<const Storage> storage_;
-};
 
 struct Status {
   CpuState mcu;
@@ -358,19 +338,14 @@ public:
   void poll_usb(UsbipRuntime &runtime);
   // Read-only host capture; unknown pixels retain their knownness.
   [[nodiscard]] std::optional<LcdImage> display_image(LcdPanel panel) const;
-  [[nodiscard]] Checkpoint checkpoint() const;
-  // Strong exception guarantee; restores native owners and all wiring together.
-  void restore(const Checkpoint &checkpoint);
 
 private:
-  friend class Checkpoint;
-
   struct Identity {};
 
   struct Owners {
     Owners(const Config &config, const Execution &execution);
     McuMachine mcu;
-    OwnDspMachine dsp;
+    DspMachine dsp;
     std::unique_ptr<NandPeer> nand;
     std::unique_ptr<McuDspGpioPeer> gpio_peer;
     std::unique_ptr<McuDspRuntime> runtime;
@@ -440,8 +415,6 @@ private:
   [[nodiscard]] LcdHostPins lcd_pins() const;
   void connect_runtime();
   [[nodiscard]] Outcome finish_branch(const std::function<void(Board &)> &input = {});
-  [[nodiscard]] Outcome run_replays();
-  void replay_marker(std::string_view phase, unsigned index);
   void flush_trace();
   [[nodiscard]] std::uint64_t ticks() const;
   [[nodiscard]] SpiInputs sample() const;
@@ -506,7 +479,6 @@ private:
                  const std::optional<SerialPcmFrame> &frame) const;
   [[nodiscard]] DspRuntimeEvents runtime_events();
   [[nodiscard]] DspRuntimePeripheralEvents peripheral_events(Owners &owners);
-  [[nodiscard]] unsigned runtime_event_budget() const;
   [[nodiscard]] McuDspRuntime::CycleInputs runtime_inputs();
   [[nodiscard]] McuDspRuntime::Observer runtime_observer();
   [[nodiscard]] std::uint64_t common_hz() const;

@@ -10,7 +10,6 @@ namespace blofeld::reference {
 void Board::attach_pcm_output(PcmFrameSink &sink) {
   require_healthy();
   if (!config_.pcm) { throw Fault("External audio requires a decoded PCM route"); }
-  if (config_.checkpoint) { throw Fault("External audio rejects automatic checkpoint replay"); }
   if (pcm_output_ == &sink) { throw Fault("External audio sink is already bound"); }
   sink.check();
   sink.claim_source(identity_);

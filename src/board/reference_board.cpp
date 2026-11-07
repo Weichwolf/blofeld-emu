@@ -30,9 +30,8 @@ McuMachine make_mcu(const Config &config, const Execution &execution) {
   if (config.nand && !live_nand && execution.device_state) {
     throw Fault("The cold NAND connection is not attached to the live durable device store");
   }
-  if ((execution.device_state || live_nand) &&
-      (!execution.flash_out.empty() || config.checkpoint)) {
-    throw Fault("A live device state excludes cold export and automatic RAM checkpoint replay");
+  if ((execution.device_state || live_nand) && !execution.flash_out.empty()) {
+    throw Fault("A live device state excludes cold export");
   }
   if (config.power_on) {
     return {execution.image, execution.specification, config.mcu, config.power_on->inputs};
@@ -329,15 +328,12 @@ void Board::step() {
 
 int Board::run(const std::function<void(Board &)> &input) {
   require_healthy();
-  if (input && config_.checkpoint) {
-    throw Fault("External host input cannot be reread by an automatic checkpoint replay");
-  }
   std::cout << "Explicit MCU/DSP reference experiment; physical board wiring and timing "
                "are unverified.\n";
   std::optional<std::string> fault;
   try {
     initialize();
-    fault = config_.checkpoint ? run_replays().fault : finish_branch(input).fault;
+    fault = finish_branch(input).fault;
   } catch (const Fault &error) {
     mark_fault();
     fault = error.what();

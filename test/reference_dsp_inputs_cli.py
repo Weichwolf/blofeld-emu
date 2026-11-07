@@ -9,7 +9,7 @@ import subprocess
 import sys
 import unittest
 
-from test_reference_cli import CONFIG, image, replay_sections
+from test_reference_cli import CONFIG, image
 
 BINARY, FIXTURE, FIRMWARE, ARTIFACTS = map(Path, sys.argv[1:5])
 ROOT = Path(__file__).resolve().parents[1]
@@ -120,17 +120,6 @@ class DspInputsCli(unittest.TestCase):
         self.assertIn("simultaneous", result.stderr)
         self.assertNotIn("DSP-INPUT requested=3015", trace)
 
-    def test_checkpoint_restores_both_future_and_exhausted_input_sources(self):
-        for operation, prefix_events, suffix_events in ((24, 0, 1), (25, 1, 0)):
-            config = self.config() + f"checkpoint {operation} 2\n"
-            result, trace = self.invoke("replay-" + str(operation), config)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            prefix, suffixes = replay_sections(trace)
-            self.assertEqual(prefix.count("DSP-INPUT requested="), prefix_events)
-            self.assertEqual(len(suffixes), 3)
-            self.assertTrue(all(suffix == suffixes[0] for suffix in suffixes))
-            self.assertEqual(suffixes[0].count("DSP-INPUT requested="), suffix_events)
-            self.assertIn("DSP-INPUTS observed=1 configured=1", result.stdout)
 
     def test_native_wai_periods_still_dispatch_exact_dsp_inputs(self):
         config = self.config().replace("operations 100", "operations 200").replace(
@@ -161,17 +150,6 @@ class DspInputsCli(unittest.TestCase):
         self.assertIn("DSP DMA clock finish pc=", result.stderr)
         self.assertIn("HC12 cycle execution pc=", result.stderr)
 
-    def test_faulted_unknown_input_suffix_repeats_after_joint_restore(self):
-        config = self.config().replace("low synchronized", "unknown raw") + "checkpoint 24 2\n"
-        result, trace = self.invoke("replayed-unknown", config)
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertIn("Unknown DSP timer capture input during clock at X:0xffff8f", result.stderr)
-        prefix, suffixes = replay_sections(trace)
-        self.assertNotIn("DSP-INPUT requested=", prefix)
-        self.assertEqual(len(suffixes), 3)
-        self.assertTrue(all(suffix == suffixes[0] for suffix in suffixes))
-        self.assertEqual(suffixes[0].count("level=unknown synchronized=0"), 1)
-        self.assertIn("DSP-INPUTS observed=1 configured=1", result.stderr)
 
     def test_invalid_input_contracts_fail_before_trace_creation(self):
         cases = [self.config().replace("input-before-dsp 4", "input-before-dsp 0"),

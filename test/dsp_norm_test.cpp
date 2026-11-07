@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_norm_expectations.hpp"
 
@@ -41,7 +41,7 @@ unsigned norm(const NormInput input) {
 }
 
 void test_no_shift_refreshes_flags() {
-  OwnDspMachine machine(native::native_clocks);
+  DspMachine machine(native::native_clocks);
   Program program;
   immediate(program, move_r0 | (1U << register_shift), 0);
   program.word(clear_a);
@@ -166,7 +166,7 @@ void check_result(const dsp56300::Registers &after, const NormInput input, const
   }
 }
 
-void run_batch(OwnDspMachine &machine, const std::span<const NormInput> batch) {
+void run_batch(DspMachine &machine, const std::span<const NormInput> batch) {
   Program program;
   std::vector<unsigned> instructions;
   for (const auto input : batch) { instructions.push_back(initialize(program, input)); }
@@ -193,7 +193,7 @@ void test_norm_matrix() {
   const auto cases = inputs();
   constexpr unsigned expected_cases = 4608;
   require(cases.size() == expected_cases, "NORM matrix covers every declared vector combination");
-  OwnDspMachine machine(native::native_clocks);
+  DspMachine machine(native::native_clocks);
   constexpr unsigned batch_size = 32;
   for (std::size_t offset = 0; offset < cases.size(); offset += batch_size) {
     run_batch(machine, std::span(cases).subspan(offset, batch_size));

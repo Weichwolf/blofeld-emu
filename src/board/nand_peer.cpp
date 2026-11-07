@@ -8,10 +8,10 @@
 #include "common/telemetry.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_gpio.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_peripheral_calendar.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_timers.hpp"
-#include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "storage/nand.hpp"
 #include "storage/nand_cell_model.hpp"
@@ -84,7 +84,7 @@ struct PeerState {
 }
 
 struct NandPeer::Impl {
-  Impl(OwnDspMachine &machine,
+  Impl(DspMachine &machine,
        NandPeerMedium medium,
        const NandBusContract contract,
        const NandTiming timing)
@@ -94,7 +94,7 @@ struct NandPeer::Impl {
     drive(0);
   }
 
-  Impl(OwnDspMachine &target,
+  Impl(DspMachine &target,
        const PeerState &state,
        std::shared_ptr<const PeripheralEventIdentity> identity)
       : machine_(target),
@@ -446,7 +446,7 @@ struct NandPeer::Impl {
   }
 
   Telemetry telemetry_;
-  OwnDspMachine &machine_;
+  DspMachine &machine_;
   std::unique_ptr<PeerState> state_;
   bool needs_binding_ = true;
   const std::shared_ptr<const PeripheralEventIdentity> identity_ =
@@ -456,7 +456,7 @@ struct NandPeer::Impl {
 struct NandPeerSnapshot::Storage {
   PeerState state;
   const NandPeer *owner;
-  const OwnDspMachine *machine;
+  const DspMachine *machine;
   std::weak_ptr<const bool> lifetime;
   std::shared_ptr<const PeripheralEventIdentity> identity;
 };
@@ -466,20 +466,20 @@ NandPeerSnapshot::NandPeerSnapshot(std::shared_ptr<const Storage> storage)
 
 NandPeerSnapshot::~NandPeerSnapshot() = default;
 
-NandPeer::NandPeer(OwnDspMachine &machine, Nand device)
+NandPeer::NandPeer(DspMachine &machine, Nand device)
     : NandPeer(machine, std::move(device), NandCellProfile{}) {}
 
-NandPeer::NandPeer(OwnDspMachine &machine, Nand device, NandCellProfile profile)
+NandPeer::NandPeer(DspMachine &machine, Nand device, NandCellProfile profile)
     : NandPeer(machine, std::move(device), std::move(profile), NandBusContract::ordered_pins) {}
 
-NandPeer::NandPeer(OwnDspMachine &machine,
+NandPeer::NandPeer(DspMachine &machine,
                    Nand device,
                    NandCellProfile profile,
                    const NandBusContract contract)
     : NandPeer(
           machine, std::move(device), std::move(profile), contract, NandTiming::candidate_minima) {}
 
-NandPeer::NandPeer(OwnDspMachine &machine,
+NandPeer::NandPeer(DspMachine &machine,
                    Nand device,
                    NandCellProfile profile,
                    const NandBusContract contract,
@@ -494,12 +494,12 @@ NandPeer::NandPeer(OwnDspMachine &machine,
   impl_->publish();
 }
 
-NandPeer::NandPeer(OwnDspMachine &machine,
+NandPeer::NandPeer(DspMachine &machine,
                    std::unique_ptr<NandWriteStore> store,
                    const NandBusContract contract)
     : NandPeer(machine, std::move(store), contract, NandTiming::candidate_minima) {}
 
-NandPeer::NandPeer(OwnDspMachine &machine,
+NandPeer::NandPeer(DspMachine &machine,
                    std::unique_ptr<NandWriteStore> store,
                    const NandBusContract contract,
                    const NandTiming timing)
@@ -511,7 +511,7 @@ NandPeer::NandPeer(OwnDspMachine &machine,
   impl_->publish();
 }
 
-NandPeer::NandPeer(const NandPeerSnapshot &snapshot, OwnDspMachine &target) {
+NandPeer::NandPeer(const NandPeerSnapshot &snapshot, DspMachine &target) {
   if (!snapshot.storage_ ||
       (snapshot.storage_->lifetime.lock() && snapshot.storage_->machine == &target)) {
     throw Fault("NAND clone requires a distinct native owner and trusted payload");

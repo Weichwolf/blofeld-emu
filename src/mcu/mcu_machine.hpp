@@ -15,7 +15,6 @@
 #include <functional>
 #include <memory>
 #include <optional>
-#include <vector>
 
 namespace blofeld {
 class VirtualDeviceState;
@@ -53,23 +52,7 @@ struct McuResetPeriod {
   std::uint64_t native_epoch = 0;
 };
 
-// Immutable trusted in-process state. Not a file format or a whole-board snapshot.
-class McuCheckpoint {
-public:
-  McuCheckpoint(const McuCheckpoint &) = default;
-  McuCheckpoint &operator=(const McuCheckpoint &) = default;
-  McuCheckpoint(McuCheckpoint &&) noexcept = default;
-  McuCheckpoint &operator=(McuCheckpoint &&) noexcept = default;
-  ~McuCheckpoint();
-
-private:
-  friend class McuMachine;
-  struct Storage;
-  explicit McuCheckpoint(std::shared_ptr<const Storage> storage);
-  std::shared_ptr<const Storage> storage_;
-};
-
-// Single-threaded MCU owner. Restore replaces bus/CPU objects, invalidating
+// Single-threaded MCU owner. Reset replaces bus/CPU objects, invalidating
 // references to them. External observers must be explicitly reattached.
 class McuMachine {
 public:
@@ -121,15 +104,10 @@ public:
   [[nodiscard]] std::uint64_t idle_bus_cycles() const;
   // Prime selected timer inputs now, then sample them before each running cycle.
   void set_timer_inputs(std::uint8_t mask);
-  [[nodiscard]] McuCheckpoint checkpoint() const;
-  // Strong exception guarantee; also permits recovery after a failed CPU step.
-  void restore(const McuCheckpoint &checkpoint);
 
 private:
-  void check_specification() const;
   struct State;
   std::filesystem::path specification_;
-  std::vector<std::uint8_t> specification_bytes_;
   std::unique_ptr<State> state_;
 };
 

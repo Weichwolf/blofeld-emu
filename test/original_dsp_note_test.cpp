@@ -3,8 +3,8 @@
 #include "common/bus.hpp"
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/own_dsp_io.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_io.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_rom_program.hpp"
 #include "esai_fixture.hpp"
@@ -416,7 +416,7 @@ struct Fixture {
     require(machine.cpu().registers() == failed && machine.cpu().progress() == progress,
             "Quarantined native fault cannot replay accesses or retire another instruction");
     const auto diagnostic = machine.checkpoint();
-    blofeld::OwnDspMachine restored(blofeld::test::dma_test::native_clocks);
+    blofeld::DspMachine restored(blofeld::test::dma_test::native_clocks);
     restored.restore(diagnostic);
     require(restored.cpu().registers() == failed && restored.cpu().progress() == progress &&
                 restored.cpu().fault() == machine.cpu().fault() && restored.io().failure(),
@@ -426,7 +426,7 @@ struct Fixture {
            << error << '\n';
   }
 
-  blofeld::OwnDspMachine machine{blofeld::test::dma_test::native_clocks};
+  blofeld::DspMachine machine{blofeld::test::dma_test::native_clocks};
   Counts counts;
   unsigned frontiers = 0;
   unsigned controls = 0;

@@ -114,8 +114,7 @@ def run(binary, generator, directory):
     for index in (0, 1):
         inputs = board_inputs(directory / f"board-inputs-{index}", generator, index, frames=64)
         results.append(monitor_case(binary, "board", directory / f"board-{index}", inputs))
-    inputs = board_inputs(directory / "restore-inputs", generator, 1)
-    results.append(monitor_case(binary, "board-restore", directory / "board-restore", inputs))
+    inputs = board_inputs(directory / "control-inputs", generator, 1)
     for mode in ("board-unknown", "board-reject", "board-binding"):
         folder = directory / mode
         folder.mkdir()

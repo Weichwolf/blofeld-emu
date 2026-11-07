@@ -2,7 +2,7 @@
 #include "common/bus.hpp"
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_boot_reference.hpp"
 #include "dsp_core_fixture.hpp"
@@ -165,7 +165,7 @@ struct Result {
 };
 
 Result execute(DspBus &bus,
-               OwnDspMachine &cpu,
+               DspMachine &cpu,
                NandLink &link,
                const unsigned after_nops,
                const Stop stop,
@@ -342,7 +342,7 @@ void run(const Firmware &firmware, const Input input, std::ostream &trace) {
   core::Program caller;
   const auto after_nops =
       own_caller(caller, input.program ? input.helper.program : input.helper.erase);
-  OwnDspMachine cpu(dma_test::native_clocks);
+  DspMachine cpu(dma_test::native_clocks);
   auto &bus = cpu.bus();
   install_inputs(bus, firmware, input.helper, source);
   caller.install(bus);
@@ -389,7 +389,7 @@ int persistent_worker(const Firmware &firmware, char **arguments) {
   const auto source = source_words_from(firmware, false);
   core::Program caller;
   const auto after_nops = own_caller(caller, program != 0 ? helper.program : helper.erase);
-  OwnDspMachine cpu(dma_test::native_clocks);
+  DspMachine cpu(dma_test::native_clocks);
   auto &bus = cpu.bus();
   install_inputs(bus, firmware, helper, source);
   caller.install(bus);

@@ -2,7 +2,7 @@
 #include "common/bus.hpp"
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_boot_context.hpp"
 #include "dsp_boot_reference.hpp"
@@ -42,7 +42,7 @@ void require(const bool condition, const std::string &message) {
 
 class Runner {
 public:
-  Runner(blofeld::OwnDspMachine &machine, std::ostream &trace, const Execution execution)
+  Runner(blofeld::DspMachine &machine, std::ostream &trace, const Execution execution)
       : machine_(machine), trace_(trace), execution_(execution) {}
 
   void step() {
@@ -90,7 +90,7 @@ public:
   [[nodiscard]] unsigned completed() const { return completed_; }
 
 private:
-  blofeld::OwnDspMachine &machine_;
+  blofeld::DspMachine &machine_;
   std::ostream &trace_;
   Execution execution_;
   unsigned completed_ = 0;
@@ -105,7 +105,7 @@ struct Inputs {
 blofeld::test::boot_context::State run(const Inputs &inputs, const Execution execution) {
   const auto firmware = blofeld::Firmware::load(inputs.firmware);
   const auto rom = blofeld::test::read_spi_boot_prefix(inputs.rom);
-  blofeld::OwnDspMachine machine(blofeld::test::dma_test::native_clocks);
+  blofeld::DspMachine machine(blofeld::test::dma_test::native_clocks);
   auto &bus = machine.bus();
   bus.install_rom({.start = bootstrap_base, .words = rom});
   bus.shi().observe_spi({.mosi = false});

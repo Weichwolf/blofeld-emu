@@ -3,7 +3,7 @@
 
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp_core_fixture.hpp"
 #include "dsp_rom_program.hpp"
 #include "nand_gpio_pins.hpp"
@@ -69,7 +69,7 @@ inline void poll_ready(core::Program &program) {
                   .kind = core::BranchKind::relative_clear});
 }
 
-inline void reset(OwnDspMachine &machine) {
+inline void reset(DspMachine &machine) {
   const core::Driver driver(machine);
   require(driver.state().pc == DspRomProgram::boot,
           "Actual native reset selects the authored caller");

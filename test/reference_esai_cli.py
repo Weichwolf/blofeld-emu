@@ -9,7 +9,7 @@ import subprocess
 import sys
 import unittest
 
-from test_reference_cli import CONFIG, image, replay_sections
+from test_reference_cli import CONFIG, image
 from reference_dsp_inputs_cli import check_pin, store
 
 BINARY, FIXTURE, FIRMWARE, ARTIFACTS = map(Path, sys.argv[1:5])
@@ -127,21 +127,12 @@ class EsaiCli(unittest.TestCase):
             self.assertIn("DSP-INPUTS observed=516 configured=516", result.stdout)
             self.assertRegex(result.stdout, r"idle=[1-9][0-9]* ")
 
-    def test_underrun_retains_known_data_and_midword_snapshot_replays(self):
-        result, trace = self.invoke("midword-replay", config() + "checkpoint 35 2\n", "esai1")
+    def test_underrun_retains_known_data(self):
+        result, trace = self.invoke("underrun", config(), "esai1")
         self.assertEqual(result.returncode, 0, result.stderr)
-        prefix, suffixes = replay_sections(trace)
-        self.assertEqual(len(suffixes), 3)
-        self.assertTrue(all(suffix == suffixes[0] for suffix in suffixes))
-        self.assertGreater(len(rows(prefix)), 2)
-        self.assertLess(len(rows(prefix)), CYCLES * 2)
-        self.verify_frame(prefix + suffixes[0], refill=False)
-        # The snapshot falls inside the first24-bit payload, not before its frame.
-        at = int(rows(prefix)[-1]["actual"])
-        self.assertGreater(at, START + 5 * 2 * HALF)
-        self.assertLess(at, START + (5 + 4 * 24) * 2 * HALF)
+        self.verify_frame(trace, refill=False)
 
-    def test_periodic_clock_matches_literal_events_and_restores_its_cursor(self):
+    def test_periodic_clock_matches_literal_events(self):
         result, literal = self.invoke("literal-reference", config())
         self.assertEqual(result.returncode, 0, result.stderr)
         result, generated = self.invoke("periodic-reference", periodic())
@@ -149,15 +140,6 @@ class EsaiCli(unittest.TestCase):
         self.assertEqual(generated, literal)
         self.verify_frame(generated)
         self.assertIn("DSP-ESAI-CLOCK instance=1 observed=516 configured=516", result.stdout)
-        for operation, events_remain in ((35, True), (180, False)):
-            result, trace = self.invoke("periodic-replay-" + str(operation),
-                                        periodic() + f"checkpoint {operation} 2\n")
-            self.assertEqual(result.returncode, 0, result.stderr)
-            prefix, suffixes = replay_sections(trace)
-            self.assertEqual(len(suffixes), 3)
-            self.assertTrue(all(suffix == suffixes[0] for suffix in suffixes))
-            self.assertEqual(bool(rows(suffixes[0])), events_remain)
-            self.verify_frame(prefix + suffixes[0])
 
     def test_compact_long_clock_does_not_expand_the_event_file(self):
         text = periodic(edges=1000000)
@@ -190,17 +172,14 @@ class EsaiCli(unittest.TestCase):
         self.assertNotIn("DSP-ESAI requested=", trace)
         self.assertNotIn("DSP-INPUT requested=", trace)
         # A static unknown HCKT snapshot follows151 real periodic observations.
-        result, trace = self.invoke("periodic-fault-replay", periodic() +
+        result, trace = self.invoke("periodic-fault", periodic() +
                                     "dsp-at 5451 esai 1 unknown unknown unknown reference-reset-edges\n"
-                                    "checkpoint 35 2\n")
+                                    "")
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("Unknown DSP ESAI HCKT", result.stderr)
         self.assertIn("DSP-ESAI-CLOCK instance=1 observed=151 configured=516", result.stderr)
         self.assertIn("DSP-INPUTS observed=0 configured=1", result.stderr)
-        prefix, suffixes = replay_sections(trace)
-        self.assertEqual(len(suffixes), 3)
-        self.assertTrue(all(suffix == suffixes[0] for suffix in suffixes))
-        self.assertEqual(len(rows(prefix + suffixes[0])), 151)
+        self.assertEqual(len(rows(trace)), 151)
 
     def test_both_periodic_instances_and_tio_share_one_ordered_source(self):
         text = periodic() + ("dsp-clock esai 0 hckt 2001 29 7 reference-reset-edges\n"
@@ -248,16 +227,13 @@ class EsaiCli(unittest.TestCase):
         self.assertIn("DSP-RELEASE requested=451 actual=630", trace)
         self.assertLess(trace.index("DSP-ESAI requested=523"), trace.index("DSP-RELEASE"))
 
-    def test_unknown_hckt_repeats_strict_failure_after_restore(self):
-        result, trace = self.invoke("unknown-replay", config(unknown=150) + "checkpoint 35 2\n")
+    def test_unknown_hckt_stops_at_the_actual_sample(self):
+        result, trace = self.invoke("unknown-input", config(unknown=150))
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("Unknown DSP ESAI HCKT at Y:0xffff96", result.stderr)
         self.assertRegex(result.stderr, r"ESAI input write index=1 mcu-pc=0x[0-9a-f]+ dsp-pc=0x[0-9a-f]+")
         self.assertIn("DSP-INPUTS observed=150 configured=516", result.stderr)
-        prefix, suffixes = replay_sections(trace)
-        self.assertEqual(len(suffixes), 3)
-        self.assertTrue(all(suffix == suffixes[0] for suffix in suffixes))
-        self.assertEqual(len(rows(prefix + suffixes[0])), 150)
+        self.assertEqual(len(rows(trace)), 150)
 
     def test_ties_keep_both_explicit_completion_orders_and_default_rejection(self):
         for order, before in (("input-before-dsp", True), ("dsp-before-input", False)):

@@ -3,9 +3,9 @@
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_interrupts.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_shi.hpp"
 #include "dsp/dsp_timers.hpp"
-#include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_interrupt_fixture.hpp"
 
@@ -170,9 +170,9 @@ public:
         "Independent full register/frame/flag/count expectations hold after the actual foreground");
   }
 
-  [[nodiscard]] OwnDspMachine &chip() noexcept { return machine_; }
+  [[nodiscard]] DspMachine &chip() noexcept { return machine_; }
 
-  [[nodiscard]] const OwnDspMachine &chip() const noexcept { return machine_; }
+  [[nodiscard]] const DspMachine &chip() const noexcept { return machine_; }
 
 private:
   static std::array<unsigned, 2> words(const Kind kind) {
@@ -188,7 +188,7 @@ private:
     }
   }
 
-  OwnDspMachine machine_{dma_test::native_clocks};
+  DspMachine machine_{dma_test::native_clocks};
   Kind kind_ = Kind::fast;
   unsigned vector_ = 0, foreground_ = 0;
   dsp56300::Registers initial_{};

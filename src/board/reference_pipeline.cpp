@@ -10,7 +10,6 @@
 #include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_shi.hpp"
-#include "dsp/own_dsp_fetch.hpp"
 #include "storage/nand.hpp"
 #include "storage/nand_image.hpp"
 #include "storage/nand_write_store.hpp"
@@ -25,10 +24,8 @@
 
 namespace blofeld::reference {
 DspRunClockInputs dsp_clock_inputs(const Config &config) {
-  const bool native = config.dsp.timing == OwnDspAutomaticTiming::functional_native_regions &&
-                      config.dsp_clock.switch_timing == DspClockSwitch::functional_region_boundary;
-  if (!native && config.dsp_clock.switch_timing != DspClockSwitch::reference_cycle_boundary) {
-    throw Fault("Regular DSP runtime requires explicit reference cycle boundaries");
+  if (config.dsp_clock.switch_timing != DspClockSwitch::functional_region_boundary) {
+    throw Fault("DSP runtime requires functional device event boundaries");
   }
   return config.dsp_clock;
 }
@@ -97,13 +94,6 @@ void Board::connect_runtime() {
       config_.dsp, native_->mcu, native_->dsp, runtime_events(), peripheral_events(*native_));
 }
 
-unsigned Board::runtime_event_budget() const {
-  if (config_.maximum_dsp_inputs_per_advance != 0) {
-    return config_.maximum_dsp_inputs_per_advance;
-  }
-  return config_.nand ? 8U : 1U;
-}
-
 DspRuntimePeripheralEvents Board::peripheral_events(Owners &owners) {
   if (!owners.nand && !transmitter_clock_events()) { return {}; }
   const auto events = owners.nand ? owners.nand->events() : NandPeerEvents{};
@@ -130,14 +120,12 @@ DspRuntimePeripheralEvents Board::peripheral_events(Owners &owners) {
                   }
                   if (!observed) { throw Fault("No device owns the offered peripheral time"); }
                 },
-            .order = DspPeerOrder::peer_first,
-            .maximum_events_per_period = runtime_event_budget()};
+            .order = DspPeerOrder::peer_first};
   }
   return {.identity = events.identity,
           .next_ticks = events.next_ticks,
           .observe = events.observe,
-          .order = DspPeerOrder::peer_first,
-          .maximum_events_per_period = runtime_event_budget()};
+          .order = DspPeerOrder::peer_first};
 }
 
 std::optional<NandPeerDetailed> Board::nand_status() const {
@@ -162,7 +150,7 @@ std::uint64_t Board::dsp_ticks() const {
 }
 
 std::uint64_t Board::dsp_steps() const {
-  return native_->dsp.cpu().progress().instructions;
+  return native_->dsp.cpu().state().progress.instructions;
 }
 
 std::uint64_t Board::schedule_ticks() const {
@@ -201,34 +189,19 @@ McuDspRuntime::CycleInputs Board::runtime_inputs() {
 McuDspRuntime::Observer Board::runtime_observer() {
   return [this](const DspRuntimeCycle &cycle) {
     synchronize_audio_clock(cycle.completion_ticks);
-    if (native_->nand) {
-      native_->nand->after_native(cycle.completion_ticks, cycle.result.native_pc);
-    }
-    if (cycle.region) {
-      control_.dsp_retirements += cycle.region->dispatches;
-    } else if (cycle.result.native && cycle.result.native->retired) {
-      ++control_.dsp_retirements;
-    }
+    if (native_->nand) { native_->nand->after_native(cycle.completion_ticks, cycle.native_pc); }
+    if (cycle.region) { control_.dsp_retirements += cycle.region->retired; }
     control_.return_boundary = cycle.completion_ticks;
     update_wiring();
     control_.return_boundary.reset();
-    observe_pcm(cycle.completion_ticks, "pipeline");
-    if (execution_.trace != nullptr && cycle.phase != DspRuntimePhase::cycle) {
+    observe_pcm(cycle.completion_ticks, "native");
+    if (execution_.trace != nullptr) {
       *execution_.trace << (cycle.phase == DspRuntimePhase::region ? "DSP-REGION" : "DSP-IO")
                         << " start=" << cycle.start_ticks << " end=" << cycle.completion_ticks
                         << " cycle=" << cycle.cycle << " cycle-known=" << cycle.cycle_known
-                        << " pc=" << hex(cycle.result.native_pc.value_or(0), 6)
-                        << " retired=" << (cycle.region ? cycle.region->dispatches : 0)
-                        << " pc-known=" << cycle.result.native_pc.has_value() << '\n';
-    } else if (execution_.trace != nullptr) {
-      *execution_.trace << "DSP-PIPELINE start=" << cycle.start_ticks
-                        << " end=" << cycle.completion_ticks << " cycle=" << cycle.cycle
-                        << " f1=" << cycle.result.issued_address.value_or(0)
-                        << " f1-known=" << cycle.result.issued_address.has_value()
-                        << " native-pc=" << hex(cycle.result.native_pc.value_or(0), 6)
-                        << " native-pc-known=" << cycle.result.native_pc.has_value()
-                        << " retirement=" << (cycle.result.native && cycle.result.native->retired)
-                        << '\n';
+                        << " pc=" << hex(cycle.native_pc.value_or(0), 6)
+                        << " retired=" << (cycle.region ? cycle.region->retired : 0)
+                        << " pc-known=" << cycle.native_pc.has_value() << '\n';
     }
   };
 }
@@ -258,7 +231,6 @@ DspRuntimeEvents Board::runtime_events() {
                 }
                 observe_dsp_input(at);
               },
-          .order = order,
-          .maximum_events_per_period = runtime_event_budget()};
+          .order = order};
 }
 }

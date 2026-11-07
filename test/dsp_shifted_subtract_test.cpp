@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dma_native_fixture.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_norm_expectations.hpp"
 
@@ -128,7 +128,7 @@ std::string instruction(const Input &input) {
   return std::string(input.left ? "subl " : "subr ") + (input.destination_b ? "a,b" : "b,a");
 }
 
-void verify(OwnDspMachine &machine, const Input &input, const ParallelEffect effect = {}) {
+void verify(DspMachine &machine, const Input &input, const ParallelEffect effect = {}) {
   const auto before = machine.cpu().registers();
   const auto progress = machine.cpu().progress();
   require(before.a == (input.destination_b ? input.source : input.destination) &&
@@ -188,7 +188,7 @@ void matrix(const bool left) {
       seed(code, input);
       code.word(encoding(input));
     }
-    OwnDspMachine machine(native::native_clocks);
+    DspMachine machine(native::native_clocks);
     native::reset_native(machine, code);
     for (const auto &input : cases) {
       for (unsigned index = 0; index < operand_preamble_steps; ++index) {
@@ -211,7 +211,7 @@ void host_overflow() {
   Program code;
   seed(code, input);
   code.word(encoding(input));
-  OwnDspMachine machine(native::native_clocks);
+  DspMachine machine(native::native_clocks);
   native::reset_native(machine, code);
   for (unsigned index = 0; index < operand_preamble_steps; ++index) {
     native::step_native(machine);
@@ -254,7 +254,7 @@ void parallel(const bool left) {
     Program code;
     seed(code, input);
     code.word(encoding(input, true, item.transfer_b));
-    OwnDspMachine machine(native::native_clocks);
+    DspMachine machine(native::native_clocks);
     native::reset_native(machine, code);
     for (unsigned index = 0; index < operand_preamble_steps; ++index) {
       native::step_native(machine);

@@ -2,9 +2,9 @@
 #include "board/nand_peer.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_gpio.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_timers.hpp"
-#include "dsp/own_dsp_machine.hpp"
 #include "esai_fixture.hpp"
 #include "storage/nand.hpp"
 
@@ -35,7 +35,7 @@ DspRunClockInputs clocks(const unsigned hz) {
 }
 
 void power(const Rate rate) {
-  OwnDspMachine machine(clocks(rate.hz));
+  DspMachine machine(clocks(rate.hz));
   NandPeer peer(machine, Nand{});
   const auto events = peer.events();
   require(events.next_ticks() == rate.power_ticks && !peer.detailed().base.ready &&
@@ -58,7 +58,7 @@ void power(const Rate rate) {
           "A rejected second board owner cannot overwrite the first peer's Ready input");
   peer.before_native(rate.power_ticks);
   const auto snapshot = peer.checkpoint();
-  OwnDspMachine fresh(clocks(rate.hz));
+  DspMachine fresh(clocks(rate.hz));
   NandPeer copy(snapshot, fresh);
   copy.before_native(rate.power_ticks);
   require(copy.detailed() == peer.detailed() && fresh.bus().timers().read(timer1, di) == di,
@@ -74,7 +74,7 @@ void power(const Rate rate) {
               fresh.bus().timers().read(timer1 - 3) == 0,
           "A fresh Ready binding establishes capture baseline without inventing a new edge");
   const auto other = rate.hz == rates[0].hz ? rates[1].hz : rates[0].hz;
-  OwnDspMachine incompatible(clocks(other));
+  DspMachine incompatible(clocks(other));
   require(rejects([&] {
             const NandPeer invalid(snapshot, incompatible);
           }).contains("matching device timebase") &&
@@ -85,7 +85,7 @@ void power(const Rate rate) {
 }
 
 void binding_lifetime() {
-  OwnDspMachine machine(clocks(rates[0].hz));
+  DspMachine machine(clocks(rates[0].hz));
   auto peer = std::make_unique<NandPeer>(machine, Nand{});
   const auto events = peer->events();
   const auto payload = peer->checkpoint();

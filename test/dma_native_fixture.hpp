@@ -3,8 +3,8 @@
 
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 
 #include <cstdint>
@@ -29,10 +29,10 @@ private:
   std::vector<std::uint32_t> words_;
 };
 
-void reset_native(OwnDspMachine &machine, const NativeProgram &program);
-void step_native(OwnDspMachine &machine);
+void reset_native(DspMachine &machine, const NativeProgram &program);
+void step_native(DspMachine &machine);
 // Explicit standalone reference phases with the native CPU held. These do not
 // supply automatic instruction timing or physical ESAI/core synchronization.
-[[nodiscard]] std::optional<DspDmaWord> dma(OwnDspMachine &machine, DspDmaInputs inputs);
-[[nodiscard]] DspDmaBusResult dma(OwnDspMachine &machine, DspDmaInputs inputs, DspCoreBusUse core);
+[[nodiscard]] std::optional<DspDmaWord> dma(DspMachine &machine, DspDmaInputs inputs);
+[[nodiscard]] DspDmaBusResult dma(DspMachine &machine, DspDmaInputs inputs, DspCoreBusUse core);
 }

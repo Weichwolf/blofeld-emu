@@ -2,7 +2,6 @@
 #include "dsp/dsp_run_clock.hpp"
 
 #include "common/bus.hpp"
-#include "dsp/dsp_agu_interlocks.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_pll.hpp"
 
@@ -13,6 +12,8 @@
 
 namespace blofeld {
 namespace {
+constexpr unsigned maximum_interlock_cycles = 3;
+
 std::string context_text(const DspRunContext context) {
   return " pc=" + hex(context.pc, 6) + " omr=" + hex(context.omr, 6);
 }
@@ -64,7 +65,6 @@ std::uint64_t DspRunClock::period_ticks(const DspBus &bus) const {
 
 std::uint64_t DspRunClock::duration_ticks(const DspClockUnits units,
                                           const std::uint64_t period) const {
-  constexpr unsigned maximum_step_cycles = 1048576;
   const auto remaining = std::numeric_limits<std::uint64_t>::max() - ticks_;
   if (inputs_.switch_timing == DspClockSwitch::reference_cycle_boundary &&
       (units.native != 1 || units.interlocks != 0)) {
@@ -72,8 +72,8 @@ std::uint64_t DspRunClock::duration_ticks(const DspClockUnits units,
   }
   const bool dependency_only =
       inputs_.switch_timing == DspClockSwitch::functional_region_boundary && units.interlocks != 0;
-  if ((units.native == 0 && !dependency_only) || units.native > maximum_step_cycles ||
-      units.interlocks > maximum_step_cycles - units.native) {
+  if ((units.native == 0 && !dependency_only) ||
+      units.interlocks > std::numeric_limits<unsigned>::max() - units.native) {
     throw Fault("Invalid or exhausted DSP reference cycle count");
   }
   const auto elapsed = units.native + units.interlocks;
@@ -175,7 +175,7 @@ void DspRunClock::restart_native_epoch() {
 std::uint64_t DspRunClock::next_step_ticks(const DspBus &bus,
                                            const unsigned native_cycles,
                                            const unsigned interlock_cycles) const {
-  if (interlock_cycles > DspAguInterlocks::maximum_stall_units) {
+  if (interlock_cycles > maximum_interlock_cycles) {
     throw Fault("Invalid nominal DSP AGU stall count");
   }
   return next_step_ticks(bus,
@@ -185,7 +185,7 @@ std::uint64_t DspRunClock::next_step_ticks(const DspBus &bus,
 void DspRunClock::finish_step(DspBus &bus,
                               const unsigned native_cycles,
                               const unsigned interlock_cycles) {
-  if (interlock_cycles > DspAguInterlocks::maximum_stall_units) {
+  if (interlock_cycles > maximum_interlock_cycles) {
     throw Fault("Invalid nominal DSP AGU stall count");
   }
   finish_step(bus, DspClockUnits{.native = native_cycles, .interlocks = interlock_cycles});

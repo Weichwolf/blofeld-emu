@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Native standalone PCM histories to atomic WAV output, including replay/errors."""
+"""Native standalone PCM histories to atomic WAV output, with visible output errors."""
 
 import os
 from pathlib import Path
@@ -11,7 +11,7 @@ import wave
 
 import reference_esai_cli as esai
 from reference_pcm_cli import records
-from test_reference_cli import image, replay_sections
+from test_reference_cli import image
 
 OLD = b"previous complete audio reference"
 PAYLOAD = bytes.fromhex("009fc3a5 00563412 00563412 00563412")
@@ -102,20 +102,6 @@ class WaveCli(unittest.TestCase):
             self.assertEqual([(int(r["first"]), int(r["end"])) for r in frames],
                              [(568250, 3403250), (3448250, 6283250)])
 
-    def test_snapshots_keep_entire_history_without_recording_replay_suffixes_twice(self):
-        result, _, baseline = self.invoke("wave-no-replay")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        expected = baseline.read_bytes()
-        for operation in (35, 200, 320):
-            result, trace, audio = self.invoke("wave-replay-" + str(operation),
-                                              config() + f"checkpoint {operation} 2\n")
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(audio.read_bytes(), expected)
-            prefix, suffixes = replay_sections(trace)
-            self.assertEqual(len(suffixes), 3)
-            self.assertTrue(all(suffix == suffixes[0] for suffix in suffixes))
-            self.assertEqual(len(records(prefix + suffixes[0], "PCM-FRAME")), 2)
-            self.assertIn("AUDIO recorded=2 limit=4", result.stdout)
 
     def test_capacity_failure_preserves_old_file_and_completed_prefix(self):
         result, trace, audio = self.invoke("wave-capacity", maximum=1)
@@ -125,8 +111,8 @@ class WaveCli(unittest.TestCase):
         self.assertEqual(audio.read_bytes(), OLD)
         self.assertEqual(len(records(trace, "PCM-FRAME")), 1)
 
-    def test_wav_recording_and_replay_do_not_require_a_diagnostic_trace(self):
-        result, trace, audio = self.invoke("wave-without-trace", config() + "checkpoint 200 2\n",
+    def test_wav_recording_does_not_require_a_diagnostic_trace(self):
+        result, trace, audio = self.invoke("wave-without-trace", config(),
                                           mode="no-trace")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(trace, "")

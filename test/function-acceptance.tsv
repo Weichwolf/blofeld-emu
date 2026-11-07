@@ -96,7 +96,7 @@ GLOBAL-LOCAL	D	M124;F-D	Global Local Control and CC122	Profile-specific local in
 GLOBAL-PROGRAM-SEND	D	F-D	Prg Send	Toggle global option, select sounds and multis; compare original outgoing program/bank traffic and retained setting	pending	pending
 GLOBAL-PERSIST	D	M87	Automatic persistence of global settings	Change each global field without Store, reset/power cycle; readback and unchanged unrelated fields/protected regions	pending	pending
 UTILITY-INIT	D	M34;M92	Init Sound/Init Multi	Initialize edited own programs/multis through menu; expected base state, current buffer only until Store, cancellation/no unrelated erasure	pending	pending
-UTILITY-RANDOMIZE	D	M34;M92	Randomize Sound	Original routine changes edit buffer within supported parameter domains; reproducible checkpoint and unchanged saved slot until Store	pending	pending
+UTILITY-RANDOMIZE	D	M34;M92	Randomize Sound	Original routine changes edit buffer within supported parameter domains; reproducible reset/input sequence and unchanged saved slot until Store	pending	pending
 UTILITY-DUMP	D	M34;M93-94	Dump Sound/Bank/All Sounds/All/Multi/Arrangement/All Multis	Every scope through original USB output; independently decode identity/count/contents, arrangement includes sounds, Multi alone does not	pending	pending
 SYSEX-RECEIVE	D	M94	Sound/Multi/Arrangement/global dump reception	Valid own dumps over DIN and USB with no special receive mode; original invalidation of unsaved edit buffers, new buffer contents, addressing and Device ID handling	pending	pending
 SYSEX-PERSIST	D	M94	Received single dump is temporary until stored	Receive own dump, play/inspect, reset without Store, repeat with Store; distinct edit-buffer versus NVM outcome	pending	pending

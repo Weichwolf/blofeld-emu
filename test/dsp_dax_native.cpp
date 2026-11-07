@@ -4,8 +4,8 @@
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dax.hpp"
 #include "dsp/dsp_gpio.hpp"
-#include "dsp/own_dsp_io.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_io.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 
 #include <utility>
@@ -98,7 +98,7 @@ void pad_contract() {
 }
 
 void native_clock_failure() {
-  OwnDspMachine machine(dma_test::native_clocks);
+  DspMachine machine(dma_test::native_clocks);
   dma_test::NativeProgram code;
   for (const auto [address, value] : {std::pair{control, 0U},
                                       std::pair{non_audio, 0U},
@@ -113,29 +113,30 @@ void native_clock_failure() {
   code.word(read_status_x0);
   dma_test::reset_native(machine, code);
   for (unsigned i = 0; i < 6; ++i) { dma_test::step_native(machine); }
-  const auto checkpoint = machine.checkpoint();
   const auto error = rejects([&] { dma_test::step_native(machine); });
   require(error.contains("0xff000c") && error.contains("register read at X:0xffffd4") &&
               error.contains("clock"),
           "Actual native status access reports the PC, operation/address and missing clock");
   const auto failure = machine.io().failure();
-  require(failure && failure->operation == OwnDspIo::Operation::read && failure->address == status,
+  require(failure && failure->operation == DspIo::Operation::read && failure->address == status,
           "The real XSTR read latches its exact native I/O failure");
   const auto stopped = machine.cpu().registers();
-  const auto progress = machine.cpu().progress();
+  const auto progress = machine.cpu().state().progress;
   // The external device may keep observing clocks; a native I/O fault cannot resume.
   machine.bus().observe_dax(inputs(false));
   static_cast<void>(rejects([&] { dma_test::step_native(machine); }));
-  require(machine.cpu().registers() == stopped && machine.cpu().progress() == progress &&
+  require(machine.cpu().registers() == stopped && machine.cpu().state().progress == progress &&
               machine.io().failure(),
           "A genuine later clock observation cannot clear a latched native fault");
-  machine.restore(checkpoint);
-  require(!machine.io().failure(), "Trusted restore retains the pre-fault native owner");
-  machine.bus().observe_dax(inputs(false));
-  dma_test::step_native(machine);
-  require(machine.cpu().registers().x == 0 && machine.cpu().progress().estimated_cycles == 13 &&
-              machine.cpu().progress().instructions == 7,
-          "Trusted recovery and a frozen real input return reset flags after literal12+1 units");
+  DspMachine recovered(dma_test::native_clocks);
+  dma_test::reset_native(recovered, code);
+  for (unsigned i = 0; i < 6; ++i) { dma_test::step_native(recovered); }
+  recovered.bus().observe_dax(inputs(false));
+  dma_test::step_native(recovered);
+  require(!recovered.io().failure() && recovered.cpu().registers().x == 0 &&
+              recovered.cpu().state().progress.estimated_cycles == 13 &&
+              recovered.cpu().state().progress.instructions == 7,
+          "Fresh reset and real clock input admit the status read after literal12+1 units");
 }
 }
 

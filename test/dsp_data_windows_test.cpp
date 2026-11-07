@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_run_clock.hpp"
-#include "dsp/own_dsp_io.hpp"
-#include "dsp/own_dsp_machine.hpp"
-#include "dsp56300/checkpoint.hpp"
+#include "dsp/dsp_io.hpp"
 #include "dsp56300/core.hpp"
+#include "dsp56300/memory.hpp"
+#include "isa.hpp"
 
 #include <array>
 #include <cstddef>
@@ -14,7 +13,6 @@
 #include <iostream>
 #include <span>
 #include <string>
-#include <utility>
 
 namespace {
 using namespace blofeld;
@@ -22,12 +20,14 @@ using namespace dsp56300;
 constexpr Word low_x_end = 0x3000, low_y_end = 0x2000, rom_base = 0x4000, high_base = 0xc000;
 constexpr Word default_x_end = 0x12000, default_y_end = 0x16000;
 constexpr Word source = 0x80, destination = 0xc080, datum = 0x9654a1, changed = 0x2579b3;
-constexpr Word boot = 0xff0000, jump_zero = 0x0c0000, switched_tail = 0x10000;
-constexpr Word read_x = 0x44f000, read_y = 0x4cf000, write_x = 0x447000, write_y = 0x4c7000;
+constexpr Word switched_tail = 0x10000;
+constexpr Word absolute_address = 0x3000, read_direction = 0x8000;
+constexpr auto write_x = isa::opcode<isa::Opcode::move_x_effective>().front() | absolute_address;
+constexpr auto write_y = isa::opcode<isa::Opcode::move_y_effective>().front() | absolute_address;
+constexpr auto read_x = write_x | read_direction, read_y = write_y | read_direction;
 constexpr Word memory_switch = 0x80, memory_switch_shift = 21;
 constexpr std::uint64_t initial_x = 0x112233aabbcc;
 constexpr unsigned word_bits = 24;
-constexpr unsigned extal = 12000000, timebase = 540000000, reset_ticks = 90;
 constexpr std::array banks{DspSpace::x, DspSpace::y};
 constexpr std::array<Word, 4> switched_y_ends{0xe000, 0x10000, 0x14000, 0x16000};
 std::size_t checks = 0;
@@ -137,15 +137,16 @@ void native_known_bytes(const DspSpace space, const Word address) {
   DspBus bus;
   const std::array program{read_opcode(space), address};
   code(bus, program);
-  OwnDspIo io(bus);
-  Core cpu(io);
+  DspIo io(bus);
+  Core cpu(Memory::external(), &io);
   cpu.set_registers(initial());
   require(io.memory_windows(Space::program).empty(), "The adapter never grants program windows");
-  const auto before = cpu.registers();
-  const auto unknown = cpu.run(RunBudget{.instructions = 1, .cycles = 2});
-  require(unknown.stop == RunStop::external_effect && unknown.execution.dispatches == 0 &&
-              cpu.registers() == before && cpu.progress() == Progress{} && !io.failure(),
-          "Unknown RAM stops before all instruction effects and before any fabricated bus read");
+  const auto unknown = cpu.run(1);
+  const auto &unknown_failure = io.failure();
+  require(unknown.retired == 0 && unknown.fault.kind == FaultKind::memory_read &&
+              unknown.fault.space == core_space(space) && unknown.fault.address == address &&
+              unknown.fault.pc == 0 && unknown_failure && unknown_failure->cause,
+          "An unknown real storage word fails with its original owner cause and exact context");
   const auto revision = bus.program_revision();
   const bool rom = address >= rom_base && address < high_base;
   const auto initialize = [&](const Word value) {
@@ -157,71 +158,71 @@ void native_known_bytes(const DspSpace space, const Word address) {
     }
   };
   initialize(datum);
-  const auto result = cpu.run(RunBudget{.instructions = 1, .cycles = 2});
-  require(result.execution.dispatches == 1 && result.execution.fault.kind == FaultKind::none &&
+  cpu.reset();
+  io.clear_failure();
+  cpu.set_registers(initial());
+  const auto result = cpu.run(1);
+  require(result.retired == 1 && result.fault.kind == FaultKind::none &&
               cpu.registers() == loaded(datum) &&
-              cpu.progress() == Progress{.instructions = 1, .estimated_cycles = 2} &&
-              cpu.jit_statistics().native_move_instructions == 1 && !io.failure(),
-          "Initializing the real known byte admits a native read with exact full CPU state");
-  const auto compiled = cpu.jit_statistics().compiled_blocks;
+              result.progress == Progress{.instructions = 1, .estimated_cycles = 2} &&
+              !io.failure(),
+          "Explicit recovery and initialization admit the real load with exact full registers");
   initialize(changed);
   cpu.set_registers(initial());
-  const auto second = cpu.run(RunBudget{.instructions = 1, .cycles = 2});
-  require(second.execution.dispatches == 1 && cpu.registers() == loaded(changed) &&
-              cpu.jit_statistics().native_move_instructions == 2 &&
-              cpu.jit_statistics().compiled_blocks == compiled &&
-              bus.program_revision() == revision,
-          "Native code reads subsequent owner writes from the same storage without stale data");
+  const auto second = cpu.run(1);
+  require(second.retired == 1 && second.fault.kind == FaultKind::none &&
+              cpu.registers() == loaded(changed) &&
+              second.progress == Progress{.instructions = 2, .estimated_cycles = 4} &&
+              bus.program_revision() == revision && !io.failure(),
+          "Retained native code reads subsequent owner writes from the actual data storage");
 }
 
-void store_and_restore(const DspSpace space) {
+void independent_storage(const DspSpace space) {
   DspBus bus;
   const std::array program{read_opcode(space), source, write_opcode(space), destination};
   code(bus, program);
   bus.write({.space = space, .address = source, .value = datum});
-  OwnDspIo io(bus);
-  Core cpu(io);
+  DspIo io(bus);
+  Core cpu(Memory::external(), &io);
   cpu.set_registers(initial());
-  require(cpu.run(1).dispatches == 1 && cpu.registers() == loaded(datum),
-          "The genuine native load establishes the independent store source");
-  const auto checkpoint = cpu.checkpoint();
-  auto restored_bus = bus;
-  require(restored_bus.data_windows(space)[0].words.data() !=
-              bus.data_windows(space)[0].words.data(),
-          "The paired bus copy owns different actual RAM allocations");
-  const auto stored = cpu.run(RunBudget{.instructions = 1, .cycles = 2});
   auto expected = loaded(datum);
   expected.pc = 4;
+  const auto stored = cpu.run(2);
   const auto offset = destination - high_base;
-  require(stored.execution.dispatches == 1 && cpu.registers() == expected &&
-              bus.data_windows(space)[2].known[offset] == 1 &&
-              bus.read({.space = space, .address = destination}) == datum &&
-              cpu.jit_statistics().native_move_instructions == 2,
-          "The native store initializes the actual high-bank word and its knowledge byte");
-  bus = std::move(restored_bus);
-  cpu.restore(checkpoint);
-  require(bus.data_windows(space)[2].known[offset] == 0,
-          "Paired restore retains the independently saved unknown destination");
-  require(cpu.run(1).dispatches == 1 && cpu.registers() == expected &&
-              bus.read({.space = space, .address = destination}) == datum &&
-              bus.data_windows(space)[2].known[offset] == 1 && !io.failure(),
-          "Restore rebinds the native windows before writing the newly owned allocation");
+  require(stored.retired == 2 && stored.fault.kind == FaultKind::none &&
+              cpu.registers() == expected && bus.data_windows(space)[2].known[offset] == 1 &&
+              bus.read({.space = space, .address = destination}) == datum && !io.failure(),
+          "Native load/store initializes the actual high-bank word and knowledge byte");
+  DspBus second_bus;
+  code(second_bus, program);
+  second_bus.write({.space = space, .address = source, .value = changed});
+  require(second_bus.data_windows(space)[2].known[offset] == 0 &&
+              second_bus.data_windows(space)[0].words.data() !=
+                  bus.data_windows(space)[0].words.data(),
+          "A fresh device owns distinct storage without inheriting initialized destinations");
+  DspIo second_io(second_bus);
+  Core second_cpu(Memory::external(), &second_io);
+  second_cpu.set_registers(initial());
+  const auto second = second_cpu.run(2);
+  expected = loaded(changed);
+  expected.pc = 4;
+  require(second.retired == 2 && second.fault.kind == FaultKind::none &&
+              second_cpu.registers() == expected &&
+              second_bus.read({.space = space, .address = destination}) == changed &&
+              bus.read({.space = space, .address = destination}) == datum && !second_io.failure(),
+          "Independent native owners never retain another device's RAM pointer or data");
 }
 
 void actual_refusal(const DspSpace space, const Word address, const bool store) {
   DspBus bus;
   const std::array program{store ? write_opcode(space) : read_opcode(space), address};
   code(bus, program);
-  OwnDspIo io(bus);
-  Core cpu(io);
+  DspIo io(bus);
+  Core cpu(Memory::external(), &io);
   cpu.set_registers(initial());
-  const auto boundary = cpu.run(RunBudget{.instructions = 1, .cycles = 2});
-  require(boundary.execution.dispatches == 0 && boundary.stop == RunStop::external_effect &&
-              cpu.registers() == initial() && cpu.progress() == Progress{} && !io.failure(),
-          "Missing storage and readonly stores retain a genuine pre-effect owner boundary");
   const auto result = cpu.run(1);
   const auto &failure = io.failure();
-  require(result.dispatches == 0 &&
+  require(result.retired == 0 &&
               result.fault.kind == (store ? FaultKind::memory_write : FaultKind::memory_read) &&
               result.fault.space == core_space(space) && result.fault.address == address &&
               result.fault.pc == 0 && failure && failure->address == address && failure->pc == 0 &&
@@ -238,23 +239,30 @@ void native_switch() {
   bus.observe_omr(memory_switch);
   bus.advance_instruction_cycles(3);
   bus.observe_omr(0);
-  OwnDspIo io(bus);
-  Core cpu(io);
+  DspIo io(bus);
+  Core cpu(Memory::external(), &io);
   cpu.set_registers(initial());
-  require(cpu.run(RunBudget{.instructions = 1, .cycles = 2}).execution.dispatches == 1,
-          "The pending expanding switch still permits a stable low RAM transfer");
-  const auto before = cpu.registers();
-  const auto stopped = cpu.run(RunBudget{.instructions = 1, .cycles = 2});
-  require(stopped.execution.dispatches == 0 && stopped.stop == RunStop::external_effect &&
-              cpu.registers() == before && !io.failure(),
-          "Old native descriptors cannot expose the pending high-bank expansion");
+  const auto first = cpu.run(1);
+  require(first.retired == 1 && first.fault.kind == FaultKind::none &&
+              cpu.registers() == loaded(datum),
+          "A pending expanding switch permits the stable low RAM transfer");
+  {
+    DspIo early_io(bus);
+    Core early(Memory::external(), &early_io);
+    early.set_registers(cpu.registers());
+    const auto stopped = early.run(1);
+    require(stopped.retired == 0 && stopped.fault.kind == FaultKind::memory_read &&
+                stopped.fault.address == switched_tail && stopped.fault.pc == 2 &&
+                early_io.failure(),
+            "A separate owner cannot read the high bank before the actual expanding commit");
+  }
   bus.advance_instruction_cycles(3);
-  const auto after = cpu.run(RunBudget{.instructions = 1, .cycles = 2});
+  const auto after = cpu.run(1);
   auto expected = loaded(changed);
   expected.pc = 4;
-  require(after.execution.dispatches == 1 && cpu.registers() == expected &&
-              cpu.jit_statistics().native_move_instructions == 2 && !io.failure(),
-          "The actual commit revision rebinds the expanded high RAM before native execution");
+  require(after.retired == 1 && after.fault.kind == FaultKind::none &&
+              cpu.registers() == expected && !io.failure(),
+          "The commit revision rebinds the expanded high RAM before native execution");
   bus.observe_omr(memory_switch);
   bus.advance_instruction_cycles(3);
   require(bus.read({.address = 0x1000}) == changed,
@@ -265,70 +273,6 @@ void native_switch() {
           "The remapped physical block cannot retain a writable X alias");
 }
 
-struct Observations {
-  unsigned reads = 0, writes = 0;
-  bool exact = true;
-
-  static void read(void *context, const DspIoReadAccess &access) {
-    auto &self = *static_cast<Observations *>(context);
-    ++self.reads;
-    self.exact = self.exact && access.address.space == DspSpace::x &&
-                 access.address.address == source && access.value == datum && access.pc == 0;
-  }
-
-  static void write(void *context, const DspStore &store, const unsigned pc) {
-    auto &self = *static_cast<Observations *>(context);
-    ++self.writes;
-    self.exact = self.exact && store.space == DspSpace::x && store.address == destination &&
-                 store.value == datum && pc == 2;
-  }
-};
-
-void observers() {
-  OwnDspMachine machine({.extal_hz = extal,
-                         .timebase_hz = timebase,
-                         .switch_timing = DspClockSwitch::reference_cycle_boundary});
-  constexpr std::array bootstrap{jump_zero};
-  machine.bus().install_rom({.start = boot, .words = bootstrap});
-  const std::array program{read_x, source, write_x, destination, jump_zero};
-  code(machine.bus(), program);
-  machine.bus().write({.space = DspSpace::x, .address = source, .value = datum});
-  machine.begin_hardware_reset(
-      {.mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2});
-  require(machine.advance_hardware_reset_ticks(reset_ticks) == reset_ticks,
-          "The actual machine owns its reset assertion periods");
-  machine.release_hardware_reset();
-  require(machine.advance_hardware_reset_ticks(reset_ticks) == reset_ticks,
-          "The actual machine owns its reset recovery periods");
-  require(machine.run_unclocked().dispatches == 1 && machine.cpu().registers().pc == 0,
-          "The genuine reset ROM jump reaches the authored RAM program");
-  require(machine.run_unclocked().dispatches == 1 && machine.run_unclocked().dispatches == 1 &&
-              machine.run_unclocked().dispatches == 1,
-          "An unobserved native load/store loop warms genuine direct-window code");
-  Observations observed;
-  require(machine.run_observed_unclocked({.context = &observed, .completed = Observations::read})
-                      .dispatches == 1 &&
-              observed.reads == 1 && observed.exact,
-          "An attached full-read observer cannot be bypassed by the warm RAM grant");
-  auto native = machine.cpu().jit_statistics().native_move_instructions;
-  require(machine.run_unclocked().dispatches == 1 &&
-              machine.cpu().jit_statistics().native_move_instructions == native + 1 &&
-              observed.reads == 1,
-          "Observer detachment rebinds direct windows before the next native store");
-  require(machine.run_unclocked().dispatches == 1 && machine.run_unclocked().dispatches == 1,
-          "The actual program returns to its store after another genuine load");
-  require(
-      machine.run_observed_unclocked({}, {.context = &observed, .completed = Observations::write})
-                  .dispatches == 1 &&
-          observed.writes == 1 && observed.exact,
-      "A full-write observer retains the actual committed RAM store exactly once");
-  require(machine.run_unclocked().dispatches == 1,
-          "The real jump resumes without a borrowed observer");
-  native = machine.cpu().jit_statistics().native_move_instructions;
-  require(machine.run_unclocked().dispatches == 1 &&
-              machine.cpu().jit_statistics().native_move_instructions == native + 1,
-          "The read path returns to native storage after the write observer is detached");
-}
 } // namespace
 
 int main() {
@@ -338,7 +282,7 @@ int main() {
       for (const auto address : {source, destination, rom_base + source}) {
         native_known_bytes(space, address);
       }
-      store_and_restore(space);
+      independent_storage(space);
       const auto hole = space == DspSpace::x ? low_x_end : low_y_end;
       for (const auto address : {source, hole, rom_base + 1}) {
         actual_refusal(space, address, false);
@@ -346,7 +290,6 @@ int main() {
       actual_refusal(space, rom_base, true);
     }
     native_switch();
-    observers();
     std::cout << checks << " actual board data-window checks passed\n";
     return 0;
   } catch (const std::exception &error) {

@@ -3,54 +3,38 @@
 
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_interrupts.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_io.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 
 namespace blofeld::test::timer_native {
-void install_vector(OwnDspMachine &machine, const unsigned vector, const unsigned opcode) {
+void install_vector(DspMachine &machine, const unsigned vector, const unsigned opcode) {
   machine.bus().write({.address = vector, .value = opcode});
   machine.bus().write({.address = vector + 1, .value = 0});
 }
 
-void service(OwnDspMachine &machine,
+void service(DspMachine &machine,
              const DspInterruptRequest request,
              const dsp56300::InstructionWords foreground) {
-  const auto before = machine.cpu().progress();
+  const auto before = machine.cpu().state().progress;
   const auto ticks = machine.clock().elapsed_ticks();
   require(machine.bus().interrupt_request(0) == request && machine.admit_interrupt(foreground),
-          "Actual eligible timer source admits the installed foreground instruction");
-  unsigned reads = 0;
+          "The actual eligible timer source admits the installed foreground instruction");
+  require(machine.io().inspect_program(request.vector).has_value() &&
+              machine.io().inspect_program(request.vector + 1).has_value() &&
+              machine.interrupt_pending() && machine.bus().interrupt_request(0) == request,
+          "Side-effect-free vector inspection cannot acknowledge an admitted source");
   for (unsigned word = 0; word < 2; ++word) {
-    auto progress = machine.begin_fetch();
-    for (unsigned effect = 0; effect < effect_bound && progress.pending && !progress.retired;
-         ++effect) {
-      const auto pending = progress.pending.value();
-      const bool fetch = pending.effect.kind == dsp56300::EffectKind::fetch_opcode ||
-                         pending.effect.kind == dsp56300::EffectKind::fetch_extension;
-      if (fetch) {
-        require(word == 0 &&
-                    pending.effect.kind == (reads == 0 ? dsp56300::EffectKind::fetch_opcode
-                                                       : dsp56300::EffectKind::fetch_extension) &&
-                    pending.effect.space == dsp56300::Space::program &&
-                    pending.effect.address == request.vector + reads && reads < 2 &&
-                    machine.bus().interrupt_request(0) == request && machine.interrupt_pending(),
-                "Both real vector reads precede acknowledgement of the selected timer source");
-      }
-      progress = machine.advance(pending.ticket);
-      require(progress.fault.kind == dsp56300::FaultKind::none,
-              "Actual fast timer vector remains healthy");
-      if (fetch) {
-        ++reads;
-        require(machine.interrupt_pending() == (reads == 1),
-                "Timer acknowledgement ownership ends only after the second actual vector read");
-      }
-    }
-    require(progress.retired, "Each one-word timer vector instruction genuinely retires");
+    const auto result = machine.run_unclocked();
+    require(
+        result.retired == 1 && result.fault.kind == dsp56300::FaultKind::none &&
+            !machine.interrupt_pending(),
+        "The native vector prefetch reads both words before acknowledgement and retires each word");
   }
-  require(reads == 2 && !machine.interrupt_pending() &&
-              machine.cpu().progress().instructions == before.instructions + 2 &&
-              machine.cpu().progress().estimated_cycles == before.estimated_cycles + 2 &&
+  require(!machine.interrupt_pending() &&
+              machine.cpu().state().progress.instructions == before.instructions + 2 &&
+              machine.cpu().state().progress.estimated_cycles == before.estimated_cycles + 2 &&
               machine.clock().elapsed_ticks() == ticks,
-          "Two one-cycle native instructions retire without inventing board clock periods");
+          "The two real native vector instructions execute without inventing board clock periods");
 }
 }

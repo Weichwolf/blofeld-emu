@@ -3,7 +3,7 @@
 
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 
 #include <cstdint>
@@ -59,7 +59,7 @@ private:
 // It supplies no clocks, register effects, vector words or success responses.
 class Driver {
 public:
-  explicit Driver(OwnDspMachine &machine);
+  explicit Driver(DspMachine &machine);
 
   [[nodiscard]] dsp56300::Registers state() const { return machine_.cpu().registers(); }
 
@@ -67,7 +67,7 @@ public:
   void hardware_reset();
 
 private:
-  OwnDspMachine &machine_;
+  DspMachine &machine_;
 };
 
 [[nodiscard]] unsigned stack_pc(const dsp56300::Registers &state);

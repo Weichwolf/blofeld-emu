@@ -23,7 +23,7 @@ UNKNOWN = 'NAND read page=0x00006a column=0x10e command=0x00: unknown contents'
 
 
 def source(image):
-    reference = json.loads((ROOT / 'test/reference/own-dsp-nand-reference.json').read_text())
+    reference = json.loads((ROOT / 'test/reference/dsp-adapter-nand-reference.json').read_text())
     if identity(image) != dict(bytes=reference['sparse_image_bytes'],
                                sha256=reference['sparse_image_sha256']):
         raise ValueError('Expected the pinned sparse original-derived NAND source')

@@ -67,8 +67,7 @@ public:
 
 private:
   friend class McuMachine;
-  [[nodiscard]] std::uint64_t checkpoint_cycles() const;
-  void restore_boundary(std::uint64_t cycles, ExecutionContext context);
+  [[nodiscard]] std::uint64_t completed_cycles_at_boundary() const;
   void healthy() const;
   void start(std::string_view slots);
   void tick(Hc12BusCycle cycle);

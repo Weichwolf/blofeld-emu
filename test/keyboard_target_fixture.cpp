@@ -34,22 +34,21 @@ Runner::Runner(const Firmware &firmware,
                const std::vector<std::uint8_t> &helper,
                const unsigned phase,
                const bool secured,
-               std::ostream &trace,
-               const hcs08_programmer::Memory *snapshot)
-    : pair(firmware, helper, phase, trace, snapshot),
+               std::ostream &trace)
+    : pair(firmware, helper, phase, trace),
       clock(pair.target.memory, pair.bdc, timing),
       secure(secured) {
   auto &memory = pair.target.memory;
-  if (snapshot == nullptr) {
-    for (unsigned address = hp::ram_first; address < hp::ram_end; ++address) {
-      memory.known.reset(address);
-      memory.bytes[address] = canary;
-    }
-    ++memory.generation;
-    ++memory.code_generation;
-    memory.accesses.clear();
+
+  for (unsigned address = hp::ram_first; address < hp::ram_end; ++address) {
+    memory.known.reset(address);
+    memory.bytes[address] = canary;
   }
-  if (secure && snapshot == nullptr) {
+  ++memory.generation;
+  ++memory.code_generation;
+  memory.accesses.clear();
+
+  if (secure) {
     auto image = memory.flash.image();
     image.data[hf::nv_options - hf::first] = secure_option;
     memory.flash = Hcs08Flash(image, hcs08_wire::chip);
@@ -287,38 +286,4 @@ void Runner::guards() const {
   }
 }
 
-Saved Runner::checkpoint() const {
-  return {.host = pair.host.checkpoint(),
-          .memory = pair.target.memory,
-          .cpu = pair.target.cpu.checkpoint(),
-          .bdc = pair.bdc.checkpoint(),
-          .wire = pair.wire.checkpoint(),
-          .clock = clock.checkpoint(),
-          .expected = pair.expected,
-          .cursor = pair.cursor,
-          .steps = pair.steps,
-          .received = pair.received,
-          .pin_writes = pair.pin_writes,
-          .go_checked = go_checked};
-}
-
-void Runner::restore(const Saved &saved) {
-  require(pair.target.memory.bytes == saved.memory.bytes &&
-              pair.target.memory.known == saved.memory.known &&
-              pair.target.memory.flash.image() == saved.memory.flash.image(),
-          "Fresh target owner must be constructed from the complete saved memory/peripheral state");
-  pair.target.cpu.restore_checkpoint(saved.cpu);
-  pair.bdc.restore_checkpoint(saved.bdc);
-  pair.wire.restore_checkpoint(saved.wire);
-  clock.restore_checkpoint(saved.clock);
-  pair.host.restore(saved.host);
-  pair.expected = saved.expected;
-  pair.cursor = saved.cursor;
-  pair.steps = saved.steps;
-  pair.received = saved.received;
-  pair.pin_writes = saved.pin_writes;
-  go_checked = saved.go_checked;
-  detailed = true;
-  pair.bind();
-}
 } // namespace blofeld::test::keyboard_target

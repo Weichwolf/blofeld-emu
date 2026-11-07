@@ -6,9 +6,8 @@
 #include "common/bus.hpp"
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_esai.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp/own_dsp_fetch.hpp"
-#include "dsp/own_dsp_machine.hpp"
 #include "mcu/mcu_flash_timing_state.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_machine.hpp"
@@ -191,11 +190,6 @@ void ordering(Config &config, std::istringstream &line) {
   }
   literal(line, "dsp-before-mcu");
   config.dsp.wait_dsp_first = true;
-  config.dsp.maximum_cycles_per_period =
-      static_cast<unsigned>(number(line, std::numeric_limits<unsigned>::max()));
-  if (config.dsp.maximum_cycles_per_period == 0) {
-    throw Fault("Reference-board DSP cycle budget must be positive");
-  }
 }
 
 void serial(Config &config, std::istringstream &line) {
@@ -300,18 +294,8 @@ AudioClockRoute audio_clock(std::istringstream &line) {
 }
 
 void dsp_execution(Config &config, std::istringstream &line) {
-  const auto timing = token(line);
-  if (timing == "reference-effects") {
-    config.dsp.timing =
-        OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts;
-  } else if (timing == "native-cycles") {
-    config.dsp.timing = OwnDspAutomaticTiming::native_cycle_budget;
-  } else if (timing == "native-regions") {
-    config.dsp.timing = OwnDspAutomaticTiming::functional_native_regions;
-    config.dsp_clock.switch_timing = DspClockSwitch::functional_region_boundary;
-  } else {
-    throw Fault("Unknown reference-board DSP execution timing: " + timing);
-  }
+  literal(line, "native-regions");
+  config.dsp_clock.switch_timing = DspClockSwitch::functional_region_boundary;
   config.dsp.reset_dsp_first = true;
   config.dma_grant = DspDmaGrant::available;
 }
@@ -358,11 +342,6 @@ void dsp_order(Config &config, std::istringstream &line) {
     config.dsp_input_order = DspPeerOrder::reject_tie;
   } else {
     throw Fault("Unknown reference-board DSP input order");
-  }
-  config.maximum_dsp_inputs_per_advance =
-      static_cast<unsigned>(number(line, std::numeric_limits<unsigned>::max()));
-  if (config.maximum_dsp_inputs_per_advance == 0) {
-    throw Fault("Reference-board DSP input budget must be positive");
   }
 }
 
@@ -571,20 +550,13 @@ void setting(Config &config, const std::string_view key, std::istringstream &lin
         config.mcu_u0_release ? 0 : numeric_value(source, UINT64_MAX, NumberBase::decimal);
     const auto pinit = token(line);
     if (pinit != "low" && pinit != "high") { throw Fault("DSP PINIT must be low or high"); }
-    config.dsp.initial_reset = OwnDspResetInputs{
+    config.dsp.initial_reset = DspResetInputs{
         .mode_known = 15, .mode_levels = 5, .pinit = pinit == "high", .recovery_cycles = 2};
   } else if (key == "operations") {
     config.operations = number(line, UINT64_MAX);
     if (config.operations == 0) {
       throw Fault("Reference-board operation budget must be positive");
     }
-  } else if (key == "checkpoint") {
-    const auto operation = number(line, UINT64_MAX);
-    const auto replays = static_cast<unsigned>(number(line, std::numeric_limits<unsigned>::max()));
-    if (replays == 0) {
-      throw Fault("Reference-board checkpoint requires a positive replay count");
-    }
-    config.checkpoint = {.operation = operation, .replays = replays};
   } else if (key == "shi-hreq") {
     config.hreq = return_route(line);
   } else if (key == "shi-miso") {
@@ -700,9 +672,6 @@ Config parse(const std::string &text) {
     }
   }
   parser.complete();
-  if (parser.result.checkpoint && parser.result.checkpoint->operation > parser.result.operations) {
-    throw Fault("Reference-board checkpoint exceeds the operation budget");
-  }
   validate_returns(parser.result);
   validate_gpio_peer(parser.result);
   validate_lcd(parser.result);

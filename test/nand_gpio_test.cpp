@@ -2,7 +2,7 @@
 #include "common/bus.hpp"
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_boot_reference.hpp"
 #include "dsp_core_fixture.hpp"
@@ -60,7 +60,7 @@ std::array<std::uint8_t, Nand::page_bytes> sample_page() {
   return bytes;
 }
 
-void step(OwnDspMachine &cpu, NandLink &link, std::ostream &trace) {
+void step(DspMachine &cpu, NandLink &link, std::ostream &trace) {
   const auto before = cpu.cpu().registers();
   trace << "pc=" << hex(before.pc, 6) << " sr=" << hex(before.sr, 6)
         << " omr=" << hex(before.omr, 6) << " r0=" << hex(before.r[0], 6)
@@ -72,7 +72,7 @@ void step(OwnDspMachine &cpu, NandLink &link, std::ostream &trace) {
 void test_own_reader(const unsigned row, const bool missing) {
   core::Program program;
   const auto poll = own_reader(program, row);
-  OwnDspMachine cpu(dma_test::native_clocks);
+  DspMachine cpu(dma_test::native_clocks);
   auto &bus = cpu.bus();
   program.install(bus);
   nand_native::reset(cpu);
@@ -119,7 +119,7 @@ void test_link_preconditions(const std::optional<bool> selected) {
   setup_gpio(program);
   // Both strobes change together; without a measured edge order this must reject.
   movep(program, 0, port_c_data, 'x');
-  OwnDspMachine cpu(dma_test::native_clocks);
+  DspMachine cpu(dma_test::native_clocks);
   auto &bus = cpu.bus();
   program.install(bus);
   nand_native::reset(cpu);
@@ -179,7 +179,7 @@ void test_original_address(const Firmware &firmware, std::ostream &trace, const 
   program.immediate(DspRomRegister::r2, buffer);
   program.immediate(DspRomRegister::m5, word_mask);
   program.emit(absolute_jsr, original_reader);
-  OwnDspMachine cpu(dma_test::native_clocks);
+  DspMachine cpu(dma_test::native_clocks);
   auto &bus = cpu.bus();
   install_original_stage(bus, firmware);
   program.install(bus);

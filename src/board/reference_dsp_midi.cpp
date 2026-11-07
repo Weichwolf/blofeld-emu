@@ -19,10 +19,8 @@ void validate_dsp_midi(const Config &config) {
     throw Fault("Host MIDI routes must be exclusive");
   }
   if (route.index > 1 || route.after_ticks < config.release_ticks ||
-      config.dsp_input_order == DspPeerOrder::unqualified ||
-      config.maximum_dsp_inputs_per_advance == 0) {
-    throw Fault(
-        "DSP MIDI requires a valid timer, post-release start and explicit event order/budget");
+      config.dsp_input_order == DspPeerOrder::unqualified) {
+    throw Fault("DSP MIDI requires a valid timer, post-release start and explicit event order");
   }
   MidiWireTiming timing{.timebase_hz = config.dsp_clock.timebase_hz,
                         .start_ticks = route.after_ticks};

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
 #include "dma_native_fixture.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_norm_expectations.hpp"
 #include "dsp_saturation_fixture.hpp"
@@ -195,7 +195,7 @@ void emit(Program &code, const Input &input) {
   code.word(scalar_opcode(input));
 }
 
-void verify(OwnDspMachine &machine, const Input &input) {
+void verify(DspMachine &machine, const Input &input) {
   const auto before = machine.cpu().registers();
   const auto progress = machine.cpu().progress();
   require(before.a == (input.destination_b ? input.source : input.destination) &&
@@ -279,7 +279,7 @@ void run(const std::span<const Input> inputs) {
       seed(code, input);
       emit(code, input);
     }
-    OwnDspMachine machine(native::native_clocks);
+    DspMachine machine(native::native_clocks);
     native::reset_native(machine, code);
     for (const auto &input : batch) {
       for (unsigned step = 0; step < preamble_steps; ++step) { native::step_native(machine); }

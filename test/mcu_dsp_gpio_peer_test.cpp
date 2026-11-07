@@ -3,8 +3,8 @@
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_interrupts.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp/own_dsp_machine.hpp"
 #include "esai_fixture.hpp"
 #include "mcu/hc12_registers.hpp"
 #include "mcu/mcu_bus.hpp"
@@ -62,7 +62,7 @@ struct Fixture {
   }
 
   McuMachine mcu;
-  OwnDspMachine dsp;
+  DspMachine dsp;
   std::unique_ptr<McuDspGpioPeer> peer;
 };
 

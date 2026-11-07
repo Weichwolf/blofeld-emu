@@ -47,8 +47,7 @@ Fixture::Fixture(const Firmware &image,
                  const std::vector<std::uint8_t> &code,
                  const unsigned first_edge,
                  const unsigned timer_prescale,
-                 std::ostream &output,
-                 const hcs08_programmer::Memory *memory)
+                 std::ostream &output)
     : firmware(image),
       helper(code),
       owned_host(std::make_unique<McuMachine>(
@@ -58,7 +57,6 @@ Fixture::Fixture(const Firmware &image,
                                    .switch_timing = McuRunClockSwitch::reference_cycle_boundary},
                          .memory_timing = McuRunMemory::internal_flash_reads})),
       host(*owned_host),
-      target(memory),
       next_edge(first_edge),
       trace(output) {
   require(first_edge > 0 && first_edge <= target_period && helper.size() == helper_bytes &&
@@ -84,7 +82,7 @@ Fixture::Fixture(const Firmware &image,
   bus.write(tscr2, static_cast<std::uint8_t>(timer_prescale));
   bus.write(hc12::tscr1, timer_enable);
   host.cpu().set_state({.pc = caller, .sp = stack, .ccr = host_flags});
-  prepare_target(memory == nullptr);
+  prepare_target(true);
   bind();
 }
 
@@ -92,19 +90,13 @@ Fixture::Fixture(McuMachine &machine,
                  const Firmware &image,
                  const std::vector<std::uint8_t> &code,
                  const unsigned first_edge,
-                 std::ostream &output,
-                 const hcs08_programmer::Memory *memory)
-    : firmware(image),
-      helper(code),
-      host(machine),
-      target(memory),
-      next_edge(first_edge),
-      trace(output) {
+                 std::ostream &output)
+    : firmware(image), helper(code), host(machine), next_edge(first_edge), trace(output) {
   require(first_edge > 0 && first_edge <= target_period && code.size() == helper_bytes,
           "Declared borrowed controller clock/phase/reference extent");
   const auto now = host.run_clock().elapsed_ticks();
   if (now >= next_edge) { next_edge += ((now - next_edge) / target_period + 1) * target_period; }
-  prepare_target(memory == nullptr);
+  prepare_target(true);
 }
 
 void Fixture::prepare_target(const bool unknown_vector) {
@@ -377,44 +369,6 @@ void Fixture::finish(const unsigned timer_prescale) {
   trace << "RETURN accepted=" << accepted << " steps=" << steps
         << " commands=" << controller().state().serviced << " syncs=" << transport().state().syncs
         << " target-retired=" << target.memory.retired << '\n';
-}
-
-Saved Fixture::checkpoint() const {
-  require(reset && bdc && wire && reset_sequence().state().phase == Hcs08ResetPhase::ready,
-          "Joint snapshot follows an actual completed reset");
-  return {.host = host.checkpoint(),
-          .memory = target.memory,
-          .cpu = target.cpu.checkpoint(),
-          .reset = reset_sequence(),
-          .bdc = controller().checkpoint(),
-          .wire = transport().checkpoint(),
-          .clock = run_clock().checkpoint(),
-          .next_edge = next_edge,
-          .origin = origin,
-          .steps = steps,
-          .received = received};
-}
-
-void Fixture::restore(const Saved &saved) {
-  target.cpu.restore_checkpoint(saved.cpu);
-  reset = saved.reset;
-  const auto mode = saved.reset.state().mode;
-  if (!mode) { throw Fault("Saved reset mode is absent"); }
-  bdc.emplace(target.cpu, target.mapping, hcs08_wire::chip, *mode);
-  controller().restore_checkpoint(saved.bdc);
-  wire.emplace(controller(),
-               hcs08_wire::wire_contract,
-               released,
-               Hcs08BdcWireClock{.period_ticks = target_period, .first_edge_ticks = target_period});
-  transport().restore_checkpoint(saved.wire);
-  clock.emplace(target.memory, controller(), Hcs08RunContract::reference_instruction_retirement);
-  run_clock().restore_checkpoint(saved.clock);
-  host.restore(saved.host);
-  next_edge = saved.next_edge;
-  origin = saved.origin;
-  steps = saved.steps;
-  received = saved.received;
-  bind();
 }
 
 std::string Fixture::endpoint() const {

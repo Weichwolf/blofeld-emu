@@ -106,11 +106,6 @@ class MidiCli(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("character device", result.stderr)
 
-    def test_live_or_file_reread_cannot_fake_automatic_replay(self):
-        result, trace = self.invoke("replay", text=configuration() + "checkpoint 100 2\n")
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("rejects automatic checkpoint replay", result.stderr)
-        self.assertEqual(trace, "")
 
     def test_invalid_or_conflicting_routes_fail_before_trace_creation(self):
         cases = [configuration().replace("midi-sci PR2", "midi-sci UNKNOWN"),

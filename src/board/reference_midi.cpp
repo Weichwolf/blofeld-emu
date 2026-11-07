@@ -41,10 +41,8 @@ void validate_midi(const Config &config) {
     validator.set_receive_reference(config.midi_reference);
   }
   if (config.midi_sci_timed) {
-    if (!config.power_on || config.midi || config.dsp_input_order == DspPeerOrder::unqualified ||
-        config.maximum_dsp_inputs_per_advance == 0) {
-      throw Fault(
-          "Timed SCI MIDI requires power-on timing, exclusive route and event order/budget");
+    if (!config.power_on || config.midi || config.dsp_input_order == DspPeerOrder::unqualified) {
+      throw Fault("Timed SCI MIDI requires power-on timing, exclusive route and event order");
     }
     static_cast<void>(MidiTimedInput({.timebase_hz = config.dsp_clock.timebase_hz,
                                       .start_ticks = config.midi_sci_timed->after_ticks}));

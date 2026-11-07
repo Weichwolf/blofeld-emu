@@ -61,6 +61,7 @@ struct Access {
   bool write = false;
   std::uint16_t address = 0;
   std::uint8_t value = 0;
+  bool operator==(const Access &) const = default;
 };
 
 class InterruptBus final : public blofeld::Bus {
@@ -128,7 +129,7 @@ void verify_original_state(const blofeld::CpuState actual) {
   const auto original = original_state();
   require(actual.pc == original.pc && actual.d == original.d && actual.x == original.x &&
               actual.y == original.y && actual.sp == original.sp && actual.ccr == original.ccr,
-          "RTI restores the complete interrupted CPU context");
+          "CPU registers match the independent original context");
 }
 
 void test_entry_frame_and_return() {
@@ -236,13 +237,35 @@ void test_stack_fault_and_invalid_vector() {
   cpu.set_state(original_state());
   bus.pending = blofeld::InterruptRequest{.vector = sci_vector};
   constexpr unsigned failed_stack = 0x3ffa;
+  constexpr unsigned pc_frame = 0x3ffe;
+  constexpr unsigned y_frame = 0x3ffc;
+  constexpr unsigned y_high = 0x9a;
+  constexpr unsigned y_low = 0xbc;
   bus.fail_write = failed_stack;
   reject([&cpu] { cpu.step(); }, "Stack write failures must remain visible");
-  require(cpu.state().sp == failed_stack && cpu.state().pc == entry &&
-              cpu.state().ccr == original_flags,
-          "Failed entry retains its partially advanced SP without falsely entering the handler");
-  bus.pending = blofeld::InterruptRequest{.vector = sci_vector + 1};
-  reject([&cpu] { static_cast<void>(cpu.pending_interrupt()); }, "Odd interrupt vectors fail");
+  // Host I/O rejection retains the entry register boundary and the accepted
+  // external write prefix. This is not an architectural hardware bus exception.
+  verify_original_state(cpu.state());
+  constexpr std::array<Access, 6> prefix{
+      {{.address = sci_vector, .value = handler >> 8U},
+       {.address = sci_vector + 1},
+       {.write = true, .address = pc_frame, .value = entry >> 8U},
+       {.write = true, .address = pc_frame + 1},
+       {.write = true, .address = y_frame, .value = y_high},
+       {.write = true, .address = y_frame + 1, .value = y_low}}};
+  require(std::ranges::equal(bus.accesses, prefix) && bus.bytes[pc_frame] == (entry >> 8U) &&
+              bus.bytes[pc_frame + 1] == 0 && bus.bytes[y_frame] == y_high &&
+              bus.bytes[y_frame + 1] == y_low && bus.bytes[failed_stack] == 0 &&
+              bus.bytes[failed_stack + 1] == 0,
+          "Rejected stack writes retain exactly the accepted PC/Y byte writes and their order");
+  const auto accesses = bus.accesses;
+  reject([&cpu] { cpu.step(); }, "Failed entry must quarantine subsequent native execution");
+  require(bus.accesses == accesses, "Retrying a failed entry cannot repeat external side effects");
+  InterruptBus invalid;
+  blofeld::Hc12 other(invalid, BLOFELD_DEFAULT_SLA);
+  other.set_state(original_state());
+  invalid.pending = blofeld::InterruptRequest{.vector = sci_vector + 1};
+  reject([&other] { static_cast<void>(other.pending_interrupt()); }, "Odd interrupt vectors fail");
 }
 
 void test_priority_and_external_pins() {

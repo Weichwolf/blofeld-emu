@@ -2,8 +2,8 @@
 #include "common/bus.hpp"
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/own_dsp_io.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_io.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_norm_expectations.hpp"
 
@@ -50,7 +50,7 @@ void set_accumulator(Program &program, const bool accumulator_b, const std::uint
   immediate(program, seeds[2], static_cast<unsigned>(value >> data_bits));
 }
 
-void run_to(OwnDspMachine &machine, const unsigned pc) {
+void run_to(DspMachine &machine, const unsigned pc) {
   unsigned count = 0;
   while (machine.cpu().registers().pc != pc) {
     constexpr unsigned instruction_limit = 100;
@@ -127,7 +127,7 @@ void check_words(DspBus &bus, const Input input, const unsigned address) {
               " value=" + number(input.value) + " sr=" + number(input.status));
 }
 
-void check(OwnDspMachine &machine,
+void check(DspMachine &machine,
            const dsp56300::Registers &before,
            const Input input,
            const unsigned base) {
@@ -149,7 +149,7 @@ void check(OwnDspMachine &machine,
 
 void run_batch(const std::span<const Input> batch) {
   Program program;
-  OwnDspMachine machine(native::native_clocks);
+  DspMachine machine(native::native_clocks);
   std::vector<unsigned> pcs;
   for (std::size_t index = 0; index < batch.size(); ++index) {
     const auto base = transfer_address + (static_cast<unsigned>(index) * matrix_stride);
@@ -221,7 +221,7 @@ void test_modulo_and_repeat() {
   program.word(repeat_three);
   const auto body = program.pc();
   program.word(vsl_base | (3U * 8U << ea_bit) | (1U << insert_bit));
-  OwnDspMachine machine(native::native_clocks);
+  DspMachine machine(native::native_clocks);
   native::reset_native(machine, program);
   run_to(machine, body);
   for (const unsigned address : {boundary, transfer_address, transfer_address + 1}) {
@@ -235,7 +235,7 @@ void test_modulo_and_repeat() {
           "REP VSL advances modulo address once per native iteration and retires normally");
 }
 
-void expect_fault(OwnDspMachine &machine, const dsp56300::Fault expected) {
+void expect_fault(DspMachine &machine, const dsp56300::Fault expected) {
   const auto before = machine.cpu().registers();
   const auto progress = machine.cpu().progress();
   bool rejected = false;
@@ -251,15 +251,15 @@ void expect_fault(OwnDspMachine &machine, const dsp56300::Fault expected) {
               " pc=" + number(observed.pc));
 }
 
-void check_bus_fault(const OwnDspMachine &machine, const std::string &detail) {
+void check_bus_fault(const DspMachine &machine, const std::string &detail) {
   const auto fault = machine.cpu().fault();
   const auto failure = machine.io().failure();
   if (!failure || !failure->cause) { throw Fault("VSL bus fault lost its board exception"); }
   require(failure->space == fault.space && failure->address == fault.address &&
               failure->pc == fault.pc &&
               failure->operation == (fault.kind == dsp56300::FaultKind::memory_write
-                                         ? OwnDspIo::Operation::write
-                                         : OwnDspIo::Operation::read),
+                                         ? DspIo::Operation::write
+                                         : DspIo::Operation::read),
           "Rejected VSL bus operation must retain its board context and cause");
   try {
     std::rethrow_exception(failure->cause);
@@ -278,7 +278,7 @@ void test_faults() {
     const auto pc = program.pc();
     program.word(vsl_base | (6U * 8U << ea_bit));
     program.word(address);
-    OwnDspMachine machine(native::native_clocks);
+    DspMachine machine(native::native_clocks);
     native::reset_native(machine, program);
     run_to(machine, pc);
     expect_fault(machine,
@@ -295,7 +295,7 @@ void test_faults() {
     // Supply the extension for the reserved EA form so its rejection cannot be
     // confused with the separate unknown-program-sample case.
     if (invalid_immediate) { program.word(transfer_address); }
-    OwnDspMachine machine(native::native_clocks);
+    DspMachine machine(native::native_clocks);
     native::reset_native(machine, program);
     expect_fault(machine,
                  {.kind = invalid_immediate ? dsp56300::FaultKind::invalid_instruction
@@ -311,7 +311,7 @@ void test_supported_cache_control() {
   Program program;
   constexpr unsigned pflush = 3;
   program.word(pflush);
-  OwnDspMachine machine(native::native_clocks);
+  DspMachine machine(native::native_clocks);
   native::reset_native(machine, program);
   auto expected = machine.cpu().registers();
   ++expected.pc;

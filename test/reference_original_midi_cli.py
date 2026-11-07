@@ -10,7 +10,7 @@ import sys
 import unittest
 
 from original_dsp_voice import original_records
-from test_reference_cli import CONFIG, image, replay_sections
+from test_reference_cli import CONFIG, image
 
 BINARY, GENERATOR, FIRMWARE, ARTIFACTS = map(Path, sys.argv[1:5])
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,7 +19,7 @@ BIT_TICKS = 3249 * 2 * 45
 # Four million ticks leave it configured; retain every original bit interval.
 START = 4000000
 OPERATIONS = 65000
-BRANCH_SECONDS = 90
+RUN_SECONDS = 90
 # Own MCU: LDS; enable PU0 pull; LDAA PORTU/CMPA/BNE poll; LDD #beef; WAI.
 # BNE at900d targets9008. Only an actual low GPIO read reaches the marker.
 MCU = bytes.fromhex("cf2000 8601 7a027c b60278 8100 26f9 ccbeef 3e")
@@ -73,12 +73,10 @@ class OriginalMidiCli(unittest.TestCase):
         board.write_text(text)
         flash.write_bytes(image(MCU))
         trace.unlink(missing_ok=True)
-        plan = re.search(r"^checkpoint \d+ (\d+)$", text, re.M)
-        branches = 1 + int(plan[1]) if plan else 1
         result = subprocess.run([BINARY, "--firmware", FIRMWARE, "--reference-board", board,
                                  "--dsp-rom", self.rom, "--flash-in", flash, "--trace", trace,
                                  "--instructions", str(OPERATIONS)], capture_output=True,
-                                text=True, timeout=BRANCH_SECONDS * branches, check=False)
+                                text=True, timeout=RUN_SECONDS, check=False)
         (folder / "run.log").write_text(result.stdout + result.stderr)
         self.assertTrue(trace.is_file(), result.stderr)
         return result, trace.read_text()
@@ -132,34 +130,16 @@ class OriginalMidiCli(unittest.TestCase):
         self.verify_events(trace, events(0x41))
         self.verify_original_returns(trace)
 
-    def test_joint_snapshot_mid_byte_repeats_the_original_result(self):
-        result, trace = self.invoke("mid-byte-replay", config() + "checkpoint 21000 2\n")
-        prefix, suffixes = replay_sections(trace)
-        self.assertEqual(len(suffixes), 3)
-        self.assertTrue(all(suffix == suffixes[0] for suffix in suffixes))
-        self.verify_events(prefix, events()[:2])
-        self.verify_events(suffixes[0], events()[2:])
-        self.assertNotIn("signal=hreq driven=1", prefix)
-        self.verify_center(result, prefix + suffixes[0])
-        boundary = re.findall(r"^MCU end=(\d+).*operations=21000 ", prefix, re.M)
-        self.assertEqual(len(boundary), 1)
-        self.assertGreater(int(boundary[0]), events()[1][0])
-        self.assertLess(int(boundary[0]), events()[2][0])
 
-    def test_joint_restore_repeats_the_original_unknown_di_fault(self):
-        result, trace = self.invoke("unknown-replay", config(unknown=True) + "checkpoint 21000 2\n")
+    def test_original_unknown_di_fault_is_contextual(self):
+        result, trace = self.invoke("unknown-input", config(unknown=True))
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("Unknown DSP timer DI read at X:0xffff8f", result.stderr)
         self.assertIn("pc=0x002ce4 omr=0x600085", result.stderr)
         self.assertIn("DSP-INPUTS observed=29 configured=30", result.stderr)
-        prefix, suffixes = replay_sections(trace)
-        self.assertEqual(len(suffixes), 3)
-        self.assertTrue(all(suffix == suffixes[0] for suffix in suffixes))
-        self.verify_events(prefix, events()[:2])
         self.assertNotIn("signal=hreq driven=1", trace)
-        for suffix in suffixes:
-            self.assertEqual(suffix.count("DSP-INPUT requested="), 27)
-            self.assertEqual(suffix.count("level=unknown synchronized=0"), 1)
+        self.assertEqual(trace.count("DSP-INPUT requested="), 29)
+        self.assertEqual(trace.count("level=unknown synchronized=0"), 1)
 
 
 if __name__ == "__main__":

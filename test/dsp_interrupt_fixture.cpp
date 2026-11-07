@@ -4,7 +4,7 @@
 #include "common/bus.hpp"
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp56300/instruction.hpp"
 
@@ -26,7 +26,7 @@ void check(const bool condition, const char *message) {
   if (!condition) { throw Fault(message); }
 }
 
-dsp56300::InstructionWords foreground(OwnDspMachine &machine) {
+dsp56300::InstructionWords foreground(DspMachine &machine) {
   const auto context = machine.cpu().instruction_fetch();
   const auto opcode = context.latched_opcode ? *context.latched_opcode
                                              : machine.bus().inspect_program(context.address);
@@ -89,7 +89,7 @@ unsigned Program::pc() const {
   return dma_test::boot + static_cast<unsigned>(words_.size());
 }
 
-Driver::Driver(OwnDspMachine &machine) : machine_(machine) {
+Driver::Driver(DspMachine &machine) : machine_(machine) {
   hardware_reset();
 }
 

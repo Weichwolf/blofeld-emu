@@ -2,8 +2,8 @@
 #include "common/bus.hpp"
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_timers.hpp"
-#include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "timer_native_fixture.hpp"
 
@@ -226,7 +226,7 @@ void native_capture_case(const NativeCaptureInput setup) {
   const auto foreground = program.pc();
   program.word(timer_native::foreground_move);
   const auto complete = program.pc();
-  OwnDspMachine machine(native_clocks);
+  DspMachine machine(native_clocks);
   reset_native(machine, program);
   timer_native::install_vector(machine, vector, timer_native::short_r2);
   for (unsigned instruction = 0; instruction < 5; ++instruction) { step_native(machine); }
@@ -236,47 +236,34 @@ void native_capture_case(const NativeCaptureInput setup) {
   timer_native::sample(machine.bus().timers(), index, initial);
   step_native(machine);
   require(machine.cpu().registers().pc == foreground &&
-              machine.cpu().progress().instructions == 6 &&
-              machine.cpu().progress().estimated_cycles == 12,
+              machine.cpu().state().progress.instructions == 6 &&
+              machine.cpu().state().progress.estimated_cycles == 12,
           "Six actual two-word native instructions establish the capture foreground");
   machine.bus().timers().advance_clk2(4); // Actual load10, then11,12,13.
   timer_native::sample(machine.bus().timers(), index, !initial);
   require(machine.bus().timers().read(csr - 3) == 13 &&
               machine.bus().timers().read(csr, flags) == capture_flag,
           "Only the selected synchronized edge captures thirteen and requests TCF");
-  const auto saved = machine.checkpoint();
-  std::optional<dsp56300::Registers> completed;
-  std::optional<dsp56300::Progress> progress;
-  for (unsigned replay = 0; replay < 4; ++replay) {
-    OwnDspMachine fresh(native_clocks);
-    auto &owner = replay == 3 ? fresh : machine;
-    owner.restore(saved);
-    auto expected = owner.cpu().registers();
-    const auto before = owner.cpu().progress();
-    const auto ticks = owner.clock().elapsed_ticks();
-    timer_native::service(owner,
-                          {.vector = vector},
-                          {.address = foreground, .opcode = timer_native::foreground_move});
-    expected.r[2] = 7;
-    require(
-        owner.cpu().registers() == expected && !owner.bus().interrupt_request(0) &&
-            owner.bus().timers().read(csr - 3) == 13 && owner.bus().timers().read(csr, flags) == 0,
-        "Actual fast vector changes only R2 and acknowledges the captured source without rearming");
-    step_native(owner);
-    expected.pc = complete;
-    expected.r[7] = 9;
-    require(owner.cpu().registers() == expected &&
-                owner.cpu().progress().instructions == before.instructions + 3 &&
-                owner.cpu().progress().estimated_cycles == before.estimated_cycles + 3 &&
-                owner.clock().elapsed_ticks() == ticks,
-            "Real foreground MOVE changes only R7/PC with three literal instruction/base costs");
-    if (completed && progress) {
-      require(owner.cpu().registers() == *completed && owner.cpu().progress() == *progress,
-              "Same/fresh-owner restore repeats complete native registers, stack and counters");
-    }
-    completed = owner.cpu().registers();
-    progress = owner.cpu().progress();
-  }
+  auto expected = machine.cpu().registers();
+  const auto before = machine.cpu().state().progress;
+  const auto ticks = machine.clock().elapsed_ticks();
+  timer_native::service(machine,
+                        {.vector = vector},
+                        {.address = foreground, .opcode = timer_native::foreground_move});
+  expected.r[2] = 7;
+  require(
+      machine.cpu().registers() == expected && !machine.bus().interrupt_request(0) &&
+          machine.bus().timers().read(csr - 3) == 13 &&
+          machine.bus().timers().read(csr, flags) == 0,
+      "Actual fast vector changes only R2 and acknowledges the captured source without rearming");
+  step_native(machine);
+  expected.pc = complete;
+  expected.r[7] = 9;
+  require(machine.cpu().registers() == expected &&
+              machine.cpu().state().progress.instructions == before.instructions + 3 &&
+              machine.cpu().state().progress.estimated_cycles == before.estimated_cycles + 3 &&
+              machine.clock().elapsed_ticks() == ticks,
+          "Real foreground MOVE changes only R7/PC with three literal instruction/base costs");
 }
 
 void test_native_capture_interrupt() {
@@ -285,7 +272,7 @@ void test_native_capture_interrupt() {
       native_capture_case({.index = index, .polarity = polarity});
     }
   }
-  std::cout << "PASS TIMER_NATIVE_CAPTURE contexts=4 continuations=16\n";
+  std::cout << "PASS TIMER_NATIVE_CAPTURE contexts=4 continuations=4\n";
 }
 }
 }

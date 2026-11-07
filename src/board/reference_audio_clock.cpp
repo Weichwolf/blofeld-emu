@@ -9,7 +9,6 @@
 #include "dsp/dsp_esai.hpp"
 #include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_pll.hpp"
-#include "dsp/own_dsp_fetch.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -20,18 +19,12 @@ namespace blofeld::reference {
 void Board::prepare_audio_clock() {
   if (!config_.audio_clock) { return; }
   const auto &route = *config_.audio_clock;
-  if (transmitter_clock_events() &&
-      (config_.checkpoint ||
-       config_.dsp.timing != OwnDspAutomaticTiming::functional_native_regions)) {
-    throw Fault("Transmitter-event audio requires native regions without checkpoint replay");
-  }
   constexpr unsigned destinations = 7;
   if (route.destinations == 0 || (route.destinations & ~destinations) != 0) {
     throw Fault("Invalid reference audio clock destinations");
   }
-  if (config_.dsp_input_order == DspPeerOrder::unqualified ||
-      config_.maximum_dsp_inputs_per_advance == 0) {
-    throw Fault("Reference audio clock requires explicit DSP input ordering/budget");
+  if (config_.dsp_input_order == DspPeerOrder::unqualified) {
+    throw Fault("Reference audio clock requires explicit DSP input ordering");
   }
   if (!config_.power_on && route.epoch_ticks < config_.release_ticks) {
     throw Fault("Reference audio clock precedes the nominal DSP release");

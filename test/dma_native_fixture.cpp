@@ -5,7 +5,7 @@
 #include "dma_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 
 #include <cstdint>
@@ -45,7 +45,7 @@ void NativeProgram::install(DspBus &bus) const {
   bus.install_rom({.start = boot, .words = words_});
 }
 
-void reset_native(OwnDspMachine &machine, const NativeProgram &program) {
+void reset_native(DspMachine &machine, const NativeProgram &program) {
   program.install(machine.bus());
   constexpr std::uint64_t hold = 90;
   constexpr std::uint64_t recovery = 90;
@@ -57,16 +57,10 @@ void reset_native(OwnDspMachine &machine, const NativeProgram &program) {
           "Actual DMA fixture reset recovery");
 }
 
-void step_native(OwnDspMachine &machine) {
-  const auto before = machine.cpu().progress().instructions;
+void step_native(DspMachine &machine) {
+  const auto before = machine.cpu().state().progress.instructions;
   const auto ticks = machine.clock().elapsed_ticks();
-  auto step = machine.begin_fetch();
-  constexpr unsigned limit = 32;
-  for (unsigned effect = 0; effect < limit && step.pending && !step.retired &&
-                            step.fault.kind == dsp56300::FaultKind::none;
-       ++effect) {
-    step = machine.advance(step.pending->ticket);
-  }
+  const auto step = machine.run_unclocked();
   if (step.fault.kind != dsp56300::FaultKind::none) {
     std::string cause = "native instruction fault";
     const auto failure = machine.io().failure();
@@ -75,15 +69,15 @@ void step_native(OwnDspMachine &machine) {
         std::rethrow_exception(failure->cause);
       } catch (const std::exception &error) { cause = error.what(); }
     }
-    throw Fault("Own DMA fixture native pc=" + hex(step.fault.pc, 6) +
+    throw Fault("DMA fixture native pc=" + hex(step.fault.pc, 6) +
                 " omr=" + hex(machine.cpu().registers().omr, 6) + ": " + cause);
   }
-  require(step.retired && machine.cpu().progress().instructions == before + 1 &&
+  require(step.retired == 1 && machine.cpu().state().progress.instructions == before + 1 &&
               machine.clock().elapsed_ticks() == ticks,
           "Exactly one untimed native instruction retires without inventing clock periods");
 }
 
-DspDmaBusResult dma(OwnDspMachine &machine, const DspDmaInputs inputs, const DspCoreBusUse core) {
+DspDmaBusResult dma(DspMachine &machine, const DspDmaInputs inputs, const DspCoreBusUse core) {
   try {
     return machine.bus().advance_dma(inputs, core);
   } catch (const Fault &error) {
@@ -93,7 +87,7 @@ DspDmaBusResult dma(OwnDspMachine &machine, const DspDmaInputs inputs, const Dsp
   }
 }
 
-std::optional<DspDmaWord> dma(OwnDspMachine &machine, const DspDmaInputs inputs) {
+std::optional<DspDmaWord> dma(DspMachine &machine, const DspDmaInputs inputs) {
   return dma(machine,
              inputs,
              {.accesses = {}, .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy})

@@ -13,18 +13,14 @@
 #include "mcu/mcu_sci.hpp"
 #include "storage/flash_image.hpp"
 
-#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <fstream>
 #include <functional>
-#include <ios>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
-#include <vector>
 
 namespace blofeld {
 namespace {
@@ -65,32 +61,7 @@ bool internal_ram(const McuSpace space) {
   return space == McuSpace::smram || space == McuSpace::qram;
 }
 
-std::vector<std::uint8_t> read_specification(const std::filesystem::path &path) {
-  constexpr std::uintmax_t maximum_size = 16777216;
-  const auto size = std::filesystem::file_size(path);
-  if (size == 0 || size > maximum_size) { throw Fault("Invalid MCU checkpoint backend size"); }
-  std::ifstream stream(path, std::ios::binary);
-  std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size));
-  stream.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-  if (!stream || stream.peek() != std::ifstream::traits_type::eof()) {
-    throw Fault("Cannot read complete MCU checkpoint backend: " + path.string());
-  }
-  return bytes;
 }
-}
-
-struct McuCheckpoint::Storage {
-  Storage(std::unique_ptr<McuBus> bus_state,
-          const std::optional<Hc12Checkpoint> &cpu_state,
-          const std::vector<std::uint8_t> &backend,
-          RunState run_state)
-      : bus(std::move(bus_state)), cpu(cpu_state), specification(backend), run(run_state) {}
-
-  const std::unique_ptr<const McuBus> bus;
-  const std::optional<Hc12Checkpoint> cpu;
-  const std::vector<std::uint8_t> specification;
-  const RunState run;
-};
 
 struct McuMachine::State {
   State(std::unique_ptr<McuBus> bus_state,
@@ -107,7 +78,7 @@ struct McuMachine::State {
     bus->configure_flash_timing(run.contract ? run.contract->flash_timing : FlashTimingInputs{});
     if (const auto &clock = run.clock; timed && clock) {
       if (run.idle_cycles > clock->bus_cycles()) { throw Fault("Invalid MCU idle clock count"); }
-      timed->restore_boundary(clock->bus_cycles() - run.idle_cycles, bus->context_);
+      cycle_origin = clock->bus_cycles() - run.idle_cycles;
     }
   }
 
@@ -175,8 +146,10 @@ struct McuMachine::State {
     const auto &clock = run.clock;
     if (timed && (!clock || clock->faulted() || run.wait_faulted || run.reset_faulted ||
                   run.idle_cycles > clock->bus_cycles() ||
-                  timed->checkpoint_cycles() != clock->bus_cycles() - run.idle_cycles)) {
-      throw Fault("MCU run checkpoint requires coordinated healthy cycle counters");
+                  cycle_origin > clock->bus_cycles() - run.idle_cycles ||
+                  timed->completed_cycles_at_boundary() !=
+                      clock->bus_cycles() - run.idle_cycles - cycle_origin)) {
+      throw Fault("MCU run requires coordinated healthy cycle counters");
     }
   }
 
@@ -189,12 +162,8 @@ struct McuMachine::State {
   std::function<void(McuResetPeriod)> reset_period_observer;
   bool reset_advancing = false;
   Hc12 cpu;
+  std::uint64_t cycle_origin = 0;
 };
-
-McuCheckpoint::McuCheckpoint(std::shared_ptr<const Storage> storage)
-    : storage_(std::move(storage)) {}
-
-McuCheckpoint::~McuCheckpoint() = default;
 
 McuMachine::McuMachine(const McuFlashImage &image, const std::filesystem::path &specification)
     : McuMachine(image, specification, std::nullopt) {}
@@ -203,10 +172,8 @@ McuMachine::McuMachine(const McuFlashImage &image,
                        const std::filesystem::path &specification,
                        const std::optional<McuRunContract> run)
     : specification_(specification),
-      specification_bytes_(read_specification(specification)),
       state_(std::make_unique<State>(
           std::make_unique<McuBus>(image), specification, initial_run(run))) {
-  check_specification();
   state_->cpu.reset();
 }
 
@@ -215,10 +182,8 @@ McuMachine::McuMachine(const McuFlashImage &image,
                        const McuRunContract run,
                        const McuPowerOnInputs power_on)
     : specification_(specification),
-      specification_bytes_(read_specification(specification)),
       state_(std::make_unique<State>(
           std::make_unique<McuBus>(image), specification, initial_run(run))) {
-  check_specification();
   state_->run.reset.emplace(McuResetSource::power_on, power_on.synchronization_cycles);
   auto &clock = state_->run.clock;
   if (!clock) { throw Fault("MCU power-on requires its reference clock"); }
@@ -346,57 +311,9 @@ void McuMachine::set_timer_inputs(const std::uint8_t mask) {
   state_->run.timer_inputs = mask;
 }
 
-void McuMachine::check_specification() const {
-  if (read_specification(specification_) != specification_bytes_) {
-    throw Fault("MCU checkpoint backend changed after machine construction");
-  }
-}
-
 void McuMachine::attach_flash_store(std::shared_ptr<VirtualDeviceState> store) {
   state_->check_inactive();
   state_->bus->attach_flash_store(std::move(store));
-}
-
-McuCheckpoint McuMachine::checkpoint() const {
-  if (state_->reset_advancing) { throw Fault("Cannot checkpoint during MCU reset advancement"); }
-  std::optional<Hc12Checkpoint> cpu_state;
-  if (system_reset_active()) {
-    validate_reset_boundary();
-  } else {
-    cpu_state = state_->cpu.checkpoint();
-  }
-  state_->check_clock_boundary();
-  check_specification();
-  return McuCheckpoint(std::make_shared<const McuCheckpoint::Storage>(
-      state_->bus->clone(), cpu_state, specification_bytes_, state_->run));
-}
-
-void McuMachine::restore(const McuCheckpoint &checkpoint) {
-  if (state_->cpu.executing() || state_->bus->notifying_ || state_->reset_advancing) {
-    throw Fault("Cannot restore during active MCU execution or bus observation");
-  }
-  if (state_->bus->flash_.persistent()) {
-    throw Fault("A live MCU flash store cannot be rewound or removed by RAM checkpoint restore");
-  }
-  if (!checkpoint.storage_) { throw Fault("Cannot restore an empty MCU checkpoint"); }
-  if (checkpoint.storage_->specification != specification_bytes_) {
-    throw Fault("MCU checkpoint has an incompatible instruction backend");
-  }
-  if (checkpoint.storage_->run.contract != state_->run.contract) {
-    throw Fault("MCU checkpoint has an incompatible reference run contract");
-  }
-  check_specification();
-  auto replacement = std::make_unique<State>(
-      checkpoint.storage_->bus->clone(), specification_, checkpoint.storage_->run);
-  const auto &cpu = checkpoint.storage_->cpu;
-  const auto &reset = replacement->run.reset;
-  if (cpu) {
-    replacement->cpu.restore_checkpoint(*cpu);
-  } else if (!reset || !reset->active()) {
-    throw Fault("MCU checkpoint without CPU state requires an asserted reset");
-  }
-  check_specification();
-  state_.swap(replacement);
 }
 
 bool McuMachine::system_reset_active() const {
@@ -420,7 +337,6 @@ void McuMachine::begin_system_reset(const McuResetSource source,
   if (source == McuResetSource::cop && state_->bus->cop_state().reset == McuCopReset::none) {
     throw Fault("MCU COP system reset requires an actual pending watchdog request");
   }
-  check_specification();
   auto run = state_->run;
   auto &clock = run.clock;
   if (!clock) { throw Fault("MCU reset requires a reference run clock"); }
@@ -431,12 +347,11 @@ void McuMachine::begin_system_reset(const McuResetSource source,
   run.reset_faulted = false;
   run.timer_inputs = 0;
   // A hardware reset preserves the single external store owner. Public clones
-  // and RAM checkpoints deliberately reject that ownership instead.
+  // reject that ownership instead.
   auto bus = std::unique_ptr<McuBus>(new McuBus(*state_->bus, McuBus::CloneState{}));
   bus->reset_modules();
   bus->reset_asserted_ = true;
   auto replacement = std::make_unique<State>(std::move(bus), specification_, run);
-  check_specification();
   state_.swap(replacement);
 }
 

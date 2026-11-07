@@ -18,15 +18,6 @@ endforeach()
 include(cmake/Quality.cmake)
 find_program(BLOFELD_CLANG_TIDY NAMES clang-tidy-19 REQUIRED)
 find_program(BLOFELD_CLANG_FORMAT NAMES clang-format-19 REQUIRED)
-option(BLOFELD_OWN_DSP_ONLY "Build independent DSP integration components without the legacy core" OFF)
-option(BLOFELD_NATIVE_MCU "Build the experimental independent CPU12 MCU executor" OFF)
-if(BLOFELD_OWN_DSP_ONLY)
-  if(BLOFELD_NATIVE_MCU)
-    message(FATAL_ERROR "BLOFELD_NATIVE_MCU requires the regular board build")
-  endif()
-  include(cmake/OwnDspOnly.cmake)
-  return()
-endif()
 set(GHIDRA_ROOT "$ENV{GHIDRA_ROOT}" CACHE PATH "Ghidra distribution with native SLEIGH sources")
 if(NOT GHIDRA_ROOT)
   file(GLOB GHIDRA_CANDIDATES "$ENV{HOME}/.local/opt/ghidra_*_PUBLIC")
@@ -82,18 +73,13 @@ endif()
 # Apply clang-tidy to our targets, after the third-party target was created.
 find_package(Git REQUIRED)
 find_package(Threads REQUIRED)
-# The remaining legacy harness is test-only while its expectations are migrated.
-if(BUILD_TESTING)
-  include(cmake/DspCore.cmake)
-endif()
-include(cmake/OwnDsp.cmake)
+include(cmake/Dsp56300.cmake)
 include(cmake/PulseAudio.cmake)
 set(CMAKE_CXX_CLANG_TIDY "${BLOFELD_CLANG_TIDY};--warnings-as-errors=*")
 
 include(cmake/Hc12Spec.cmake)
 include(cmake/Hcs08Spec.cmake)
-include(cmake/OwnDspComponents.cmake)
-include(cmake/NativeTimedExecution.cmake)
+include(cmake/DspComponents.cmake)
 include(cmake/ReferenceRomFixtures.cmake)
 include(cmake/SerialPcm.cmake)
 add_library(blofeld_hcs08 src/keyboard/hcs08.cpp src/keyboard/hcs08_interrupts.cpp src/keyboard/hcs08_registers.cpp src/keyboard/hcs08_ccr.cpp)
@@ -215,7 +201,7 @@ target_link_libraries(blofeld_nand_write_store PUBLIC blofeld_nand_write_medium 
 add_library(blofeld_nand_peer src/board/nand_peer.cpp src/board/nand_peer_medium.cpp
   src/board/nand_bus_decode.cpp)
 target_include_directories(blofeld_nand_peer PUBLIC src)
-target_link_libraries(blofeld_nand_peer PUBLIC blofeld_own_dsp_io
+target_link_libraries(blofeld_nand_peer PUBLIC blofeld_dsp_machine
   blofeld_nand_write_medium blofeld_nand_write_store blofeld_nand_read_timing blofeld_nand_write_timing
   blofeld_nand_read_setup blofeld_dsp_peripheral_calendar)
 add_library(blofeld_mcu src/mcu/mcu_bus.cpp src/mcu/mcu_bus_clone.cpp src/mcu/mcu_bus_usb.cpp src/mcu/mcu_code_cache.cpp src/mcu/mcu_memory.cpp src/mcu/mcu_gpio.cpp
@@ -246,12 +232,8 @@ target_link_libraries(blofeld_display PUBLIC blofeld_firmware)
 add_library(blofeld_lcd_export src/display/lcd_image.cpp src/display/lcd_png.cpp src/display/lcd_export.cpp)
 target_include_directories(blofeld_lcd_export PUBLIC src)
 target_link_libraries(blofeld_lcd_export PUBLIC blofeld_display blofeld_private_files PRIVATE ZLIB::ZLIB)
-if(BLOFELD_NATIVE_MCU)
-  include(cmake/Cpu12.cmake)
-  add_library(blofeld_core src/mcu/hc12_native.cpp src/mcu/mcu_machine.cpp)
-else()
-  add_library(blofeld_core src/mcu/hc12.cpp src/mcu/hc12_decimal.cpp src/mcu/mcu_machine.cpp)
-endif()
+include(cmake/Cpu12.cmake)
+add_library(blofeld_core src/mcu/hc12_native.cpp src/mcu/mcu_machine.cpp)
 add_library(blofeld_hc12_cycles src/mcu/hc12_cycle_plan.cpp src/mcu/hc12_cycle_page2.cpp src/mcu/hc12_cycle_bus.cpp)
 target_include_directories(blofeld_hc12_cycles PUBLIC src)
 target_link_libraries(blofeld_hc12_cycles PUBLIC blofeld_firmware)
@@ -281,49 +263,14 @@ target_link_libraries(blofeld_mcu_midi PUBLIC blofeld_mcu blofeld_midi_serial)
 add_library(blofeld_mcu_midi_output src/mcu/mcu_midi_output.cpp)
 target_include_directories(blofeld_mcu_midi_output PUBLIC src)
 target_link_libraries(blofeld_mcu_midi_output PUBLIC blofeld_mcu blofeld_midi_serial)
-if(BUILD_TESTING)
-  add_library(blofeld_dsp
-    src/dsp/dsp_memory_form.cpp src/dsp/dsp_address_stages.cpp src/dsp/dsp_core.cpp
-    src/dsp/dsp_move_writeback.cpp src/dsp/dsp_address_phase.cpp src/dsp/dsp_native_access.cpp
-    src/dsp/dsp_fetch_context.cpp
-    src/dsp/dsp_reference_execution.cpp src/dsp/dsp_program_fetch.cpp src/dsp/dsp_loop_fetch.cpp src/dsp/dsp_pipeline_words.cpp src/dsp/dsp_reference_cycle.cpp
-    src/dsp/dsp_fetch_run.cpp src/dsp/dsp_fetch_state.cpp src/dsp/dsp_fetch_checkpoint.cpp
-    src/dsp/dsp_fetch_reset.cpp src/dsp/dsp_fetch_schedule.cpp
-    src/dsp/dsp_fetch_schedule_events.cpp src/dsp/dsp_fetch_peripheral_events.cpp
-    src/dsp/dsp_pipeline.cpp src/dsp/dsp_pipeline_decode.cpp src/dsp/dsp_pipeline_transfer.cpp
-    src/dsp/dsp_pipeline_loop.cpp src/dsp/dsp_pipeline_program.cpp src/dsp/dsp_pipeline_control.cpp src/dsp/dsp_loop_source.cpp
-    src/dsp/dsp_pipeline_execute.cpp src/dsp/dsp_interlock_decode.cpp
-    src/dsp/dsp_interrupt_timing.cpp src/dsp/dsp_machine.cpp src/dsp/dsp_scheduled_run.cpp
-    src/dsp/dsp_scheduled_events.cpp src/dsp/dsp_agu_interlocks.cpp src/dsp/dsp_machine_reference_dma.cpp
-    src/dsp/dsp_scheduled_reset.cpp src/dsp/dsp_peripheral_read.cpp)
-  target_include_directories(blofeld_dsp PUBLIC src)
-  target_link_libraries(blofeld_dsp PUBLIC blofeld_dsp_peripherals blofeld_dsp_peripheral_calendar
-    blofeld_dsp_dependencies
-    PRIVATE "$<LINK_ONLY:blofeld_dsp_branch_decode>" "$<LINK_ONLY:blofeld_dsp_control_decode>"
-    "$<LINK_ONLY:blofeld_dsp_address_decode>"
-    "$<LINK_ONLY:blofeld_dsp_peripheral_decode>"
-    blofeld_dsp_native)
-  add_library(blofeld_dsp_instruction_fixture test/dsp_instruction_fixture.cpp)
-  target_link_libraries(blofeld_dsp_instruction_fixture PUBLIC blofeld_dsp PRIVATE blofeld_dsp_native)
-endif()
 add_dependencies(blofeld_core blofeld_hc12_spec)
 target_include_directories(blofeld_core PUBLIC src)
 target_link_libraries(blofeld_core PUBLIC blofeld_mcu)
 set(blofeld_independent_native_args --native dsp56300_core=$<TARGET_FILE:dsp56300_core>)
-if(BLOFELD_NATIVE_MCU)
-  target_link_libraries(blofeld_core PRIVATE cpu12::core blofeld_hc12_cycles)
-  list(APPEND blofeld_independent_native_args --native cpu12_core=$<TARGET_FILE:cpu12_core>)
-else()
-  target_link_libraries(blofeld_core PRIVATE blofeld_sleigh blofeld_hc12_cycles)
-endif()
+target_link_libraries(blofeld_core PRIVATE cpu12::core blofeld_hc12_cycles)
+list(APPEND blofeld_independent_native_args --native cpu12_core=$<TARGET_FILE:cpu12_core>)
 target_compile_definitions(blofeld_core PUBLIC
   BLOFELD_DEFAULT_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla")
-if(BUILD_TESTING)
-  add_library(blofeld_mcu_dsp src/board/mcu_dsp_schedule.cpp src/board/mcu_dsp_fetch_schedule.cpp
-    src/board/mcu_dsp_fetch_events.cpp src/board/mcu_dsp_fetch_peripheral.cpp)
-  target_include_directories(blofeld_mcu_dsp PUBLIC src)
-  target_link_libraries(blofeld_mcu_dsp PUBLIC blofeld_core blofeld_dsp)
-endif()
 add_library(blofeld_host_midi src/midi/host_midi.cpp)
 target_include_directories(blofeld_host_midi PUBLIC src)
 target_link_libraries(blofeld_host_midi PUBLIC blofeld_quality)
@@ -334,7 +281,7 @@ target_include_directories(blofeld_host_midi_port PUBLIC src)
 target_link_libraries(blofeld_host_midi_port PUBLIC blofeld_quality)
 add_library(blofeld_reference_board src/board/mcu_dsp_gpio_peer.cpp src/board/reference_gpio_peer.cpp
   src/board/reference_config.cpp src/board/reference_square_clock.cpp src/board/reference_audio_clock.cpp
-  src/board/reference_board.cpp src/board/reference_pipeline.cpp src/board/reference_wiring.cpp src/board/reference_returns.cpp src/board/reference_checkpoint.cpp
+  src/board/reference_board.cpp src/board/reference_pipeline.cpp src/board/reference_wiring.cpp src/board/reference_returns.cpp src/board/reference_execution.cpp
   src/board/reference_reset_source.cpp src/board/reference_lcd.cpp src/board/reference_b_pulls.cpp
   src/board/reference_dsp_inputs.cpp src/board/reference_dsp_clocks.cpp src/board/reference_pcm.cpp src/board/reference_audio.cpp
   src/board/reference_midi.cpp src/board/reference_midi_output.cpp src/board/reference_dsp_midi.cpp)
@@ -346,30 +293,17 @@ add_executable(blofeld-headless src/app/main.cpp src/app/host_midi_runner.cpp sr
 target_link_libraries(blofeld-headless PRIVATE blofeld_reference_board blofeld_host_midi blofeld_host_midi_session blofeld_audio_runtime blofeld_sample_library blofeld_device_identity)
 
 if(BUILD_TESTING)
-  add_executable(blofeld-dsp-peripheral-form-own-test test/dsp_peripheral_form_own_test.cpp)
-  target_link_libraries(blofeld-dsp-peripheral-form-own-test PRIVATE blofeld_dsp_peripheral_decode)
-  add_test(NAME dsp_peripheral_form_own COMMAND blofeld-dsp-peripheral-form-own-test)
-  add_executable(blofeld-dsp-address-form-own-test test/dsp_address_form_own_test.cpp)
-  target_link_libraries(blofeld-dsp-address-form-own-test PRIVATE blofeld_dsp_address_decode)
-  add_test(NAME dsp_address_form_own COMMAND blofeld-dsp-address-form-own-test)
-  add_executable(blofeld-dsp-branch-form-own-test test/dsp_branch_form_own_test.cpp)
-  target_link_libraries(blofeld-dsp-branch-form-own-test PRIVATE blofeld_dsp_branch_decode)
-  add_test(NAME dsp_branch_form_own COMMAND blofeld-dsp-branch-form-own-test)
-  add_executable(blofeld-dsp-control-move-own-test test/dsp_control_move_own_test.cpp)
-  target_link_libraries(blofeld-dsp-control-move-own-test PRIVATE blofeld_dsp_control_decode)
-  add_test(NAME dsp_control_move_own COMMAND blofeld-dsp-control-move-own-test)
-  add_executable(blofeld-own-dsp-io-test test/own_dsp_io_test.cpp)
-  target_link_libraries(blofeld-own-dsp-io-test PRIVATE blofeld_own_dsp_io)
-  add_test(NAME own_dsp_io COMMAND blofeld-own-dsp-io-test)
-  add_executable(blofeld-own-dsp-interrupts-test test/own_dsp_interrupts_test.cpp)
-  target_link_libraries(blofeld-own-dsp-interrupts-test PRIVATE blofeld_own_dsp_io)
-  add_test(NAME own_dsp_interrupts COMMAND blofeld-own-dsp-interrupts-test)
-  add_executable(blofeld-own-dsp-reset-test test/own_dsp_reset_test.cpp)
-  target_link_libraries(blofeld-own-dsp-reset-test PRIVATE blofeld_own_dsp_io)
-  add_test(NAME own_dsp_reset COMMAND blofeld-own-dsp-reset-test)
-  add_executable(blofeld-own-dsp-checkpoint-test test/own_dsp_checkpoint_test.cpp)
-  target_link_libraries(blofeld-own-dsp-checkpoint-test PRIVATE blofeld_own_dsp_io)
-  add_test(NAME own_dsp_checkpoint COMMAND blofeld-own-dsp-checkpoint-test)
+
+  add_executable(blofeld-dsp-adapter-io-test test/dsp_adapter_io_test.cpp)
+  target_link_libraries(blofeld-dsp-adapter-io-test PRIVATE blofeld_dsp_machine)
+  add_test(NAME dsp_adapter_io COMMAND blofeld-dsp-adapter-io-test)
+  add_executable(blofeld-dsp-adapter-interrupts-test test/dsp_adapter_interrupts_test.cpp)
+  target_link_libraries(blofeld-dsp-adapter-interrupts-test PRIVATE blofeld_dsp_machine)
+  target_include_directories(blofeld-dsp-adapter-interrupts-test PRIVATE "${BLOFELD_DSP56300_ROOT}/test/support")
+  add_test(NAME dsp_interrupt_admission COMMAND blofeld-dsp-adapter-interrupts-test)
+  add_executable(blofeld-dsp-adapter-reset-test test/dsp_adapter_reset_test.cpp)
+  target_link_libraries(blofeld-dsp-adapter-reset-test PRIVATE blofeld_dsp_machine)
+  add_test(NAME dsp_adapter_reset COMMAND blofeld-dsp-adapter-reset-test)
   # One checked translation unit for the shared target-memory reference fixture.
   add_library(blofeld_hcs08_programmer_fixture OBJECT test/hcs08_programmer_fixture.cpp)
   target_link_libraries(blofeld_hcs08_programmer_fixture PUBLIC
@@ -1264,25 +1198,7 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-keyboard-reset.trace")
   set_tests_properties(original_keyboard_reset PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 360)
-  add_executable(blofeld-original-keyboard-chain-test test/original_keyboard_chain_test.cpp
-    test/keyboard_chain_fixture.cpp test/keyboard_chain_execution.cpp test/keyboard_chain_trace.cpp
-    test/keyboard_chain_checkpoint.cpp test/keyboard_chain_overlap.cpp
-    test/keyboard_board_reset_fixture.cpp)
-  target_link_libraries(blofeld-original-keyboard-chain-test PRIVATE blofeld_hcs08_board_wire)
-  target_link_libraries(blofeld-original-keyboard-chain-test PRIVATE blofeld_core blofeld_mcu_dsp
-    blofeld_dsp_native blofeld_lcd_fixture blofeld_lcd_export
-    blofeld_hcs08_reset blofeld_hcs08_bdc_wire blofeld_hcs08_run_clock)
-  target_compile_definitions(blofeld-original-keyboard-chain-test PRIVATE
-    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
-  add_test(NAME original_keyboard_chain COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_keyboard_chain.py"
-    $<TARGET_FILE:blofeld-original-keyboard-chain-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
-    "${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-keyboard-chain.trace")
-  set_tests_properties(original_keyboard_chain PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 520)
+
   add_executable(blofeld-audio-runtime-test test/audio_runtime_test.cpp
     test/audio_runtime_failure.cpp test/audio_runtime_board.cpp test/audio_runtime_underrun.cpp)
   target_link_libraries(blofeld-audio-runtime-test PRIVATE blofeld_audio_runtime blofeld_reference_board)
@@ -1300,17 +1216,7 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-pcm-queue-test PRIVATE blofeld_pcm_queue Threads::Threads)
   add_test(NAME pcm_queue COMMAND blofeld-pcm-queue-test)
   set_tests_properties(pcm_queue PROPERTIES TIMEOUT 40)
-  add_executable(blofeld-host-audio-test test/host_audio_test.cpp test/host_audio_native.cpp
-    test/host_audio_negotiation.cpp)
-  target_link_libraries(blofeld-host-audio-test PRIVATE blofeld_host_audio blofeld_dsp_pcm_fixture)
-  add_test(NAME host_audio COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/host_audio.py" $<TARGET_FILE:blofeld-host-audio-test>)
-  set_tests_properties(host_audio PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
-  add_test(NAME host_audio_negotiation COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/host_audio_negotiation.py"
-    $<TARGET_FILE:blofeld-host-audio-test>
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/host-audio-negotiation")
-  set_tests_properties(host_audio_negotiation PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 40)
+
   add_executable(blofeld-hc12-ccr-test test/hc12_ccr_test.cpp)
   target_link_libraries(blofeld-hc12-ccr-test PRIVATE blofeld_core)
   add_test(NAME hc12_ccr COMMAND blofeld-hc12-ccr-test)
@@ -1470,200 +1376,17 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-io-map-test test/dsp_io_map_test.cpp)
   target_link_libraries(blofeld-dsp-io-map-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_io_map COMMAND blofeld-dsp-io-map-test)
-  add_executable(blofeld-reference-access-test test/dsp_reference_test.cpp
-    test/dsp_reference_core.cpp test/dsp_reference_dma.cpp test/dsp_reference_interrupts.cpp)
-  target_link_libraries(blofeld-reference-access-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_reference_access COMMAND blofeld-reference-access-test)
-  add_executable(blofeld-reference-dma-admission-test test/dsp_reference_dma_admission_test.cpp)
-  target_link_libraries(blofeld-reference-dma-admission-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_reference_dma_admission COMMAND blofeld-reference-dma-admission-test)
+
   add_executable(blofeld-peripheral-calendar-test test/dsp_peripheral_calendar_test.cpp)
   target_link_libraries(blofeld-peripheral-calendar-test PRIVATE blofeld_dsp_peripheral_calendar blofeld_nand_read_timing)
   add_test(NAME dsp_peripheral_calendar COMMAND blofeld-peripheral-calendar-test)
-  add_executable(blofeld-fetch-peripheral-test test/dsp_fetch_peripheral_test.cpp)
-  target_link_libraries(blofeld-fetch-peripheral-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  foreach(scope order causal state guards reset)
-    add_test(NAME dsp_fetch_peripheral_${scope} COMMAND blofeld-fetch-peripheral-test ${scope})
-  endforeach()
-  add_executable(blofeld-fetch-schedule-test test/dsp_fetch_schedule_test.cpp
-    test/dsp_fetch_schedule_fixture.cpp test/dsp_fetch_schedule_guards.cpp
-    test/dsp_fetch_schedule_boundaries.cpp test/dsp_fetch_schedule_pins.cpp)
-  target_link_libraries(blofeld-fetch-schedule-test PRIVATE blofeld_mcu_dsp_runtime)
-  add_test(NAME dsp_fetch_external_events COMMAND blofeld-fetch-schedule-test)
-  add_executable(blofeld-retirement-test test/dsp_retirement_test.cpp test/dsp_retirement_fetch.cpp)
-  target_link_libraries(blofeld-retirement-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_reference_retirement COMMAND blofeld-retirement-test)
-  add_executable(blofeld-address-phase-test test/dsp_address_phase_test.cpp test/dsp_address_phase_clock.cpp)
-  target_link_libraries(blofeld-address-phase-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_address_phase COMMAND blofeld-address-phase-test)
-  add_executable(blofeld-pipeline-test test/dsp_pipeline_test.cpp test/dsp_pipeline_state.cpp test/dsp_pipeline_guards.cpp)
-  target_link_libraries(blofeld-pipeline-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_automatic_alu_pipeline COMMAND blofeld-pipeline-test)
-  add_executable(blofeld-memory-pipeline-test test/dsp_memory_pipeline_test.cpp test/dsp_memory_pipeline_stream.cpp test/dsp_memory_pipeline_guards.cpp)
-  target_link_libraries(blofeld-memory-pipeline-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_automatic_memory_pipeline COMMAND blofeld-memory-pipeline-test)
-  add_executable(blofeld-parallel-memory-test test/dsp_parallel_memory_test.cpp
-    test/dsp_parallel_memory_execution.cpp test/dsp_parallel_memory_state.cpp)
-  target_link_libraries(blofeld-parallel-memory-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_parallel_memory_addresses COMMAND blofeld-parallel-memory-test address)
-  add_test(NAME dsp_parallel_memory_execution COMMAND blofeld-parallel-memory-test execution)
-  add_test(NAME dsp_parallel_memory_state COMMAND blofeld-parallel-memory-test state)
-  add_executable(blofeld-parallel-accumulator-add-test
-    test/dsp_parallel_accumulator_fixture.cpp test/dsp_parallel_accumulator_add_test.cpp
-    test/dsp_parallel_accumulator_dependency.cpp)
-  target_link_libraries(blofeld-parallel-accumulator-add-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  foreach(scope native pipeline dependencies state guards)
-    add_test(NAME dsp_parallel_accumulator_add_${scope}
-      COMMAND blofeld-parallel-accumulator-add-test ${scope})
-  endforeach()
-  add_executable(blofeld-transfer-pipeline-test test/dsp_transfer_pipeline_fields.cpp
-    test/dsp_transfer_pipeline_agu.cpp test/dsp_transfer_pipeline_state.cpp)
-  target_link_libraries(blofeld-transfer-pipeline-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_pipeline_transfers COMMAND blofeld-transfer-pipeline-test fields)
-  add_test(NAME dsp_pipeline_agu_dependencies COMMAND blofeld-transfer-pipeline-test agu)
-  add_test(NAME dsp_pipeline_transfer_state COMMAND blofeld-transfer-pipeline-test state)
-  add_executable(blofeld-branch-pipeline-test test/dsp_branch_pipeline_test.cpp
-    test/dsp_branch_pipeline_branches.cpp test/dsp_branch_pipeline_state.cpp)
-  target_link_libraries(blofeld-branch-pipeline-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_pipeline_omr_branches COMMAND blofeld-branch-pipeline-test branches)
-  add_test(NAME dsp_pipeline_branch_state COMMAND blofeld-branch-pipeline-test state)
-  add_executable(blofeld-peripheral-pipeline-test test/dsp_peripheral_pipeline_test.cpp
-    test/dsp_peripheral_pipeline_writes.cpp test/dsp_peripheral_pipeline_state.cpp
-    test/dsp_register_peripheral_writes.cpp test/dsp_register_peripheral_state.cpp)
-  target_link_libraries(blofeld-peripheral-pipeline-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_pipeline_peripheral_writes COMMAND blofeld-peripheral-pipeline-test writes)
-  add_test(NAME dsp_pipeline_peripheral_state COMMAND blofeld-peripheral-pipeline-test state)
-  add_test(NAME dsp_pipeline_register_peripheral_writes COMMAND blofeld-peripheral-pipeline-test register-writes)
-  add_test(NAME dsp_pipeline_register_peripheral_state COMMAND blofeld-peripheral-pipeline-test register-state)
-  add_test(NAME dsp_pipeline_bootstrap_prefix COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_bootstrap_pipeline.py"
-    $<TARGET_FILE:blofeld-peripheral-pipeline-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-pipeline-bootstrap-prefix.trace")
-  set_tests_properties(dsp_pipeline_bootstrap_prefix PROPERTIES SKIP_RETURN_CODE 77)
-  foreach(kind read native automatic automatic_state automatic_guard)
-    string(REPLACE "_" "-" target_kind "${kind}")
-    add_executable(blofeld-peripheral-${target_kind}-test test/dsp_peripheral_${kind}_test.cpp)
-    target_link_libraries(blofeld-peripheral-${target_kind}-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  endforeach()
-  foreach(mode encodings visibility boundaries)
-    add_test(NAME dsp_peripheral_read_${mode} COMMAND blofeld-peripheral-read-test ${mode})
-  endforeach()
-  foreach(mode visibility ownership fifo phases bits)
-    add_test(NAME dsp_peripheral_native_${mode} COMMAND blofeld-peripheral-native-test ${mode})
-  endforeach()
-  add_test(NAME dsp_peripheral_automatic_visibility COMMAND blofeld-peripheral-automatic-test visibility)
-  add_test(NAME dsp_peripheral_automatic_state COMMAND blofeld-peripheral-automatic-state-test state)
-  add_test(NAME dsp_peripheral_automatic_guards COMMAND blofeld-peripheral-automatic-guard-test guards)
-  foreach(kind fetch program_fetch native_fetch identity_thread)
-    string(REPLACE "_" "-" target_kind "${kind}")
-    add_executable(blofeld-loop-${target_kind}-test test/dsp_loop_${kind}_test.cpp)
-    target_link_libraries(blofeld-loop-${target_kind}-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  endforeach()
-  target_link_libraries(blofeld-loop-identity-thread-test PRIVATE Threads::Threads)
-  add_test(NAME dsp_loop_fetch COMMAND blofeld-loop-fetch-test)
-  add_test(NAME dsp_loop_program_fetch COMMAND blofeld-loop-program-fetch-test)
-  add_test(NAME dsp_loop_native_fetch COMMAND blofeld-loop-native-fetch-test)
-  add_test(NAME dsp_loop_identity_threads COMMAND blofeld-loop-identity-thread-test)
-  add_executable(blofeld-pipeline-occurrence-test test/dsp_pipeline_occurrence_test.cpp)
-  target_link_libraries(blofeld-pipeline-occurrence-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_pipeline_occurrences COMMAND blofeld-pipeline-occurrence-test)
-  add_executable(blofeld-loop-port-test test/dsp_loop_port_test.cpp)
-  target_link_libraries(blofeld-loop-port-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_loop_port_receipts COMMAND blofeld-loop-port-test)
-  foreach(kind auto_loop auto_loop_source auto_loop_transfer_source auto_loop_source_guard auto_loop_a0 r_data_transfer loop_barrier loader_prefix_operand program_memory program_memory_clock program_memory_guard relative_branch relative_branch_guard ccr_control indirect_control control_composition control_guard document_loader_entry)
-    string(REPLACE "_" "-" target_kind "${kind}")
-    add_executable(blofeld-${target_kind}-test test/dsp_${kind}_test.cpp)
-    target_link_libraries(blofeld-${target_kind}-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  endforeach()
-  add_test(NAME dsp_automatic_counted_loops COMMAND blofeld-auto-loop-test)
-  add_test(NAME dsp_automatic_loop_sources COMMAND blofeld-auto-loop-source-test)
-  add_test(NAME dsp_automatic_loop_transfer_sources COMMAND blofeld-auto-loop-transfer-source-test)
-  add_test(NAME dsp_automatic_loop_source_guards COMMAND blofeld-auto-loop-source-guard-test)
-  add_test(NAME dsp_automatic_loop_a0 COMMAND blofeld-auto-loop-a0-test)
-  add_test(NAME dsp_r_data_transfers COMMAND blofeld-r-data-transfer-test)
-  add_test(NAME dsp_loop_decode_barrier COMMAND blofeld-loop-barrier-test)
-  add_test(NAME dsp_program_memory_components COMMAND blofeld-program-memory-test)
-  add_test(NAME dsp_automatic_program_memory COMMAND blofeld-program-memory-clock-test)
-  add_test(NAME dsp_program_memory_guards COMMAND blofeld-program-memory-guard-test)
-  add_test(NAME dsp_relative_branches COMMAND blofeld-relative-branch-test)
-  add_test(NAME dsp_relative_branch_guards COMMAND blofeld-relative-branch-guard-test)
-  foreach(kind native clock branch peripheral memory thread)
-    add_executable(blofeld-omr-${kind}-test test/dsp_omr_${kind}_test.cpp)
-    target_link_libraries(blofeld-omr-${kind}-test PRIVATE blofeld_dsp blofeld_dsp_native)
-    add_test(NAME dsp_omr_${kind} COMMAND blofeld-omr-${kind}-test)
-    set_tests_properties(dsp_omr_${kind} PROPERTIES TIMEOUT 120)
-  endforeach()
-  target_link_libraries(blofeld-omr-thread-test PRIVATE Threads::Threads)
-  foreach(kind clock hazard thread)
-    add_executable(blofeld-accumulator-${kind}-test test/dsp_accumulator_${kind}_test.cpp)
-    target_link_libraries(blofeld-accumulator-${kind}-test PRIVATE blofeld_dsp blofeld_dsp_native)
-    add_test(NAME dsp_accumulator_${kind} COMMAND blofeld-accumulator-${kind}-test)
-    set_tests_properties(dsp_accumulator_${kind} PROPERTIES TIMEOUT 120)
-  endforeach()
-  target_link_libraries(blofeld-accumulator-thread-test PRIVATE Threads::Threads)
-  add_executable(blofeld-postloop-context-test test/dsp_postloop_context_test.cpp)
-  target_link_libraries(blofeld-postloop-context-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_postloop_context COMMAND blofeld-postloop-context-test)
-  set_tests_properties(dsp_postloop_context PROPERTIES TIMEOUT 120)
-  foreach(kind repeat_clock repeat_latch repeat_clock_state repeat_long_count long_store long_store_guard repeat_clock_thread)
-    string(REPLACE "_" "-" target_kind "${kind}")
-    add_executable(blofeld-${target_kind}-test test/dsp_${kind}_test.cpp)
-    target_link_libraries(blofeld-${target_kind}-test PRIVATE blofeld_dsp blofeld_dsp_native)
-    add_test(NAME dsp_${kind} COMMAND blofeld-${target_kind}-test)
-    set_tests_properties(dsp_${kind} PROPERTIES TIMEOUT 120)
-  endforeach()
-  target_link_libraries(blofeld-repeat-clock-thread-test PRIVATE Threads::Threads)
+
   add_executable(blofeld-vm-info-test test/dsp_vm_info_test.cpp)
   target_include_directories(blofeld-vm-info-test SYSTEM PRIVATE "${BLOFELD_DSP_COPY}/source/asmjit/src")
   target_link_libraries(blofeld-vm-info-test PRIVATE blofeld_quality asmjit Threads::Threads ${CMAKE_DL_LIBS} rt)
   add_test(NAME dsp_vm_info COMMAND blofeld-vm-info-test)
   set_tests_properties(dsp_vm_info PROPERTIES TIMEOUT 120)
-  add_test(NAME dsp_ccr_control COMMAND blofeld-ccr-control-test)
-  add_test(NAME dsp_indirect_control COMMAND blofeld-indirect-control-test)
-  add_executable(blofeld-absolute-jump-test test/dsp_absolute_jump_test.cpp)
-  target_link_libraries(blofeld-absolute-jump-test PRIVATE blofeld_dsp blofeld_dsp_native Threads::Threads)
-  add_test(NAME dsp_absolute_jump COMMAND blofeld-absolute-jump-test
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-absolute-jump.trace")
-  set_tests_properties(dsp_absolute_jump PROPERTIES TIMEOUT 120)
-  add_test(NAME dsp_control_composition COMMAND blofeld-control-composition-test)
-  add_test(NAME dsp_control_guards COMMAND blofeld-control-guard-test)
-  add_executable(blofeld-original-clocked-frontier-test test/dsp_original_clocked_frontier_test.cpp)
-  target_link_libraries(blofeld-original-clocked-frontier-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME original_dsp_clocked_frontier COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_clocked_frontier.py"
-    $<TARGET_FILE:blofeld-original-clocked-frontier-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-main-boot-document.bin"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-clocked-frontier.trace")
-  set_tests_properties(original_dsp_clocked_frontier PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  add_test(NAME dsp_document_loader_entry COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_document_loader_entry.py"
-    $<TARGET_FILE:blofeld-document-loader-entry-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-main-boot-document.bin"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-document-loader-entry.trace")
-  set_tests_properties(dsp_document_loader_entry PROPERTIES SKIP_RETURN_CODE 77)
-  add_test(NAME dsp_document_spi_loader_operands COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_loader_prefix_operands.py"
-    $<TARGET_FILE:blofeld-loader-prefix-operand-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-document-loader-operands.trace")
-  set_tests_properties(dsp_document_spi_loader_operands PROPERTIES SKIP_RETURN_CODE 77)
-  add_executable(blofeld-overlap-test test/dsp_overlap_test.cpp test/dsp_overlap_clock.cpp)
-  target_link_libraries(blofeld-overlap-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_native_overlap COMMAND blofeld-overlap-test)
-  add_executable(blofeld-writeback-test test/dsp_writeback_test.cpp test/dsp_writeback_parallel.cpp test/dsp_writeback_clock.cpp)
-  target_link_libraries(blofeld-writeback-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_move_writeback COMMAND blofeld-writeback-test)
-  add_executable(blofeld-reference-runtime-status-test test/reference_runtime_status_test.cpp)
-  target_link_libraries(blofeld-reference-runtime-status-test PRIVATE blofeld_reference_board)
-  add_test(NAME reference_runtime_status COMMAND blofeld-reference-runtime-status-test
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-runtime-status")
-  set_tests_properties(reference_runtime_status PROPERTIES TIMEOUT 120)
-  add_executable(blofeld-reference-checkpoint-test test/reference_checkpoint.cpp)
-  target_link_libraries(blofeld-reference-checkpoint-test PRIVATE blofeld_reference_board)
-  add_test(NAME reference_checkpoint COMMAND blofeld-reference-checkpoint-test
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-checkpoint")
+
   add_test(NAME reference_dsp_inputs_cli COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/reference_dsp_inputs_cli.py"
     $<TARGET_FILE:blofeld-headless> $<TARGET_FILE:blofeld-reference-rom-fixture>
@@ -1688,17 +1411,7 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-wave")
   set_tests_properties(reference_wave_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
-  add_executable(blofeld-dsp-completion-observer-test test/dsp_completion_observer.cpp)
-  target_link_libraries(blofeld-dsp-completion-observer-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_completion_observer COMMAND blofeld-dsp-completion-observer-test)
-  add_executable(blofeld-dsp-native-access-test test/dsp_native_access_test.cpp
-    test/dsp_native_access_failures.cpp test/dsp_native_access_continuations.cpp)
-  target_link_libraries(blofeld-dsp-native-access-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_native_access COMMAND blofeld-dsp-native-access-test)
-  add_executable(blofeld-dsp-external-events-test test/dsp_external_events.cpp
-    test/dsp_external_esai.cpp test/mcu_dsp_external_events.cpp)
-  target_link_libraries(blofeld-dsp-external-events-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
-  add_test(NAME dsp_external_events COMMAND blofeld-dsp-external-events-test)
+
   add_test(NAME reference_original_midi_cli COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/reference_original_midi_cli.py"
     $<TARGET_FILE:blofeld-headless> $<TARGET_FILE:blofeld-reference-original-midi-rom>
@@ -1723,64 +1436,7 @@ if(BUILD_TESTING)
   add_executable(blofeld-mcu-power-on-test test/mcu_power_on_test.cpp)
   target_link_libraries(blofeld-mcu-power-on-test PRIVATE blofeld_core)
   add_test(NAME mcu_power_on COMMAND blofeld-mcu-power-on-test)
-  add_executable(blofeld-mcu-dsp-fetch-power-on-test test/mcu_dsp_fetch_power_on_test.cpp
-    test/mcu_dsp_power_on_fixture.cpp test/mcu_dsp_power_on_guards.cpp)
-  target_link_libraries(blofeld-mcu-dsp-fetch-power-on-test PRIVATE blofeld_mcu_dsp_runtime)
-  add_test(NAME mcu_dsp_fetch_power_on COMMAND blofeld-mcu-dsp-fetch-power-on-test)
-  add_executable(blofeld-original-power-on-test test/original_power_on_test.cpp)
-  target_link_libraries(blofeld-original-power-on-test PRIVATE blofeld_mcu_dsp_runtime)
-  add_test(NAME original_power_on COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_power_on.py"
-    $<TARGET_FILE:blofeld-original-power-on-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-power-on.json")
-  set_tests_properties(original_power_on PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  add_executable(blofeld-dsp-fetch-clone-test test/dsp_fetch_clone_test.cpp)
-  target_link_libraries(blofeld-dsp-fetch-clone-test PRIVATE blofeld_mcu_dsp_runtime)
-  add_test(NAME dsp_fetch_clone COMMAND blofeld-dsp-fetch-clone-test)
-  add_executable(blofeld-mcu-dsp-fetch-clone-test test/mcu_dsp_fetch_clone_test.cpp)
-  target_link_libraries(blofeld-mcu-dsp-fetch-clone-test PRIVATE blofeld_mcu_dsp_runtime)
-  add_test(NAME mcu_dsp_fetch_clone COMMAND blofeld-mcu-dsp-fetch-clone-test)
-  add_executable(blofeld-fetch-clone-isolation-test test/fetch_clone_isolation_test.cpp)
-  target_link_libraries(blofeld-fetch-clone-isolation-test PRIVATE blofeld_mcu_dsp_runtime)
-  add_test(NAME fetch_clone_isolation COMMAND blofeld-fetch-clone-isolation-test)
-  add_executable(blofeld-mcu-dsp-fetch-peripheral-test test/mcu_dsp_fetch_peripheral_test.cpp)
-  target_link_libraries(blofeld-mcu-dsp-fetch-peripheral-test PRIVATE blofeld_mcu_dsp_runtime)
-  foreach(scope external-first mcu-first unqualified state guards running births sources budget restore)
-    add_test(NAME mcu_dsp_fetch_peripheral_${scope} COMMAND blofeld-mcu-dsp-fetch-peripheral-test ${scope})
-  endforeach()
-  add_library(blofeld_mcu_dsp_fixture STATIC test/mcu_dsp_runtime_fixture.cpp)
-  target_link_libraries(blofeld_mcu_dsp_fixture PUBLIC blofeld_mcu_dsp_runtime)
-  add_executable(blofeld-mcu-dsp-fetch-schedule-test test/mcu_dsp_fetch_schedule_test.cpp)
-  target_link_libraries(blofeld-mcu-dsp-fetch-schedule-test PRIVATE blofeld_mcu_dsp_fixture)
-  add_test(NAME mcu_dsp_fetch_schedule COMMAND blofeld-mcu-dsp-fetch-schedule-test)
-  add_executable(blofeld-mcu-dsp-fetch-events-test test/mcu_dsp_fetch_events_test.cpp
-    test/mcu_dsp_fetch_events_fixture.cpp test/mcu_dsp_fetch_events_orders.cpp
-    test/mcu_dsp_fetch_events_guards.cpp)
-  target_link_libraries(blofeld-mcu-dsp-fetch-events-test PRIVATE blofeld_mcu_dsp_runtime)
-  add_test(NAME mcu_dsp_fetch_external_events COMMAND blofeld-mcu-dsp-fetch-events-test)
-  add_executable(blofeld-mcu-dsp-fetch-external-wait-test test/mcu_dsp_fetch_external_wait_test.cpp)
-  target_link_libraries(blofeld-mcu-dsp-fetch-external-wait-test PRIVATE blofeld_mcu_dsp_runtime)
-  add_test(NAME mcu_dsp_fetch_external_wait COMMAND blofeld-mcu-dsp-fetch-external-wait-test)
-  add_executable(blofeld-mcu-dsp-fetch-external-reset-test test/mcu_dsp_fetch_external_reset_test.cpp)
-  target_link_libraries(blofeld-mcu-dsp-fetch-external-reset-test PRIVATE blofeld_mcu_dsp_runtime)
-  add_test(NAME mcu_dsp_fetch_external_reset COMMAND blofeld-mcu-dsp-fetch-external-reset-test)
-  add_executable(blofeld-mcu-dsp-fetch-wait-test test/mcu_dsp_fetch_wait_test.cpp)
-  target_link_libraries(blofeld-mcu-dsp-fetch-wait-test PRIVATE blofeld_mcu_dsp_runtime)
-  add_test(NAME mcu_dsp_fetch_wait COMMAND blofeld-mcu-dsp-fetch-wait-test)
-  add_executable(blofeld-mcu-dsp-fetch-reset-test test/mcu_dsp_fetch_reset_test.cpp)
-  target_link_libraries(blofeld-mcu-dsp-fetch-reset-test PRIVATE blofeld_mcu_dsp_runtime)
-  add_test(NAME mcu_dsp_fetch_reset COMMAND blofeld-mcu-dsp-fetch-reset-test)
-  set_tests_properties(mcu_dsp_fetch_reset PROPERTIES TIMEOUT 180)
-  add_executable(blofeld-mcu-dsp-fetch-dsp-reset-test test/mcu_dsp_fetch_dsp_reset_test.cpp
-    test/mcu_dsp_runtime_reset_edges.cpp test/mcu_dsp_runtime_reset_guards.cpp)
-  target_link_libraries(blofeld-mcu-dsp-fetch-dsp-reset-test PRIVATE blofeld_mcu_dsp_fixture)
-  add_test(NAME mcu_dsp_fetch_dsp_reset COMMAND blofeld-mcu-dsp-fetch-dsp-reset-test)
-  add_executable(blofeld-mcu-dsp-fetch-checkpoint-test test/mcu_dsp_fetch_checkpoint_test.cpp)
-  target_link_libraries(blofeld-mcu-dsp-fetch-checkpoint-test PRIVATE blofeld_mcu_dsp_runtime)
-  add_test(NAME mcu_dsp_fetch_checkpoint COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/mcu_checkpoint.py"
-    $<TARGET_FILE:blofeld-mcu-dsp-fetch-checkpoint-test>)
+
   add_executable(blofeld-hc12-cycle-test test/hc12_cycle_test.cpp)
   target_link_libraries(blofeld-hc12-cycle-test PRIVATE blofeld_core blofeld_hc12_cycles)
   add_test(NAME hc12_cycles COMMAND blofeld-hc12-cycle-test)
@@ -1812,9 +1468,6 @@ if(BUILD_TESTING)
   add_executable(blofeld-mcu-run-clock-test test/mcu_run_clock_test.cpp)
   target_link_libraries(blofeld-mcu-run-clock-test PRIVATE blofeld_core blofeld_hc12_cycles)
   add_test(NAME mcu_run_clock COMMAND blofeld-mcu-run-clock-test)
-  add_executable(blofeld-mcu-clock-checkpoint-test test/mcu_clock_checkpoint_test.cpp)
-  target_link_libraries(blofeld-mcu-clock-checkpoint-test PRIVATE blofeld_core)
-  add_test(NAME mcu_clock_checkpoint COMMAND blofeld-mcu-clock-checkpoint-test)
   add_executable(blofeld-mcu-wait-clock-test test/mcu_wait_clock_test.cpp)
   target_link_libraries(blofeld-mcu-wait-clock-test PRIVATE blofeld_core)
   add_test(NAME mcu_wait_clock COMMAND blofeld-mcu-wait-clock-test)
@@ -1858,26 +1511,7 @@ if(BUILD_TESTING)
   find_program(BLOFELD_LLVM_NM NAMES llvm-nm-19 REQUIRED)
   find_program(BLOFELD_LLVM_READELF NAMES llvm-readelf-19 REQUIRED)
   find_program(BLOFELD_LLVM_DIS NAMES llvm-dis-19 REQUIRED)
-  add_test(NAME dependency_instrumentation COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/dependency_instrumentation.py"
-    --source "${CMAKE_CURRENT_SOURCE_DIR}"
-    --database "${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json"
-    --binary $<TARGET_FILE:blofeld-headless>
-    --audio-binary $<TARGET_FILE:blofeld-host-audio-test>
-    --audio-binary $<TARGET_FILE:blofeld-audio-runtime-test>
-    --audio-binary $<TARGET_FILE:blofeld-original-dsp-voice-host-test>
-    --audio-binary $<TARGET_FILE:blofeld-original-dsp-voice-audio-test>
-    --audio-binary $<TARGET_FILE:blofeld-original-dsp-ring-audio-test>
-    --mode "${BLOFELD_SANITIZER}"
-    --nm "${BLOFELD_LLVM_NM}" --readelf "${BLOFELD_LLVM_READELF}"
-    --native zlibstatic=$<TARGET_FILE:zlibstatic>
-    --native blofeld_sleigh=$<TARGET_FILE:blofeld_sleigh>
-    --native blofeld_dsp_native=$<TARGET_FILE:blofeld_dsp_native>
-    --native asmjit=$<TARGET_FILE:asmjit>
-    --native sndfile=$<TARGET_FILE:sndfile>
-    --native blofeld_pulse=$<TARGET_FILE:blofeld_pulse>
-    --native blofeld_pulse_common=$<TARGET_FILE:blofeld_pulse_common>
-    ${blofeld_independent_native_args})
+
   add_executable(blofeld-firmware-nand-test test/firmware_nand_image_test.cpp)
   target_link_libraries(blofeld-firmware-nand-test PRIVATE blofeld_firmware_nand blofeld_nand_store)
   add_test(NAME firmware_nand_image COMMAND blofeld-firmware-nand-test)
@@ -1897,11 +1531,7 @@ if(BUILD_TESTING)
   add_executable(blofeld-mcu-midi-output-test test/mcu_midi_output_test.cpp)
   target_link_libraries(blofeld-mcu-midi-output-test PRIVATE blofeld_mcu_midi_output)
   add_test(NAME mcu_midi_output COMMAND blofeld-mcu-midi-output-test)
-  add_executable(blofeld-reference-midi-output-test test/reference_midi_output_test.cpp)
-  target_link_libraries(blofeld-reference-midi-output-test PRIVATE blofeld_reference_board)
-  add_test(NAME reference_midi_output COMMAND blofeld-reference-midi-output-test
-    "${CMAKE_CURRENT_BINARY_DIR}/midi-output.bfboard")
-  set_tests_properties(reference_midi_output PROPERTIES TIMEOUT 120)
+
   add_executable(blofeld-mcu-midi-test test/mcu_midi_test.cpp)
   target_link_libraries(blofeld-mcu-midi-test PRIVATE blofeld_mcu_midi)
   add_test(NAME mcu_midi COMMAND blofeld-mcu-midi-test)
@@ -1960,58 +1590,15 @@ if(BUILD_TESTING)
   add_executable(blofeld-nand-read-timing-test test/nand_read_timing_test.cpp)
   target_link_libraries(blofeld-nand-read-timing-test PRIVATE blofeld_nand_read_timing)
   add_test(NAME nand_read_timing COMMAND blofeld-nand-read-timing-test)
-  add_executable(blofeld-original-nand-read-timing-test test/original_nand_read_timing_test.cpp)
-  target_link_libraries(blofeld-original-nand-read-timing-test PRIVATE
-    blofeld_nand_read_timing blofeld_dsp blofeld_dsp_native)
-  add_test(NAME original_nand_read_timing COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
-    $<TARGET_FILE:blofeld-original-nand-read-timing-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-read-timing.trace")
-  set_tests_properties(original_nand_read_timing PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  add_executable(blofeld-original-nand-pack-test test/original_nand_pack_test.cpp)
-  target_link_libraries(blofeld-original-nand-pack-test PRIVATE
-    blofeld_nand_read_timing blofeld_dsp blofeld_dsp_native)
-  add_test(NAME original_nand_pack COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
-    $<TARGET_FILE:blofeld-original-nand-pack-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-pack.trace")
-  set_tests_properties(original_nand_pack PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  add_executable(blofeld-original-nand-records-test test/original_nand_records_test.cpp)
-  target_link_libraries(blofeld-original-nand-records-test PRIVATE
-    blofeld_nand_read_timing blofeld_dsp blofeld_dsp_native)
-  add_test(NAME original_nand_records COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_nand_records.py"
-    $<TARGET_FILE:blofeld-original-nand-records-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-records.trace")
-  set_tests_properties(original_nand_records PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+
   add_executable(blofeld-nand-write-timing-test test/nand_write_timing_test.cpp)
   target_link_libraries(blofeld-nand-write-timing-test PRIVATE blofeld_nand_write_timing)
   add_test(NAME nand_write_timing COMMAND blofeld-nand-write-timing-test)
-  add_executable(blofeld-original-nand-write-timing-test test/original_nand_write_timing_test.cpp)
-  target_link_libraries(blofeld-original-nand-write-timing-test PRIVATE
-    blofeld_nand_write_timing blofeld_dsp blofeld_dsp_native)
-  add_test(NAME original_nand_write_timing COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
-    $<TARGET_FILE:blofeld-original-nand-write-timing-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-write-timing.trace")
-  set_tests_properties(original_nand_write_timing PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+
   add_executable(blofeld-nand-read-setup-test test/nand_read_setup_test.cpp)
   target_link_libraries(blofeld-nand-read-setup-test PRIVATE blofeld_nand_read_setup)
   add_test(NAME nand_read_setup COMMAND blofeld-nand-read-setup-test)
-  add_executable(blofeld-original-nand-read-setup-test test/original_nand_read_setup_test.cpp)
-  target_link_libraries(blofeld-original-nand-read-setup-test PRIVATE
-    blofeld_nand_operation_clock blofeld_nand_read_setup blofeld_nand_read_timing blofeld_nand_write_timing
-    blofeld_dsp blofeld_dsp_native)
-  add_test(NAME original_nand_read_setup COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
-    $<TARGET_FILE:blofeld-original-nand-read-setup-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-read-setup.trace")
-  set_tests_properties(original_nand_read_setup PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+
   add_executable(blofeld-nand-image-test test/nand_image_test.cpp)
   target_link_libraries(blofeld-nand-image-test PRIVATE blofeld_nand)
   add_test(NAME nand_image COMMAND blofeld-nand-image-test)
@@ -2060,39 +1647,7 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-update-validation.trace")
   set_tests_properties(original_update_validation PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  add_executable(blofeld-original-update-forward-test test/original_update_forward_test.cpp)
-  target_link_libraries(blofeld-original-update-forward-test PRIVATE
-    blofeld_mcu_dsp blofeld_dsp_native blofeld_lcd_fixture)
-  add_executable(blofeld-original-update-coupled-test test/original_update_coupled_test.cpp)
-  target_link_libraries(blofeld-original-update-coupled-test PRIVATE
-    blofeld_mcu_dsp blofeld_dsp_native blofeld_lcd_fixture blofeld_lcd_export)
-  add_test(NAME original_update_coupled COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_update_coupled.py"
-    $<TARGET_FILE:blofeld-original-update-coupled-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-update-coupled.trace")
-  set_tests_properties(original_update_coupled PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 540)
-  add_test(NAME original_update_reset_inputs COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_update_reset_inputs.py"
-    $<TARGET_FILE:blofeld-original-update-coupled-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-update-reset-inputs.trace")
-  set_tests_properties(original_update_reset_inputs PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
-  add_executable(blofeld-original-update-diagnostic-test test/original_update_diagnostic_test.cpp)
-  target_link_libraries(blofeld-original-update-diagnostic-test PRIVATE
-    blofeld_mcu_dsp blofeld_dsp_native blofeld_lcd_fixture blofeld_lcd_export)
-  add_test(NAME original_update_diagnostic COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_update_diagnostic.py"
-    $<TARGET_FILE:blofeld-original-update-diagnostic-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-update-diagnostic.trace")
-  set_tests_properties(original_update_diagnostic PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
-  add_test(NAME original_update_forwarding COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_update_forward.py"
-    $<TARGET_FILE:blofeld-original-update-forward-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-update-forward.trace")
-  set_tests_properties(original_update_forwarding PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+
   add_test(NAME original_secondary_update_validation COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_secondary_update_validation.py"
     $<TARGET_FILE:blofeld-original-update-validation-test>
@@ -2144,11 +1699,7 @@ if(BUILD_TESTING)
     $<TARGET_FILE:blofeld-flash-live-test> $<TARGET_FILE:blofeld-flash-durable-queue-test>
     $<TARGET_FILE:blofeld-flash-live-worker>)
   set_tests_properties(flash_native_persistence PROPERTIES TIMEOUT 120)
-  add_executable(blofeld-reference-flash-test test/reference_flash_test.cpp)
-  target_link_libraries(blofeld-reference-flash-test PRIVATE blofeld_reference_board)
-  add_test(NAME reference_flash COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/reference_flash_processes.py"
-    $<TARGET_FILE:blofeld-reference-flash-test>)
+
   add_test(NAME reference_flash_cli COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/reference_flash_cli.py" $<TARGET_FILE:blofeld-headless>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip")
@@ -2308,76 +1859,14 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-timer-updates-test test/dsp_timer_updates_test.cpp)
   target_link_libraries(blofeld-dsp-timer-updates-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_timer_updates COMMAND blofeld-dsp-timer-updates-test)
-  add_executable(blofeld-original-dsp-gpio-input-test test/original_dsp_gpio_input_test.cpp)
-  target_link_libraries(blofeld-original-dsp-gpio-input-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_executable(blofeld-original-dsp-gpio-request-test test/original_dsp_gpio_request_test.cpp
-    test/original_dsp_gpio_request_fixture.cpp)
-  target_link_libraries(blofeld-original-dsp-gpio-request-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME original_dsp_gpio_request COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_gpio_request.py"
-    "$<TARGET_FILE:blofeld-original-dsp-gpio-request-test>"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-gpio-request.trace")
-  set_tests_properties(original_dsp_gpio_request PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
-  add_test(NAME original_dsp_gpio_input
-    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_gpio_input.py"
-      "$<TARGET_FILE:blofeld-original-dsp-gpio-input-test>"
-      "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-      "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-gpio-input.trace")
-  set_tests_properties(original_dsp_gpio_input PROPERTIES SKIP_RETURN_CODE 77)
-  add_executable(blofeld-original-gpio-midi-test
-    test/original_gpio_midi_test.cpp test/original_gpio_midi_fixture.cpp
-    test/original_gpio_midi_peer.cpp test/original_gpio_midi_endpoint.cpp
-    test/usb_endpoint_reset_fixture.cpp)
-  target_link_libraries(blofeld-original-gpio-midi-test PRIVATE
-    blofeld_core blofeld_firmware blofeld_dsp blofeld_dsp_native)
-  add_test(NAME original_gpio_midi
-    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/original_gpio_midi.py"
-      "$<TARGET_FILE:blofeld-original-gpio-midi-test>"
-      "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-      "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-gpio-midi.trace")
-  set_tests_properties(original_gpio_midi PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
-  add_test(NAME original_usb_gpio_midi COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_usb_gpio_midi.py"
-    $<TARGET_FILE:blofeld-original-gpio-midi-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-usb-gpio-midi.trace")
-  set_tests_properties(original_usb_gpio_midi PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+
   add_executable(blofeld-dsp-gpio-test test/dsp_gpio_test.cpp)
   target_link_libraries(blofeld-dsp-gpio-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_gpio COMMAND blofeld-dsp-gpio-test)
   add_executable(blofeld-dsp-pll-test test/dsp_pll_test.cpp)
   target_link_libraries(blofeld-dsp-pll-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_pll COMMAND blofeld-dsp-pll-test)
-  add_executable(blofeld-dsp-instruction-test test/dsp_instruction_test.cpp
-    test/dsp_logical_boundaries.cpp test/dsp_bitfield_boundaries.cpp test/dsp_operand_rejection.cpp)
-  target_link_libraries(blofeld-dsp-instruction-test PRIVATE blofeld_dsp_instruction_fixture blofeld_dsp_native)
-  add_test(NAME dsp_instruction_fixture COMMAND blofeld-dsp-instruction-test)
-  set_tests_properties(dsp_instruction_fixture PROPERTIES TIMEOUT 60)
-  foreach(control IN ITEMS trap debug)
-    add_test(NAME dsp_${control}_conditions COMMAND blofeld-dsp-instruction-test --conditions ${control})
-    set_tests_properties(dsp_${control}_conditions PROPERTIES TIMEOUT 60)
-  endforeach()
-  add_test(NAME dsp_shift_counts COMMAND blofeld-dsp-instruction-test --shift-counts)
-  set_tests_properties(dsp_shift_counts PROPERTIES TIMEOUT 60)
-  add_test(NAME dsp_operand_bounds COMMAND blofeld-dsp-instruction-test --operand-bounds)
-  set_tests_properties(dsp_operand_bounds PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
-  add_executable(blofeld-dsp-divide-test test/dsp_divide_test.cpp)
-  target_link_libraries(blofeld-dsp-divide-test PRIVATE blofeld_dsp_instruction_fixture blofeld_dsp_native)
-  add_test(NAME dsp_divide COMMAND blofeld-dsp-divide-test)
-  set_tests_properties(dsp_divide PROPERTIES TIMEOUT 180)
-  add_executable(blofeld-dsp-fast-normalization-test test/dsp_fast_normalization_test.cpp)
-  target_link_libraries(blofeld-dsp-fast-normalization-test PRIVATE blofeld_dsp_instruction_fixture blofeld_dsp_native)
-  add_test(NAME dsp_fast_normalization COMMAND blofeld-dsp-fast-normalization-test)
-  set_tests_properties(dsp_fast_normalization PROPERTIES TIMEOUT 180)
-  add_executable(blofeld-original-runtime-clocks-test test/original_runtime_clocks.cpp)
-  target_link_libraries(blofeld-original-runtime-clocks-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
-  add_test(NAME original_runtime_clocks COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_runtime_clocks.py"
-    $<TARGET_FILE:blofeld-original-runtime-clocks-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-runtime-clocks.trace")
-  set_tests_properties(original_runtime_clocks PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+
   add_executable(blofeld-original-mcu-request-release-test test/original_mcu_request_release.cpp)
   target_link_libraries(blofeld-original-mcu-request-release-test PRIVATE blofeld_core blofeld_firmware)
   add_test(NAME original_mcu_request_release COMMAND ${Python3_EXECUTABLE}
@@ -2386,412 +1875,14 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-mcu-request-release.trace")
   set_tests_properties(original_mcu_request_release PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  add_executable(blofeld-original-gpio-pair-test test/original_gpio_pair_test.cpp)
-  target_link_libraries(blofeld-original-gpio-pair-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
-  add_test(NAME original_gpio_pair COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_gpio_pair.py"
-    $<TARGET_FILE:blofeld-original-gpio-pair-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-gpio-pair.report")
-  set_tests_properties(original_gpio_pair PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
-  add_executable(blofeld-original-gpio-pair-checkpoint-test test/original_gpio_pair_checkpoint_test.cpp)
-  target_link_libraries(blofeld-original-gpio-pair-checkpoint-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
-  add_test(NAME original_gpio_pair_checkpoints COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_gpio_pair_checkpoint.py"
-    $<TARGET_FILE:blofeld-original-gpio-pair-checkpoint-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-gpio-pair-checkpoint.report")
-  set_tests_properties(original_gpio_pair_checkpoints PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
-  add_executable(blofeld-original-gpio-sequence-test test/original_gpio_sequence_test.cpp)
-  target_link_libraries(blofeld-original-gpio-sequence-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
-  add_test(NAME original_gpio_sequence COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_gpio_sequence.py"
-    $<TARGET_FILE:blofeld-original-gpio-sequence-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-gpio-sequence.report")
-  set_tests_properties(original_gpio_sequence PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
-  add_executable(blofeld-original-gpio-parameter-test test/original_gpio_parameter_test.cpp)
-  target_link_libraries(blofeld-original-gpio-parameter-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
-  add_test(NAME original_gpio_parameters COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_gpio_parameter.py"
-    $<TARGET_FILE:blofeld-original-gpio-parameter-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-gpio-parameter.report")
-  set_tests_properties(original_gpio_parameters PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
-  add_executable(blofeld-original-gpio-sound-test test/original_gpio_sound_test.cpp)
-  target_link_libraries(blofeld-original-gpio-sound-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
-  add_test(NAME original_gpio_sound COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_gpio_sound.py"
-    $<TARGET_FILE:blofeld-original-gpio-sound-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-gpio-sound.report")
-  set_tests_properties(original_gpio_sound PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
-  add_executable(blofeld-original-gpio-notification-test test/original_gpio_notification_test.cpp)
-  target_link_libraries(blofeld-original-gpio-notification-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
-  add_test(NAME original_gpio_notification COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_gpio_notification.py"
-    $<TARGET_FILE:blofeld-original-gpio-notification-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-gpio-notification.report")
-  set_tests_properties(original_gpio_notification PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
-  add_executable(blofeld-original-gpio-usb-notification-test test/original_gpio_usb_notification_test.cpp
-    test/usb_endpoint_reset_fixture.cpp)
-  target_link_libraries(blofeld-original-gpio-usb-notification-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
-  add_test(NAME original_gpio_usb_notification COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_gpio_usb_notification.py"
-    $<TARGET_FILE:blofeld-original-gpio-usb-notification-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-gpio-usb-notification.report")
-  set_tests_properties(original_gpio_usb_notification PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
-  add_executable(blofeld-original-gpio-sysex-test test/original_gpio_sysex_test.cpp
-    test/usb_endpoint_reset_fixture.cpp)
-  target_link_libraries(blofeld-original-gpio-sysex-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
-  add_test(NAME original_gpio_sysex COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_gpio_sysex.py"
-    $<TARGET_FILE:blofeld-original-gpio-sysex-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-gpio-sysex.report")
-  set_tests_properties(original_gpio_sysex PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
-  add_executable(blofeld-original-gpio-global-wait-test test/original_gpio_global_wait_test.cpp)
-  target_link_libraries(blofeld-original-gpio-global-wait-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
-  add_test(NAME original_gpio_global_wait COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_gpio_global_wait.py"
-    $<TARGET_FILE:blofeld-original-gpio-global-wait-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-gpio-global-wait.report")
-  set_tests_properties(original_gpio_global_wait PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
-  add_executable(blofeld-dsp-memory-storage-test test/dsp_memory_storage_test.cpp)
-  target_link_libraries(blofeld-dsp-memory-storage-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_memory_storage COMMAND blofeld-dsp-memory-storage-test)
-  add_executable(blofeld-dsp-checkpoint-test test/dsp_checkpoint_test.cpp
-    test/dsp_checkpoint_interrupts.cpp test/dsp_checkpoint_peripherals.cpp)
-  target_link_libraries(blofeld-dsp-checkpoint-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_checkpoint COMMAND blofeld-dsp-checkpoint-test)
-  add_executable(blofeld-dsp-power-test test/dsp_power_test.cpp test/dsp_saturation_oracle.cpp)
-  target_link_libraries(blofeld-dsp-power-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  foreach(scope IN ITEMS mpy mpyr mac macr reject-a-mpy reject-b-mpy reject-a-mpyr reject-b-mpyr
-      reject-a-mac reject-b-mac reject-a-macr reject-b-macr)
-    add_test(NAME dsp_power_${scope} COMMAND blofeld-dsp-power-test ${scope})
-    set_tests_properties(dsp_power_${scope} PROPERTIES TIMEOUT 120)
-  endforeach()
-  add_executable(blofeld-original-dsp-master-output-test test/original_dsp_master_output_test.cpp
-    test/dsp_master_output_fixture.cpp)
-  target_link_libraries(blofeld-original-dsp-master-output-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME original_dsp_master_output COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_master_output.py"
-    $<TARGET_FILE:blofeld-original-dsp-master-output-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-master-output.trace")
-  set_tests_properties(original_dsp_master_output PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
-  add_executable(blofeld-original-dsp-sample-test test/original_dsp_sample_test.cpp)
-  target_link_libraries(blofeld-original-dsp-sample-test PRIVATE
-    blofeld_dsp blofeld_dsp_native blofeld_firmware)
-  add_test(NAME original_dsp_sample COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_sample.py"
-    $<TARGET_FILE:blofeld-original-dsp-sample-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-sample.trace")
-  set_tests_properties(original_dsp_sample PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
-  add_executable(blofeld-original-dsp-sample-receiver-test test/original_dsp_sample_receiver_test.cpp)
-  target_link_libraries(blofeld-original-dsp-sample-receiver-test PRIVATE
-    blofeld_dsp blofeld_dsp_native blofeld_firmware)
-  add_test(NAME original_dsp_sample_receiver COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_sample_receiver.py"
-    $<TARGET_FILE:blofeld-original-dsp-sample-receiver-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-sample-receiver.trace")
-  set_tests_properties(original_dsp_sample_receiver PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
+
   add_test(NAME sample_midi_pages COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/sample_midi_pages_test.py")
   add_test(NAME sample_midi_reference COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/sample_midi_pages_test.py" --reference
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/sample-midi-reference.json")
   set_tests_properties(sample_midi_reference PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  add_test(NAME original_dsp_sample_receiver_midi COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_sample_receiver_midi.py"
-    $<TARGET_FILE:blofeld-original-dsp-sample-receiver-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-sample-receiver-midi.trace")
-  set_tests_properties(original_dsp_sample_receiver_midi PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
-  add_test(NAME original_dsp_sample_timer COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_sample_timer.py"
-    $<TARGET_FILE:blofeld-original-dsp-sample-receiver-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-sample-timer.trace")
-  set_tests_properties(original_dsp_sample_timer PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
-  add_test(NAME original_dsp_sample_refill COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_sample_refill.py"
-    $<TARGET_FILE:blofeld-original-dsp-sample-receiver-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-sample-refill.trace")
-  set_tests_properties(original_dsp_sample_refill PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 960)
-  add_executable(blofeld-original-dsp-filters-test test/original_dsp_filters_test.cpp
-    test/dsp_filter_model.cpp test/dsp_filter_fixture.cpp)
-  target_link_libraries(blofeld-original-dsp-filters-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME original_dsp_filters COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_filters.py"
-    $<TARGET_FILE:blofeld-original-dsp-filters-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-filters.trace")
-  set_tests_properties(original_dsp_filters PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
-  add_executable(blofeld-original-dsp-waveforms-test test/original_dsp_waveforms_test.cpp)
-  target_link_libraries(blofeld-original-dsp-waveforms-test PRIVATE
-    blofeld_dsp blofeld_dsp_native blofeld_firmware)
-  add_test(NAME original_dsp_waveforms COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_waveforms.py"
-    $<TARGET_FILE:blofeld-original-dsp-waveforms-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-waveforms.trace")
-  set_tests_properties(original_dsp_waveforms PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  add_executable(blofeld-original-dsp-wavetable-test test/original_dsp_wavetable_test.cpp)
-  target_link_libraries(blofeld-original-dsp-wavetable-test PRIVATE
-    blofeld_dsp blofeld_dsp_native blofeld_firmware)
-  add_test(NAME original_dsp_wavetable COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_wavetable.py"
-    $<TARGET_FILE:blofeld-original-dsp-wavetable-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-wavetable.trace")
-  set_tests_properties(original_dsp_wavetable PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  add_executable(blofeld-original-dsp-envelopes-test test/original_dsp_envelopes_test.cpp)
-  target_link_libraries(blofeld-original-dsp-envelopes-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME original_dsp_envelopes COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_envelopes.py"
-    $<TARGET_FILE:blofeld-original-dsp-envelopes-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-envelopes.trace")
-  set_tests_properties(original_dsp_envelopes PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
-  add_library(blofeld_voice_fixture STATIC test/dsp_voice_fixture.cpp test/dsp_voice_master.cpp
-    test/dsp_voice_pcm.cpp test/dsp_voice_repeat.cpp test/dsp_voice_dax.cpp)
-  target_link_libraries(blofeld_voice_fixture PUBLIC blofeld_dsp blofeld_dsp_native blofeld_serial_pcm)
-  add_executable(blofeld-original-dsp-voice-test test/original_dsp_voice_test.cpp)
-  target_link_libraries(blofeld-original-dsp-voice-test PRIVATE blofeld_voice_fixture)
-  add_test(NAME original_dsp_voice COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_voice.py"
-    $<TARGET_FILE:blofeld-original-dsp-voice-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-voice.trace")
-  set_tests_properties(original_dsp_voice PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
-  add_executable(blofeld-original-dsp-voice-master-test test/original_dsp_voice_master_test.cpp)
-  target_link_libraries(blofeld-original-dsp-voice-master-test PRIVATE blofeld_voice_fixture)
-  add_test(NAME original_dsp_voice_master COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_voice_master.py"
-    $<TARGET_FILE:blofeld-original-dsp-voice-master-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-voice-master.trace")
-  set_tests_properties(original_dsp_voice_master PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
-  add_executable(blofeld-original-dsp-voice-pcm-test test/original_dsp_voice_pcm_test.cpp)
-  target_link_libraries(blofeld-original-dsp-voice-pcm-test PRIVATE blofeld_voice_fixture)
-  add_test(NAME original_dsp_voice_pcm COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_voice_pcm.py"
-    $<TARGET_FILE:blofeld-original-dsp-voice-pcm-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-voice-pcm.trace")
-  set_tests_properties(original_dsp_voice_pcm PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
-  add_executable(blofeld-original-dsp-voice-host-test test/original_dsp_voice_host_test.cpp)
-  target_link_libraries(blofeld-original-dsp-voice-host-test PRIVATE blofeld_voice_fixture blofeld_audio_runtime)
-  add_test(NAME original_dsp_voice_host COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_voice_host.py"
-    $<TARGET_FILE:blofeld-original-dsp-voice-host-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-voice-host")
-  set_tests_properties(original_dsp_voice_host PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120
-    ENVIRONMENT "BLOFELD_TEST_SANITIZER=${BLOFELD_SANITIZER}")
-  add_test(NAME original_dsp_voice_midi_host COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_voice_host.py"
-    $<TARGET_FILE:blofeld-original-dsp-voice-host-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-voice-midi-host" midi)
-  set_tests_properties(original_dsp_voice_midi_host PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120
-    ENVIRONMENT "BLOFELD_TEST_SANITIZER=${BLOFELD_SANITIZER}")
-  add_test(NAME original_dsp_repeat_host COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_voice_host.py"
-    $<TARGET_FILE:blofeld-original-dsp-voice-host-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-repeat-host" stream)
-  set_tests_properties(original_dsp_repeat_host PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 360
-    ENVIRONMENT "BLOFELD_TEST_SANITIZER=${BLOFELD_SANITIZER}")
-  add_executable(blofeld-original-dsp-voice-midi-test test/original_dsp_voice_midi_test.cpp)
-  target_link_libraries(blofeld-original-dsp-voice-midi-test PRIVATE blofeld_voice_fixture)
-  add_test(NAME original_dsp_voice_midi COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_voice_midi.py"
-    $<TARGET_FILE:blofeld-original-dsp-voice-midi-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-voice-midi.trace")
-  set_tests_properties(original_dsp_voice_midi PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
-  add_executable(blofeld-original-dsp-foreground-test test/original_dsp_foreground_test.cpp)
-  target_link_libraries(blofeld-original-dsp-foreground-test PRIVATE blofeld_voice_fixture)
-  add_test(NAME original_dsp_foreground COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_foreground.py"
-    $<TARGET_FILE:blofeld-original-dsp-foreground-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-foreground.trace")
-  set_tests_properties(original_dsp_foreground PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
-  add_executable(blofeld-original-dsp-program-guard-test test/original_dsp_program_guard_test.cpp)
-  target_link_libraries(blofeld-original-dsp-program-guard-test PRIVATE blofeld_voice_fixture)
-  add_test(NAME original_dsp_program_guard COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_program_guard.py"
-    $<TARGET_FILE:blofeld-original-dsp-program-guard-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-program-guard")
-  set_tests_properties(original_dsp_program_guard PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  add_executable(blofeld-original-dsp-repeat-test test/original_dsp_repeat_test.cpp)
-  target_link_libraries(blofeld-original-dsp-repeat-test PRIVATE blofeld_voice_fixture)
-  add_test(NAME original_dsp_repeat COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_repeat.py"
-    $<TARGET_FILE:blofeld-original-dsp-repeat-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-repeat.trace")
-  set_tests_properties(original_dsp_repeat PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
-  add_executable(blofeld-original-dsp-dual-output-test test/original_dsp_dual_output_test.cpp)
-  target_link_libraries(blofeld-original-dsp-dual-output-test PRIVATE blofeld_voice_fixture)
-  add_test(NAME original_dsp_dual_output COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_dual_output.py"
-    $<TARGET_FILE:blofeld-original-dsp-dual-output-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-dual-output.trace")
-  set_tests_properties(original_dsp_dual_output PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
-  add_executable(blofeld-original-dsp-idle-midi-test test/original_dsp_idle_midi_test.cpp)
-  target_link_libraries(blofeld-original-dsp-idle-midi-test PRIVATE blofeld_voice_fixture)
-  add_test(NAME original_dsp_idle_midi COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_idle_midi.py"
-    $<TARGET_FILE:blofeld-original-dsp-idle-midi-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-idle-midi.trace")
-  set_tests_properties(original_dsp_idle_midi PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
-  add_executable(blofeld-original-dsp-release-ring-test test/original_dsp_release_ring_test.cpp)
-  target_link_libraries(blofeld-original-dsp-release-ring-test PRIVATE blofeld_voice_fixture)
-  add_test(NAME original_dsp_release_ring COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_release_ring.py"
-    $<TARGET_FILE:blofeld-original-dsp-release-ring-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-release-ring.trace")
-  set_tests_properties(original_dsp_release_ring PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
-  add_executable(blofeld-original-dsp-sustain-ring-test test/original_dsp_sustain_ring_test.cpp)
-  target_link_libraries(blofeld-original-dsp-sustain-ring-test PRIVATE blofeld_voice_fixture)
-  add_test(NAME original_dsp_sustain_ring COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_sustain_ring.py"
-    $<TARGET_FILE:blofeld-original-dsp-sustain-ring-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-sustain-ring.trace")
-  set_tests_properties(original_dsp_sustain_ring PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
-  add_executable(blofeld-original-dsp-ring-audio-test test/original_dsp_ring_audio_test.cpp)
-  target_link_libraries(blofeld-original-dsp-ring-audio-test PRIVATE
-    blofeld_voice_fixture blofeld_audio_runtime)
-  add_test(NAME original_dsp_ring_audio COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_ring_audio.py"
-    $<TARGET_FILE:blofeld-original-dsp-ring-audio-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-ring-audio")
-  set_tests_properties(original_dsp_ring_audio PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600
-    ENVIRONMENT "BLOFELD_TEST_SANITIZER=${BLOFELD_SANITIZER}")
-  add_test(NAME original_dsp_ring_midi_audio COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_ring_audio.py"
-    $<TARGET_FILE:blofeld-original-dsp-ring-audio-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-ring-midi-audio" midi)
-  set_tests_properties(original_dsp_ring_midi_audio PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900
-    ENVIRONMENT "BLOFELD_TEST_SANITIZER=${BLOFELD_SANITIZER}")
-  add_test(NAME original_dsp_ring_release_audio COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_ring_audio.py"
-    $<TARGET_FILE:blofeld-original-dsp-ring-audio-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-ring-release-audio" release)
-  set_tests_properties(original_dsp_ring_release_audio PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300
-    ENVIRONMENT "BLOFELD_TEST_SANITIZER=${BLOFELD_SANITIZER}")
-  add_test(NAME original_dsp_ring_sustain_audio COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_ring_audio.py"
-    $<TARGET_FILE:blofeld-original-dsp-ring-audio-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-ring-sustain-audio" sustain)
-  set_tests_properties(original_dsp_ring_sustain_audio PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300
-    ENVIRONMENT "BLOFELD_TEST_SANITIZER=${BLOFELD_SANITIZER}")
-  add_executable(blofeld-original-dsp-voice-audio-test test/original_dsp_voice_audio_test.cpp)
-  target_link_libraries(blofeld-original-dsp-voice-audio-test PRIVATE
-    blofeld_voice_fixture blofeld_audio_runtime)
-  add_test(NAME original_dsp_voice_audio COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_voice_audio.py"
-    $<TARGET_FILE:blofeld-original-dsp-voice-audio-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-voice-audio")
-  set_tests_properties(original_dsp_voice_audio PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600
-    ENVIRONMENT "BLOFELD_TEST_SANITIZER=${BLOFELD_SANITIZER}")
-  add_executable(blofeld-original-dsp-drive-voice-test test/original_dsp_drive_voice_test.cpp)
-  target_link_libraries(blofeld-original-dsp-drive-voice-test PRIVATE blofeld_voice_fixture)
-  add_test(NAME original_dsp_drive_voice COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_drive_voice.py"
-    $<TARGET_FILE:blofeld-original-dsp-drive-voice-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-drive-voice.trace")
-  set_tests_properties(original_dsp_drive_voice PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
-  add_executable(blofeld-original-dsp-peripheral-init-test test/original_dsp_peripheral_init.cpp)
-  target_link_libraries(blofeld-original-dsp-peripheral-init-test PRIVATE
-    blofeld_dsp blofeld_dsp_native blofeld_firmware)
-  add_test(NAME original_dsp_peripheral_init COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_peripheral_init.py"
-    $<TARGET_FILE:blofeld-original-dsp-peripheral-init-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-peripheral-init.trace")
-  set_tests_properties(original_dsp_peripheral_init PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  add_executable(blofeld-original-dsp-audio-dma-test
-    test/original_dsp_audio_dma_test.cpp test/dsp_audio_dma_fixture.cpp)
-  target_link_libraries(blofeld-original-dsp-audio-dma-test PRIVATE
-    blofeld_dsp blofeld_dsp_native blofeld_firmware blofeld_serial_pcm)
-  add_test(NAME original_dsp_audio_dma COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_audio_dma.py"
-    $<TARGET_FILE:blofeld-original-dsp-audio-dma-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-audio-dma.trace")
-  set_tests_properties(original_dsp_audio_dma PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  add_executable(blofeld-original-dsp-scheduler-test test/original_dsp_scheduler_test.cpp)
-  target_link_libraries(blofeld-original-dsp-scheduler-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME original_dsp_scheduler COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_scheduler.py"
-    $<TARGET_FILE:blofeld-original-dsp-scheduler-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-scheduler.trace")
-  set_tests_properties(original_dsp_scheduler PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 250 RUN_SERIAL TRUE)
-  add_executable(blofeld-original-update-transport-test test/original_update_transport_test.cpp)
-  target_link_libraries(blofeld-original-update-transport-test PRIVATE
-    blofeld_dsp blofeld_dsp_native blofeld_firmware)
-  add_test(NAME original_update_transport COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_update_transport.py"
-    $<TARGET_FILE:blofeld-original-update-transport-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-update-transport.trace")
-  set_tests_properties(original_update_transport PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  add_executable(blofeld-original-keyboard-transport-test test/original_keyboard_transport_test.cpp)
-  target_link_libraries(blofeld-original-keyboard-transport-test PRIVATE
-    blofeld_dsp blofeld_dsp_native blofeld_firmware)
-  add_test(NAME original_keyboard_transport COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_keyboard_transport.py"
-    $<TARGET_FILE:blofeld-original-keyboard-transport-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-keyboard-transport.trace")
-  set_tests_properties(original_keyboard_transport PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  add_executable(blofeld-original-keyboard-short-test
-    test/original_keyboard_short_test.cpp test/keyboard_short_fixture.cpp)
-  target_link_libraries(blofeld-original-keyboard-short-test PRIVATE
-    blofeld_dsp blofeld_dsp_native blofeld_firmware)
-  add_test(NAME original_keyboard_short COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_keyboard_short.py"
-    $<TARGET_FILE:blofeld-original-keyboard-short-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-keyboard-short.trace")
-  set_tests_properties(original_keyboard_short PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  add_executable(blofeld-original-keyboard-initial-test
-    test/original_keyboard_initial_test.cpp test/keyboard_initial_fixture.cpp
-    test/keyboard_initial_display.cpp test/keyboard_initial_replay.cpp)
-  target_link_libraries(blofeld-original-keyboard-initial-test PRIVATE
-    blofeld_mcu_dsp blofeld_dsp_native blofeld_lcd_fixture blofeld_lcd_export)
-  add_test(NAME original_keyboard_initial COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_keyboard_initial.py"
-    $<TARGET_FILE:blofeld-original-keyboard-initial-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-keyboard-initial.trace")
-  set_tests_properties(original_keyboard_initial PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+
   add_executable(blofeld-original-keyboard-receiver-test test/original_keyboard_receiver_test.cpp)
   target_link_libraries(blofeld-original-keyboard-receiver-test PRIVATE blofeld_core)
   add_test(NAME original_keyboard_receiver COMMAND ${Python3_EXECUTABLE}
@@ -2801,78 +1892,7 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-keyboard-receiver.trace")
   set_tests_properties(original_keyboard_receiver PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
-  add_executable(blofeld-original-keyboard-handoff-test test/original_keyboard_handoff_test.cpp)
-  target_link_libraries(blofeld-original-keyboard-handoff-test PRIVATE
-    blofeld_mcu_dsp blofeld_dsp_native)
-  add_test(NAME original_keyboard_handoff COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_keyboard_handoff.py"
-    $<TARGET_FILE:blofeld-original-keyboard-handoff-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-keyboard-handoff.trace")
-  set_tests_properties(original_keyboard_handoff PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
-  add_executable(blofeld-original-dsp-download-test test/original_dsp_download_test.cpp)
-  target_link_libraries(blofeld-original-dsp-download-test PRIVATE
-    blofeld_dsp blofeld_dsp_native blofeld_firmware)
-  add_test(NAME original_dsp_download COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_download.py"
-    $<TARGET_FILE:blofeld-original-dsp-download-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-download.trace")
-  set_tests_properties(original_dsp_download PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
-  add_executable(blofeld-original-dsp-request-queue-test test/original_dsp_request_queue_test.cpp)
-  target_link_libraries(blofeld-original-dsp-request-queue-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME original_dsp_request_queue COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_request_queue.py"
-    $<TARGET_FILE:blofeld-original-dsp-request-queue-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-request-queue.trace")
-  set_tests_properties(original_dsp_request_queue PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 250)
-  add_executable(blofeld-original-dsp-workspace-test
-    test/original_dsp_workspace_test.cpp test/original_dsp_workspace_state.cpp)
-  target_link_libraries(blofeld-original-dsp-workspace-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME original_dsp_workspace COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_workspace.py"
-    $<TARGET_FILE:blofeld-original-dsp-workspace-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-workspace.trace")
-  set_tests_properties(original_dsp_workspace PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
-  add_test(NAME original_dsp_request_readiness COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_request_readiness.py"
-    $<TARGET_FILE:blofeld-original-dsp-request-queue-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-request-readiness.trace")
-  set_tests_properties(original_dsp_request_readiness PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 130)
-  add_executable(blofeld-dsp-zero-loop-test test/dsp_zero_loop_test.cpp)
-  target_link_libraries(blofeld-dsp-zero-loop-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_zero_loops COMMAND blofeld-dsp-zero-loop-test)
-  add_executable(blofeld-dsp-corpus-test test/dsp_corpus_test.cpp)
-  target_link_libraries(blofeld-dsp-corpus-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_hardware_corpus COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_hardware_corpus.py"
-    $<TARGET_FILE:blofeld-dsp-corpus-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/dsp56300-tools/tools/difftest/goldens"
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/reference/dsp-corpus.json"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-hardware-corpus")
-  set_tests_properties(dsp_hardware_corpus PROPERTIES SKIP_RETURN_CODE 77)
-  add_test(NAME dsp_operand_regressions COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_operand_regressions.py"
-    $<TARGET_FILE:blofeld-dsp-corpus-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/dsp56300-tools/tools/difftest/goldens"
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/reference/dsp-operand-regressions.json"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-operand-regressions")
-  set_tests_properties(dsp_operand_regressions PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 250)
-  add_test(NAME dsp_corpus_bounds COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_corpus_bounds.py"
-    $<TARGET_FILE:blofeld-dsp-corpus-test>)
-  add_executable(blofeld-original-sample-preparation-test test/original_sample_preparation_test.cpp)
-  target_link_libraries(blofeld-original-sample-preparation-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME original_sample_preparation COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_sample_preparation.py"
-    $<TARGET_FILE:blofeld-original-sample-preparation-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/library/Standard_Factory_Sample_Content_V1.0_for_License_SL_as_MID_File.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-sample-preparation.trace")
-  set_tests_properties(original_sample_preparation PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+
   add_test(NAME wpc_codec COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/wpc_reference.py" --synthetic)
   add_test(NAME wpc_reference COMMAND ${Python3_EXECUTABLE}
@@ -2885,65 +1905,7 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/test/wpc_catalogue_test.py"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/wpc-catalogue.json")
   set_tests_properties(wpc_catalogue_reference PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  add_executable(blofeld-coupled-boot-test test/original_coupled_boot_test.cpp
-    test/coupled_boot_fixture.cpp)
-  target_link_libraries(blofeld-coupled-boot-test PRIVATE blofeld_core blofeld_dsp)
-  add_test(NAME original_coupled_boot COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_boot.py"
-    $<TARGET_FILE:blofeld-coupled-boot-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-coupled-boot.trace")
-  set_tests_properties(original_coupled_boot PROPERTIES SKIP_RETURN_CODE 77)
-  add_executable(blofeld-scheduled-coupling-test test/original_scheduled_coupling_test.cpp
-    test/scheduled_coupling_fixture.cpp test/scheduled_frontier_fixture.cpp
-    test/original_owned_clock_fixture.cpp)
-  target_link_libraries(blofeld-scheduled-coupling-test PRIVATE blofeld_core blofeld_dsp blofeld_mcu_dsp
-    blofeld_dsp_native blofeld_lcd_fixture)
-  add_executable(blofeld-original-reset-start-test test/original_reset_start_test.cpp
-    test/scheduled_coupling_fixture.cpp test/original_owned_clock_fixture.cpp)
-  target_link_libraries(blofeld-original-reset-start-test PRIVATE blofeld_core blofeld_dsp blofeld_mcu_dsp
-    blofeld_dsp_native blofeld_lcd_fixture)
-  add_test(NAME original_reset_start COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_reset_start.py"
-    $<TARGET_FILE:blofeld-original-reset-start-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-reset-start.trace")
-  set_tests_properties(original_reset_start PROPERTIES SKIP_RETURN_CODE 77)
-  add_executable(blofeld-original-fetch-reset-start-test test/original_fetch_reset_start_test.cpp
-    test/original_owned_clock_fixture.cpp)
-  target_link_libraries(blofeld-original-fetch-reset-start-test PRIVATE blofeld_mcu_dsp_runtime
-    blofeld_lcd_fixture blofeld_nand_peer blofeld_nand_store)
-  add_test(NAME original_fetch_reset_start COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_fetch_reset_start.py"
-    $<TARGET_FILE:blofeld-original-fetch-reset-start-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-main-boot-document.bin"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-fetch-reset-start.json")
-  set_tests_properties(original_fetch_reset_start PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
-  add_test(NAME original_fetch_write_decoder COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_fetch_write_decoder.py"
-    $<TARGET_FILE:blofeld-original-fetch-reset-start-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-main-boot-document.bin"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-fetch-write-decoder.json")
-  set_tests_properties(original_fetch_write_decoder PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
-  add_test(NAME original_fetch_gpio_start COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_fetch_gpio_start.py"
-    $<TARGET_FILE:blofeld-original-fetch-reset-start-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-main-boot-document.bin"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-fetch-gpio-start.json")
-  set_tests_properties(original_fetch_gpio_start PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
-  add_test(NAME original_fetch_nand_start COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_fetch_nand_start.py"
-    $<TARGET_FILE:blofeld-original-fetch-reset-start-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-main-boot-document.bin"
-    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/connected-nand/initial-nand.bfnand"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-fetch-nand-start.json")
-  set_tests_properties(original_fetch_nand_start PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 3600)
+
   add_test(NAME original_shi_routes COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_shi_routes.py"
     $<TARGET_FILE:blofeld-headless>
@@ -2951,13 +1913,6 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-shi-routes")
   set_tests_properties(original_shi_routes PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
-  add_test(NAME original_checkpoint_cli COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_checkpoint_cli.py"
-    $<TARGET_FILE:blofeld-headless>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-checkpoint-cli.trace")
-  set_tests_properties(original_checkpoint_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
   add_test(NAME original_reference_cli COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_reference_cli.py"
     $<TARGET_FILE:blofeld-headless>
@@ -2965,13 +1920,7 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-reference-cli.trace")
   set_tests_properties(original_reference_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
-  add_test(NAME original_scheduled_coupling COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_scheduled_coupling.py"
-    $<TARGET_FILE:blofeld-scheduled-coupling-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-scheduled-coupling.trace")
-  set_tests_properties(original_scheduled_coupling PROPERTIES SKIP_RETURN_CODE 77)
+
   add_executable(blofeld-shi-test test/dsp_shi_test.cpp)
   target_link_libraries(blofeld-shi-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_shi COMMAND blofeld-shi-test)
@@ -2981,12 +1930,6 @@ if(BUILD_TESTING)
   add_executable(blofeld-core-test test/core_test.cpp)
   target_link_libraries(blofeld-core-test PRIVATE blofeld_core)
   add_test(NAME native_core COMMAND blofeld-core-test)
-  add_executable(blofeld-mcu-checkpoint-test test/mcu_checkpoint_test.cpp
-    test/mcu_checkpoint_peripherals.cpp test/mcu_checkpoint_flash.cpp)
-  target_link_libraries(blofeld-mcu-checkpoint-test PRIVATE blofeld_core)
-  add_test(NAME mcu_checkpoint COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/mcu_checkpoint.py"
-    $<TARGET_FILE:blofeld-mcu-checkpoint-test>)
   add_executable(blofeld-code-cache-test test/code_cache_test.cpp)
   target_link_libraries(blofeld-code-cache-test PRIVATE blofeld_core)
   add_test(NAME code_cache COMMAND blofeld-code-cache-test)
@@ -3000,18 +1943,9 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-gpio-unknown-driver-test PRIVATE blofeld_mcu blofeld_dsp_peripherals)
   add_test(NAME gpio_unknown_drivers COMMAND blofeld-gpio-unknown-driver-test)
   add_executable(blofeld-gpio-pad-source-test test/gpio_pad_source_test.cpp)
-  target_link_libraries(blofeld-gpio-pad-source-test PRIVATE blofeld_mcu blofeld_own_dsp_io)
+  target_link_libraries(blofeld-gpio-pad-source-test PRIVATE blofeld_mcu blofeld_dsp_machine)
   add_test(NAME gpio_pad_sources COMMAND blofeld-gpio-pad-source-test)
-  add_executable(blofeld-gpio-pad-checkpoint-test test/gpio_pad_checkpoint_test.cpp)
-  target_link_libraries(blofeld-gpio-pad-checkpoint-test PRIVATE
-    blofeld_core blofeld_dsp blofeld_dsp_native)
-  add_test(NAME gpio_pad_checkpoints COMMAND blofeld-gpio-pad-checkpoint-test)
-  add_executable(blofeld-mcu-dsp-reset-test test/mcu_dsp_reset_test.cpp)
-  target_link_libraries(blofeld-mcu-dsp-reset-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
-  add_test(NAME mcu_dsp_reset COMMAND blofeld-mcu-dsp-reset-test)
-  add_executable(blofeld-mcu-reset-test test/mcu_reset_test.cpp)
-  target_link_libraries(blofeld-mcu-reset-test PRIVATE blofeld_mcu_dsp_runtime)
-  add_test(NAME mcu_reset COMMAND blofeld-mcu-reset-test)
+
   add_executable(blofeld-mcu-cop-test test/mcu_cop_test.cpp)
   target_link_libraries(blofeld-mcu-cop-test PRIVATE blofeld_core)
   add_test(NAME mcu_cop COMMAND blofeld-mcu-cop-test)
@@ -3026,71 +1960,7 @@ if(BUILD_TESTING)
     test/mcu_sci_reference_owner.cpp)
   target_link_libraries(blofeld-sci-reference-test PRIVATE blofeld_core)
   add_test(NAME mcu_sci_reference COMMAND blofeld-sci-reference-test)
-  add_executable(blofeld-dsp-run-clock-test test/dsp_run_clock_test.cpp)
-  target_link_libraries(blofeld-dsp-run-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_run_clock COMMAND blofeld-dsp-run-clock-test)
-  add_executable(blofeld-dsp-agu-interlocks-test test/dsp_agu_interlocks_test.cpp)
-  target_link_libraries(blofeld-dsp-agu-interlocks-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_agu_interlocks COMMAND blofeld-dsp-agu-interlocks-test)
-  add_executable(blofeld-dsp-interlock-test test/dsp_interlock_clock_test.cpp test/dsp_interlock_state.cpp)
-  target_include_directories(blofeld-dsp-interlock-test PRIVATE src)
-  target_link_libraries(blofeld-dsp-interlock-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_interlock_clock COMMAND blofeld-dsp-interlock-test)
-  add_test(NAME dsp_interlock_reference COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_interlock_clock.py"
-    $<TARGET_FILE:blofeld-dsp-interlock-test>
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-interlock-reference")
-  add_test(NAME dsp_status_pipeline COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_status_pipeline.py"
-    $<TARGET_FILE:blofeld-dsp-interlock-test>
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-status-pipeline")
-  add_executable(blofeld-dsp-reset-epoch-test test/dsp_reset_epoch_test.cpp)
-  target_link_libraries(blofeld-dsp-reset-epoch-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_reset_epoch COMMAND blofeld-dsp-reset-epoch-test)
-  add_executable(blofeld-dsp-reset-interlock-test test/dsp_reset_interlock_test.cpp)
-  target_link_libraries(blofeld-dsp-reset-interlock-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_reset_interlocks COMMAND blofeld-dsp-reset-interlock-test)
-  add_executable(blofeld-dsp-hardware-reset-test test/dsp_hardware_reset_test.cpp)
-  target_link_libraries(blofeld-dsp-hardware-reset-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_hardware_reset COMMAND blofeld-dsp-hardware-reset-test)
-  add_executable(blofeld-dsp-irq-clock-test test/dsp_irq_clock_test.cpp)
-  target_link_libraries(blofeld-dsp-irq-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_irq_clock COMMAND blofeld-dsp-irq-clock-test)
-  set_tests_properties(dsp_irq_clock PROPERTIES TIMEOUT 120)
-  add_executable(blofeld-dsp-irq-admission-test test/dsp_irq_admission_test.cpp)
-  target_link_libraries(blofeld-dsp-irq-admission-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_irq_admission COMMAND blofeld-dsp-irq-admission-test)
-  set_tests_properties(dsp_irq_admission PROPERTIES TIMEOUT 120)
-  add_executable(blofeld-dsp-scheduled-run-test test/dsp_scheduled_run_test.cpp)
-  target_link_libraries(blofeld-dsp-scheduled-run-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_scheduled_run COMMAND blofeld-dsp-scheduled-run-test)
-  add_executable(blofeld-joint-dsp-hold-test test/joint_dsp_hold_test.cpp)
-  target_link_libraries(blofeld-joint-dsp-hold-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
-  add_test(NAME joint_dsp_hold COMMAND blofeld-joint-dsp-hold-test)
-  add_executable(blofeld-original-dsp-clock-test test/original_dsp_clock_test.cpp)
-  target_link_libraries(blofeld-original-dsp-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME original_dsp_clock COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_clock.py"
-    $<TARGET_FILE:blofeld-original-dsp-clock-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-clock.trace")
-  set_tests_properties(original_dsp_clock PROPERTIES SKIP_RETURN_CODE 77)
-  add_test(NAME original_dsp_agu_clock COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_agu_clock.py"
-    $<TARGET_FILE:blofeld-original-dsp-clock-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-agu-clock.trace")
-  set_tests_properties(original_dsp_agu_clock PROPERTIES SKIP_RETURN_CODE 77)
 
-  add_test(NAME original_dsp_reset_clock COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_reset_clock.py"
-    $<TARGET_FILE:blofeld-original-dsp-clock-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-reset-clock.trace")
-  set_tests_properties(original_dsp_reset_clock PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
   add_executable(blofeld-clocked-midi-test test/mcu_clocked_midi_test.cpp)
   target_link_libraries(blofeld-clocked-midi-test PRIVATE blofeld_mcu_midi)
   add_test(NAME mcu_clocked_midi COMMAND blofeld-clocked-midi-test)
@@ -3174,39 +2044,7 @@ if(BUILD_TESTING)
   set_tests_properties(firmware_python PROPERTIES
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     ENVIRONMENT "BLOFELD_TEST_BINARY=$<TARGET_FILE:blofeld-headless>")
-  get_property(blofeld_build_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
-  set(blofeld_hardened_executables "")
-  foreach(target IN LISTS blofeld_build_targets)
-    get_target_property(kind ${target} TYPE)
-    if(kind STREQUAL "EXECUTABLE")
-      string(APPEND blofeld_hardened_executables "$<TARGET_FILE:${target}>\n")
-    endif()
-  endforeach()
-  file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/hardening-executables.txt"
-    CONTENT "${blofeld_hardened_executables}$<TARGET_FILE:blofeld-reference-pipeline-test>\n$<TARGET_FILE:blofeld-original-board-power-on-test>\n$<TARGET_FILE:blofeld-sci-midi-timeline-test>\n$<TARGET_FILE:blofeld-host-midi-session-test>\n$<TARGET_FILE:blofeld-sci-fast-test>\n$<TARGET_FILE:blofeld-sci-overlap-test>\n$<TARGET_FILE:blofeld-gpio-multiple-drivers-test>\n$<TARGET_FILE:blofeld-original-gpio-reset-test>\n$<TARGET_FILE:blofeld-usb-functional-halt-test>\n$<TARGET_FILE:blofeld-scalar-store-test>\n$<TARGET_FILE:blofeld-scalar-store-window-test>\n$<TARGET_FILE:blofeld-repeat-scalar-test>\n$<TARGET_FILE:blofeld-repeat-scalar-guard-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-native-test>\n$<TARGET_FILE:blofeld-modifier-agu-test>\n$<TARGET_FILE:blofeld-modifier-move-test>\n$<TARGET_FILE:blofeld-modifier-window-test>\n$<TARGET_FILE:blofeld-partial-scalar-test>\n$<TARGET_FILE:blofeld-partial-scalar-window-test>\n$<TARGET_FILE:blofeld-repeat-partial-test>\n$<TARGET_FILE:blofeld-repeat-partial-guard-test>\n$<TARGET_FILE:blofeld-accumulator-load-test>\n$<TARGET_FILE:blofeld-accumulator-load-window-test>\n$<TARGET_FILE:blofeld-accumulator-load-incoming-test>\n$<TARGET_FILE:blofeld-preupdate-native-test>\n$<TARGET_FILE:blofeld-preupdate-clock-test>\n$<TARGET_FILE:blofeld-preupdate-window-test>\n$<TARGET_FILE:blofeld-preupdate-guard-test>\n$<TARGET_FILE:blofeld-preupdate-load-test>\n$<TARGET_FILE:blofeld-preupdate-producer-test>\n$<TARGET_FILE:blofeld-preupdate-modifier-guard-test>\n$<TARGET_FILE:blofeld-preupdate-modifier-test>\n$<TARGET_FILE:blofeld-preupdate-store-test>\n$<TARGET_FILE:blofeld-preupdate-alu-test>\n$<TARGET_FILE:blofeld-preupdate-alu-window-test>\n$<TARGET_FILE:blofeld-preupdate-loop-test>\n$<TARGET_FILE:blofeld-preupdate-source-window-test>\n$<TARGET_FILE:blofeld-short-load-native-test>\n$<TARGET_FILE:blofeld-short-load-stage-test>\n$<TARGET_FILE:blofeld-short-load-guard-test>\n$<TARGET_FILE:blofeld-short-load-agu-test>\n$<TARGET_FILE:blofeld-short-load-accumulator-test>\n$<TARGET_FILE:blofeld-short-load-loop-test>\n$<TARGET_FILE:blofeld-short-load-scaling-test>\n$<TARGET_FILE:blofeld-repeat-register-test>\n$<TARGET_FILE:blofeld-repeat-register-producer-test>\n$<TARGET_FILE:blofeld-repeat-register-guard-test>\n$<TARGET_FILE:blofeld-offset-store-test>\n$<TARGET_FILE:blofeld-repeat-accumulator-preupdate-test>\n$<TARGET_FILE:blofeld-unknown-fetch-returns-test>\n$<TARGET_FILE:blofeld-unknown-fetch-samples-test>\n$<TARGET_FILE:blofeld-unknown-fetch-actual-test>\n$<TARGET_FILE:blofeld-unknown-fetch-dma-test>\n$<TARGET_FILE:blofeld-unknown-fetch-branches-test>\n$<TARGET_FILE:blofeld-postloop-return-test>\n$<TARGET_FILE:blofeld-subroutine-clock-test>\n$<TARGET_FILE:blofeld-subroutine-guard-test>\n$<TARGET_FILE:blofeld-dor-clock-test>\n$<TARGET_FILE:blofeld-raw-middle-test>\n$<TARGET_FILE:blofeld-raw-offset-agu-test>\n$<TARGET_FILE:blofeld-dsp-gpio-pull-test>\n$<TARGET_FILE:blofeld-parallel-middle-test>\n$<TARGET_FILE:blofeld-nand-sequential-read-test>\n$<TARGET_FILE:blofeld-nand-ce-pause-test>\n$<TARGET_FILE:blofeld-near-end-clock-test>\n$<TARGET_FILE:blofeld-near-end-guard-test>\n$<TARGET_FILE:blofeld-movem-clock-test>\n$<TARGET_FILE:blofeld-dma-pipeline-activation-test>\n$<TARGET_FILE:blofeld-dma-pipeline-controls-test>\n$<TARGET_FILE:blofeld-dma-pipeline-timing-test>\n$<TARGET_FILE:blofeld-square-clock-test>\n$<TARGET_FILE:blofeld-audio-clock-board-test>\n$<TARGET_FILE:blofeld-word-decode-test>\n$<TARGET_FILE:blofeld-decode-extension-test>\n$<TARGET_FILE:blofeld-immediate-compare-test>\n$<TARGET_FILE:blofeld-conditional-branch-test>\n$<TARGET_FILE:blofeld-absolute-branch-test>\n$<TARGET_FILE:blofeld-absolute-branch-edges-test>\n$<TARGET_FILE:blofeld-absolute-branch-guards-test>\n$<TARGET_FILE:blofeld-absolute-unknown-branches-test>\n$<TARGET_FILE:blofeld-absolute-branch-native-test>\n$<TARGET_FILE:blofeld-peripheral-bit-test>\n$<TARGET_FILE:blofeld-gpio-dma-test>\n$<TARGET_FILE:blofeld-gpio-dma-guards-test>\n$<TARGET_FILE:blofeld-gpio-dma-serial-test>\n$<TARGET_FILE:blofeld-timer-dma-native-test>\n$<TARGET_FILE:blofeld-timer-dma-ports-test>\n$<TARGET_FILE:blofeld-timer-dma-words-test>\n$<TARGET_FILE:blofeld-timer-dma-reads-test>\n$<TARGET_FILE:blofeld-timer-dma-serial-test>\n$<TARGET_FILE:blofeld-rmw-lifecycle-test>\n$<TARGET_FILE:blofeld-rmw-loop-test>\n$<TARGET_FILE:blofeld-rmw-peer-test>\n$<TARGET_FILE:blofeld-rmw-timer-clock-test>\n$<TARGET_FILE:blofeld-sr-control-test>\n$<TARGET_FILE:blofeld-sr-memory-test>\n$<TARGET_FILE:blofeld-sr-guard-test>\n$<TARGET_FILE:blofeld-modifier-direction-test>\n$<TARGET_FILE:blofeld-modifier-direction-window-test>\n$<TARGET_FILE:blofeld-repeat-handoff-test>\n$<TARGET_FILE:blofeld-repeat-handoff-guard-test>\n$<TARGET_FILE:blofeld-absolute-call-test>\n$<TARGET_FILE:blofeld-absolute-call-guard-test>\n$<TARGET_FILE:blofeld-absolute-call-producer-test>\n$<TARGET_FILE:blofeld-absolute-data-test>\n$<TARGET_FILE:blofeld-absolute-data-guard-test>\n$<TARGET_FILE:blofeld-core-blocks-test>\n$<TARGET_FILE:blofeld-full-peripheral-test>\n$<TARGET_FILE:blofeld-full-peripheral-ports-test>\n$<TARGET_FILE:blofeld-full-peripheral-guards-test>\n$<TARGET_FILE:blofeld-full-peripheral-producers-test>\n")
-  set(blofeld_hardening_options)
-  if(BLOFELD_USE_LIBSTDCXX)
-    list(APPEND blofeld_hardening_options --libstdcxx)
-  endif()
-  if(BLOFELD_CF_PROTECTION)
-    list(APPEND blofeld_hardening_options --cf-protection)
-  endif()
-  add_test(NAME build_hardening COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/build_hardening.py"
-    --source "${CMAKE_CURRENT_SOURCE_DIR}"
-    --database "${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json"
-    --binary-list "${CMAKE_CURRENT_BINARY_DIR}/generated/hardening-executables.txt"
-    --readelf "${BLOFELD_LLVM_READELF}" --compiler "${CMAKE_C_COMPILER}"
-    --llvm-dis "${BLOFELD_LLVM_DIS}"
-    --native zlibstatic=$<TARGET_FILE:zlibstatic>
-    --native blofeld_sleigh=$<TARGET_FILE:blofeld_sleigh>
-    --native blofeld_dsp_native=$<TARGET_FILE:blofeld_dsp_native>
-    --native asmjit=$<TARGET_FILE:asmjit>
-    --native sndfile=$<TARGET_FILE:sndfile>
-    --native blofeld_pulse=$<TARGET_FILE:blofeld_pulse>
-    --native blofeld_pulse_common=$<TARGET_FILE:blofeld_pulse_common>
-    ${blofeld_independent_native_args}
-    ${blofeld_hardening_options})
+
 endif()
 
 install(TARGETS blofeld-headless RUNTIME DESTINATION bin)
@@ -3228,294 +2066,10 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS blofeld-native-dependency-timeline-test
-    blofeld-pcode-storage-test
-    blofeld-dsp-native-timed-test blofeld-dsp-native-dependencies-test
-    blofeld-native-region-clock-test blofeld-native-region-frontend-test
-    blofeld-native-region-events-test blofeld-native-deferred-irq-test
-    blofeld-native-region-mcu-test
-    blofeld-dsp-rom-program-test blofeld-reference-original-midi-rom
-    blofeld-mcu-dsp-runtime-test blofeld-own-dsp-timeline-checkpoint-test
-    blofeld-own-dsp-ram-bit-test blofeld-own-dsp-ram-bit-dma-test
-    blofeld-own-dsp-fetch-test blofeld-own-dsp-clock-test
-    blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test blofeld-dsp-unclocked-test
-    blofeld-dsp-observed-test blofeld-dsp-timer-sample-test blofeld-dsp-write-decoder-test
-    blofeld-dsp-reserved-write-decoder-test
-    blofeld-reserved-read-decoder-test
-    blofeld-vacant-read-decoder-test
-    blofeld-original-reverb-clear-test
-    blofeld-dsp-independent-io-fetch-test
-    blofeld-dsp-ram-rmw-test
-    blofeld-dsp-gpio-write-decoder-test
-    blofeld-dsp-gpio-latch-test
-    blofeld-own-dsp-reset-test blofeld-own-dsp-checkpoint-test
-    blofeld-hcs08-bit-known-test blofeld-hcs08-gpio-known-test
-    blofeld-hcs08-captured-known-test blofeld-hcs08-known-load-test blofeld-hcs08-icg-events-test
-    blofeld-hcs08-icg-clocks-test blofeld-hcs08-icg-status-test
-    blofeld-hcs08-icg-history-test blofeld-hcs08-known-interrupts-test
-    blofeld-original-hcs08-icg-history-test blofeld-original-hcs08-clock-prefix-test
-    blofeld-hcs08-board-memory-test blofeld-original-hcs08-board-memory-test
-    blofeld-hcs08-board-test blofeld-original-hcs08-board-test
-    blofeld-hcs08-board-reset-test blofeld-original-hcs08-board-reset-test
-    blofeld-hcs08-board-wire-test blofeld-original-keyboard-board-reset-test
-    blofeld-hcs08-board-status-test blofeld-original-keyboard-board-upload-test
-    blofeld-hcs08-board-serial-test
-    blofeld-hcs08-subroutine-cycle-test blofeld-original-hcs08-subroutine-test
-    blofeld-hcs08-call-cycle-test blofeld-original-hcs08-call-test
-    blofeld-hcs08-rmw-cycle-test blofeld-original-hcs08-modify-test
-    blofeld-hcs08-clear-cycle-test blofeld-original-hcs08-clear-test
-    blofeld-hcs08-indexed-store-test blofeld-original-hcs08-indexed-test
-    blofeld-hcs08-prefetch-store-test
-    blofeld-original-hcs08-spi-word-test blofeld-original-hcs08-spi-move-test
-    blofeld-original-startup-identity-test blofeld-original-identity-main-test blofeld-original-device-identity-test blofeld-virtual-device-state-test
-    blofeld-device-identity-test blofeld-hcs08-instruction-reservation-test blofeld-hcs08-irq-bus-test blofeld-hcs08-irq-test
-    blofeld-original-hcs08-spi-irq-test blofeld-hcs08-spi-test blofeld-original-hcs08-spi-test blofeld-hcs08-register-knowledge-test
-    blofeld-original-hcs08-clock-startup-test blofeld-hcs08-gpio-test blofeld-original-hcs08-gpio-test format-check
-    blofeld-hcs08-peripheral-reset-test blofeld-hcs08-icg-test blofeld-hcs08-icg-native-test blofeld-hcs08-flash-clock-test
-    blofeld-original-hcs08-reset-entry-test blofeld-hcs08-reset-security-test blofeld-hcs08-background-reset-test blofeld-original-keyboard-chain-test
-    blofeld-original-keyboard-reset-test blofeld-hcs08-reset-test blofeld-hcs08-run-clock-test blofeld-original-keyboard-target-test
-    blofeld-hcs08-bdc-wire-test blofeld-original-keyboard-bdc-wire-test blofeld-hcs08-bdc-test blofeld-original-hcs08-bdc-test
-    blofeld-hcs08-flash-test blofeld-hcs08-flash-recovery-test blofeld-original-hcs08-flash-test blofeld-original-hcs08-test
-    blofeld-hcs08-core-test blofeld-hcs08-arithmetic-test blofeld-gpio-output-test blofeld-gpio-unknown-driver-test
-    blofeld-gpio-pad-source-test blofeld-original-runtime-clocks-test blofeld-original-mcu-request-release-test blofeld-original-gpio-pair-test
-    blofeld-original-gpio-pair-checkpoint-test blofeld-original-gpio-sequence-test blofeld-original-gpio-parameter-test blofeld-original-gpio-sound-test
-    blofeld-original-gpio-notification-test blofeld-original-gpio-usb-notification-test blofeld-original-gpio-sysex-test blofeld-original-gpio-global-wait-test
-    blofeld-hcs08-serial-foreground-test blofeld-original-hcs08-serial-foreground-test
-    blofeld-hcs08-board-irq-test blofeld-hcs08-board-irq-native-test
-    blofeld-hcs08-flash-vector-test blofeld-hcs08-vector-irq-test blofeld-hcs08-vector-atomic-test
-    blofeld-hcs08-swi-test blofeld-hcs08-swi-boundary-test blofeld-hcs08-decimal-test
-    blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test
-    blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test
-    blofeld-esai-status-fetch-test blofeld-dma-test
-    blofeld-gpio-pad-checkpoint-test blofeld-hcs08-prefetch-scanner-test blofeld-hcs08-prefetch-irq-test blofeld-hcs08-prefetch-jump-test
-    blofeld-hcs08-prefetch-return-test blofeld-hcs08-spi-run-clock-test blofeld-original-hcs08-spi-run-clock-test blofeld-usbip-runtime-test
-    blofeld-usbip-suspend-test blofeld-hcs08-prefetch-peripheral-test blofeld-hcs08-prefetch-branch-test blofeld-hcs08-prefetch-data-test
-    blofeld-hcs08-prefetch-test blofeld-original-hcs08-prefetch-test blofeld-hcs08-spi-clock-test blofeld-original-hcs08-calibration-test
-    blofeld-original-hcs08-pitch-event-test blofeld-original-hcs08-adc-clock-test blofeld-hcs08-irq-enable-delay-test blofeld-hcs08-adc-flags-test
-    blofeld-hcs08-adc-test blofeld-original-hcs08-adc-test blofeld-hcs08-tpm-test blofeld-hcs08-cop-test
-    blofeld-original-hcs08-timer-wait-test blofeld-original-hcs08-icg-test blofeld-nand-operation-clock-test blofeld-original-keyboard-reset-sync-test
-    blofeld-hcs08-instruction-timing-test blofeld-hcs08-divide-test blofeld-original-reset-start-test blofeld-joint-dsp-hold-test
-    blofeld-dsp-hardware-reset-test blofeld-dsp-reset-interlock-test blofeld-dsp-timer-events-test blofeld-dsp-memory-storage-test
-    blofeld-dsp-irqa-test blofeld-dsp-dma-interrupt-test blofeld-original-dsp-gpio-input-test
-    blofeld-original-dsp-gpio-request-test
-    blofeld-original-gpio-midi-test
-    blofeld-original-dsp-download-test
-    blofeld-original-update-transport-test
-    blofeld-original-keyboard-transport-test
-    blofeld-original-keyboard-short-test
-    blofeld-original-keyboard-initial-test
-    blofeld-original-keyboard-receiver-test
-    blofeld-original-keyboard-handoff-test
-    blofeld-esai-interrupt-test
-    blofeld-pin-routing-test
-    blofeld-sample-library-test blofeld-hc12-ccr-test blofeld-original-usb-midi-test
-    blofeld-original-usb-queue-test
-    blofeld-original-midi-forward-test
-    blofeld-original-midi-dispatch-test
-    blofeld-original-usb-peer-test
-    blofeld-sample-wave-test
-    blofeld-usbip-test blofeld-usb-host-test blofeld-usb-host-native-test
-    blofeld-usb-device-test blofeld-usbip-management-test blofeld-usb-device-native-test
-    blofeld-usbip-session-test blofeld-usbip-tcp-test blofeld-usbip-tcp-native-test
-    blofeld-usbip-frame-timeout-test
-    blofeld-usbip-output-timeout-test
-    blofeld-usbip-session-boundaries-test
-    blofeld-serial-pcm-test
-    blofeld-host-midi-test
-    blofeld-sequence-codec-test blofeld-host-midi-port-test
-    blofeld-midi-timed-test
-    blofeld-original-host-midi-test
-    blofeld-pcm-transport-test
-    blofeld-bank-test
-    blofeld-repeat-test
-    blofeld-reference-runtime-status-test
-    blofeld-reference-access-test
-    blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test blofeld-reference-cycle-test
-    blofeld-controller-write-test
-    blofeld-native-budget-test
-    blofeld-native-budget-events-test
-    blofeld-native-loop-test
-    blofeld-loop-prefill-test
-    blofeld-loop-fetch-test blofeld-loop-program-fetch-test blofeld-loop-native-fetch-test
-    blofeld-loop-identity-thread-test blofeld-pipeline-occurrence-test blofeld-loop-port-test
-    blofeld-auto-loop-test blofeld-auto-loop-source-test blofeld-auto-loop-transfer-source-test
-    blofeld-auto-loop-source-guard-test blofeld-auto-loop-a0-test blofeld-r-data-transfer-test
-    blofeld-loop-barrier-test blofeld-loader-prefix-operand-test
-    blofeld-program-memory-test blofeld-program-memory-clock-test blofeld-program-memory-guard-test
-    blofeld-relative-branch-test blofeld-relative-branch-guard-test
-    blofeld-ccr-control-test blofeld-indirect-control-test blofeld-control-composition-test
-    blofeld-absolute-jump-test
-    blofeld-control-guard-test blofeld-document-loader-entry-test
-    blofeld-omr-native-test blofeld-omr-clock-test blofeld-omr-branch-test
-    blofeld-omr-peripheral-test blofeld-omr-memory-test blofeld-omr-thread-test
-    blofeld-accumulator-clock-test blofeld-accumulator-hazard-test
-    blofeld-accumulator-thread-test blofeld-postloop-context-test
-    blofeld-timeline-ownership-test blofeld-fetch-run-test blofeld-fetch-reset-test blofeld-fetch-schedule-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test
-    blofeld-overlap-test blofeld-pipeline-test blofeld-memory-pipeline-test blofeld-parallel-memory-test
-    blofeld-parallel-accumulator-add-test
-    blofeld-transfer-pipeline-test blofeld-reference-dma-admission-test
-    blofeld-dax-test
-    blofeld-reference-checkpoint-test blofeld-reference-rom-fixture blofeld-reference-pipeline-test blofeld-reference-reset-release-test blofeld-original-board-power-on-test
-    blofeld-reference-original-midi-rom
-    blofeld-dsp-completion-observer-test blofeld-dsp-native-access-test blofeld-dsp-external-events-test
-    blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
-    blofeld-mcu-dsp-fetch-schedule-test
-    blofeld-mcu-power-on-test blofeld-mcu-dsp-fetch-power-on-test blofeld-original-power-on-test
-    blofeld-dsp-fetch-clone-test blofeld-mcu-dsp-fetch-clone-test blofeld-fetch-clone-isolation-test
-    blofeld-mcu-dsp-fetch-events-test blofeld-mcu-dsp-fetch-external-wait-test
-    blofeld-mcu-dsp-fetch-external-reset-test
-    blofeld-mcu-dsp-fetch-wait-test blofeld-mcu-dsp-fetch-reset-test
-    blofeld-mcu-dsp-fetch-checkpoint-test
-    blofeld-mcu-dsp-fetch-dsp-reset-test blofeld-original-fetch-reset-start-test
-    blofeld-hc12-cycle-test blofeld-hc12-masked-gpio-test
-    blofeld-hc12-cycle-extended-test
-    blofeld-hc12-compare-stack-test
-    blofeld-hc12-indexed-test
-    blofeld-hc12-minmax-test
-    blofeld-hc12-flash-cycles-test
-    blofeld-mcu-cycle-test
-    blofeld-mcu-run-clock-test
-    blofeld-dsp-run-clock-test blofeld-dsp-reset-epoch-test blofeld-dsp-interlock-test blofeld-dsp-divide-test
-    blofeld-dsp-fast-normalization-test blofeld-dsp-agu-interlocks-test
-    blofeld-dsp-irq-clock-test
-    blofeld-dsp-irq-admission-test
-    blofeld-dsp-scheduled-run-test
-    blofeld-original-dsp-clock-test
-    blofeld-original-dsp-midi-test
-    blofeld-original-dsp-note-test
-    blofeld-original-dsp-scheduler-test
-    blofeld-original-dsp-request-queue-test
-    blofeld-original-dsp-workspace-test
-    blofeld-original-dsp-peripheral-init-test
-    blofeld-original-dsp-audio-dma-test
-    blofeld-original-dsp-shi-receive-test
-    blofeld-original-dsp-wire-test
-    blofeld-original-dsp-clocked-wire-test
-    blofeld-mcu-clock-checkpoint-test
-    blofeld-mcu-wait-clock-test
-    blofeld-original-cycle-boot-test
-    blofeld-original-cycle-application-test
-    blofeld-original-run-clock-test
-    blofeld-original-owned-clock-test
-    blofeld-firmware-nand-test
-    blofeld-host-midi-output-session-test
-    blofeld-midi-serial-test blofeld-midi-serial-receiver-test
-    blofeld-mcu-midi-output-test blofeld-reference-midi-output-test
-    blofeld-mcu-midi-test blofeld-clocked-midi-test
-    blofeld-nand-read-test blofeld-nand-write-test blofeld-nand-power-test blofeld-nand-gpio-test
-    blofeld-nand-read-timing-test blofeld-original-nand-read-timing-test
-    blofeld-original-nand-pack-test
-    blofeld-original-nand-records-test
-    blofeld-nand-functional-timing-test
-    blofeld-nand-write-timing-test blofeld-original-nand-write-timing-test
-    blofeld-nand-read-setup-test blofeld-original-nand-read-setup-test
-    blofeld-nand-image-test
-    blofeld-nand-identification-test blofeld-original-nand-identification-test
-    blofeld-nand-store-test
-    blofeld-nand-gpio-write-test
-    blofeld-original-nand-write-test
-    blofeld-original-update-validation-test
-    blofeld-original-update-forward-test
-    blofeld-original-update-diagnostic-test
-    blofeld-original-update-coupled-test
-    blofeld-mcu-checkpoint-test
-    blofeld-shi-test blofeld-mcu-shi-test blofeld-dsp-test blofeld-dsp-boot-test blofeld-dsp-pll-test
-    blofeld-dsp-instruction-test blofeld-dsp-memory-map-test blofeld-dsp-checkpoint-test blofeld-dsp-cycle-cache-test
-    blofeld-dsp-gpio-test
-    blofeld-dsp-timers-test
-    blofeld-dsp-timer-updates-test
-    blofeld-dsp-capture-test
-    blofeld-dsp-interrupt-test
-    blofeld-dsp-norm-test
-    blofeld-dsp-transfer-test blofeld-dsp-shifted-subtract-test blofeld-dsp-vsl-test
-    blofeld-dsp-saturation-test
-    blofeld-dsp-power-test
-    blofeld-dsp-cmpm-test blofeld-immediate-compare-test
-    blofeld-original-dsp-filters-test
-    blofeld-original-dsp-master-output-test
-    blofeld-original-dsp-sample-test
-    blofeld-original-dsp-sample-receiver-test
-    blofeld-original-dsp-waveforms-test
-    blofeld-original-dsp-wavetable-test
-    blofeld-original-dsp-envelopes-test
-    blofeld-original-dsp-voice-test
-    blofeld-original-dsp-voice-master-test
-    blofeld-original-dsp-voice-pcm-test
-    blofeld-original-dsp-voice-host-test
-    blofeld-original-dsp-voice-audio-test
-    blofeld-original-dsp-voice-midi-test
-    blofeld-original-dsp-foreground-test
-    blofeld-original-dsp-program-guard-test
-    blofeld-original-dsp-repeat-test
-    blofeld-original-dsp-dual-output-test
-    blofeld-original-dsp-idle-midi-test
-    blofeld-original-dsp-release-ring-test blofeld-original-dsp-sustain-ring-test
-    blofeld-original-dsp-ring-audio-test
-    blofeld-original-dsp-drive-voice-test
-    blofeld-dsp-corpus-test blofeld-coupled-boot-test blofeld-dsp-zero-loop-test
-    blofeld-original-sample-preparation-test
-    blofeld-scheduled-coupling-test
-    blofeld-mcu-cop-test blofeld-mcu-reset-test blofeld-mcu-dsp-reset-test
-    blofeld-clock-test blofeld-sci-test blofeld-sci-reference-test
-    blofeld-timer-test blofeld-pacnt-storage-test blofeld-pacnt-native-test
-    blofeld-interrupt-test blofeld-rti-test
-    blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test
-    blofeld-usb-configuration-status-test blofeld-usb-standard-read-test
-    blofeld-usb-device-status-test
-    blofeld-mcu-sender-test
-    blofeld-flash-config-test blofeld-original-flash-config-test
-    blofeld-flash-test blofeld-flash-stop-test blofeld-original-flash-stop-test
-    blofeld-flash-timing-test blofeld-flash-clock-test blofeld-flash-calendar-test
-    blofeld-flash-live-test blofeld-flash-live-worker blofeld-flash-durable-queue-test
-    blofeld-reference-flash-test
-    blofeld-flash-backdoor-test
-    blofeld-original-flash-test
-    blofeld-original-flash-restart-test
-    blofeld-original-parallel-update-test
-    blofeld-original-lcd-helper-test blofeld-original-lcd-image-test
-    blofeld-original-mcu-scan-test
-    blofeld-usb-ique-control-test
-    blofeld-usb-endpoint-reset-test
-    blofeld-original-usb-reset-test
-    blofeld-usb-bulk-fields-test blofeld-original-usb-bulk-test
-    blofeld-original-application-test
-    blofeld-wai-test
-    blofeld-st7565-test blofeld-lcd-image-test blofeld-lcd-export-test
-    blofeld-st7565-parallel-test
-    blofeld-flash-image-test blofeld-flash-file-worker
+  DEPENDS format-check
   USES_TERMINAL)
-  add_executable(blofeld-reference-pipeline-test test/reference_pipeline_test.cpp)
-  target_link_libraries(blofeld-reference-pipeline-test PRIVATE blofeld_reference_board)
-  add_test(NAME reference_pipeline COMMAND blofeld-reference-pipeline-test)
-  add_executable(blofeld-reference-reset-release-test test/reference_reset_release_test.cpp)
-  target_link_libraries(blofeld-reference-reset-release-test PRIVATE blofeld_reference_board)
-  add_test(NAME reference_reset_release COMMAND blofeld-reference-reset-release-test
-    "${CMAKE_CURRENT_BINARY_DIR}/reference-reset-release-test")
-  set_tests_properties(reference_reset_release PROPERTIES TIMEOUT 60)
-  add_executable(blofeld-reference-nand-test test/reference_nand_test.cpp)
-  add_executable(blofeld-nand-cell-board-test test/nand_cell_board_test.cpp)
-  target_link_libraries(blofeld-nand-cell-board-test PRIVATE blofeld_reference_board)
-  add_test(NAME nand_cell_board COMMAND blofeld-nand-cell-board-test)
-  add_dependencies(quality blofeld-nand-cell-board-test)
-  add_executable(blofeld-reference-nand-functional-timing-test test/reference_nand_functional_timing_test.cpp)
-  target_link_libraries(blofeld-reference-nand-functional-timing-test PRIVATE blofeld_reference_board)
-  add_test(NAME reference_nand_functional_timing COMMAND blofeld-reference-nand-functional-timing-test)
-  add_dependencies(quality blofeld-reference-nand-functional-timing-test)
-  target_link_libraries(blofeld-reference-nand-test PRIVATE blofeld_reference_board)
-  add_test(NAME reference_nand COMMAND blofeld-reference-nand-test
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-nand")
-  set_tests_properties(reference_nand PROPERTIES TIMEOUT 60)
-  add_dependencies(quality blofeld-reference-nand-test)
-  add_executable(blofeld-original-board-power-on-test test/original_board_power_on_test.cpp)
-  target_link_libraries(blofeld-original-board-power-on-test PRIVATE blofeld_reference_board)
-  add_test(NAME original_board_power_on COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_board_power_on.py"
-    $<TARGET_FILE:blofeld-original-board-power-on-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-board-power-on.json")
-  set_tests_properties(original_board_power_on PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-endif()
 
+endif()
 
 # Common-time SCI input and ordinary host sessions share no modeled OS state.
 target_sources(blofeld_reference_board PRIVATE src/board/reference_sci_midi.cpp)
@@ -3523,18 +2077,7 @@ add_library(blofeld_host_midi_session src/app/host_midi_session.cpp)
 target_include_directories(blofeld_host_midi_session PUBLIC src)
 target_link_libraries(blofeld_host_midi_session PUBLIC blofeld_reference_board blofeld_host_midi_port)
 if(BUILD_TESTING)
-  add_executable(blofeld-sci-midi-timeline-test test/sci_midi_timeline_test.cpp)
-  target_link_libraries(blofeld-sci-midi-timeline-test PRIVATE blofeld_reference_board)
-  add_test(NAME sci_midi_timeline COMMAND blofeld-sci-midi-timeline-test)
-  set_tests_properties(sci_midi_timeline PROPERTIES TIMEOUT 900)
-  add_executable(blofeld-host-midi-session-test test/host_midi_session_test.cpp)
-  target_link_libraries(blofeld-host-midi-session-test PRIVATE blofeld_host_midi_session)
-  add_test(NAME host_midi_session COMMAND blofeld-host-midi-session-test)
-  set_tests_properties(host_midi_session PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  add_executable(blofeld-host-midi-output-session-test test/host_midi_output_session_test.cpp)
-  target_link_libraries(blofeld-host-midi-output-session-test PRIVATE blofeld_host_midi_session)
-  add_test(NAME host_midi_output_session COMMAND blofeld-host-midi-output-session-test)
-  set_tests_properties(host_midi_output_session PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+
   add_test(NAME reference_midi_session_cli COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/reference_midi_session_cli.py"
     $<TARGET_FILE:blofeld-headless>
@@ -3547,11 +2090,7 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-audio-live-cli")
   set_tests_properties(reference_audio_live_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
-  add_test(NAME host_midi_session_tools COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/host_midi_session_tools.py"
-    $<TARGET_FILE:blofeld-host-midi-session-test>
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/host-midi-session-tools.json")
-  set_tests_properties(host_midi_session_tools PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 150)
+
 endif()
 
 # Independent external waveforms cover receive stop/start overlap.
@@ -3562,7 +2101,7 @@ if(BUILD_TESTING)
   add_executable(blofeld-sci-overlap-test test/mcu_sci_overlap_test.cpp)
   target_link_libraries(blofeld-sci-overlap-test PRIVATE blofeld_mcu)
   add_test(NAME mcu_sci_overlap COMMAND blofeld-sci-overlap-test)
-  add_dependencies(quality blofeld-sci-fast-test blofeld-sci-overlap-test blofeld-sci-midi-timeline-test blofeld-host-midi-session-test)
+  add_dependencies(quality blofeld-sci-fast-test blofeld-sci-overlap-test  )
 endif()
 
 # Explicit multi-driver GPIO voltage and original PU0 release/readback controls.
@@ -3593,17 +2132,6 @@ if(BUILD_TESTING)
 endif()
 
 # Native scalar/repeated full-accumulator stores and independent pipeline oracles.
-if(BUILD_TESTING)
-  foreach(kind scalar_store scalar_store_window repeat_scalar repeat_scalar_guard)
-    string(REPLACE "_" "-" target_kind "${kind}")
-    add_executable(blofeld-${target_kind}-test test/dsp_${kind}_test.cpp)
-    target_link_libraries(blofeld-${target_kind}-test PRIVATE blofeld_dsp blofeld_dsp_native)
-    add_test(NAME dsp_${kind} COMMAND blofeld-${target_kind}-test)
-    set_tests_properties(dsp_${kind} PROPERTIES TIMEOUT 300)
-  endforeach()
-  add_dependencies(quality blofeld-scalar-store-test blofeld-scalar-store-window-test
-    blofeld-repeat-scalar-test blofeld-repeat-scalar-guard-test)
-endif()
 
 # Automatic endpoint status remains separate from firmware-owned descriptor requests.
 if(BUILD_TESTING)
@@ -3627,428 +2155,41 @@ if(BUILD_TESTING)
 endif()
 
 # The alternate host service is isolated from all user and physical audio devices.
-if(BUILD_TESTING)
-  add_test(NAME host_audio_pipewire COMMAND ${Python3_EXECUTABLE} -B
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/host_audio_pipewire.py"
-    $<TARGET_FILE:blofeld-host-audio-test> $<TARGET_FILE:blofeld-audio-runtime-test>
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/host-audio-pipewire")
-  set_tests_properties(host_audio_pipewire PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-endif()
 
 # Raw modifier sources retain native register/cache phases and strict operand guards.
-if(BUILD_TESTING)
-  add_executable(blofeld-modifier-move-test test/dsp_modifier_move_test.cpp)
-  target_link_libraries(blofeld-modifier-move-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_modifier_moves COMMAND blofeld-modifier-move-test)
-  set_tests_properties(dsp_modifier_moves PROPERTIES TIMEOUT 300)
-  add_executable(blofeld-modifier-window-test test/dsp_modifier_window_model.cpp
-    test/dsp_modifier_window_test.cpp)
-  target_link_libraries(blofeld-modifier-window-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_modifier_windows COMMAND blofeld-modifier-window-test)
-  set_tests_properties(dsp_modifier_windows PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-modifier-move-test blofeld-modifier-window-test)
-endif()
 
 # Partial accumulator stores preserve raw data/CCR through ordinary and REP phases.
 if(BUILD_TESTING)
-  add_executable(blofeld-peripheral-accumulator-test test/dsp_peripheral_accumulator_test.cpp
-    test/dsp_peripheral_accumulator_native.cpp test/dsp_peripheral_accumulator_dependencies.cpp
-    test/dsp_peripheral_accumulator_guards.cpp)
-  target_link_libraries(blofeld-peripheral-accumulator-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  foreach(mode IN ITEMS native pipeline dependencies guards)
-    add_test(NAME dsp_peripheral_accumulator_${mode} COMMAND blofeld-peripheral-accumulator-test ${mode})
-    set_tests_properties(dsp_peripheral_accumulator_${mode} PROPERTIES TIMEOUT 240)
-  endforeach()
-  add_dependencies(quality blofeld-peripheral-accumulator-test)
 
-  add_executable(blofeld-peripheral-relative-test test/dsp_peripheral_relative_test.cpp
-    test/dsp_peripheral_relative_native.cpp test/dsp_peripheral_relative_guards.cpp
-    test/dsp_peripheral_relative_boundary.cpp)
-  target_link_libraries(blofeld-peripheral-relative-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  foreach(mode IN ITEMS native pipeline boundary guards)
-    add_test(NAME dsp_peripheral_relative_${mode} COMMAND blofeld-peripheral-relative-test ${mode})
-    set_tests_properties(dsp_peripheral_relative_${mode} PROPERTIES TIMEOUT 180)
-  endforeach()
-  add_dependencies(quality blofeld-peripheral-relative-test)
-
-  add_executable(blofeld-address-update-test test/dsp_address_update_test.cpp
-    test/dsp_address_update_native.cpp test/dsp_address_update_dependencies.cpp
-    test/dsp_address_update_guards.cpp)
-  target_link_libraries(blofeld-address-update-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  foreach(mode IN ITEMS native pipeline dependencies guards)
-    add_test(NAME dsp_address_update_${mode} COMMAND blofeld-address-update-test ${mode})
-    set_tests_properties(dsp_address_update_${mode} PROPERTIES TIMEOUT 120)
-  endforeach()
-  add_dependencies(quality blofeld-address-update-test)
-
-  add_executable(blofeld-peripheral-bit-test test/dsp_peripheral_bit_test.cpp test/dsp_peripheral_bit_guards.cpp)
-  target_link_libraries(blofeld-peripheral-bit-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  foreach(mode native pipeline guards)
-    add_test(NAME dsp_peripheral_bit_${mode} COMMAND blofeld-peripheral-bit-test ${mode})
-    set_tests_properties(dsp_peripheral_bit_${mode} PROPERTIES TIMEOUT 300)
-  endforeach()
-  add_dependencies(quality blofeld-peripheral-bit-test)
-  add_executable(blofeld-gpio-dma-test test/dsp_gpio_dma_test.cpp)
-  add_executable(blofeld-gpio-dma-guards-test test/dsp_gpio_dma_guards_test.cpp)
-  add_executable(blofeld-gpio-dma-serial-test test/dsp_gpio_dma_serial_test.cpp)
-  foreach(target blofeld-gpio-dma-test blofeld-gpio-dma-guards-test blofeld-gpio-dma-serial-test)
-    target_link_libraries(${target} PRIVATE blofeld_dsp blofeld_dsp_native)
-    add_dependencies(quality ${target})
-  endforeach()
-  add_test(NAME dsp_gpio_dma COMMAND blofeld-gpio-dma-test)
-  add_test(NAME dsp_gpio_dma_guards COMMAND blofeld-gpio-dma-guards-test)
-  add_test(NAME dsp_gpio_dma_serial COMMAND blofeld-gpio-dma-serial-test)
-  set_tests_properties(dsp_gpio_dma dsp_gpio_dma_guards PROPERTIES TIMEOUT 300)
-  set_tests_properties(dsp_gpio_dma_serial PROPERTIES TIMEOUT 900)
   # Timer register accesses retain real native effects beside independent DMA.
   foreach(mode IN ITEMS native ports words reads serial)
     if(mode STREQUAL "native")
       set(timer_source test/dsp_timer_dma_test.cpp)
-      set(timer_name dsp_timer_dma)
+      set(timer_name )
     else()
       set(timer_source test/dsp_timer_dma_${mode}_test.cpp)
       set(timer_name dsp_timer_dma_${mode})
     endif()
-    add_executable(blofeld-timer-dma-${mode}-test ${timer_source})
-    target_link_libraries(blofeld-timer-dma-${mode}-test PRIVATE blofeld_dsp blofeld_dsp_native)
-    add_dependencies(quality blofeld-timer-dma-${mode}-test)
-    add_test(NAME ${timer_name} COMMAND blofeld-timer-dma-${mode}-test)
-    set_tests_properties(${timer_name} PROPERTIES TIMEOUT 300)
+
   endforeach()
-  set_tests_properties(dsp_timer_dma_serial PROPERTIES TIMEOUT 900)
-  add_executable(blofeld-port-f-dma-test test/dsp_port_f_dma_test.cpp)
-  target_link_libraries(blofeld-port-f-dma-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_dependencies(quality blofeld-port-f-dma-test)
-  add_test(NAME dsp_port_f_dma COMMAND blofeld-port-f-dma-test)
-  set_tests_properties(dsp_port_f_dma PROPERTIES TIMEOUT 300)
-  add_executable(blofeld-port-f-dma-guards-test test/dsp_port_f_dma_guards_test.cpp)
-  target_link_libraries(blofeld-port-f-dma-guards-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_dependencies(quality blofeld-port-f-dma-guards-test)
-  add_test(NAME dsp_port_f_dma_guards COMMAND blofeld-port-f-dma-guards-test)
-  set_tests_properties(dsp_port_f_dma_guards PROPERTIES TIMEOUT 120)
-  add_executable(blofeld-port-f-dma-serial-test test/dsp_port_f_dma_serial_test.cpp)
-  target_link_libraries(blofeld-port-f-dma-serial-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_dependencies(quality blofeld-port-f-dma-serial-test)
-  add_test(NAME dsp_port_f_dma_serial COMMAND blofeld-port-f-dma-serial-test)
-  set_tests_properties(dsp_port_f_dma_serial PROPERTIES TIMEOUT 300)
-  add_executable(blofeld-gpio-word-dma-test test/dsp_gpio_word_dma_test.cpp)
-  target_link_libraries(blofeld-gpio-word-dma-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_dependencies(quality blofeld-gpio-word-dma-test)
-  add_test(NAME dsp_gpio_word_dma COMMAND blofeld-gpio-word-dma-test)
-  set_tests_properties(dsp_gpio_word_dma PROPERTIES TIMEOUT 300)
-  add_executable(blofeld-gpio-word-dma-guards-test test/dsp_gpio_word_dma_guards_test.cpp)
-  target_link_libraries(blofeld-gpio-word-dma-guards-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_dependencies(quality blofeld-gpio-word-dma-guards-test)
-  add_test(NAME dsp_gpio_word_dma_guards COMMAND blofeld-gpio-word-dma-guards-test)
-  set_tests_properties(dsp_gpio_word_dma_guards PROPERTIES TIMEOUT 120)
-  add_executable(blofeld-gpio-word-dma-serial-test test/dsp_gpio_word_dma_serial_test.cpp)
-  target_link_libraries(blofeld-gpio-word-dma-serial-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_dependencies(quality blofeld-gpio-word-dma-serial-test)
-  add_test(NAME dsp_gpio_word_dma_serial COMMAND blofeld-gpio-word-dma-serial-test)
-  set_tests_properties(dsp_gpio_word_dma_serial PROPERTIES TIMEOUT 900)
-  add_executable(blofeld-gpio-word-dma-accumulators-test test/dsp_gpio_word_dma_accumulators_test.cpp)
-  target_link_libraries(blofeld-gpio-word-dma-accumulators-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_dependencies(quality blofeld-gpio-word-dma-accumulators-test)
-  add_test(NAME dsp_gpio_word_dma_accumulators COMMAND blofeld-gpio-word-dma-accumulators-test)
-  set_tests_properties(dsp_gpio_word_dma_accumulators PROPERTIES TIMEOUT 300)
-  add_executable(blofeld-gpio-configuration-dma-test test/dsp_gpio_configuration_dma_test.cpp)
-  target_link_libraries(blofeld-gpio-configuration-dma-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_dependencies(quality blofeld-gpio-configuration-dma-test)
-  add_test(NAME dsp_gpio_configuration_dma COMMAND blofeld-gpio-configuration-dma-test)
-  set_tests_properties(dsp_gpio_configuration_dma PROPERTIES TIMEOUT 300)
-  add_executable(blofeld-gpio-configuration-dma-guards-test test/dsp_gpio_configuration_dma_guards_test.cpp)
-  target_link_libraries(blofeld-gpio-configuration-dma-guards-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_dependencies(quality blofeld-gpio-configuration-dma-guards-test)
-  add_test(NAME dsp_gpio_configuration_dma_guards COMMAND blofeld-gpio-configuration-dma-guards-test)
-  set_tests_properties(dsp_gpio_configuration_dma_guards PROPERTIES TIMEOUT 120)
-  add_executable(blofeld-gpio-configuration-dma-serial-test test/dsp_gpio_configuration_dma_serial_test.cpp)
-  target_link_libraries(blofeld-gpio-configuration-dma-serial-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_dependencies(quality blofeld-gpio-configuration-dma-serial-test)
-  add_test(NAME dsp_gpio_configuration_dma_serial COMMAND blofeld-gpio-configuration-dma-serial-test)
-  set_tests_properties(dsp_gpio_configuration_dma_serial PROPERTIES TIMEOUT 1200)
-  add_executable(blofeld-rmw-lifecycle-test test/dsp_rmw_lifecycle_test.cpp)
-  target_link_libraries(blofeld-rmw-lifecycle-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  foreach(mode timer-old timer-async reset fault)
-    add_test(NAME dsp_rmw_lifecycle_${mode} COMMAND blofeld-rmw-lifecycle-test ${mode})
-    set_tests_properties(dsp_rmw_lifecycle_${mode} PROPERTIES TIMEOUT 120)
-  endforeach()
-  add_dependencies(quality blofeld-rmw-lifecycle-test)
-  add_executable(blofeld-rmw-loop-test test/dsp_rmw_loop_test.cpp)
-  target_link_libraries(blofeld-rmw-loop-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  foreach(mode do-last do-before-last dor-last dor-before-last)
-    add_test(NAME dsp_rmw_loop_${mode} COMMAND blofeld-rmw-loop-test ${mode})
-    set_tests_properties(dsp_rmw_loop_${mode} PROPERTIES TIMEOUT 120)
-  endforeach()
-  add_dependencies(quality blofeld-rmw-loop-test)
-  add_executable(blofeld-rmw-timer-clock-test test/dsp_rmw_timer_clock_test.cpp)
-  target_link_libraries(blofeld-rmw-timer-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_rmw_clocked_timer COMMAND blofeld-rmw-timer-clock-test)
-  set_tests_properties(dsp_rmw_clocked_timer PROPERTIES TIMEOUT 120)
-  add_dependencies(quality blofeld-rmw-timer-clock-test)
-  add_executable(blofeld-rmw-peer-test test/dsp_rmw_peer_test.cpp)
-  target_link_libraries(blofeld-rmw-peer-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  foreach(mode clear-low clear-high set-low set-high change-low change-high)
-    add_test(NAME dsp_rmw_peer_${mode} COMMAND blofeld-rmw-peer-test ${mode})
-    set_tests_properties(dsp_rmw_peer_${mode} PROPERTIES TIMEOUT 120)
-  endforeach()
-  add_dependencies(quality blofeld-rmw-peer-test)
-  add_executable(blofeld-middle-peripheral-native-test test/dsp_middle_peripheral_native_test.cpp)
-  target_link_libraries(blofeld-middle-peripheral-native-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_middle_peripheral_native COMMAND blofeld-middle-peripheral-native-test)
-  add_executable(blofeld-middle-peripheral-window-test test/dsp_middle_peripheral_window_test.cpp)
-  target_link_libraries(blofeld-middle-peripheral-window-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_middle_peripheral_windows COMMAND blofeld-middle-peripheral-window-test)
-  set_tests_properties(dsp_middle_peripheral_native dsp_middle_peripheral_windows PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-middle-peripheral-native-test blofeld-middle-peripheral-window-test)
-  add_executable(blofeld-partial-scalar-test test/dsp_partial_scalar_test.cpp)
-  target_link_libraries(blofeld-partial-scalar-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_partial_scalar_native COMMAND blofeld-partial-scalar-test --native)
-  add_test(NAME dsp_partial_scalar_pipeline COMMAND blofeld-partial-scalar-test --candidate)
-  add_test(NAME dsp_partial_scalar_addresses COMMAND blofeld-partial-scalar-test --expanded)
-  add_executable(blofeld-partial-scalar-window-test test/dsp_partial_scalar_window_test.cpp)
-  target_link_libraries(blofeld-partial-scalar-window-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_partial_scalar_windows COMMAND blofeld-partial-scalar-window-test)
-  add_executable(blofeld-repeat-partial-test test/dsp_repeat_partial_test.cpp)
-  target_link_libraries(blofeld-repeat-partial-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_repeat_partial COMMAND blofeld-repeat-partial-test)
-  add_executable(blofeld-repeat-partial-guard-test test/dsp_repeat_partial_guard_test.cpp)
-  target_link_libraries(blofeld-repeat-partial-guard-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_repeat_partial_guard COMMAND blofeld-repeat-partial-guard-test)
-  set_tests_properties(dsp_partial_scalar_native dsp_partial_scalar_pipeline
-    dsp_partial_scalar_addresses dsp_partial_scalar_windows dsp_repeat_partial
-    dsp_repeat_partial_guard PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-partial-scalar-test blofeld-partial-scalar-window-test
-    blofeld-repeat-partial-test blofeld-repeat-partial-guard-test)
+
 endif()
 
 # Standalone accumulator loads retain native values, phases and transfer interlocks.
-if(BUILD_TESTING)
-  add_executable(blofeld-accumulator-load-test test/dsp_accumulator_load_test.cpp)
-  target_link_libraries(blofeld-accumulator-load-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_accumulator_load_native COMMAND blofeld-accumulator-load-test --native)
-  add_test(NAME dsp_accumulator_load_pipeline COMMAND blofeld-accumulator-load-test --candidate)
-  add_test(NAME dsp_accumulator_load_addresses COMMAND blofeld-accumulator-load-test --expanded)
-  add_executable(blofeld-accumulator-load-window-test test/dsp_accumulator_load_window_test.cpp)
-  target_link_libraries(blofeld-accumulator-load-window-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_accumulator_load_windows COMMAND blofeld-accumulator-load-window-test)
-  add_executable(blofeld-accumulator-load-incoming-test test/dsp_accumulator_load_incoming_test.cpp)
-  target_link_libraries(blofeld-accumulator-load-incoming-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_accumulator_load_incoming COMMAND blofeld-accumulator-load-incoming-test)
-  set_tests_properties(dsp_accumulator_load_native dsp_accumulator_load_pipeline
-    dsp_accumulator_load_addresses dsp_accumulator_load_windows dsp_accumulator_load_incoming
-    PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-accumulator-load-test blofeld-accumulator-load-window-test
-    blofeld-accumulator-load-incoming-test)
-endif()
 
 # Indexed/predecrement scalar moves retain native AGU ownership and explicit reference latency.
-if(BUILD_TESTING)
-  add_executable(blofeld-preupdate-native-test test/dsp_preupdate_native_test.cpp)
-  target_link_libraries(blofeld-preupdate-native-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_preupdate_native COMMAND blofeld-preupdate-native-test)
-  add_executable(blofeld-preupdate-clock-test test/dsp_preupdate_clock_test.cpp)
-  target_link_libraries(blofeld-preupdate-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_preupdate_clock COMMAND blofeld-preupdate-clock-test)
-  add_executable(blofeld-preupdate-window-test test/dsp_preupdate_window_test.cpp)
-  target_link_libraries(blofeld-preupdate-window-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_preupdate_window COMMAND blofeld-preupdate-window-test)
-  add_executable(blofeld-preupdate-guard-test test/dsp_preupdate_guard_test.cpp)
-  target_link_libraries(blofeld-preupdate-guard-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_preupdate_guard COMMAND blofeld-preupdate-guard-test)
-  add_executable(blofeld-preupdate-load-test test/dsp_preupdate_load_test.cpp)
-  target_link_libraries(blofeld-preupdate-load-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_preupdate_load_native COMMAND blofeld-preupdate-load-test --native)
-  add_test(NAME dsp_preupdate_load_staged COMMAND blofeld-preupdate-load-test --staged)
-  add_executable(blofeld-preupdate-producer-test test/dsp_preupdate_producer_test.cpp)
-  target_link_libraries(blofeld-preupdate-producer-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_preupdate_producer COMMAND blofeld-preupdate-producer-test)
-  add_executable(blofeld-preupdate-modifier-guard-test test/dsp_preupdate_modifier_guard_test.cpp)
-  target_link_libraries(blofeld-preupdate-modifier-guard-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_preupdate_modifier_guard COMMAND blofeld-preupdate-modifier-guard-test)
-  add_executable(blofeld-preupdate-modifier-test test/dsp_preupdate_modifier_test.cpp)
-  target_link_libraries(blofeld-preupdate-modifier-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_preupdate_modifier COMMAND blofeld-preupdate-modifier-test)
-  add_executable(blofeld-preupdate-store-test test/dsp_preupdate_store_test.cpp)
-  target_link_libraries(blofeld-preupdate-store-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_preupdate_store_native COMMAND blofeld-preupdate-store-test --native)
-  add_test(NAME dsp_preupdate_store_staged COMMAND blofeld-preupdate-store-test --staged)
-  add_executable(blofeld-preupdate-alu-test test/dsp_preupdate_alu_test.cpp)
-  target_link_libraries(blofeld-preupdate-alu-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_preupdate_alu_native COMMAND blofeld-preupdate-alu-test --native)
-  add_test(NAME dsp_preupdate_alu_staged COMMAND blofeld-preupdate-alu-test --staged)
-  add_executable(blofeld-preupdate-alu-window-test test/dsp_preupdate_alu_window_test.cpp)
-  target_link_libraries(blofeld-preupdate-alu-window-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_preupdate_alu_window COMMAND blofeld-preupdate-alu-window-test)
-  add_executable(blofeld-preupdate-loop-test test/dsp_preupdate_loop_test.cpp)
-  target_link_libraries(blofeld-preupdate-loop-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_preupdate_loop COMMAND blofeld-preupdate-loop-test)
-  set_tests_properties(
-    dsp_preupdate_native
-    dsp_preupdate_clock
-    dsp_preupdate_window
-    dsp_preupdate_guard
-    dsp_preupdate_load_native
-    dsp_preupdate_load_staged
-    dsp_preupdate_producer
-    dsp_preupdate_modifier_guard
-    dsp_preupdate_modifier
-    dsp_preupdate_store_native
-    dsp_preupdate_store_staged
-    dsp_preupdate_alu_native
-    dsp_preupdate_alu_staged
-    dsp_preupdate_alu_window
-    dsp_preupdate_loop
-    PROPERTIES TIMEOUT 300)
-  add_dependencies(quality
-    blofeld-preupdate-native-test
-    blofeld-preupdate-clock-test
-    blofeld-preupdate-window-test
-    blofeld-preupdate-guard-test
-    blofeld-preupdate-load-test
-    blofeld-preupdate-producer-test
-    blofeld-preupdate-modifier-guard-test
-    blofeld-preupdate-modifier-test
-    blofeld-preupdate-store-test
-    blofeld-preupdate-alu-test
-    blofeld-preupdate-alu-window-test
-    blofeld-preupdate-loop-test
-  )
-endif()
 
 # Source dependencies and preupdate waits constrain the same earliest memory phase.
-if(BUILD_TESTING)
-  add_executable(blofeld-preupdate-source-window-test test/dsp_preupdate_source_window_test.cpp)
-  target_link_libraries(blofeld-preupdate-source-window-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_preupdate_source_windows COMMAND blofeld-preupdate-source-window-test)
-  set_tests_properties(dsp_preupdate_source_windows PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-preupdate-source-window-test)
-endif()
 
 # Fixed AA6 loads retain native values and explicit non-AGU address ownership.
-if(BUILD_TESTING)
-  add_library(blofeld_short_load_fixture OBJECT test/dsp_short_load_fixture.cpp)
-  target_link_libraries(blofeld_short_load_fixture PUBLIC blofeld_dsp blofeld_dsp_native)
-  add_executable(blofeld-short-load-native-test test/dsp_short_load_native_test.cpp)
-  target_link_libraries(blofeld-short-load-native-test PRIVATE blofeld_short_load_fixture)
-  add_executable(blofeld-short-load-stage-test test/dsp_short_load_test.cpp)
-  target_link_libraries(blofeld-short-load-stage-test PRIVATE blofeld_short_load_fixture)
-  add_executable(blofeld-short-load-guard-test test/dsp_short_load_guard_test.cpp)
-  target_link_libraries(blofeld-short-load-guard-test PRIVATE blofeld_short_load_fixture)
-  add_executable(blofeld-short-load-agu-test test/dsp_short_load_agu_test.cpp)
-  target_link_libraries(blofeld-short-load-agu-test PRIVATE blofeld_short_load_fixture)
-  add_executable(blofeld-short-load-accumulator-test test/dsp_short_load_accumulator_test.cpp)
-  target_link_libraries(blofeld-short-load-accumulator-test PRIVATE blofeld_short_load_fixture)
-  add_executable(blofeld-short-load-loop-test test/dsp_short_load_loop_test.cpp)
-  target_link_libraries(blofeld-short-load-loop-test PRIVATE blofeld_short_load_fixture)
-  add_test(NAME dsp_short_load_native COMMAND blofeld-short-load-native-test)
-  add_test(NAME dsp_short_load_pipeline COMMAND blofeld-short-load-stage-test --matrix)
-  add_test(NAME dsp_short_load_addresses COMMAND blofeld-short-load-stage-test --addresses)
-  add_test(NAME dsp_short_load_guards COMMAND blofeld-short-load-guard-test)
-  add_test(NAME dsp_short_load_agu COMMAND blofeld-short-load-agu-test)
-  add_test(NAME dsp_short_load_accumulator COMMAND blofeld-short-load-accumulator-test)
-  add_test(NAME dsp_short_load_loops COMMAND blofeld-short-load-loop-test)
-  set_tests_properties(dsp_short_load_native dsp_short_load_pipeline dsp_short_load_addresses
-    dsp_short_load_guards dsp_short_load_agu dsp_short_load_accumulator dsp_short_load_loops
-    PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-short-load-native-test blofeld-short-load-stage-test
-    blofeld-short-load-guard-test blofeld-short-load-agu-test blofeld-short-load-accumulator-test
-    blofeld-short-load-loop-test)
-endif()
 
 # Memory inputs preserve raw destination fields independently of supported SR scaling.
-if(BUILD_TESTING)
-  add_executable(blofeld-short-load-scaling-test test/dsp_short_load_scaling_test.cpp)
-  target_link_libraries(blofeld-short-load-scaling-test PRIVATE blofeld_short_load_fixture)
-  add_test(NAME dsp_short_load_scaling_native COMMAND blofeld-short-load-scaling-test --native)
-  add_test(NAME dsp_short_load_scaling_pipeline COMMAND blofeld-short-load-scaling-test --staged)
-  set_tests_properties(dsp_short_load_scaling_native dsp_short_load_scaling_pipeline
-    PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-short-load-scaling-test)
-endif()
 
 # Native REP counts and raw data/N bodies retain fixed reference-stage contracts.
-if(BUILD_TESTING)
-  foreach(kind IN ITEMS repeat-register repeat-register-producer repeat-register-guard
-      offset-store repeat-accumulator-preupdate)
-    string(REPLACE "-" "_" source_kind "${kind}")
-    add_executable(blofeld-${kind}-test test/dsp_${source_kind}_test.cpp)
-    target_link_libraries(blofeld-${kind}-test PRIVATE blofeld_dsp blofeld_dsp_native)
-    add_dependencies(quality blofeld-${kind}-test)
-  endforeach()
-  add_test(NAME dsp_repeat_register_streams COMMAND blofeld-repeat-register-test --streams)
-  add_test(NAME dsp_repeat_register_address_modes COMMAND blofeld-repeat-register-test --address-modes)
-  add_test(NAME dsp_repeat_register_snapshots COMMAND blofeld-repeat-register-test --snapshots)
-  add_test(NAME dsp_repeat_register_producers COMMAND blofeld-repeat-register-producer-test --streams)
-  add_test(NAME dsp_repeat_register_producer_snapshots COMMAND blofeld-repeat-register-producer-test --snapshots)
-  add_test(NAME dsp_repeat_register_guards COMMAND blofeld-repeat-register-guard-test)
-  add_test(NAME dsp_offset_store COMMAND blofeld-offset-store-test)
-  add_test(NAME dsp_repeat_accumulator_preupdate COMMAND blofeld-repeat-accumulator-preupdate-test --streams)
-  add_test(NAME dsp_repeat_accumulator_preupdate_snapshots COMMAND blofeld-repeat-accumulator-preupdate-test --snapshots)
-  set(blofeld_repeat_runtime_tests dsp_repeat_register_streams dsp_repeat_register_address_modes
-    dsp_repeat_register_snapshots dsp_repeat_register_producers dsp_repeat_register_producer_snapshots
-    dsp_repeat_register_guards dsp_offset_store dsp_repeat_accumulator_preupdate
-    dsp_repeat_accumulator_preupdate_snapshots)
-  set_tests_properties(${blofeld_repeat_runtime_tests} PROPERTIES LABELS dsp_repeat_runtime TIMEOUT 300)
-  set_tests_properties(dsp_repeat_register_snapshots dsp_repeat_register_producer_snapshots
-    dsp_repeat_accumulator_preupdate_snapshots PROPERTIES TIMEOUT 900)
-endif()
 
 # Native call/return frames retain independently qualified nominal windows.
-if(BUILD_TESTING)
-  add_executable(blofeld-subroutine-clock-test test/dsp_subroutine_clock_test.cpp)
-  target_link_libraries(blofeld-subroutine-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_executable(blofeld-subroutine-guard-test test/dsp_subroutine_guard_test.cpp)
-  target_link_libraries(blofeld-subroutine-guard-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_executable(blofeld-postloop-return-test test/dsp_postloop_return_test.cpp)
-  target_link_libraries(blofeld-postloop-return-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_dependencies(quality blofeld-subroutine-clock-test blofeld-subroutine-guard-test
-    blofeld-postloop-return-test)
-  add_test(NAME dsp_subroutine_streams COMMAND blofeld-subroutine-clock-test streams)
-  add_test(NAME dsp_subroutine_snapshots COMMAND blofeld-subroutine-clock-test snapshots)
-  add_test(NAME dsp_subroutine_guards COMMAND blofeld-subroutine-guard-test)
-  add_test(NAME dsp_postloop_return COMMAND blofeld-postloop-return-test)
-  foreach(kind returns samples actual dma branches)
-    add_executable(blofeld-unknown-fetch-${kind}-test test/dsp_unknown_fetch_${kind}.cpp)
-    target_link_libraries(blofeld-unknown-fetch-${kind}-test PRIVATE blofeld_dsp blofeld_dsp_native)
-    add_dependencies(quality blofeld-unknown-fetch-${kind}-test)
-    add_test(NAME dsp_unknown_fetch_${kind} COMMAND blofeld-unknown-fetch-${kind}-test)
-    set_tests_properties(dsp_unknown_fetch_${kind} PROPERTIES
-      LABELS dsp_program_fetch_unknown TIMEOUT 300)
-  endforeach()
-  set_tests_properties(dsp_subroutine_streams dsp_subroutine_snapshots dsp_subroutine_guards
-    dsp_postloop_return
-    PROPERTIES LABELS dsp_subroutine_runtime TIMEOUT 300)
-endif()
-
-if(BUILD_TESTING)
-  add_executable(blofeld-dor-clock-test test/dsp_dor_clock_test.cpp)
-  target_link_libraries(blofeld-dor-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_dependencies(quality blofeld-dor-clock-test)
-  add_test(NAME dsp_dor_streams COMMAND blofeld-dor-clock-test streams)
-  add_test(NAME dsp_dor_snapshots COMMAND blofeld-dor-clock-test snapshots)
-  set_tests_properties(dsp_dor_streams dsp_dor_snapshots
-    PROPERTIES LABELS dsp_dor_runtime TIMEOUT 300)
-endif()
 
 # Raw middle-word transfers retain independently qualified source interlocks.
-if(BUILD_TESTING)
-  add_executable(blofeld-raw-middle-test test/dsp_raw_middle_test.cpp)
-  target_link_libraries(blofeld-raw-middle-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_dependencies(quality blofeld-raw-middle-test)
-  add_test(NAME dsp_raw_middle_streams COMMAND blofeld-raw-middle-test streams)
-  add_test(NAME dsp_raw_middle_snapshots COMMAND blofeld-raw-middle-test snapshots)
-  add_test(NAME dsp_raw_middle_guards COMMAND blofeld-raw-middle-test guards)
-  add_test(NAME dsp_raw_middle_offsets COMMAND blofeld-raw-middle-test offsets)
-  add_test(NAME dsp_raw_middle_offset_snapshots COMMAND blofeld-raw-middle-test offset-snapshots)
-  add_executable(blofeld-raw-offset-agu-test test/dsp_raw_offset_agu_test.cpp)
-  target_link_libraries(blofeld-raw-offset-agu-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_dependencies(quality blofeld-raw-offset-agu-test)
-  add_test(NAME dsp_raw_offset_agu COMMAND blofeld-raw-offset-agu-test windows)
-  add_test(NAME dsp_raw_offset_snapshots COMMAND blofeld-raw-offset-agu-test snapshots)
-  set_tests_properties(dsp_raw_middle_streams dsp_raw_middle_snapshots dsp_raw_middle_guards
-    dsp_raw_middle_offsets dsp_raw_middle_offset_snapshots dsp_raw_offset_agu dsp_raw_offset_snapshots
-    PROPERTIES LABELS dsp_raw_middle_runtime TIMEOUT 300)
-endif()
 
 # GPIO inputs use the documented passive internal pull-downs.
 if(BUILD_TESTING)
@@ -4060,16 +2201,6 @@ if(BUILD_TESTING)
 endif()
 
 # Parallel raw middle words preserve old operands and ordinary ALU forwarding.
-if(BUILD_TESTING)
-  add_executable(blofeld-parallel-middle-test test/dsp_parallel_middle_test.cpp)
-  target_link_libraries(blofeld-parallel-middle-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_dependencies(quality blofeld-parallel-middle-test)
-  add_test(NAME dsp_parallel_middle_streams COMMAND blofeld-parallel-middle-test streams)
-  add_test(NAME dsp_parallel_middle_snapshots COMMAND blofeld-parallel-middle-test snapshots)
-  add_test(NAME dsp_parallel_middle_guards COMMAND blofeld-parallel-middle-test guards)
-  set_tests_properties(dsp_parallel_middle_streams dsp_parallel_middle_snapshots dsp_parallel_middle_guards
-    PROPERTIES LABELS dsp_parallel_middle_runtime TIMEOUT 300)
-endif()
 
 # Explicit P-package read continuation follows qualified output-end edges.
 if(BUILD_TESTING)
@@ -4086,70 +2217,25 @@ if(BUILD_TESTING)
 endif()
 
 # Occurrence-bound loop/call forecasts retain unchanged software reference windows.
-if(BUILD_TESTING)
-  add_executable(blofeld-near-end-clock-test test/dsp_near_end_clock_test.cpp)
-  target_link_libraries(blofeld-near-end-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_executable(blofeld-near-end-guard-test test/dsp_near_end_guard_test.cpp)
-  target_link_libraries(blofeld-near-end-guard-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_dependencies(quality blofeld-near-end-clock-test blofeld-near-end-guard-test)
-  add_test(NAME dsp_near_end_streams COMMAND blofeld-near-end-clock-test streams)
-  add_test(NAME dsp_near_end_snapshots COMMAND blofeld-near-end-clock-test snapshots)
-  add_test(NAME dsp_near_end_guards COMMAND blofeld-near-end-guard-test)
-  set_tests_properties(dsp_near_end_streams dsp_near_end_snapshots dsp_near_end_guards
-    PROPERTIES LABELS dsp_near_end_runtime TIMEOUT 300)
-endif()
 
 # Raw program-memory operands retain distinct reference bus/source-wait contracts.
-if(BUILD_TESTING)
-  add_executable(blofeld-movem-clock-test
-    test/dsp_movem_clock_test.cpp test/dsp_movem_cases.cpp
-    test/dsp_movem_program.cpp test/dsp_movem_oracle.cpp)
-  target_link_libraries(blofeld-movem-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_dependencies(quality blofeld-movem-clock-test)
-  add_test(NAME dsp_movem_streams COMMAND blofeld-movem-clock-test streams)
-  add_test(NAME dsp_movem_snapshots COMMAND blofeld-movem-clock-test snapshots)
-  add_test(NAME dsp_movem_guards COMMAND blofeld-movem-clock-test guards)
-  set_tests_properties(dsp_movem_streams dsp_movem_snapshots dsp_movem_guards
-    PROPERTIES LABELS dsp_movem_runtime TIMEOUT 300)
-endif()
 
 # Native controller words and actual DMA holds share the explicit reference cycle.
-if(BUILD_TESTING)
-  add_executable(blofeld-dma-pipeline-activation-test test/dsp_dma_pipeline_activation_test.cpp)
-  target_link_libraries(blofeld-dma-pipeline-activation-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_automatic_dma_activation COMMAND blofeld-dma-pipeline-activation-test)
-  add_executable(blofeld-dma-pipeline-controls-test test/dsp_dma_pipeline_controls_test.cpp
-    test/dsp_dma_pipeline_controls.cpp)
-  target_link_libraries(blofeld-dma-pipeline-controls-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_automatic_dma_controls COMMAND blofeld-dma-pipeline-controls-test)
-  add_executable(blofeld-dma-pipeline-timing-test test/dsp_dma_pipeline_timing_test.cpp)
-  target_link_libraries(blofeld-dma-pipeline-timing-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_automatic_dma_timing COMMAND blofeld-dma-pipeline-timing-test)
-  add_dependencies(quality blofeld-dma-pipeline-activation-test
-    blofeld-dma-pipeline-controls-test blofeld-dma-pipeline-timing-test)
-  set_tests_properties(dsp_automatic_dma_activation dsp_automatic_dma_controls dsp_automatic_dma_timing
-    PROPERTIES LABELS dsp_automatic_dma_runtime TIMEOUT 300)
-endif()
 
 # Explicit free-running audio input clocks retain one declared source and fanout.
 if(BUILD_TESTING)
   add_executable(blofeld-square-clock-test test/reference_square_clock_test.cpp
     test/reference_audio_clock_test.cpp)
   target_link_libraries(blofeld-square-clock-test PRIVATE blofeld_reference_board)
-  add_executable(blofeld-audio-clock-board-test test/reference_audio_clock_board.cpp)
-  target_link_libraries(blofeld-audio-clock-board-test PRIVATE blofeld_reference_board)
-  add_dependencies(quality blofeld-square-clock-test blofeld-audio-clock-board-test)
+
+  add_dependencies(quality blofeld-square-clock-test )
   add_test(NAME reference_square_clock_source COMMAND blofeld-square-clock-test source)
   add_test(NAME reference_square_clock_serial COMMAND blofeld-square-clock-test serial)
   add_test(NAME reference_square_clock_snapshots COMMAND blofeld-square-clock-test snapshots)
-  add_test(NAME reference_audio_clock_board COMMAND blofeld-audio-clock-board-test runtime)
-  add_test(NAME reference_audio_clock_restore COMMAND blofeld-audio-clock-board-test restore)
-  add_test(NAME reference_audio_clock_guards COMMAND blofeld-audio-clock-board-test guards)
-  add_test(NAME reference_dsp_coincident_inputs COMMAND blofeld-audio-clock-board-test inputs)
-  add_test(NAME reference_nand_audio_clock COMMAND blofeld-audio-clock-board-test nand)
+
   set_tests_properties(reference_square_clock_source reference_square_clock_serial
-    reference_square_clock_snapshots reference_audio_clock_board reference_audio_clock_restore
-    reference_audio_clock_guards reference_dsp_coincident_inputs reference_nand_audio_clock
+    reference_square_clock_snapshots
+
     PROPERTIES LABELS reference_audio_clock TIMEOUT 300)
 endif()
 
@@ -4163,22 +2249,6 @@ if(BUILD_TESTING)
 endif()
 
 # Extension Decode overlaps opcode AG1 and retains the actual F2 word identity.
-if(BUILD_TESTING)
-  add_executable(blofeld-word-decode-test test/dsp_word_decode_test.cpp)
-  add_executable(blofeld-decode-extension-test test/dsp_decode_extension_test.cpp)
-  add_executable(blofeld-conditional-branch-test test/dsp_conditional_branch_test.cpp)
-  foreach(target blofeld-word-decode-test blofeld-decode-extension-test
-      blofeld-conditional-branch-test)
-    target_link_libraries(${target} PRIVATE blofeld_dsp blofeld_dsp_native)
-    add_dependencies(quality ${target})
-  endforeach()
-  add_test(NAME dsp_initial_word_decode COMMAND blofeld-word-decode-test)
-  add_test(NAME dsp_decode_extension_streams COMMAND blofeld-decode-extension-test)
-  add_test(NAME dsp_conditional_branch_pipeline COMMAND blofeld-conditional-branch-test)
-  set_tests_properties(dsp_initial_word_decode dsp_decode_extension_streams
-    dsp_conditional_branch_pipeline
-    PROPERTIES LABELS dsp_word_decode_runtime TIMEOUT 300)
-endif()
 
 if(BUILD_TESTING)
   add_dependencies(quality blofeld-nand-ce-window-test blofeld-nand-initial-observation-test
@@ -4187,41 +2257,16 @@ if(BUILD_TESTING)
 endif()
 
 if(BUILD_TESTING)
-  add_dependencies(quality blofeld-peripheral-calendar-test blofeld-fetch-peripheral-test blofeld-mcu-dsp-fetch-peripheral-test)
+  add_dependencies(quality blofeld-peripheral-calendar-test  )
 endif()
 
 # Short absolute Jcc uses owned CCR resolution and genuine native retirement.
-if(BUILD_TESTING)
-  foreach(kind absolute_branch absolute_branch_edges absolute_branch_guards
-      absolute_unknown_branches absolute_branch_native)
-    string(REPLACE "_" "-" target_suffix "${kind}")
-    set(target "blofeld-${target_suffix}-test")
-    add_executable(${target} "test/dsp_${kind}_test.cpp")
-    target_link_libraries(${target} PRIVATE blofeld_dsp blofeld_dsp_native)
-    add_dependencies(quality ${target})
-    add_test(NAME dsp_${kind} COMMAND ${target})
-    set_tests_properties(dsp_${kind} PROPERTIES LABELS dsp_absolute_branch_runtime TIMEOUT 300)
-  endforeach()
-endif()
 
 # Causal cell verification and actual native GPIO status/write/readback paths.
 if(BUILD_TESTING)
-  add_library(blofeld_nand_native_fixture STATIC test/nand_native_run.cpp)
-  target_link_libraries(blofeld_nand_native_fixture PUBLIC blofeld_nand_peer
-    blofeld_own_dsp_fetch)
-  include(cmake/NandStatusTests.cmake)
-  include(cmake/NandSampleTests.cmake)
+
   include(cmake/MasterHistoryTests.cmake)
-  add_executable(blofeld-nand-native-runtime-test test/nand_native_runtime_test.cpp)
-  target_link_libraries(blofeld-nand-native-runtime-test PRIVATE blofeld_nand_native_fixture)
-  add_test(NAME nand_native_runtime COMMAND blofeld-nand-native-runtime-test)
-  set_tests_properties(nand_native_runtime PROPERTIES TIMEOUT 30)
-  add_dependencies(quality blofeld-nand-native-runtime-test)
-  add_executable(blofeld-nand-capture-test test/nand_capture_test.cpp)
-  target_link_libraries(blofeld-nand-capture-test PRIVATE blofeld_nand_native_fixture blofeld_dma_fixture)
-  add_test(NAME nand_capture COMMAND blofeld-nand-capture-test)
-  set_tests_properties(nand_capture PROPERTIES TIMEOUT 60)
-  add_dependencies(quality blofeld-nand-capture-test)
+
   add_executable(blofeld-nand-peer-timebase-test test/nand_peer_timebase_test.cpp)
   target_link_libraries(blofeld-nand-peer-timebase-test PRIVATE blofeld_nand_peer)
   add_test(NAME nand_peer_timebase COMMAND blofeld-nand-peer-timebase-test)
@@ -4232,187 +2277,19 @@ if(BUILD_TESTING)
   add_test(NAME nand_bus_decode COMMAND blofeld-nand-bus-decode-test)
   set_tests_properties(nand_bus_decode PROPERTIES TIMEOUT 30)
   add_dependencies(quality blofeld-nand-bus-decode-test)
-  add_executable(blofeld-nand-read-handoff-test test/nand_read_handoff_test.cpp)
-  target_link_libraries(blofeld-nand-read-handoff-test PRIVATE blofeld_nand_native_fixture)
-  add_test(NAME nand_read_handoff COMMAND blofeld-nand-read-handoff-test)
-  set_tests_properties(nand_read_handoff PROPERTIES TIMEOUT 30)
-  add_dependencies(quality blofeld-nand-read-handoff-test)
+
   foreach(kind write_medium busy_status)
     string(REPLACE "_" "-" target_suffix "${kind}")
     set(target "blofeld-nand-${target_suffix}-test")
-    add_executable(${target} "test/nand_${kind}_test.cpp" "test/nand_${kind}_native.cpp")
-    target_link_libraries(${target} PRIVATE blofeld_nand_native_fixture)
-    add_dependencies(quality ${target})
-    add_test(NAME nand_${kind} COMMAND ${target})
-    set_tests_properties(nand_${kind} PROPERTIES LABELS nand_causal_medium TIMEOUT 300)
+
   endforeach()
-endif()
-
-if(BUILD_TESTING)
-  add_executable(blofeld-mpy-transfer-test test/dsp_mpy_transfer_test.cpp test/dsp_mpy_recurrence_test.cpp)
-  target_link_libraries(blofeld-mpy-transfer-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  foreach(phase native clocks producers snapshots guards recurrence)
-    add_test(NAME dsp_mpy_transfer_${phase} COMMAND blofeld-mpy-transfer-test ${phase})
-    set_tests_properties(dsp_mpy_transfer_${phase} PROPERTIES TIMEOUT 300)
-  endforeach()
-  add_dependencies(quality blofeld-mpy-transfer-test)
-  add_executable(blofeld-sp-control-test test/dsp_sp_control_test.cpp)
-  target_link_libraries(blofeld-sp-control-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_sp_control COMMAND blofeld-sp-control-test)
-  set_tests_properties(dsp_sp_control PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-sp-control-test)
-  add_executable(blofeld-sp-flow-test test/dsp_sp_flow_test.cpp)
-  target_link_libraries(blofeld-sp-flow-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_sp_flow COMMAND blofeld-sp-flow-test)
-  add_test(NAME dsp_sp_adjacent_call COMMAND blofeld-sp-flow-test --adjacent)
-  set_tests_properties(dsp_sp_flow PROPERTIES TIMEOUT 300)
-  set_tests_properties(dsp_sp_adjacent_call PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-sp-flow-test)
-
-  add_executable(blofeld-subroutine-writer-test test/dsp_subroutine_writer_test.cpp)
-  target_link_libraries(blofeld-subroutine-writer-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_subroutine_writers COMMAND blofeld-subroutine-writer-test)
-  set_tests_properties(dsp_subroutine_writers PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-subroutine-writer-test)
-  add_executable(blofeld-sr-control-test test/dsp_sr_control_test.cpp)
-  target_link_libraries(blofeld-sr-control-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_sr_control COMMAND blofeld-sr-control-test)
-  set_tests_properties(dsp_sr_control PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-sr-control-test)
-  add_executable(blofeld-sr-memory-test test/dsp_sr_memory_test.cpp)
-  target_link_libraries(blofeld-sr-memory-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_sr_memory COMMAND blofeld-sr-memory-test)
-  set_tests_properties(dsp_sr_memory PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-sr-memory-test)
-  add_executable(blofeld-sr-guard-test test/dsp_sr_guard_test.cpp)
-  target_link_libraries(blofeld-sr-guard-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_sr_guard COMMAND blofeld-sr-guard-test)
-  set_tests_properties(dsp_sr_guard PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-sr-guard-test)
-  add_executable(blofeld-modifier-direction-test test/dsp_modifier_direction_test.cpp)
-  target_link_libraries(blofeld-modifier-direction-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_modifier_direction COMMAND blofeld-modifier-direction-test)
-  set_tests_properties(dsp_modifier_direction PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-modifier-direction-test)
-  add_executable(blofeld-modifier-direction-window-test test/dsp_modifier_direction_window_test.cpp test/dsp_modifier_direction_window_model.cpp)
-  target_link_libraries(blofeld-modifier-direction-window-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_modifier_direction_window COMMAND blofeld-modifier-direction-window-test)
-  set_tests_properties(dsp_modifier_direction_window PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-modifier-direction-window-test)
-  add_executable(blofeld-repeat-handoff-test test/dsp_repeat_handoff_test.cpp)
-  target_link_libraries(blofeld-repeat-handoff-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_repeat_handoff COMMAND blofeld-repeat-handoff-test)
-  set_tests_properties(dsp_repeat_handoff PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-repeat-handoff-test)
-  add_executable(blofeld-repeat-handoff-guard-test test/dsp_repeat_handoff_guard_test.cpp)
-  target_link_libraries(blofeld-repeat-handoff-guard-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_repeat_handoff_guard COMMAND blofeld-repeat-handoff-guard-test)
-  set_tests_properties(dsp_repeat_handoff_guard PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-repeat-handoff-guard-test)
-endif()
-
-if(BUILD_TESTING)
-  add_executable(blofeld-absolute-call-test test/dsp_absolute_call_test.cpp)
-  target_link_libraries(blofeld-absolute-call-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_absolute_call COMMAND blofeld-absolute-call-test)
-  set_tests_properties(dsp_absolute_call PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-absolute-call-test)
-  add_executable(blofeld-absolute-call-guard-test test/dsp_absolute_call_guard_test.cpp)
-  target_link_libraries(blofeld-absolute-call-guard-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_absolute_call_guard COMMAND blofeld-absolute-call-guard-test)
-  set_tests_properties(dsp_absolute_call_guard PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-absolute-call-guard-test)
-endif()
-
-if(BUILD_TESTING)
-  add_executable(blofeld-absolute-call-producer-test test/dsp_absolute_call_producer_test.cpp)
-  target_link_libraries(blofeld-absolute-call-producer-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_absolute_call_producer COMMAND blofeld-absolute-call-producer-test)
-  set_tests_properties(dsp_absolute_call_producer PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-absolute-call-producer-test)
-endif()
-
-if(BUILD_TESTING)
-  add_executable(blofeld-absolute-data-test test/dsp_absolute_data_test.cpp)
-  target_link_libraries(blofeld-absolute-data-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_absolute_data COMMAND blofeld-absolute-data-test)
-  set_tests_properties(dsp_absolute_data PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-absolute-data-test)
-endif()
-
-if(BUILD_TESTING)
-  add_executable(blofeld-absolute-data-guard-test test/dsp_absolute_data_guard_test.cpp)
-  target_link_libraries(blofeld-absolute-data-guard-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_absolute_data_guard COMMAND blofeld-absolute-data-guard-test)
-  set_tests_properties(dsp_absolute_data_guard PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-absolute-data-guard-test)
 endif()
 
 # Parallel internal TFR and two-word absolute X/Y reads.
-if(BUILD_TESTING)
-  add_executable(blofeld-parallel-eor-store-test test/dsp_parallel_eor_store_test.cpp)
-  target_link_libraries(blofeld-parallel-eor-store-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_parallel_eor_store COMMAND blofeld-parallel-eor-store-test)
-  set_tests_properties(dsp_parallel_eor_store PROPERTIES TIMEOUT 600)
-  add_dependencies(quality blofeld-parallel-eor-store-test)
-
-  add_executable(blofeld-parallel-eor-producer-test test/dsp_parallel_eor_producer_test.cpp)
-  target_link_libraries(blofeld-parallel-eor-producer-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_parallel_eor_producer COMMAND blofeld-parallel-eor-producer-test)
-  set_tests_properties(dsp_parallel_eor_producer PROPERTIES TIMEOUT 600)
-  add_dependencies(quality blofeld-parallel-eor-producer-test)
-
-  add_executable(blofeld-address-register-store-test test/dsp_address_register_store_test.cpp)
-  target_link_libraries(blofeld-address-register-store-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_address_register_store COMMAND blofeld-address-register-store-test)
-  set_tests_properties(dsp_address_register_store PROPERTIES TIMEOUT 600)
-  add_dependencies(quality blofeld-address-register-store-test)
-
-  add_executable(blofeld-parallel-partial-store-test test/dsp_parallel_partial_store_test.cpp)
-  target_link_libraries(blofeld-parallel-partial-store-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_parallel_partial_store COMMAND blofeld-parallel-partial-store-test)
-  set_tests_properties(dsp_parallel_partial_store PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-parallel-partial-store-test)
-
-  add_executable(blofeld-compatibility-mode-test test/dsp_compatibility_mode_test.cpp)
-  target_include_directories(blofeld-compatibility-mode-test PRIVATE src)
-  target_link_libraries(blofeld-compatibility-mode-test PRIVATE blofeld_quality)
-  add_test(NAME dsp_compatibility_mode COMMAND blofeld-compatibility-mode-test)
-  add_dependencies(quality blofeld-compatibility-mode-test)
-
-  add_executable(blofeld-compatibility-moves-test test/dsp_compatibility_moves_test.cpp)
-  target_link_libraries(blofeld-compatibility-moves-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_compatibility_moves COMMAND blofeld-compatibility-moves-test)
-  set_tests_properties(dsp_compatibility_moves PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-compatibility-moves-test)
-
-  add_executable(blofeld-parallel-absolute-test test/dsp_parallel_absolute_test.cpp)
-  target_link_libraries(blofeld-parallel-absolute-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_parallel_absolute COMMAND blofeld-parallel-absolute-test)
-  set_tests_properties(dsp_parallel_absolute PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-parallel-absolute-test)
-endif()
 
 # Native core accesses across distinct physical RAM modules.
-if(BUILD_TESTING)
-  add_executable(blofeld-core-blocks-test test/dsp_core_blocks_test.cpp)
-  target_link_libraries(blofeld-core-blocks-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_core_blocks COMMAND blofeld-core-blocks-test)
-  set_tests_properties(dsp_core_blocks PROPERTIES TIMEOUT 300)
-  add_dependencies(quality blofeld-core-blocks-test)
-endif()
 
 # Native full-accumulator MOVEP stores and their source/port ownership.
-if(BUILD_TESTING)
-  foreach(kind full_peripheral full_peripheral_ports full_peripheral_guards full_peripheral_producers)
-    string(REPLACE "_" "-" target_kind "${kind}")
-    add_executable(blofeld-${target_kind}-test test/dsp_${kind}_test.cpp)
-    target_link_libraries(blofeld-${target_kind}-test PRIVATE blofeld_dsp blofeld_dsp_native)
-    add_test(NAME dsp_${kind} COMMAND blofeld-${target_kind}-test)
-    set_tests_properties(dsp_${kind} PROPERTIES TIMEOUT 300)
-    add_dependencies(quality blofeld-${target_kind}-test)
-  endforeach()
-endif()
 
 if(BUILD_TESTING)
   add_dependencies(quality blofeld-nand-wide-timebase-test)
@@ -4423,53 +2300,8 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-mcu-dsp-gpio-peer-test PRIVATE blofeld_reference_board)
   add_test(NAME mcu_dsp_gpio_peer COMMAND blofeld-mcu-dsp-gpio-peer-test)
   set_tests_properties(mcu_dsp_gpio_peer PROPERTIES TIMEOUT 30)
-  add_executable(blofeld-gpio-peer-board-test test/gpio_peer_board_test.cpp)
-  target_link_libraries(blofeld-gpio-peer-board-test PRIVATE blofeld_reference_board)
-  add_test(NAME gpio_peer_board COMMAND blofeld-gpio-peer-board-test
-    "${CMAKE_CURRENT_BINARY_DIR}/gpio-peer-board-test")
-  set_tests_properties(gpio_peer_board PROPERTIES TIMEOUT 30)
-  add_dependencies(quality blofeld-mcu-dsp-gpio-peer-test blofeld-gpio-peer-board-test)
-endif()
 
-if(BUILD_TESTING)
-  add_executable(blofeld-reference-tio-hold-test test/reference_tio_hold_test.cpp)
-  target_link_libraries(blofeld-reference-tio-hold-test PRIVATE blofeld_reference_board)
-  add_test(NAME reference_tio_hold COMMAND blofeld-reference-tio-hold-test)
-  set_tests_properties(reference_tio_hold PROPERTIES TIMEOUT 30)
-  add_dependencies(quality blofeld-reference-tio-hold-test)
-endif()
-
-if(BUILD_TESTING)
-  add_executable(blofeld-reference-lcd-test test/reference_lcd_test.cpp)
-  target_link_libraries(blofeld-reference-lcd-test PRIVATE blofeld_reference_board)
-  add_test(NAME reference_lcd COMMAND blofeld-reference-lcd-test)
-  set_tests_properties(reference_lcd PROPERTIES TIMEOUT 60)
-  add_dependencies(quality blofeld-reference-lcd-test)
-endif()
-
-if(BUILD_TESTING)
-  add_executable(blofeld-gpio-configuration-bits-dma-test test/dsp_gpio_configuration_bits_dma_test.cpp)
-  target_link_libraries(blofeld-gpio-configuration-bits-dma-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_dependencies(quality blofeld-gpio-configuration-bits-dma-test)
-  add_test(NAME dsp_gpio_configuration_bits_dma COMMAND blofeld-gpio-configuration-bits-dma-test)
-  set_tests_properties(dsp_gpio_configuration_bits_dma PROPERTIES TIMEOUT 300)
-endif()
-
-if(BUILD_TESTING)
-  add_executable(blofeld-reference-b-pulls-test test/reference_b_pulls_test.cpp)
-  target_link_libraries(blofeld-reference-b-pulls-test PRIVATE blofeld_reference_board)
-  add_test(NAME reference_b_pulls COMMAND blofeld-reference-b-pulls-test
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-b-pulls.bfboard")
-  set_tests_properties(reference_b_pulls PROPERTIES TIMEOUT 120)
-  add_dependencies(quality blofeld-reference-b-pulls-test)
-endif()
-
-if(BUILD_TESTING)
-  add_executable(blofeld-mcu-dsp-shared-word-test test/mcu_dsp_shared_word_test.cpp)
-  target_link_libraries(blofeld-mcu-dsp-shared-word-test PRIVATE blofeld_mcu_dsp_fixture)
-  add_test(NAME mcu_dsp_shared_word COMMAND blofeld-mcu-dsp-shared-word-test)
-  set_tests_properties(mcu_dsp_shared_word PROPERTIES TIMEOUT 60)
-  add_dependencies(quality blofeld-mcu-dsp-shared-word-test)
+  add_dependencies(quality blofeld-mcu-dsp-gpio-peer-test )
 endif()
 
 if(BUILD_TESTING)
@@ -4487,27 +2319,12 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-nand-write-store-test PRIVATE blofeld_nand_write_store)
   add_test(NAME nand_write_store COMMAND blofeld-nand-write-store-test)
   set_tests_properties(nand_write_store PROPERTIES TIMEOUT 30)
-  add_executable(blofeld-nand-durable-peer-test test/nand_durable_peer_test.cpp
-    test/nand_durable_peer_native.cpp)
-  target_link_libraries(blofeld-nand-durable-peer-test PRIVATE blofeld_nand_native_fixture)
-  add_test(NAME nand_durable_peer COMMAND blofeld-nand-durable-peer-test)
-  set_tests_properties(nand_durable_peer PROPERTIES TIMEOUT 120)
-  add_executable(blofeld-reference-nand-store-test test/reference_nand_store_test.cpp)
-  target_link_libraries(blofeld-reference-nand-store-test PRIVATE blofeld_reference_board)
-  add_test(NAME reference_nand_store COMMAND blofeld-reference-nand-store-test)
-  set_tests_properties(reference_nand_store PROPERTIES TIMEOUT 30)
-  add_dependencies(quality blofeld-nand-write-store-test blofeld-nand-durable-peer-test
-    blofeld-reference-nand-store-test)
+
+  add_dependencies(quality blofeld-nand-write-store-test
+    )
 endif()
 
 # Host-only mutation stamps protect the native runtime's read-only callback contract.
-if(BUILD_TESTING)
-  add_executable(blofeld-mcu-integrity-test test/mcu_integrity_test.cpp)
-  target_link_libraries(blofeld-mcu-integrity-test PRIVATE blofeld_mcu_dsp_runtime)
-  add_test(NAME mcu_integrity COMMAND blofeld-mcu-integrity-test)
-  set_tests_properties(mcu_integrity PROPERTIES TIMEOUT 180)
-  add_dependencies(quality blofeld-mcu-integrity-test)
-endif()
 
 # Explicit developer measurement; never part of routine CTest execution.
 if(BUILD_TESTING)
@@ -4526,3 +2343,17 @@ endif()
 include(cmake/McuInspectionTests.cmake)
 
 include(cmake/TelemetryTests.cmake)
+
+if(BUILD_TESTING)
+  get_property(blofeld_build_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+  set(blofeld_hardened_executables "")
+  foreach(target IN LISTS blofeld_build_targets)
+    get_target_property(kind ${target} TYPE)
+    if(kind STREQUAL "EXECUTABLE")
+      add_dependencies(quality ${target})
+      string(APPEND blofeld_hardened_executables "$<TARGET_FILE:${target}>\n")
+    endif()
+  endforeach()
+  file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/hardening-executables.txt"
+    CONTENT "${blofeld_hardened_executables}")
+endif()

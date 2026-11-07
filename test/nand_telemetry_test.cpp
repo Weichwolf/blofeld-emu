@@ -3,8 +3,8 @@
 #include "board/nand_peer.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_gpio.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp/own_dsp_machine.hpp"
 #include "esai_fixture.hpp"
 #include "storage/nand.hpp"
 #include "storage/nand_array.hpp"
@@ -121,15 +121,15 @@ constexpr DspRunClockInputs clocks{.extal_hz = extal,
                                    .timebase_hz = timebase,
                                    .switch_timing = DspClockSwitch::reference_cycle_boundary};
 
-void x(OwnDspMachine &machine, const unsigned address, const unsigned value) {
+void x(DspMachine &machine, const unsigned address, const unsigned value) {
   machine.bus().write({.space = DspSpace::x, .address = address, .value = value});
 }
 
-void y(OwnDspMachine &machine, const unsigned address, const unsigned value) {
+void y(DspMachine &machine, const unsigned address, const unsigned value) {
   machine.bus().write({.space = DspSpace::y, .address = address, .value = value});
 }
 
-void configure(OwnDspMachine &machine) {
+void configure(DspMachine &machine) {
   for (const auto port : {DspPort::c, DspPort::f}) {
     machine.bus().gpio(port).set_contract(DspGpioContract::logical_pins);
   }
@@ -156,7 +156,7 @@ void settle(NandPeer &peer, const unsigned ticks) {
   peer.before_native(ticks);
 }
 
-NandPeerDetailed suffix(OwnDspMachine &machine, NandPeer &peer, const unsigned at) {
+NandPeerDetailed suffix(DspMachine &machine, NandPeer &peer, const unsigned at) {
   settle(peer, at + interval);
   x(machine, control, command);
   peer.after_native(at + interval, native_pc);
@@ -187,7 +187,7 @@ NandPeerDetailed suffix(OwnDspMachine &machine, NandPeer &peer, const unsigned a
 }
 
 void peer_and_restore(std::ostream *telemetry) {
-  OwnDspMachine machine(clocks);
+  DspMachine machine(clocks);
   NandPeer peer(machine, device(), NandCellProfile{}, NandBusContract::functional_transactions);
   peer.set_telemetry(telemetry);
   configure(machine);
@@ -206,7 +206,7 @@ void peer_and_restore(std::ostream *telemetry) {
   const auto cpu = machine.checkpoint();
   const auto before = peer.detailed();
   const auto endpoint = suffix(machine, peer, power + (2 * interval));
-  OwnDspMachine fresh(clocks);
+  DspMachine fresh(clocks);
   fresh.restore(cpu);
   NandPeer copy(saved, fresh);
   copy.set_telemetry(telemetry);
@@ -217,7 +217,7 @@ void peer_and_restore(std::ostream *telemetry) {
           "Fresh-owner continuation reproduces the actual reset pulse and completion");
 }
 
-void phase(OwnDspMachine &machine, NandPeer &peer, unsigned &ticks, const unsigned controls) {
+void phase(DspMachine &machine, NandPeer &peer, unsigned &ticks, const unsigned controls) {
   ticks += interval;
   settle(peer, ticks);
   x(machine, control, controls);
@@ -229,7 +229,7 @@ struct Latch {
   unsigned value;
 };
 
-void latch(OwnDspMachine &machine, NandPeer &peer, unsigned &ticks, const Latch input) {
+void latch(DspMachine &machine, NandPeer &peer, unsigned &ticks, const Latch input) {
   y(machine, f_data, input.value);
   phase(machine, peer, ticks, input.qualifier | inactive);
   phase(machine, peer, ticks, input.qualifier | 0x100U);
@@ -237,7 +237,7 @@ void latch(OwnDspMachine &machine, NandPeer &peer, unsigned &ticks, const Latch 
 }
 
 NandPeerDetailed read_one(std::ostream *telemetry) {
-  OwnDspMachine machine(clocks);
+  DspMachine machine(clocks);
   NandPeer peer(machine,
                 device(),
                 NandCellProfile{},
@@ -274,7 +274,7 @@ NandPeerDetailed read_one(std::ostream *telemetry) {
 }
 
 void strict_control(std::ostream *telemetry) {
-  OwnDspMachine machine(clocks);
+  DspMachine machine(clocks);
   NandPeer peer(machine, device());
   peer.set_telemetry(telemetry);
   configure(machine);

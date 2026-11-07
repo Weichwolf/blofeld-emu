@@ -9,7 +9,7 @@
 
 namespace blofeld {
 class McuMachine;
-class OwnDspMachine;
+class DspMachine;
 
 enum class GpioPeerPull : std::uint8_t { none, up, down };
 
@@ -24,7 +24,7 @@ struct McuDspGpioWiring {
 // Both chips must outlive this owner. Rebind after a trusted chip restore.
 class McuDspGpioPeer {
 public:
-  McuDspGpioPeer(McuMachine &mcu, OwnDspMachine &dsp, McuDspGpioWiring wiring);
+  McuDspGpioPeer(McuMachine &mcu, DspMachine &dsp, McuDspGpioWiring wiring);
   McuDspGpioPeer(const McuDspGpioPeer &) = delete;
   McuDspGpioPeer &operator=(const McuDspGpioPeer &) = delete;
   void rebind();
@@ -40,7 +40,7 @@ private:
   [[nodiscard]] GpioPadSample data_pads(bool dsp_side, std::uint32_t mask) const;
   [[nodiscard]] GpioPadSample notification() const;
   McuMachine &mcu_;
-  OwnDspMachine &dsp_;
+  DspMachine &dsp_;
   McuDspGpioWiring wiring_;
   const std::shared_ptr<const bool> lifetime_ = std::make_shared<const bool>(true);
   McuDspPeerDrivers drivers_;

@@ -115,21 +115,6 @@ AudioRuntimeOptions output_options(const reference::Config &config, const std::s
                      .server = server}};
 }
 
-void restore_and_rebind(Machine &machine, AudioRuntime &output) {
-  const auto checkpoint = machine.board.checkpoint();
-  while (!machine.board.status().last_pcm) { machine.board.advance(); }
-  pcm::require(output.status().accepted == 1, "The live prefix is external to modeled checkpoints");
-  machine.board.restore(checkpoint);
-  pcm::require(pcm::rejects([&] { output.finish(); }).find("retired") != std::string::npos,
-               "Restoring native owners retires rather than rewinds the host stream");
-  const auto failure = pcm::rejects([&] { machine.board.advance(); });
-  pcm::require(failure.find("retired") != std::string::npos &&
-                   failure.find("mcu-pc=") != std::string::npos &&
-                   failure.find("dsp-pc=") != std::string::npos,
-               "A stale external binding fails with the inactive board's execution context");
-  machine.board.restore(checkpoint);
-}
-
 void controls(Machine &machine, Probe &probe, const std::string &mode) {
   if (mode == "board-reject") { probe.capacity = 0; }
   machine.board.attach_pcm_output(probe);
@@ -156,13 +141,6 @@ void binding_controls(const reference::Config &config,
                  without_route.board.attach_pcm_output(probe);
                }).find("decoded PCM route") != std::string::npos,
                "An external sink cannot invent a board output route");
-  auto replay = config;
-  replay.checkpoint = reference::ReplayPlan{.operation = 1, .replays = 1};
-  Machine automatic(replay, program, image);
-  pcm::require(pcm::rejects([&] {
-                 automatic.board.attach_pcm_output(probe);
-               }).find("automatic checkpoint replay") != std::string::npos,
-               "Unselected checkpoint branches cannot escape as irreversible audio");
   Machine valid(config, program, image);
   valid.board.attach_pcm_output(probe);
   pcm::require(pcm::rejects([&] { valid.board.attach_pcm_output(probe); }).find("already bound") !=
@@ -243,30 +221,22 @@ void board_cases(const BoardInputs &inputs) {
     controls(machine, probe, mode);
     return;
   }
-  std::unique_ptr<AudioRuntime> replacement;
+  if (mode != "board") { throw Fault("Unknown audio board test mode"); }
   AudioRuntime initial(output_options(config, server));
   Machine machine(config, program, image);
   Probe probe;
-  const unsigned total = mode == "board" ? 64 : 2;
+  constexpr unsigned total = 64;
   probe.capacity = total;
   Machine baseline(config, program, image);
   baseline.board.attach_pcm_output(probe);
   complete(baseline.board);
   expected_frames(probe, total);
   machine.board.attach_pcm_output(initial);
-  if (mode == "board-restore") {
-    restore_and_rebind(machine, initial);
-    replacement = std::make_unique<AudioRuntime>(output_options(config, server));
-    machine.board.attach_pcm_output(*replacement);
-    complete(machine.board);
-    replacement->finish();
-    pcm::require(replacement->status().written == 2,
-                 "A new external epoch delivers the replay once");
-  } else {
-    complete(machine.board);
-    initial.finish();
-    pcm::require(initial.status().written == total, "The host receives actual board-decoded PCM");
-  }
+
+  complete(machine.board);
+  initial.finish();
+  pcm::require(initial.status().written == total, "The host receives actual board-decoded PCM");
+
   pcm::require(machine.board.status() == baseline.board.status(),
                "The live worker cannot change native clocks, instructions, state or decoded PCM");
   std::cout << "board frames=" << total

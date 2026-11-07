@@ -33,9 +33,8 @@ Runner::Runner(const Firmware &firmware,
                const std::vector<std::uint8_t> &helper,
                const unsigned phase,
                const bool secured,
-               std::ostream &trace,
-               const Hcs08BoardWireCheckpoint *snapshot)
-    : pair(firmware, helper, phase, trace, preimage(secured), snapshot), secure(secured) {
+               std::ostream &trace)
+    : pair(firmware, helper, phase, trace, preimage(secured)), secure(secured) {
   initial_flash = pair.target.memory().flash_image();
   pair.target_clock = [this](const std::uint64_t ticks) { target_tick(ticks); };
 }
@@ -278,26 +277,4 @@ void Runner::guards() const {
   }
 }
 
-Saved Runner::checkpoint() const {
-  return {.host = pair.host.checkpoint(),
-          .target = pair.target.checkpoint(),
-          .expected = pair.expected,
-          .cursor = pair.cursor,
-          .steps = pair.steps,
-          .received = pair.received,
-          .pin_writes = pair.pin_writes,
-          .go_checked = go_checked};
-}
-
-void Runner::restore(const Saved &saved) {
-  pair.host.restore(saved.host);
-  pair.expected = saved.expected;
-  pair.cursor = saved.cursor;
-  pair.steps = saved.steps;
-  pair.received = saved.received;
-  pair.pin_writes = saved.pin_writes;
-  go_checked = saved.go_checked;
-  detailed = true;
-  pair.bind();
-}
 } // namespace blofeld::test::keyboard_board_upload

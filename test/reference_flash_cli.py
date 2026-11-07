@@ -30,7 +30,7 @@ with tempfile.TemporaryDirectory(prefix='blofeld-live-flash-cli-') as name:
     directory = Path(name)
     board, rom = directory / 'own.bfboard', directory / 'own-rom.bin'
     board.write_text(config)
-    rom.write_bytes(bytes(3))  # Own DSP NOP; DSP is never released in this MCU control.
+    rom.write_bytes(bytes(3))  # DSP NOP; DSP is never released in this MCU control.
     for budget, state in [(1, 'initial'), (100, 'unknown'), (200, 'program')]:
         path = directory / f'unit-{budget}.bfnvm'
         path.write_bytes(wire.encoded(wire.initial()))

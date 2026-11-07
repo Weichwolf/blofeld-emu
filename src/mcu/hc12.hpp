@@ -3,7 +3,6 @@
 
 #include "common/bus.hpp"
 
-#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -23,7 +22,7 @@ struct CpuState {
   std::uint8_t ccr = 0;
 };
 
-// Host integrity metadata, never guest data, time or checkpoint state.
+// Host integrity metadata, never guest data, time or CPU state.
 struct CpuInspectionStamp {
   std::uint64_t owner = 0;
   std::uint64_t revision = 0;
@@ -34,22 +33,6 @@ struct CpuStep {
   bool instruction_executed = true;
   std::optional<std::uint16_t> interrupt_vector = std::nullopt;
   bool stack_reused = false;
-};
-
-// Trusted opaque instruction-boundary state, including native scratch registers.
-class Hc12Checkpoint {
-public:
-  Hc12Checkpoint(const Hc12Checkpoint &) = default;
-  Hc12Checkpoint &operator=(const Hc12Checkpoint &) = default;
-
-private:
-  friend class Hc12;
-  Hc12Checkpoint() = default;
-  static constexpr unsigned register_bytes = 256;
-  std::array<std::uint8_t, register_bytes> registers_{};
-  std::uint16_t pc_ = 0;
-  bool waiting_ = false;
-  bool defer_irq_ = false;
 };
 
 // The build selects the HC12 executor. The board supplies peripheral/cycle
@@ -69,13 +52,11 @@ public:
   [[nodiscard]] std::string disassemble() const;
   [[nodiscard]] std::optional<InterruptRequest> pending_interrupt() const;
   // A failed unretired step cannot resume its partial CPU/bus prefix. Reset,
-  // explicit debug state or coordinated restore must establish a fresh boundary.
+  // explicit debug state must establish a fresh boundary.
   CpuStep step();
 
 private:
   friend class McuMachine;
-  [[nodiscard]] Hc12Checkpoint checkpoint() const;
-  void restore_checkpoint(const Hc12Checkpoint &checkpoint);
   [[nodiscard]] bool executing() const;
   void begin_wait_clock();
   void end_wait_clock(bool healthy);

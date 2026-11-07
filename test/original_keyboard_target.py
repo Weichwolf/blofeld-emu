@@ -14,11 +14,11 @@ from original_dsp_voice import ROOT, original_records
 
 def validate(path, helper, records):
     expected_cases = ((0, 0), (4, 0), (0, 1))
-    cases, replays, host_steps = 0, 0, 0
+    cases, host_steps = 0, 0
     stage, cursor, cpu = '', 0, 0
     row_case = None
     ended = False
-    case_open, go_seen, case_replays = False, False, 0
+    case_open, go_seen = False, False
     with path.open() as stream:
         for line in stream:
             tag, *fields = line.split()
@@ -29,7 +29,7 @@ def validate(path, helper, records):
                 if case_open or cases >= 3 or (row['phase'], row['secure']) != expected_cases[cases]:
                     raise ValueError('Changed target case/entry assumptions')
                 row_case, stage, cursor, cpu = row, 'prepare', 0, 0
-                case_open, go_seen, case_replays = True, False, 0
+                case_open, go_seen = True, False
             elif tag == 'RX':
                 if stage == 'prepare':
                     frame = [0xe0, 255, 190]
@@ -81,14 +81,9 @@ def validate(path, helper, records):
                         or cpu != (0 if secure else 8)):
                     raise ValueError('Native strict target/host failure no longer has its full causal prefix')
                 stage = 'failed'
-            elif tag == 'REPLAY':
-                if not case_open or stage != 'failed' or case_replays >= 2 or row['index'] != case_replays or row['bytes'] <= 0 or row['identical'] != 1:
-                    raise ValueError('Missing complete fresh joint target replay')
-                case_replays += 1
-                replays += 1
             elif tag == 'CASE_END':
                 secure = row_case['secure']
-                if not case_open or case_replays != 2 or stage != 'failed' or row != dict(phase=row_case['phase'], secure=secure,
+                if not case_open or stage != 'failed' or row != dict(phase=row_case['phase'], secure=secure,
                         **{'host-steps': row['host-steps'], 'target-retired': 0 if secure else 8,
                            'target-executing': 0 if secure else 26}, commands=682, rx=2722, tx=1):
                     raise ValueError('Changed complete target case')
@@ -96,14 +91,14 @@ def validate(path, helper, records):
                 cases += 1
                 case_open, stage = False, 'closed'
             elif tag == 'END':
-                if case_open or row != {'cases': 3, 'replays': 6, 'RAM-uploads': 3, 'launched': 3, 'NVM-transfers': 0} or cases != 3 or replays != 6:
+                if case_open or row != {'cases': 3, 'RAM-uploads': 3, 'launched': 3, 'NVM-transfers': 0} or cases != 3:
                     raise ValueError('Incomplete original target matrix')
                 ended = True
             elif tag not in ('PIN', 'TICK', 'HOST'):
                 raise ValueError('Unknown original target trace row')
     if not ended:
         raise ValueError('Missing original target completion')
-    return dict(cases=cases, trusted_joint_suffix_replays=replays,
+    return dict(cases=cases,
                 native_HC12_steps=host_steps, baseline_HCS08_retired=16,
                 original_RAM_uploads=3, accepted_RAM_uploads=2, secured_uploads_ignored=1,
                 target_commands=2046, received_bytes=8166, transmitted_bytes=3,
@@ -112,14 +107,6 @@ def validate(path, helper, records):
 
 def check_oracle(path, helper, records):
     original = path.read_text().splitlines(keepends=True)
-    changed, moved = [], []
-    for line in original:
-        if line.startswith('REPLAY ') and len(moved) < 2:
-            moved.append(line)
-        else:
-            changed.append(line)
-    last = max(n for n, line in enumerate(changed) if line.startswith('CASE_END '))
-    changed[last:last] = moved
     duplicate = list(original)
     first = next(n for n, line in enumerate(duplicate) if line.startswith('CASE '))
     duplicate.insert(first, duplicate[first])
@@ -134,7 +121,7 @@ def check_oracle(path, helper, records):
             line, done = ' '.join(parts) + '\n', True
         altered.append(line)
     negative = path.with_name(path.name + '.oracle-negative')
-    for lines in (changed, duplicate, omitted, altered):
+    for lines in (duplicate, omitted, altered):
         negative.write_text(''.join(lines))
         try:
             validate(negative, helper, records)
@@ -142,7 +129,7 @@ def check_oracle(path, helper, records):
             continue
         raise ValueError('Fixed native target oracle corruption accepted')
     negative.unlink()
-    return 4
+    return 3
 
 
 def main():
@@ -181,7 +168,7 @@ def main():
         'Explicit post-SYNC/context/clock assumptions; documented six-form unstretched instruction '
         'budgets commit at retirement under a named reference contract. No physical reset, full helper, '
         'bus subcycle/arbitration, peripheral-clock or whole update/recovery equivalence.'), indent=2) + '\n')
-    print('Verified native original controller upload/control, coupled strict target failures and fresh joint replays.')
+    print('Verified native original controller upload/control, coupled strict target failures.')
     return 0
 
 

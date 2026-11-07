@@ -176,7 +176,6 @@ def refusals(binary, firmware, folder):
     texts = [(configuration(False).replace("midi-output PR3\n", ""), "midi-output"),
              (configuration(False).replace("midi-sci-timed PR2 after 0\n", "")
               .replace("midi-transfer-reference 12 0\n", ""), "Host MIDI requires"),
-             (configuration(False) + "checkpoint 100 2\n", "rejects automatic checkpoint"),
              (configuration(False).replace("midi-sci-timed PR2", "midi-sci-timed UNKNOWN"),
               "PR2 or PS4"),
              (configuration(False).replace("mcu-power-on 3 high\n", ""), "Timed SCI MIDI requires"),

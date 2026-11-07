@@ -3,9 +3,9 @@
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_interrupts.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_shi.hpp"
 #include "dsp/dsp_timers.hpp"
-#include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_interrupt_fixture.hpp"
 
@@ -156,7 +156,7 @@ void test_priority_rejections_and_reset() {
 }
 
 void test_fast_entry(const bool double_word) {
-  blofeld::OwnDspMachine machine(native_clocks);
+  blofeld::DspMachine machine(native_clocks);
   auto &bus = machine.bus();
   Program program;
   program.setup({.priorities = 0x100});
@@ -193,7 +193,7 @@ void test_fast_entry(const bool double_word) {
 }
 
 void test_fast_latches_both_vector_words() {
-  blofeld::OwnDspMachine machine(native_clocks);
+  blofeld::DspMachine machine(native_clocks);
   auto &bus = machine.bus();
   Program changed;
   changed.emit(short_r2_nine);
@@ -225,7 +225,7 @@ void test_fast_latches_both_vector_words() {
 }
 
 void test_native_mask_release() {
-  blofeld::OwnDspMachine machine(native_clocks);
+  blofeld::DspMachine machine(native_clocks);
   auto &bus = machine.bus();
   Program program;
   program.setup({.priorities = 0x100, .status = ordinary_sr | mask_bits});
@@ -250,7 +250,7 @@ void test_native_mask_release() {
 }
 
 void test_masked_source_does_not_probe_unknown_pins() {
-  blofeld::OwnDspMachine machine(native_clocks);
+  blofeld::DspMachine machine(native_clocks);
   auto &bus = machine.bus();
   Program program;
   constexpr unsigned priorities = 0x304;
@@ -275,7 +275,7 @@ void test_masked_source_does_not_probe_unknown_pins() {
 }
 
 void test_bus_tie_order_and_shi_acknowledgement() {
-  blofeld::OwnDspMachine machine(native_clocks);
+  blofeld::DspMachine machine(native_clocks);
   auto &bus = machine.bus();
   Program program;
   constexpr unsigned all_ones = 0xffffff;
@@ -329,7 +329,7 @@ void test_bus_tie_order_and_shi_acknowledgement() {
 }
 
 void test_long_entry(const VectorForm form, const unsigned level) {
-  blofeld::OwnDspMachine machine(native_clocks);
+  blofeld::DspMachine machine(native_clocks);
   auto &bus = machine.bus();
   Program program;
   program.setup({.priorities = (level + 1) << 8U, .status = scaling_sr});
@@ -369,7 +369,7 @@ void test_long_entry(const VectorForm form, const unsigned level) {
 }
 
 void test_fast_status_and_shi_fifo() {
-  blofeld::OwnDspMachine machine(native_clocks);
+  blofeld::DspMachine machine(native_clocks);
   auto &bus = machine.bus();
   Program program;
   program.setup({.priorities = 4});
@@ -396,7 +396,7 @@ void test_fast_status_and_shi_fifo() {
 }
 
 void test_nested_priority_and_pending_retention() {
-  blofeld::OwnDspMachine machine(native_clocks);
+  blofeld::DspMachine machine(native_clocks);
   auto &bus = machine.bus();
   Program program;
   program.setup({.priorities = nested_priorities});
@@ -445,7 +445,7 @@ void test_nested_priority_and_pending_retention() {
 }
 
 void test_vba_relocation_and_resets() {
-  blofeld::OwnDspMachine machine(native_clocks);
+  blofeld::DspMachine machine(native_clocks);
   auto &bus = machine.bus();
   Program program;
   program.setup({.priorities = 0x100});
@@ -475,7 +475,7 @@ void test_vba_relocation_and_resets() {
 }
 
 void test_sequential_rep_deferral() {
-  blofeld::OwnDspMachine machine(native_clocks);
+  blofeld::DspMachine machine(native_clocks);
   auto &bus = machine.bus();
   Program program;
   program.setup({.priorities = 0x100});
@@ -506,7 +506,7 @@ void test_sequential_rep_deferral() {
 }
 
 void test_do_loop_interrupt_restore() {
-  blofeld::OwnDspMachine machine(native_clocks);
+  blofeld::DspMachine machine(native_clocks);
   auto &bus = machine.bus();
   Program program;
   program.setup({.priorities = 0x100});
@@ -544,7 +544,7 @@ void test_do_loop_interrupt_restore() {
 }
 
 void test_unknown_vector_and_extension(const unsigned known_words) {
-  blofeld::OwnDspMachine machine(native_clocks);
+  blofeld::DspMachine machine(native_clocks);
   auto &bus = machine.bus();
   Program program;
   program.setup({.priorities = 0x100});
@@ -575,7 +575,7 @@ void test_unknown_vector_and_extension(const unsigned known_words) {
 }
 
 void test_interrupt_stack_overflow_rejection() {
-  blofeld::OwnDspMachine machine(native_clocks);
+  blofeld::DspMachine machine(native_clocks);
   auto &bus = machine.bus();
   Program program;
   program.setup({.priorities = 0x100});
@@ -605,7 +605,7 @@ void test_interrupt_stack_overflow_rejection() {
 }
 
 void test_rejected_fast_control_flow() {
-  blofeld::OwnDspMachine machine(native_clocks);
+  blofeld::DspMachine machine(native_clocks);
   auto &bus = machine.bus();
   Program program;
   program.setup({.priorities = 0x100});

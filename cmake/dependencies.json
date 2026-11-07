@@ -1,7 +1,7 @@
 {
   "independent_dsp56300": {
     "source": "https://github.com/Weichwolf/dsp56300",
-    "revision": "ec8336aaf1b8c24fcf6b25be4d8749157bdf0c6b",
+    "revision": "53f1620f988eb0d4dc8abf5eac6b31b147a129a4",
     "license": "GPL-3.0-only"
   },
   "zlib": {
@@ -43,32 +43,6 @@
     ],
     "hcs08_patch": "patches/ghidra-hcs08-arithmetic.patch"
   },
-  "dsp56300": {
-    "source": "https://github.com/dsp56300/dsp56300",
-    "revision": "3ff6610d5018d798f35bc784696f3384ade0e3c4",
-    "integrated": true,
-    "test_only": true,
-    "patch": "patches/dsp56300-reference-bus.patch",
-    "asmjit_host_cpuinfo": {
-      "file": "source/asmjit/src/asmjit/core/cpuinfo.cpp",
-      "upstream_sha256": "6f6d5f17c53b922fa5511a547d462eb9c94fb98afba8808d4e7714a44eb58e86",
-      "license": "Zlib; original source notices retained."
-    },
-    "accumulator_bus_growth": {
-      "file": "source/dsp56kEmu/dsp.h",
-      "reference": "DSP56300FM 3.1.6 and 5-13"
-    },
-    "asmjit": {
-      "source": "https://github.com/dsp56300/asmjit",
-      "revision": "3577608cab0bc509f856ebf6e41b2f9d9f71acc4",
-      "license": "Zlib"
-    },
-    "scalar_agu_compatibility": {
-      "patch": "patches/dsp56300-sc-moves.patch",
-      "owner_header": "src/dsp/dsp_compatibility_mode.hpp",
-      "reference": "DSP56300FM Rev5 section4.2 and Table5-1"
-    }
-  },
   "dsp56300_assembly_tool": {
     "source": "https://github.com/xemu-project/dsp56300",
     "version": "1.0.0",
@@ -104,7 +78,7 @@
   },
   "independent_cpu12": {
     "source": "https://github.com/Weichwolf/cpu12",
-    "revision": "64e5f4dac51bca6d96d3567620af5c8fd5e9c150",
+    "revision": "0f0e0945cf67465b55432bcfe5f1beff13acb7ce",
     "license": "GPL-3.0-only"
   }
 }

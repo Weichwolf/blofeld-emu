@@ -27,17 +27,6 @@ constexpr unsigned caller = 0x2000, returned = caller + 3, stack = 0x2100;
 constexpr unsigned sync_entry = 0x138c, sync_request = 0x13c9, helper_base = 0x1200;
 constexpr unsigned reset_pin = 0x80, bkgd_pin = 2, target_period = 15, byte_mask = 255;
 
-struct Saved {
-  McuCheckpoint host;
-  hcs08_programmer::Memory memory;
-  Hcs08Checkpoint cpu;
-  Hcs08ResetSequence reset;
-  Hcs08BdcCheckpoint bdc;
-  Hcs08BdcWireCheckpoint wire;
-  Hcs08RunCheckpoint clock;
-  std::uint64_t next_edge, origin, steps, received;
-};
-
 struct Fixture {
   const Firmware &firmware;
   const std::vector<std::uint8_t> &helper;
@@ -56,16 +45,14 @@ struct Fixture {
           const std::vector<std::uint8_t> &code,
           unsigned first_edge,
           unsigned timer_prescale,
-          std::ostream &output,
-          const hcs08_programmer::Memory *memory = nullptr);
+          std::ostream &output);
   // Borrow the actual coupled MCU without changing its RAM, registers or clocks.
   // The caller composes GPIO/bus/cycle observers and supplies peripheral context.
   Fixture(McuMachine &machine,
           const Firmware &image,
           const std::vector<std::uint8_t> &code,
           unsigned first_edge,
-          std::ostream &output,
-          const hcs08_programmer::Memory *memory = nullptr);
+          std::ostream &output);
   void prepare_target(bool unknown_vector);
   void bind();
   [[nodiscard]] Hcs08RunClock &run_clock();
@@ -84,8 +71,6 @@ struct Fixture {
   void edge(std::uint64_t ticks);
   void step();
   void finish(unsigned timer_prescale);
-  [[nodiscard]] Saved checkpoint() const;
-  void restore(const Saved &saved);
   [[nodiscard]] std::string endpoint() const;
 };
 }

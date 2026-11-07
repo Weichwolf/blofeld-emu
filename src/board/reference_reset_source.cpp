@@ -3,7 +3,7 @@
 #include "board/reference_board.hpp"
 #include "board/reference_context.hpp"
 #include "common/bus.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_gpio.hpp"
 

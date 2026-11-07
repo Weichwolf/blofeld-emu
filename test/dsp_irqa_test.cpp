@@ -3,8 +3,8 @@
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_interrupts.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_timers.hpp"
-#include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 
 #include <array>
@@ -232,7 +232,7 @@ struct Setup {
   bool complete_vector = true;
 };
 
-void vectors(OwnDspMachine &machine, const Setup setup) {
+void vectors(DspMachine &machine, const Setup setup) {
   auto &bus = machine.bus();
   bus.write({.address = irqa_vector, .value = setup.long_vector ? absolute_jsr : 0});
   if (setup.complete_vector) {
@@ -245,7 +245,7 @@ void vectors(OwnDspMachine &machine, const Setup setup) {
   }
 }
 
-unsigned prepare(OwnDspMachine &machine, const Setup setup) {
+unsigned prepare(DspMachine &machine, const Setup setup) {
   NativeProgram program;
   program.word(move_sr);
   program.word(ordinary_status);
@@ -266,7 +266,7 @@ unsigned prepare(OwnDspMachine &machine, const Setup setup) {
   return foreground;
 }
 
-void service(OwnDspMachine &machine,
+void service(DspMachine &machine,
              const dsp56300::InstructionWords foreground,
              const DspInterruptRequest request,
              const bool long_vector) {
@@ -312,7 +312,7 @@ void service(OwnDspMachine &machine,
           "Real JSR or both fast NOPs retire without inventing physical clock periods");
 }
 
-void long_service(OwnDspMachine &machine, const dsp56300::InstructionWords foreground) {
+void long_service(DspMachine &machine, const dsp56300::InstructionWords foreground) {
   auto expected = machine.cpu().registers();
   service(machine, foreground, {.vector = irqa_vector, .level = 1}, true);
   expected.stack[1] = (std::uint64_t{expected.pc} << word_bits) | expected.sr;
@@ -341,11 +341,11 @@ struct NativeResult {
   bool operator==(const NativeResult &) const = default;
 };
 
-void replay(OwnDspMachine &machine, const auto &continuation) {
+void replay(DspMachine &machine, const auto &continuation) {
   const auto saved = machine.checkpoint();
   std::optional<NativeResult> completed;
   for (unsigned iteration = 0; iteration < 4; ++iteration) {
-    OwnDspMachine fresh(native_clocks);
+    DspMachine fresh(native_clocks);
     auto &owner = iteration == 3 ? fresh : machine;
     owner.restore(saved);
     const auto ticks = owner.clock().elapsed_ticks();
@@ -360,11 +360,11 @@ void replay(OwnDspMachine &machine, const auto &continuation) {
 }
 
 void test_native_long_entry_and_checkpoint() {
-  OwnDspMachine machine(native_clocks);
+  DspMachine machine(native_clocks);
   const auto foreground = prepare(machine, {.priority = edge_ipl1, .long_vector = true});
   machine.bus().observe_irqa(false);
   machine.bus().observe_irqa(true); // The captured edge must survive actual pin release.
-  replay(machine, [foreground](OwnDspMachine &owner) {
+  replay(machine, [foreground](DspMachine &owner) {
     auto expected = owner.cpu().registers();
     const auto before = owner.cpu().progress();
     long_service(owner, {.address = foreground, .opcode = move_y0, .extension = 9});
@@ -380,7 +380,7 @@ void test_native_long_entry_and_checkpoint() {
 }
 
 void test_native_masked_edge_release() {
-  OwnDspMachine machine(native_clocks);
+  DspMachine machine(native_clocks);
   NativeProgram program;
   program.word(move_sr);
   program.word(ordinary_status | mask_bits);
@@ -396,7 +396,7 @@ void test_native_masked_edge_release() {
   step_native(machine);
   machine.bus().observe_irqa(false);
   machine.bus().observe_irqa(true);
-  replay(machine, [unmask, foreground](OwnDspMachine &owner) {
+  replay(machine, [unmask, foreground](DspMachine &owner) {
     auto expected = owner.cpu().registers();
     const auto before = owner.cpu().progress();
     require(!owner.admit_interrupt(
@@ -419,10 +419,10 @@ void test_native_masked_edge_release() {
 }
 
 void test_native_level_repeat() {
-  OwnDspMachine machine(native_clocks);
+  DspMachine machine(native_clocks);
   const auto foreground = prepare(machine, {.priority = 1, .foreground_nop = true});
   machine.bus().observe_irqa(false);
-  replay(machine, [foreground](OwnDspMachine &owner) {
+  replay(machine, [foreground](DspMachine &owner) {
     auto expected = owner.cpu().registers();
     const auto before = owner.cpu().progress();
     const DspInterruptRequest request{.vector = irqa_vector};
@@ -452,10 +452,10 @@ void test_native_level_repeat() {
 }
 
 void test_native_missing_vector() {
-  OwnDspMachine machine(native_clocks);
+  DspMachine machine(native_clocks);
   const auto foreground = prepare(machine, {.priority = edge_ipl1, .complete_vector = false});
   machine.bus().observe_irqa(false);
-  replay(machine, [foreground](OwnDspMachine &owner) {
+  replay(machine, [foreground](DspMachine &owner) {
     auto expected = owner.cpu().registers();
     const auto before = owner.cpu().progress();
     const auto trusted = owner.checkpoint();

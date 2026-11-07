@@ -4,7 +4,6 @@
 #include "keyboard_receiver_fixture.hpp"
 #include "keyboard_reset_fixture.hpp"
 
-#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <fstream>
@@ -32,28 +31,12 @@ void run_case(const Firmware &firmware,
       require(run.steps < step_limit, "Original reset/idle prefix reaches its actual SYNC request");
       run.step();
     }
-    const auto saved = run.checkpoint();
-    const auto offset = static_cast<std::size_t>(events.tellp());
+
     run.finish(prescale);
     const auto complete = events.str();
-    const auto suffix = complete.substr(offset);
+
     trace << complete;
-    for (unsigned n = 0; n < 2; ++n) {
-      std::ostringstream actual;
-      Fixture restored(firmware, helper, phase, prescale, actual, &saved.memory);
-      restored.restore(saved);
-      restored.finish(prescale);
-      require(actual.str() == suffix && restored.endpoint() == run.endpoint() &&
-                  restored.target.memory.bytes == run.target.memory.bytes &&
-                  restored.target.memory.known == run.target.memory.known &&
-                  restored.target.memory.flash.image() == run.target.memory.flash.image() &&
-                  restored.target.memory.flash.state() == run.target.memory.flash.state() &&
-                  restored.controller().state() == run.controller().state() &&
-                  restored.transport().state() == run.transport().state() &&
-                  restored.reset_sequence().state() == run.reset_sequence().state(),
-              "Fresh MCU/target/native/reset/BDC/wire/TIM owners reproduce the entire SYNC suffix");
-      trace << "REPLAY index=" << n << " bytes=" << actual.str().size() << " identical=1\n";
-    }
+
     trace << "CASE_END phase=" << phase << " prescale=" << prescale << " steps=" << run.steps
           << '\n';
   } catch (...) {
@@ -73,7 +56,7 @@ int main(const int count, char **arguments) {
     run_case(firmware, helper, 1, 2, trace);
     run_case(firmware, helper, 14, 2, trace);
     run_case(firmware, helper, 1, 6, trace);
-    trace << "END cases=3 replays=6 accepted=2 rejected=1 target-retired=0\n";
+    trace << "END cases=3 accepted=2 rejected=1 target-retired=0\n";
     std::cout << "Original HC12 reset/SYNC uses native timer and actual reset/BKGD peer state.\n";
     return 0;
   } catch (const std::exception &e) {

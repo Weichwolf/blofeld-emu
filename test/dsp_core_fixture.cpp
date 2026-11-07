@@ -4,7 +4,7 @@
 #include "common/bus.hpp"
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_rom_program.hpp"
 
@@ -114,7 +114,7 @@ void Program::install(DspBus &bus) const {
   bus.install_rom({.start = DspRomProgram::boot, .words = words()});
 }
 
-Driver::Driver(OwnDspMachine &machine) : machine_(machine) {
+Driver::Driver(DspMachine &machine) : machine_(machine) {
   hardware_reset();
 }
 

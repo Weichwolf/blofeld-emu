@@ -2,9 +2,9 @@
 #include "common/bus.hpp"
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_io.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp/own_dsp_io.hpp"
-#include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp56300/instruction.hpp"
 #include "dsp_rom_program.hpp"
@@ -171,7 +171,7 @@ struct Counts {
 struct Experiment {
   const blofeld::Firmware &firmware;
   std::ostream &trace;
-  blofeld::OwnDspMachine machine{blofeld::test::dma_test::native_clocks};
+  blofeld::DspMachine machine{blofeld::test::dma_test::native_clocks};
   unsigned unmask = 0;
   unsigned foreground = 0;
   std::vector<Event> events;

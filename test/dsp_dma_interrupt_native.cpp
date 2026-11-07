@@ -5,8 +5,8 @@
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_interrupts.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_timers.hpp"
-#include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_dma_interrupt_fixture.hpp"
 
@@ -30,7 +30,7 @@ void write(DspBus &bus, const unsigned address, const unsigned value) {
   bus.write({.space = DspSpace::x, .address = address, .value = value});
 }
 
-unsigned prepare(OwnDspMachine &machine,
+unsigned prepare(DspMachine &machine,
                  const unsigned channel,
                  const bool long_vector,
                  const bool complete_vector = true) {
@@ -69,13 +69,13 @@ unsigned prepare(OwnDspMachine &machine,
   return foreground;
 }
 
-std::optional<DspDmaWord> tick(OwnDspMachine &machine, const std::uint64_t cycle) {
+std::optional<DspDmaWord> tick(DspMachine &machine, const std::uint64_t cycle) {
   return dma(
       machine,
       {.cycle = cycle, .known_requests = 1, .requests = 1, .timing = timing, .grant = grant});
 }
 
-void admit(OwnDspMachine &machine) {
+void admit(DspMachine &machine) {
   const auto pc = machine.cpu().registers().pc;
   require(
       machine.admit_interrupt({.address = pc, .opcode = move_r7, .extension = foreground_value}) &&
@@ -83,7 +83,7 @@ void admit(OwnDspMachine &machine) {
       "Actual unmasked DMA event admits the independently authored foreground instruction");
 }
 
-void drain(OwnDspMachine &machine, dsp56300::InstructionProgress progress) {
+void drain(DspMachine &machine, dsp56300::InstructionProgress progress) {
   const auto before = machine.cpu().progress().instructions;
   for (unsigned effect = 0; effect < effect_bound && progress.pending && !progress.retired &&
                             progress.fault.kind == dsp56300::FaultKind::none;
@@ -95,7 +95,7 @@ void drain(OwnDspMachine &machine, dsp56300::InstructionProgress progress) {
           "Actual native continuation retires once without a substituted service result");
 }
 
-void vector_service(OwnDspMachine &machine, const DspInterruptRequest request) {
+void vector_service(DspMachine &machine, const DspInterruptRequest request) {
   admit(machine);
   unsigned reads = 0;
   for (unsigned instruction = 0;
@@ -141,7 +141,7 @@ struct Result {
   bool operator==(const Result &) const = default;
 };
 
-Result completed_service(OwnDspMachine &machine, const unsigned channel, const bool long_vector) {
+Result completed_service(DspMachine &machine, const unsigned channel, const bool long_vector) {
   auto expected = machine.cpu().registers();
   const auto before = machine.cpu().progress();
   const auto ticks = machine.clock().elapsed_ticks();
@@ -186,14 +186,14 @@ Result completed_service(OwnDspMachine &machine, const unsigned channel, const b
 }
 
 void native_service(const unsigned channel, const bool long_vector) {
-  OwnDspMachine machine(native_clocks);
+  DspMachine machine(native_clocks);
   prepare(machine, channel, long_vector);
   require(!tick(machine, 1) && !machine.bus().interrupt_request(0),
           "Actual source capture alone cannot signal DMA completion");
   const auto held = machine.checkpoint();
   std::optional<Result> completed;
   for (unsigned replay = 0; replay < 4; ++replay) {
-    OwnDspMachine fresh(native_clocks);
+    DspMachine fresh(native_clocks);
     auto &owner = replay == 3 ? fresh : machine;
     owner.restore(held);
     const auto result = completed_service(owner, channel, long_vector);
@@ -256,7 +256,7 @@ void bus_arbitration() {
 }
 
 void missing_vector_and_recovery() {
-  OwnDspMachine machine(native_clocks);
+  DspMachine machine(native_clocks);
   prepare(machine, 1, false, false);
   static_cast<void>(tick(machine, 1));
   require(tick(machine, 2).has_value(), "Actual DMA1 destination store establishes the IRQ");
@@ -290,7 +290,7 @@ void missing_vector_and_recovery() {
 }
 
 void suspended_acknowledgement() {
-  OwnDspMachine machine(native_clocks);
+  DspMachine machine(native_clocks);
   prepare(machine, 1, false);
   static_cast<void>(tick(machine, 1));
   require(tick(machine, 2).has_value(), "Actual DMA1 completion precedes suspended entry");
@@ -313,7 +313,7 @@ void suspended_acknowledgement() {
   require(
       machine.bus().interrupt_request(0) == request,
       "Refused acknowledgement retains the genuine DMA event behind its disabled delivery gate");
-  OwnDspMachine fresh(native_clocks);
+  DspMachine fresh(native_clocks);
   fresh.restore(saved);
   const auto pending = fresh.cpu().pending_instruction();
   if (!pending) { throw Fault("Trusted restore lost the actual vector read"); }

@@ -127,10 +127,9 @@ void wake_and_return(blofeld::McuMachine &machine, const unsigned elapsed) {
       "Literal manual instruction costs reach the next WAI without replacing CPU/peripheral state");
 }
 
-void test_phase(const blofeld::McuCheckpoint &baseline,
-                blofeld::McuMachine &machine,
-                const unsigned delay) {
-  machine.restore(baseline);
+void test_phase(const unsigned delay) {
+  blofeld::McuMachine machine(program(), BLOFELD_DEFAULT_SLA, contract());
+  configure(machine);
   machine.set_sci_receive_reference(
       blofeld::SciReceiveReference{.baud_divisor = divisor, .transfer_delay_bus_cycles = delay});
   attach_wire(machine);
@@ -146,18 +145,15 @@ void test_phase(const blofeld::McuCheckpoint &baseline,
   machine.bus().write(reg::sci_control1, paused_control1);
   require(machine.advance_wait(pause_cycles) == pause_cycles && !machine.cpu().pending_interrupt(),
           "SCISWAI freezes a pending transfer deadline independently of TIM/OSC");
-  const auto frozen = machine.checkpoint();
-  for (unsigned replay = 0; replay < 2; ++replay) {
-    machine.restore(frozen);
-    attach_wire(machine);
-    const auto reference = machine.sci_receive_reference();
-    require(reference && reference->transfer_delay_bus_cycles == delay,
-            "Trusted restore retains the explicit timing scenario and pending deadline");
-    machine.bus().write(reg::sci_control1, 8);
-    require(machine.advance_wait(last_delay + 1) == delay,
-            "A restored pending transfer consumes exactly its remaining enabled IPBus periods");
-    wake_and_return(machine, stop_decision + pause_cycles + delay);
-  }
+
+  attach_wire(machine);
+  const auto reference = machine.sci_receive_reference();
+  require(reference && reference->transfer_delay_bus_cycles == delay,
+          "WAI retains the explicit timing scenario and pending deadline");
+  machine.bus().write(reg::sci_control1, 8);
+  require(machine.advance_wait(last_delay + 1) == delay,
+          "A pending transfer consumes exactly its remaining enabled IPBus periods");
+  wake_and_return(machine, stop_decision + pause_cycles + delay);
 }
 }
 
@@ -165,7 +161,6 @@ void test_owned_sci_references() {
   blofeld::McuMachine machine(program(), BLOFELD_DEFAULT_SLA, contract());
   configure(machine);
   require(!machine.sci_receive_reference(), "Owned MCU default has no selected SCI hypothesis");
-  const auto baseline = machine.checkpoint();
   attach_wire(machine);
   reject([&] { machine.advance_wait(stop_decision + 1); },
          "Unqualified default still exposes the transfer window during continuous IRQ selection");
@@ -174,19 +169,20 @@ void test_owned_sci_references() {
       [&] {
         machine.set_sci_receive_reference(blofeld::SciReceiveReference{.baud_divisor = divisor});
       },
-      "A reference cannot repair an already failed run without trusted restore");
+      "A reference cannot repair an already failed run without a new device instance");
   for (const unsigned delay :
        {0U, 1U, divisor - 1, divisor, divisor + 1, last_delay - 1, last_delay}) {
-    test_phase(baseline, machine, delay);
+    test_phase(delay);
   }
-  machine.restore(baseline);
-  require(!machine.sci_receive_reference(),
-          "Restoring the unqualified checkpoint drops the hypothesis");
-  machine.set_wait_observer([&machine](auto /*cycle*/) {
-    reject([&] { machine.set_sci_receive_reference(std::nullopt); },
+  blofeld::McuMachine guarded(program(), BLOFELD_DEFAULT_SLA, contract());
+  configure(guarded);
+  require(!guarded.sci_receive_reference(),
+          "A fresh device has no implicit receive timing hypothesis");
+  guarded.set_wait_observer([&guarded](auto /*cycle*/) {
+    reject([&] { guarded.set_sci_receive_reference(std::nullopt); },
            "SCI reference reconfiguration cannot reenter active native WAI");
-    machine.bus().update_pin_drive(blofeld::McuPort::r, 4, {.mask = 4, .levels = 4});
+    guarded.bus().update_pin_drive(blofeld::McuPort::r, 4, {.mask = 4, .levels = 4});
   });
-  require(machine.advance_wait(1) == 1 && !machine.timing_faulted(),
+  require(guarded.advance_wait(1) == 1 && !guarded.timing_faulted(),
           "Caught reference reconfiguration guards leave a healthy WAI boundary");
 }

@@ -11,7 +11,7 @@ Native SLEIGH and the HC12 language specification:
   (patches/README.txt); the corrected language is compiled with native SLEIGH.
   The integration uses exceptions as the native SLEIGH error interface.
 
-Optional independent CPU12 executor:
+Independent CPU12 runtime core:
   https://github.com/Weichwolf/cpu12
   GPL-3.0-only; corresponding source and notices remain in the pinned checkout.
   Built under its own strict diagnostics and matching project sanitizers.
@@ -33,21 +33,6 @@ Independent DSP56300 runtime core:
   THIRD_PARTY.txt attribution. The core has no dependency on another DSP
   emulator or JIT library. Corresponding source and its notices must accompany
   redistributable binaries as required by the GPL.
-
-Legacy DSP test harness only (not the regular runtime):
-  https://github.com/dsp56300/dsp56300
-  GPL-3.0 (see the dependency's LICENSE.md), pinned in cmake/dependencies.json.
-  The native interpreter is built from a local checkout, patched only in build/.
-  Original notices remain in the build copy and source checkout. Its asmjit
-  component uses the Zlib license (source/asmjit/LICENSE.md).
-  The build-copy patch also synchronizes AsmJit's host CPU detection with
-  explicit std::call_once initialization; its original notices remain intact. Other native source
-  notices remain upstream. Corresponding source and dependency notices must
-  accompany any redistributable binary package as required by their licenses.
-  The reference data-bus patch also corrects scaled selected-source S growth
-  from DSP56300FM 5-13; numeric transfer operations and notices stay intact.
-  Remaining component tests use this legacy reference harness during migration.
-  BUILD_TESTING=OFF neither configures nor builds it.
 
 Native session audio client:
   PulseAudio 17.0 client, upstream authors and contributors.

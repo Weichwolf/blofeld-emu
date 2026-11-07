@@ -471,21 +471,15 @@ void validate_board_options(const Options &config,
   if ((!config.audio_out.empty() || config.audio_live) && (!board || !board->pcm)) {
     throw blofeld::Fault("Audio output requires pcm-receive in the reference board");
   }
-  if (config.audio_live && board && board->checkpoint) {
-    throw blofeld::Fault("Live audio rejects automatic checkpoint replay");
-  }
   const bool midi = !config.midi_file.empty() || !config.midi_device.empty() || config.midi_port;
-  if (midi && (!board || (!board->midi && !board->midi_sci_timed && !board->midi_dsp) ||
-               board->checkpoint)) {
-    throw blofeld::Fault(
-        "Host MIDI requires midi-sci, midi-sci-timed or midi-dsp-tio and rejects automatic "
-        "checkpoint replay");
+  if (midi && (!board || (!board->midi && !board->midi_sci_timed && !board->midi_dsp))) {
+    throw blofeld::Fault("Host MIDI requires midi-sci, midi-sci-timed or midi-dsp-tio");
   }
   if (config.midi_port && (!board || !board->midi_output)) {
     throw blofeld::Fault("Host MIDI port requires midi-output PR3 or PS5 in the reference board");
   }
-  if (config.usbip_port && (!board || board->checkpoint)) {
-    throw blofeld::Fault("Host USB/IP rejects automatic checkpoint replay");
+  if (config.usbip_port && !board) {
+    throw blofeld::Fault("Host USB/IP requires a reference board");
   }
 }
 

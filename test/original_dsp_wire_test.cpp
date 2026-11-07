@@ -2,8 +2,8 @@
 #include "common/bus.hpp"
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/own_dsp_io.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_io.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_rom_program.hpp"
 #include "esai_fixture.hpp"
@@ -1021,7 +1021,7 @@ private:
     watched_ = saved.watched;
   }
 
-  blofeld::OwnDspMachine machine_{blofeld::test::dma_test::native_clocks};
+  blofeld::DspMachine machine_{blofeld::test::dma_test::native_clocks};
   unsigned foreground_ = 0;
   unsigned idle_ = 0;
   unsigned complete_ = 0;

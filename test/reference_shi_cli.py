@@ -11,7 +11,7 @@ import subprocess
 import sys
 import unittest
 
-from test_reference_cli import CONFIG, ROM, WAIT, image, replay_sections
+from test_reference_cli import CONFIG, ROM, WAIT, image
 
 BINARY, FIXTURE, FIRMWARE, ARTIFACTS = map(Path, sys.argv[1:5])
 GROUP = sys.argv[5] if len(sys.argv) == 6 else "all"
@@ -175,7 +175,7 @@ class ShiReturnCli(unittest.TestCase):
         self.assertIn("0x3000", result.stderr)
         self.assertIn("pc=0x9007", result.stderr)
 
-    def test_echo_replays_both_shift_directions_between_real_cpu_reads(self):
+    def test_echo_transfers_both_shift_directions_between_real_cpu_reads(self):
         base = self.serial_config() + "initial drive Q ff 00 00\nat 20000 drive Q ff 01 00\n"
         mcu_cycles, dsp_steps, dsp_units = echo_counts()
         self.assertEqual((mcu_cycles, dsp_steps, dsp_units), (1174, 396, 2336))
@@ -194,47 +194,20 @@ class ShiReturnCli(unittest.TestCase):
             self.assertIn(f"completed-steps={dsp_steps} units={dsp_units} ticks={mcu_cycles * 90}",
                           result.stdout)
             self.assertIn(f"pc=0x{0x9000 + len(code):04x}", result.stdout)
-            for point, frame, high in ((71, 0, True), (72, 0, True), (76, 0, False),
-                                       (249, 1, True), (250, 1, True), (427, 2, True)):
-                with self.subTest(first=first, checkpoint=point):
-                    result, trace = self.run_cli(f"echo-{first:x}-cp{point}",
-                                                 base + f"checkpoint {point} 2\n", code,
-                                                 mode="echo", instructions=instructions)
-                    self.assertEqual(result.returncode, 0, result.stderr)
-                    self.assertIn("r4=259 lc=0", result.stdout)
-                    self.assertIn(f"cycles={mcu_cycles} idle=0 ticks={mcu_cycles * 10}", result.stdout)
-                    self.assertIn(f"completed-steps={dsp_steps} units={dsp_units} "
-                                  f"ticks={mcu_cycles * 90}", result.stdout)
-                    prefix, branches = replay_sections(trace)
-                    self.assertEqual(len(branches), 3)
-                    self.assertEqual(branches, [branches[0]] * 3)
-                    self.assertEqual(prefix + branches[0], baseline)
-                    last = [row for row in prefix.splitlines() if row.startswith("SPI ")][-1]
-                    value = int(re.search(r"value=(0x[0-9a-f]+)", last)[1], 16)
-                    self.assertFalse(value & 2, last)
-                    self.assertEqual(bool(value & 4), high, last)
-                    self.assertIn(f"frames={frame}", last)
-                    self.assertIn(f"operations={point} idle=0", prefix.splitlines()[-1])
-                    self.assertEqual(prefix.count("INPUT requested=20000"), int(frame != 0))
-                    self.assertEqual(branches[0].count("INPUT requested=20000"), int(frame == 0))
 
-    def test_echo_changed_mosi_bit_changes_native_dsp_reply_and_replays_the_actual_fault(self):
+    def test_echo_changed_mosi_bit_changes_native_dsp_reply_and_faults(self):
         words = (0x123456, 0x654321, 0x0f0f0f)
         code, failures = echo_exchange(words, (words[0] ^ 0x800000, *words[1:]))
         config = (self.serial_config() + "initial drive Q ff 00 00\n"
-                  "at 20000 drive Q ff 01 00\ncheckpoint 71 2\n")
+                  "at 20000 drive Q ff 01 00\n")
         result, trace = self.run_cli("echo-changed-bit", config, code, mode="echo",
                                      instructions=8 + 178 * len(words) + 3)
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("0x3000", result.stderr)
         self.assertIn(f"pc=0x{failures[1][0]:04x}", result.stderr)
-        prefix, branches = replay_sections(trace)
-        self.assertEqual(len(branches), 3)
-        self.assertEqual(branches, [branches[0]] * 3)
         # The first native received word must alter the next frame's first MISO bit.
         self.assertIn("r4=257 lc=0", result.stderr)
-        first_frame = prefix + branches[0]
-        rows = first_frame.splitlines()
+        rows = trace.splitlines()
         last_release = next(i for i, row in enumerate(rows) if row.startswith("SPI ") and
                             "frames=1" in row)
         self.assertEqual(spi_words("\n".join(rows[:last_release + 1]) + "\n"),
@@ -339,24 +312,20 @@ class ShiReturnCli(unittest.TestCase):
         self.assertLess(events[1][0] % 90, events[2][0] % 90)
         self.assertLess(trace.index("SHI-RETURN end=5175"), trace.index("IRQ vector=0xfff2"))
 
-    def test_checkpoint_replays_native_edge_irq_and_future_input_cursor(self):
+    def test_native_edge_irq_and_future_input_cursor(self):
         config = CONFIG.replace("operations 23", "operations 200")
         config = config.replace("12000000 540000000", "60000000 540000000")
         config = config.replace("initial drive E 03 03", "initial drive E 01 01")
         config += ("shi-hreq E 02 direct\ninitial drive Q ff 00 00\n"
-                   "at 5148 drive Q ff 01 00\ncheckpoint 10 2\n")
+                   "at 5148 drive Q ff 01 00\n")
         code = WAIT[:3] + store(0x1e, 0xc0) + WAIT[3:] + check_pin(0x260, 1)
-        result, trace = self.run_cli("checkpoint-edge-input", config, code, mode="short-request",
+        result, trace = self.run_cli("native-edge-input", config, code, mode="short-request",
                                      instructions=15, irq=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        _, branches = replay_sections(trace)
-        self.assertEqual(len(branches), 3)
-        self.assertEqual(branches, [branches[0]] * 3)
-        for branch in branches:
-            self.assertIn("SHI-RETURN end=5148 signal=hreq driven=1 level=0", branch)
-            self.assertIn("SHI-RETURN end=5175 signal=hreq driven=0 level=unknown", branch)
-            self.assertIn("INPUT requested=5148 actual=5220", branch)
-            self.assertIn("IRQ vector=0xfff2 stack-reused=1", branch)
+        self.assertIn("SHI-RETURN end=5148 signal=hreq driven=1 level=0", trace)
+        self.assertIn("SHI-RETURN end=5175 signal=hreq driven=0 level=unknown", trace)
+        self.assertIn("INPUT requested=5148 actual=5220", trace)
+        self.assertIn("IRQ vector=0xfff2 stack-reused=1", trace)
         self.assertIn("interrupts=1", result.stdout)
         self.assertIn("sp=0x2000", result.stdout)
         self.assertIn(f"pc=0x{0x9000 + len(code):04x}", result.stdout)

@@ -2,817 +2,116 @@
 #include "dsp/dsp_machine.hpp"
 
 #include "common/bus.hpp"
-#include "dsp/detail/dsp_program_fetch.hpp"
-#include "dsp/detail/dsp_reference_cycle.hpp"
-#include "dsp/dsp_address_register_store.hpp"
-#include "dsp/dsp_address_stage.hpp"
-#include "dsp/dsp_agu_interlocks.hpp"
-#include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp/dsp_dax.hpp"
-#include "dsp/dsp_dma.hpp"
-#include "dsp/dsp_interlocks.hpp"
-#include "dsp/dsp_interrupts.hpp"
-#include "dsp/dsp_native_access.hpp"
-#include "dsp/dsp_peripheral_read_stage.hpp"
-#include "dsp/dsp_program_fetch.hpp"
-#include "dsp/dsp_reference_cycle.hpp"
-#include "dsp/dsp_reference_execution.hpp"
-#include "dsp/dsp_repeat_fetch.hpp"
 #include "dsp/dsp_run_clock.hpp"
+#include "dsp56300/core.hpp"
+#include "dsp56300/memory.hpp"
 
-#include <cstddef>
 #include <cstdint>
-#include <exception>
-#include <functional>
-#include <memory>
-#include <optional>
-#include <span>
 #include <string>
-#include <utility>
-#include <variant>
 
 namespace blofeld {
-namespace {
-constexpr unsigned shi_receive = 0xffff94;
-constexpr unsigned shi_status = 0xffff91;
-
-bool status_after_receive(const std::optional<DspAddressStageView> &memory,
-                          const std::optional<DspMemoryAccess> early) {
-  if (!memory || !early || memory->data_access_count != 2) { return false; }
-  const auto source = memory->data_accesses[0];
-  const auto destination = memory->data_accesses[1];
-  return source.target.space == DspSpace::x && source.target.address == shi_receive &&
-         source.operation == DspMemoryOperation::read && destination.target.space == DspSpace::p &&
-         destination.operation == DspMemoryOperation::write && early->target.space == DspSpace::x &&
-         early->target.address == shi_status;
+DspMachine::DspMachine(const DspRunClockInputs clock)
+    : io_(bus_),
+      cpu_(dsp56300::Memory::external(), &io_),
+      interrupts_(bus_, cpu_),
+      clock_(clock),
+      clock_inputs_(clock) {
+  io_.program_observer_ = {.context = &interrupts_,
+                           .completed = [](void *owner, const unsigned address) {
+                             static_cast<DspInterruptAdmission *>(owner)->fetch_completed(address);
+                           }};
 }
 
-struct RunState {
-  std::optional<DspRunContract> contract;
-  std::optional<DspRunClock> clock;
-  std::optional<DspAguInterlocks> agu;
-  std::optional<DspAguEffect> pending_agu;
-  std::optional<DspInterlocks> interlocks;
-};
-
-RunState initial_run(const std::optional<DspRunContract> contract) {
-  if (!contract) { return {}; }
-  const bool agu = contract->timing == DspRunTiming::native_internal_agu_interlocks;
-  const bool interlocks = contract->timing == DspRunTiming::native_interlock_estimates;
-  if (contract->timing != DspRunTiming::native_internal_estimates && !interlocks && !agu) {
-    throw Fault("DSP run requires an explicit native-cycle-estimate timing contract");
-  }
-  if (contract->interrupts != DspInterruptTiming::unqualified &&
-      contract->interrupts != DspInterruptTiming::native_vector_estimates) {
-    throw Fault("Unsupported DSP interrupt timing contract");
-  }
-  // Nominal AGU timing admits ordinary prepared steps; preview/begin still
-  // refuse actual IRQ entry. The broader interlock profile has no vector contract.
-  if (interlocks && contract->interrupts != DspInterruptTiming::unqualified) {
-    throw Fault("DSP interlock estimates do not qualify interrupt-vector timing");
-  }
-  if (contract->resets != DspResetTiming::unqualified &&
-      contract->resets != DspResetTiming::reference_instruction_boundary &&
-      contract->resets != DspResetTiming::reference_extal_hold) {
-    throw Fault("Unsupported DSP reset timing contract");
-  }
-  return {.contract = contract,
-          .clock = DspRunClock(contract->clock),
-          .agu = contract->timing == DspRunTiming::native_internal_agu_interlocks
-                     ? std::optional(DspAguInterlocks{})
-                     : std::nullopt,
-          .pending_agu = std::nullopt,
-          .interlocks = interlocks ? std::optional{DspInterlocks{}} : std::nullopt};
-}
-}
-
-struct DspCheckpoint::Storage {
-  Storage(DspBus bus_state, DspCoreCheckpoint cpu_state, RunState run_state)
-      : bus(std::move(bus_state)), cpu(std::move(cpu_state)), run(run_state) {}
-
-  const DspBus bus;
-  const DspCoreCheckpoint cpu;
-  const RunState run;
-};
-
-struct DspMachine::State {
-  explicit State(const RunState run_state) : run(run_state), cpu(bus) {
-    if (run.clock) {
-      if (!run.contract) { throw Fault("Clocked DSP owner lost its timing contract"); }
-      const bool vector_estimates =
-          run.contract.value().interrupts == DspInterruptTiming::native_vector_estimates;
-      cpu.set_run_hooks(
-          {.ready =
-               [this] {
-                 if (run.clock->hardware_reset_active()) {
-                   const auto context = cpu.state();
-                   throw Fault("DSP instruction during hardware reset pc=" + hex(context.pc, 6) +
-                               " omr=" + hex(context.omr, 6));
-                 }
-               },
-           .begin =
-               [this](const auto state,
-                      const bool interrupt,
-                      const unsigned units,
-                      const std::optional<std::uint32_t> opcode) {
-                 begin_step(state, interrupt, units, opcode);
-               },
-           .complete = [this](const auto cycles) { complete_step(cycles); },
-           .failed = [this] { run.clock->fail(); },
-           .reset = [this] { reset_clock(); },
-           .fetched = run.interlocks ? std::function<void(std::uint32_t)>(
-                                           [this](const auto opcode) { observe_opcode(opcode); })
-                                     : std::function<void(std::uint32_t)>{},
-           .data = run.interlocks ? std::function<void(DspMemoryAccess)>([this](const auto access) {
-             static_cast<void>(bus.memory_resource(access));
-           })
-                                  : std::function<void(DspMemoryAccess)>{},
-           .vector_estimates = vector_estimates,
-           .timing_opcode = run.agu.has_value()});
-    }
-  }
-
-  [[nodiscard]] DspAguEffect preview_agu(const DspCore::StepEstimate &estimate) const {
-    if (!run.agu) { return {}; }
-    if (estimate.interrupt || !estimate.opcode) {
-      throw Fault("Unqualified interrupt entry in nominal DSP AGU timing");
-    }
-    return run.agu->preview(*estimate.opcode);
-  }
-
-  void begin_step(const DspState context,
-                  const bool interrupt,
-                  const unsigned units,
-                  const std::optional<std::uint32_t> opcode) {
-    if (!run.clock || !run.contract) { throw Fault("DSP run lost its clock contract"); }
-    const bool vector_estimates =
-        run.contract->interrupts == DspInterruptTiming::native_vector_estimates;
-    constexpr unsigned compatibility = 0x2000;
-    constexpr unsigned arithmetic_or_loop = 0x28000;
-    if ((interrupt && !vector_estimates) || (context.sr & compatibility) != 0) {
-      throw Fault("Unqualified DSP interrupt or compatibility-mode timing");
-    }
-    if (run.interlocks && (context.sr & arithmetic_or_loop) != 0) {
-      throw Fault("Unqualified DSP interlock arithmetic/loop-mode timing");
-    }
-    if (cpu.native_cycles() != run.clock->epoch_native_cycle_units()) {
-      throw Fault("DSP clock/native counters require coordinated recovery");
-    }
-    if (run.agu) {
-      if (interrupt || !opcode) {
-        throw Fault("Unqualified interrupt entry in nominal DSP AGU timing");
-      }
-      run.pending_agu = run.agu->preview(*opcode);
-    }
-    prepare_interlocks(context, units);
-    run.clock->begin_step(bus, {.pc = context.pc, .omr = context.omr});
-  }
-
-  [[nodiscard]] unsigned preview_stalls(const DspState context, const unsigned units) const {
-    if (!run.interlocks) { return 0; }
-    try {
-      constexpr unsigned unsupported_status = 0x2a000; // SA, LF, SC.
-      if ((context.sr & unsupported_status) != 0) {
-        throw Fault("Unqualified DSP interlock arithmetic/loop/compatibility mode");
-      }
-      return run.interlocks->preview(bus.inspect_program(context.pc), units);
-    } catch (const std::exception &error) {
-      throw Fault("DSP interlock opcode read P:" + hex(context.pc, 6) +
-                  " omr=" + hex(context.omr, 6) + ": " + error.what());
-    }
-  }
-
-  void prepare_interlocks(const DspState context, const unsigned units) {
-    static_cast<void>(preview_stalls(context, units));
-    if (run.interlocks) { run.interlocks->prepare(bus.inspect_program(context.pc), units); }
-  }
-
-  void observe_opcode(const std::uint32_t opcode) {
-    if (!run.interlocks) { throw Fault("DSP opcode timing hook lost its dependency state"); }
-    run.interlocks->observe_opcode(opcode);
-  }
-
-  void complete_step(const unsigned units) {
-    if (!run.clock) { throw Fault("DSP instruction completion lost its clock"); }
-    const auto effect = run.pending_agu.value_or(DspAguEffect{});
-    const auto stalls = effect.stalls + (run.interlocks ? run.interlocks->complete(units) : 0);
-    run.clock->finish_step(bus, DspClockUnits{.native = units, .interlocks = stalls});
-    if (run.agu) { run.agu->complete(effect, units); }
-    run.pending_agu.reset();
-  }
-
-  void reset_clock() {
-    if (!run.clock || !run.contract) { throw Fault("Clocked DSP reset lost its timing contract"); }
-    auto &clock = run.clock.value();
-    const auto context = cpu.state();
-    if (clock.faulted() || clock.active() || cpu.faulted() ||
-        cpu.native_cycles() != clock.epoch_native_cycle_units()) {
-      throw Fault("Clocked DSP reset requires coordinated recovery pc=" + hex(context.pc, 6) +
-                  " omr=" + hex(context.omr, 6));
-    }
-    if (clock.native_cycle_units() != 0 &&
-        run.contract.value().resets == DspResetTiming::unqualified) {
-      throw Fault("Clocked DSP reset requires explicit reference reset timing pc=" +
-                  hex(context.pc, 6) + " omr=" + hex(context.omr, 6));
-    }
-    clock.restart_native_epoch();
-    if (run.agu) { run.agu = DspAguInterlocks{}; }
-    run.pending_agu.reset();
-    if (run.interlocks) { run.interlocks->reset(); }
-  }
-
-  void check_boundary() const {
-    const auto &clock = run.clock;
-    if (clock && (clock->faulted() || clock->active() ||
-                  cpu.native_cycles() != clock->epoch_native_cycle_units())) {
-      throw Fault("DSP checkpoint requires coordinated healthy reference clock counters");
-    }
-  }
-
-  [[nodiscard]] std::optional<DspAddressStageView>
-  reference_memory_operand(const DspReferenceCycleInputs &inputs) const {
-    if (inputs.address_only) {
-      cpu.validate_reference_address(*inputs.address_only, true);
-      const auto address = cpu.address_stage(*inputs.address_only);
-      if (inputs.memory || address.kind != DspAddressStageKind::address_only ||
-          address.data_access_count != 0) {
-        throw Fault("Bus-cycle address-only continuation cannot acquire a data operand");
-      }
-    }
-    if (inputs.address_update) { cpu.validate_reference_address(*inputs.address_update, false); }
-    if (!inputs.memory) { return std::nullopt; }
-    cpu.validate_reference_address(*inputs.memory, true);
-    const auto operand = cpu.address_stage(*inputs.memory);
-    if (operand.kind == DspAddressStageKind::address_only || operand.data_access_count == 0) {
-      throw Fault("Memory bus-cycle requires an actual data operand");
-    }
-    return operand;
-  }
-
-  void advance_reference_memory(const DspReferenceCycleInputs &inputs,
-                                DspReferenceCycleResult &result) {
-    // The older register source must be sampled before a younger AG2 R update.
-    // This is a selected reference phase order, not a silicon sampling claim.
-    if (inputs.memory) {
-      const auto view = cpu.address_stage(*inputs.memory);
-      if (view.kind == DspAddressStageKind::peripheral_register ||
-          address_register_scalar_store(view.word.value)) {
-        result.memory = cpu.execute_reference_memory(*inputs.memory);
-      }
-    }
-    if (inputs.address_update) {
-      result.address_update = cpu.publish_reference_address(*inputs.address_update);
-    }
-    if (inputs.memory && !result.memory) {
-      result.memory = cpu.execute_reference_memory(*inputs.memory);
-    }
-    if (inputs.address_only) {
-      result.address_only = cpu.execute_reference_address_only(*inputs.address_only);
-    }
-  }
-
-  DspBus bus;
-  RunState run;
-  DspCore cpu;
-  const std::shared_ptr<const bool> execution_owner = std::make_shared<const bool>(true);
-};
-
-DspCheckpoint::DspCheckpoint(std::shared_ptr<const Storage> storage)
-    : storage_(std::move(storage)) {}
-
-DspCheckpoint::~DspCheckpoint() = default;
-
-DspMachine::DspMachine() : DspMachine(std::nullopt) {}
-
-DspMachine::DspMachine(const std::optional<DspRunContract> run)
-    : state_(std::make_unique<State>(initial_run(run))) {}
-
-DspMachine::~DspMachine() = default;
-
-DspBus &DspMachine::bus() {
-  return state_->bus;
-}
-
-DspCore &DspMachine::cpu() {
-  return state_->cpu;
-}
-
-const DspBus &DspMachine::bus() const {
-  return state_->bus;
-}
-
-const DspCore &DspMachine::cpu() const {
-  return state_->cpu;
-}
-
-bool DspMachine::clocked() const {
-  return state_->run.clock.has_value();
-}
-
-bool DspMachine::hardware_reset_active() const {
-  const auto &clock = state_->run.clock;
-  return state_->cpu.reference_reset_active() || (clock && clock->hardware_reset_active());
-}
-
-void DspMachine::set_reference_reset(const bool held) {
-  if (clocked()) { throw Fault("Fetch reset cannot replace a completion-clock owner"); }
-  state_->cpu.set_reference_reset(held);
-}
-
-void DspMachine::validate_fetch_clone_target() const {
-  if (clocked() || state_->cpu.executing() || timing_faulted() || hardware_reset_active() ||
-      reference_pending() || reference_retirement() || reference_fetch() != DspProgramFetchView{} ||
-      state_->bus.last_dma_cycle()) {
-    throw Fault("DSP fetch state transfer requires a pristine isolated inactive target");
+void DspMachine::require_unclocked(const char *const operation) const {
+  if (active_ || !clocked_owner_.expired()) {
+    throw Fault("DSP execution owner is busy operation=" + std::string(operation) +
+                " pc=" + hex(cpu_.registers().pc, 6));
   }
 }
 
 void DspMachine::require_running() const {
-  if (hardware_reset_active()) {
-    const auto context = state_->cpu.state();
-    throw Fault("DSP operation during hardware reset pc=" + hex(context.pc, 6) +
-                " omr=" + hex(context.omr, 6));
+  const auto reset = clock_.hardware_reset_state();
+  if (!reset || reset->phase != DspHardwareResetPhase::complete || clock_.faulted()) {
+    throw Fault("DSP execution requires completed hardware reset pc=" +
+                hex(cpu_.registers().pc, 6));
   }
 }
 
-void DspMachine::begin_hardware_reset(const DspHardwareResetInputs inputs) {
-  constexpr unsigned all_modes = 15;
+void DspMachine::check_hardware_reset(const DspResetInputs inputs) const {
+  if (active_) { throw Fault("DSP reset requires an inactive native effect"); }
+  constexpr unsigned mode_mask = 15;
   constexpr unsigned spi_mode = 5;
-  const auto contract = state_->run.contract;
-  auto &optional_clock = state_->run.clock;
-  const auto context = state_->cpu.state();
-  if (!contract || !optional_clock || contract->resets != DspResetTiming::reference_extal_hold ||
-      inputs.mode_known != all_modes || inputs.mode_levels != spi_mode || !inputs.pinit ||
-      inputs.pinit.value() || inputs.recovery_cycles < 2 || hardware_reset_active() ||
-      state_->cpu.executing()) {
-    throw Fault("DSP hardware reset requires an inactive explicit EXTAL-hold contract, stable "
-                "observed mode5/PINIT-low and qualified recovery of at least2 periods pc=" +
-                hex(context.pc, 6) + " omr=" + hex(context.omr, 6));
+  if (inputs.mode_known != mode_mask || inputs.mode_levels != spi_mode ||
+      !inputs.pinit.has_value() || inputs.recovery_cycles < 2 || clock_.hardware_reset_active()) {
+    throw Fault("DSP reset requires stable mode5/known PINIT and "
+                "at least two recovery periods pc=" +
+                hex(cpu_.registers().pc, 6));
   }
-  auto &clock = optional_clock.value();
-  state_->check_boundary();
+}
+
+void DspMachine::begin_hardware_reset(const DspResetInputs inputs) {
+  require_unclocked("reset-assert");
+  perform_hardware_reset(inputs);
+}
+
+void DspMachine::perform_hardware_reset(const DspResetInputs inputs) {
+  check_hardware_reset(inputs);
+  auto regs = cpu_.registers();
   try {
-    state_->bus.observe_irqa((inputs.mode_levels & 1U) != 0);
-    state_->bus.pll().observe_pinit(inputs.pinit);
-    state_->cpu.reset_spi_boot();
-    clock.begin_hardware_reset(inputs.recovery_cycles);
+    clock_.restart_native_epoch();
+    bus_.observe_irqa((inputs.mode_levels & 1U) != 0);
+    bus_.pll().observe_pinit(inputs.pinit);
+    bus_.reset();
+    cpu_.reset();
+    interrupts_.reset_after_cpu_reset();
+    // FM figures 5-3/5-4, sections 4.3.4, 5.4.3/5.4.4 and mode5 boot.
+    // Retain registers without reset initialization, including EP and SZ.
+    constexpr dsp56300::Word reset_status = 0xc00300;
+    constexpr dsp56300::Word reset_omr = 0x305;
+    constexpr dsp56300::Word boot_entry = 0xff0000;
+    regs.pc = boot_entry;
+    regs.sr = reset_status;
+    regs.omr = reset_omr;
+    regs.sp = 0;
+    regs.sc = 0;
+    regs.vba = 0;
+    regs.m.fill(dsp56300::word_mask);
+    cpu_.set_registers(regs);
+    io_.clear_failure();
+    io_.peripheral_observer_ = {};
+    clock_.begin_hardware_reset(inputs.recovery_cycles);
   } catch (...) {
-    clock.fail();
+    clock_.fail();
     throw;
   }
 }
 
-std::uint64_t DspMachine::advance_hardware_reset(const std::uint64_t maximum_extal_cycles) {
-  auto &optional_clock = state_->run.clock;
-  if (!optional_clock || !optional_clock->hardware_reset_active()) {
-    throw Fault("DSP hardware reset is not active");
-  }
-  auto &clock = optional_clock.value();
-  state_->check_boundary();
-  try {
-    return clock.advance_hardware_reset(maximum_extal_cycles);
-  } catch (const std::exception &error) {
-    clock.fail();
-    const auto context = state_->cpu.state();
-    throw Fault("DSP reset EXTAL advance pc=" + hex(context.pc, 6) + " omr=" + hex(context.omr, 6) +
-                ": " + error.what());
-  }
+std::uint64_t DspMachine::advance_hardware_reset_ticks(const std::uint64_t maximum_ticks) {
+  require_unclocked("reset-time");
+  return clock_.advance_hardware_reset_ticks(maximum_ticks);
 }
 
 void DspMachine::release_hardware_reset() {
-  auto &optional_clock = state_->run.clock;
-  if (!optional_clock || !optional_clock->hardware_reset_active()) {
-    throw Fault("DSP hardware reset is not active");
-  }
-  auto &clock = optional_clock.value();
-  state_->check_boundary();
-  try {
-    clock.release_hardware_reset();
-  } catch (const std::exception &error) {
-    clock.fail();
-    const auto context = state_->cpu.state();
-    throw Fault("DSP reset release pc=" + hex(context.pc, 6) + " omr=" + hex(context.omr, 6) +
-                ": " + error.what());
-  }
+  require_unclocked("reset-release");
+  check_reset_release();
+  clock_.release_hardware_reset();
 }
 
-std::uint64_t DspMachine::advance_hardware_reset_ticks(const std::uint64_t maximum_ticks) {
-  auto &optional_clock = state_->run.clock;
-  if (!optional_clock || !optional_clock->hardware_reset_active()) {
-    throw Fault("DSP hardware reset is not active");
-  }
-  auto &clock = optional_clock.value();
-  state_->check_boundary();
-  try {
-    return clock.advance_hardware_reset_ticks(maximum_ticks);
-  } catch (const std::exception &error) {
-    clock.fail();
-    const auto context = state_->cpu.state();
-    throw Fault("DSP reset time advance pc=" + hex(context.pc, 6) + " omr=" + hex(context.omr, 6) +
-                ": " + error.what());
+void DspMachine::check_reset_release() const {
+  // PEN captures either observed PINIT level on assertion. PLL-enabled reset
+  // recovery/lock is not yet modeled; it cannot use the bypass-EXTAL contract.
+  constexpr unsigned pll_enabled = 0x2000;
+  const auto control = bus_.pll().read();
+  if ((control & pll_enabled) != 0) {
+    throw Fault("DSP reset-release requires qualified PLL recovery at X:0xfffffd value=" +
+                hex(control, 6) + " pc=" + hex(cpu_.registers().pc, 6));
   }
 }
 
-const DspRunClock &DspMachine::run_clock() const {
-  const auto &clock = state_->run.clock;
-  if (!clock) { throw Fault("DSP machine has no reference run clock"); }
-  return *clock;
-}
-
-bool DspMachine::timing_faulted() const {
-  const auto &clock = state_->run.clock;
-  return clock && (clock->faulted() || state_->cpu.faulted());
-}
-
-std::optional<DspDmaWord> DspMachine::advance_dma(const DspDmaInputs inputs) {
+bool DspMachine::admit_interrupt(const dsp56300::InstructionWords foreground) {
+  require_unclocked("interrupt-admission");
   require_running();
-  if (state_->cpu.executing() || state_->cpu.faulted() || timing_faulted()) {
-    throw Fault("DSP DMA observation requires a healthy native boundary");
-  }
-  try {
-    return state_->bus.advance_dma(inputs);
-  } catch (const std::exception &error) {
-    const auto context = state_->cpu.state();
-    throw Fault("DSP DMA observation pc=" + hex(context.pc, 6) + " omr=" + hex(context.omr, 6) +
-                ": " + error.what());
-  }
+  return interrupts_.admit(foreground);
 }
-
-void DspMachine::observe_dax(const DspDaxInputs inputs) {
-  require_running();
-  if (state_->cpu.executing() || state_->cpu.faulted() || timing_faulted()) {
-    throw Fault("DAX observation requires a healthy native boundary");
-  }
-  try {
-    state_->bus.observe_dax(inputs);
-  } catch (const std::exception &error) {
-    const auto context = state_->cpu.state();
-    throw Fault("DSP DAX observation pc=" + hex(context.pc, 6) + " omr=" + hex(context.omr, 6) +
-                ": " + error.what());
-  }
-}
-
-DspDmaBusResult DspMachine::advance_dma(const DspDmaInputs inputs, const DspCoreBusUse core) {
-  require_running();
-  if (state_->cpu.executing() || state_->cpu.faulted() || timing_faulted()) {
-    throw Fault("DSP DMA arbitration requires a healthy native boundary");
-  }
-  try {
-    return state_->bus.advance_dma(inputs, core);
-  } catch (const std::exception &error) {
-    const auto context = state_->cpu.state();
-    throw Fault("DSP DMA arbitration pc=" + hex(context.pc, 6) + " omr=" + hex(context.omr, 6) +
-                ": " + error.what());
-  }
-}
-
-DspStepPlan DspMachine::plan_step() const {
-  require_running();
-  const auto &clock = run_clock();
-  state_->check_boundary();
-  const auto before = state_->cpu.debug_state();
-  try {
-    const auto run_contract = state_->run.contract;
-    if (!run_contract) { throw Fault("Clocked DSP owner lost its timing contract"); }
-    const bool vector_estimates =
-        run_contract->interrupts == DspInterruptTiming::native_vector_estimates;
-    const auto estimate =
-        state_->cpu.next_step_cycles(vector_estimates, nullptr, state_->run.agu.has_value());
-    const auto agu = state_->preview_agu(estimate);
-    const auto stalls = agu.stalls + state_->preview_stalls(before.cpu, estimate.units);
-    return {.before = before,
-            .native_cycle_units = estimate.units,
-            .interlock_cycle_units = stalls,
-            .start_ticks = clock.elapsed_ticks(),
-            .duration_ticks = clock.next_step_ticks(
-                state_->bus, DspClockUnits{.native = estimate.units, .interlocks = stalls}),
-            .interrupt = estimate.interrupt};
-  } catch (const std::exception &error) {
-    throw Fault("DSP run plan pc=" + hex(before.cpu.pc, 6) + " omr=" + hex(before.cpu.omr, 6) +
-                ": " + error.what());
-  }
-}
-
-void DspMachine::check_admission_contract() const {
-  static_cast<void>(run_clock());
-  const auto contract = state_->run.contract;
-  if (!contract || contract->interrupts != DspInterruptTiming::native_vector_estimates) {
-    throw Fault("Prepared DSP interrupt admission requires explicit native vector estimates");
-  }
-}
-
-void DspMachine::verify_prepared_step(const DspStepPlan &plan) const {
-  require_running();
-  check_admission_contract();
-  state_->check_boundary();
-  const auto before = state_->cpu.debug_state();
-  const auto &clock = run_clock();
-  try {
-    if (before != plan.before || clock.elapsed_ticks() != plan.start_ticks) {
-      throw Fault("DSP admitted instruction lost its native boundary");
-    }
-    DspCore::Admission admission;
-    if (plan.interrupt) { admission.interrupt = plan.interrupt->request; }
-    const auto estimate =
-        state_->cpu.next_step_cycles(true, &admission, state_->run.agu.has_value());
-    const auto agu = state_->preview_agu(estimate);
-    const auto stalls = agu.stalls + state_->preview_stalls(before.cpu, estimate.units);
-    if (estimate.units != plan.native_cycle_units || estimate.interrupt != plan.interrupt ||
-        stalls != plan.interlock_cycle_units ||
-        clock.next_step_ticks(state_->bus,
-                              DspClockUnits{.native = estimate.units, .interlocks = stalls}) !=
-            plan.duration_ticks) {
-      throw Fault("DSP admitted instruction changed before its declared completion");
-    }
-  } catch (const std::exception &error) {
-    throw Fault("DSP admitted plan pc=" + hex(before.cpu.pc, 6) + " omr=" + hex(before.cpu.omr, 6) +
-                ": " + error.what());
-  }
-}
-
-void DspMachine::execute_prepared_step(const DspStepPlan &plan) {
-  verify_prepared_step(plan);
-  std::optional<DspInterruptRequest> request;
-  if (plan.interrupt) { request = plan.interrupt->request; }
-  state_->cpu.step_admitted(request);
-}
-
-DspReferenceProgress DspMachine::begin_reference_instruction(const DspReferenceExecution contract) {
-  if (clocked()) { throw Fault("Native access suspension requires an unclocked reference owner"); }
-  return state_->cpu.begin_reference_instruction(contract);
-}
-
-void DspMachine::validate_reference_overlap(const DspReferenceTicket &ticket) const {
-  if (clocked()) { throw Fault("Native overlap requires an unclocked reference owner"); }
-  state_->cpu.validate_reference_overlap(ticket);
-}
-
-DspReferenceProgress DspMachine::overlap_reference_instruction(const DspReferenceTicket &ticket) {
-  if (clocked()) { throw Fault("Native overlap requires an unclocked reference owner"); }
-  return state_->cpu.overlap_reference_instruction(ticket);
-}
-
-std::optional<DspReferencePending> DspMachine::reference_retirement() const {
-  return state_->cpu.reference_retirement();
-}
-
-DspInstructionRetire DspMachine::retire_reference_overlap(const DspReferenceTicket &ticket) {
-  if (clocked()) { throw Fault("Native overlap requires an unclocked reference owner"); }
-  return state_->cpu.retire_reference_overlap(ticket);
-}
-
-DspReferenceProgress DspMachine::begin_reference_interrupt(const DspReferenceExecution contract) {
-  if (clocked()) { throw Fault("Native access suspension requires an unclocked reference owner"); }
-  return state_->cpu.begin_reference_interrupt(contract);
-}
-
-DspReferencePending DspMachine::latch_reference_program(const DspReferenceTicket &ticket) {
-  if (clocked()) { throw Fault("Program latching requires an unclocked reference owner"); }
-  return state_->cpu.latch_reference_program(ticket);
-}
-
-DspProgramFetchView DspMachine::start_reference_fetch(const DspReferenceTicket &ticket) {
-  if (clocked()) { throw Fault("Program fetching requires an unclocked reference owner"); }
-  return state_->cpu.start_reference_fetch(ticket);
-}
-
-DspProgramFetchView DspMachine::advance_reference_fetch(const DspProgramFetchStage stage) {
-  if (clocked()) { throw Fault("Program fetching requires an unclocked reference owner"); }
-  return state_->cpu.advance_reference_fetch(stage);
-}
-
-std::optional<DspFetchedSample> DspMachine::pipeline_fetched_sample(const std::size_t index) const {
-  return state_->cpu.pipeline_fetched_sample(index);
-}
-
-std::optional<DspFetchedWord> DspMachine::pipeline_fetched_word(const std::size_t index) const {
-  return state_->cpu.pipeline_fetched_word(index);
-}
-
-bool DspMachine::pipeline_interrupt_deferred() const {
-  return state_->cpu.pipeline_interrupt_deferred();
-}
-
-std::optional<DspRepeatControl> DspMachine::pipeline_repeat_control() const {
-  return state_->cpu.pipeline_repeat_control();
-}
-
-std::optional<DspRepeatControl> DspMachine::pipeline_repeat_result() const {
-  return state_->cpu.pipeline_repeat_result();
-}
-
-std::optional<DspFetchedWord> DspMachine::pipeline_repeat_body() const {
-  return state_->cpu.pipeline_repeat_body();
-}
-
-bool DspMachine::pipeline_loop_control() const {
-  return state_->cpu.pipeline_loop_control();
-}
-
-bool DspMachine::pipeline_loop_result() const {
-  return state_->cpu.pipeline_loop_result();
-}
-
-std::optional<std::uint32_t> DspMachine::pipeline_loop_last(const DspFetchedWord word) const {
-  return state_->cpu.pipeline_loop_last(word);
-}
-
-std::uint32_t DspMachine::pipeline_continuation(const DspFetchedWord word,
-                                                const unsigned words) const {
-  return state_->cpu.pipeline_continuation(word, words);
-}
-
-void DspMachine::hold_pipeline_loop(const DspFetchedWord word) {
-  if (clocked()) { throw Fault("Native DO Decode requires an unclocked reference owner"); }
-  state_->cpu.hold_pipeline_loop(word);
-}
-
-void DspMachine::hold_pipeline_branch(const DspFetchedWord word) {
-  if (clocked()) { throw Fault("Native branch barrier requires an unclocked reference owner"); }
-  state_->cpu.hold_pipeline_branch(word);
-}
-
-DspProgramFetchView DspMachine::reference_fetch() const {
-  return state_->cpu.reference_fetch();
-}
-
-DspReferenceProgress DspMachine::advance_reference_access(const DspReferenceTicket &ticket) {
-  if (clocked()) { throw Fault("Native access suspension requires an unclocked reference owner"); }
-  return state_->cpu.advance_reference_access(ticket);
-}
-
-DspBranchDecision DspMachine::capture_reference_branch(const std::uint32_t address,
-                                                       const std::uint64_t occurrence) {
-  if (clocked()) { throw Fault("Native branch AG1 requires an unclocked reference owner"); }
-  return state_->cpu.capture_reference_branch(address, occurrence);
-}
-
-DspAddressStageTicket DspMachine::capture_reference_address(const std::uint32_t address,
-                                                            const std::uint64_t occurrence) {
-  if (clocked()) { throw Fault("Native AG1 requires an unclocked reference owner"); }
-  return state_->cpu.capture_reference_address(address, occurrence);
-}
-
-DspAddressStageView DspMachine::address_stage(const DspAddressStageTicket &ticket) const {
-  return state_->cpu.address_stage(ticket);
-}
-
-DspAddressStageTicket DspMachine::rebind_address_stage(const DspAddressStageTicket &ticket) const {
-  return state_->cpu.rebind_address_stage(ticket);
-}
-
-std::optional<DspReferencePending> DspMachine::reference_pending() const {
-  return state_->cpu.reference_pending();
-}
-
-DspPeripheralReadTicket
-DspMachine::capture_reference_peripheral_read(const DspPeripheralReadPoint point) {
-  if (clocked()) { throw Fault("Peripheral capture requires an unclocked reference owner"); }
-  return state_->cpu.capture_reference_peripheral_read(point);
-}
-
-DspPeripheralReadTicket
-DspMachine::rebind_reference_peripheral_read(const DspPeripheralReadTicket &ticket) const {
-  if (clocked()) { throw Fault("Peripheral rebind requires an unclocked reference owner"); }
-  return state_->cpu.rebind_reference_peripheral_read(ticket);
-}
-
-DspReferenceProgress
-DspMachine::advance_reference_peripheral_read(const DspPeripheralReadTicket &read,
-                                              const DspReferenceTicket &native) {
-  if (clocked()) { throw Fault("Peripheral admission requires an unclocked reference owner"); }
-  return state_->cpu.advance_reference_peripheral_read(read, native);
-}
-
-DspBranchDecision
-DspMachine::preview_pipeline_peripheral_branch(const DspPeripheralReadTicket &read) {
-  if (clocked()) { throw Fault("Pipeline branch preview requires an unclocked owner"); }
-  return state_->cpu.preview_pipeline_peripheral_branch(read);
-}
-
-DspReferenceProgress
-DspMachine::advance_pipeline_peripheral_read(const DspPeripheralReadTicket &read,
-                                             const DspReferenceTicket &native) {
-  if (clocked()) { throw Fault("Pipeline read admission requires an unclocked owner"); }
-  return state_->cpu.advance_pipeline_peripheral_read(read, native);
-}
-
-DspReferenceCycleResult
-DspMachine::advance_reference_bus_cycle(const DspReferenceCycleInputs &inputs) {
-  if (inputs.peripheral_capture || state_->cpu.has_reference_peripheral_reads()) {
-    throw Fault("Peripheral pipeline phases require the actual automatic fetch owner");
-  }
-  return advance_reference_bus_cycle_impl(inputs);
-}
-
-DspReferenceCycleResult
-DspMachine::advance_reference_bus_cycle_impl(const DspReferenceCycleInputs &inputs,
-                                             const std::uint64_t capture_occurrence) {
-  require_running();
-  if (clocked() || state_->cpu.executing()) {
-    throw Fault("Composed native bus cycles require an unclocked healthy reference owner");
-  }
-  const auto pending = state_->cpu.reference_pending();
-  const auto context = state_->cpu.state();
-  DspReferenceCycleResult result;
-  bool capture_after_memory = false;
-  try {
-    if (inputs.peripheral_capture.has_value() != (capture_occurrence != 0)) {
-      throw Fault("Pipeline peripheral capture requires its owned actual F2 occurrence");
-    }
-    if (inputs.order != DspReferenceBusOrder::dma_then_fetch_then_native) {
-      throw Fault("Native bus cycle requires explicit DMA/fetch/native order");
-    }
-    if (inputs.bit_write) { state_->cpu.validate_reference_bit_write(*inputs.bit_write); }
-    if (inputs.retirement) { state_->cpu.validate_reference_retirement(*inputs.retirement); }
-    if (inputs.access) {
-      state_->cpu.validate_reference_admission(
-          *inputs.access, inputs.retirement.has_value(), inputs.dma.cycle);
-    }
-    if (inputs.fetch) { state_->cpu.validate_reference_fetch(*inputs.fetch); }
-    const auto memory = state_->reference_memory_operand(inputs);
-    const auto early = inputs.peripheral_capture
-                           ? std::optional(state_->cpu.pipeline_peripheral_access(
-                                 *inputs.peripheral_capture, capture_occurrence))
-                           : std::nullopt;
-    capture_after_memory = status_after_receive(memory, early);
-    result = reference_cycle_footprint(
-        state_->bus, inputs, pending, state_->cpu.reference_fetch(), memory, early);
-  } catch (const std::exception &error) {
-    throw Fault("DSP bus-cycle preflight pc=" + hex(context.pc, 6) + " omr=" + hex(context.omr, 6) +
-                ": " + error.what());
-  }
-  try {
-    result.dma =
-        advance_dma(inputs.dma,
-                    {.accesses = std::span(result.core_accesses).first(result.core_access_count),
-                     .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});
-    if (result.dma.core_stall) { return result; }
-    if (inputs.fetch) { result.fetch = state_->cpu.advance_reference_fetch(*inputs.fetch); }
-    if (inputs.peripheral_capture && !capture_after_memory) {
-      result.peripheral_read = state_->cpu.capture_pipeline_peripheral_read(
-          {.address = *inputs.peripheral_capture, .epoch = inputs.dma.cycle}, capture_occurrence);
-    }
-    if (inputs.retirement) {
-      result.retirement = state_->cpu.retire_reference_overlap(*inputs.retirement);
-    }
-    if (inputs.bit_write) {
-      auto progress = state_->cpu.advance_reference_access(*inputs.bit_write);
-      if (!progress.completed || !progress.pending ||
-          !std::holds_alternative<DspInstructionRetire>(progress.pending->effect)) {
-        throw Fault("RMW E2 write did not produce its genuine native CPU result");
-      }
-      result.bit_write = std::get<DspNativeAccess>(*progress.completed);
-      result.progress = state_->cpu.advance_reference_access(progress.pending->ticket);
-    }
-    if (inputs.access) { result.progress = state_->cpu.advance_reference_access(*inputs.access); }
-    state_->advance_reference_memory(inputs, result);
-    // Selected logical subcycle order: a younger SHI status sample observes the
-    // older HRX/P-memory effect. This is not a measured silicon sampling edge.
-    if (inputs.peripheral_capture && capture_after_memory) {
-      result.peripheral_read = state_->cpu.capture_pipeline_peripheral_read(
-          {.address = *inputs.peripheral_capture, .epoch = inputs.dma.cycle}, capture_occurrence);
-    }
-    if (inputs.fetch) { result.fetch = state_->cpu.reference_fetch(); }
-    return result;
-  } catch (const std::exception &error) {
-    state_->cpu.fail_reference_cycle();
-    throw Fault("DSP bus cycle=" + std::to_string(inputs.dma.cycle) + " DMA/fetch/native pc=" +
-                hex(context.pc, 6) + " omr=" + hex(context.omr, 6) + ": " + error.what());
-  } catch (...) {
-    state_->cpu.fail_reference_cycle();
-    throw Fault("Non-standard DSP bus-cycle failure pc=" + hex(context.pc, 6) +
-                " omr=" + hex(context.omr, 6));
-  }
-}
-
-DspCheckpoint DspMachine::checkpoint() const {
-  const auto cpu_state = state_->cpu.checkpoint();
-  state_->check_boundary();
-  return DspCheckpoint(
-      std::make_shared<const DspCheckpoint::Storage>(state_->bus, cpu_state, state_->run));
-}
-
-void DspMachine::fail_reference_clock() noexcept {
-  state_->cpu.fail_reference_cycle();
-}
-
-std::shared_ptr<const bool> DspMachine::reference_clock_owner() const {
-  return state_->execution_owner;
-}
-
-void DspMachine::restore(const DspCheckpoint &checkpoint) {
-  if (state_->cpu.executing()) { throw Fault("Cannot restore during active DSP execution"); }
-  if (!checkpoint.storage_) { throw Fault("Cannot restore an empty DSP checkpoint"); }
-  if (checkpoint.storage_->run.contract != state_->run.contract) {
-    throw Fault("DSP checkpoint has an incompatible reference run contract");
-  }
-  auto replacement = std::make_unique<State>(checkpoint.storage_->run);
-  replacement->bus = checkpoint.storage_->bus;
-  replacement->cpu.restore_checkpoint(checkpoint.storage_->cpu);
-  state_.swap(replacement);
-}
-
 }

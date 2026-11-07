@@ -2,8 +2,8 @@
 #include "common/bus.hpp"
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/own_dsp_io.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_io.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "firmware/firmware.hpp"
 
@@ -277,7 +277,7 @@ struct Counters {
   unsigned setup_returns = 0, returned = 0, clears = 0, ready = 0, lookaheads = 0;
 };
 
-void inspect_boundary(OwnDspMachine &machine,
+void inspect_boundary(DspMachine &machine,
                       const dsp56300::Registers &state,
                       const Caller &code,
                       Counters &count) {
@@ -317,7 +317,7 @@ void inspect_boundary(OwnDspMachine &machine,
 
 Outcome
 execute(const Firmware &firmware, const Caller &code, const Scene scene, std::ostream &trace) {
-  OwnDspMachine machine(native::native_clocks);
+  DspMachine machine(native::native_clocks);
   install(machine.bus(), firmware, scene.diffusion);
   machine.bus().set_unselected_data_read_word(scene.word);
   constexpr unsigned output_base = 0x860;

@@ -306,7 +306,7 @@ void test_native_invalid_service() {
           "An unhandled reset request cannot accrue hidden CPU time");
 }
 
-void test_wait_gate_checkpoint_and_wake() {
+void test_wait_gate_and_wake() {
   constexpr std::array<std::uint8_t, 2> code{0x3e, 0xa7}; // Own WAI; NOP.
   McuMachine machine(blofeld::test::checkpoint_image(code), BLOFELD_DEFAULT_SLA, contract());
   blofeld::test::drive_interrupts(machine.bus());
@@ -316,25 +316,22 @@ void test_wait_gate_checkpoint_and_wake() {
   machine.bus().write(control_address, 1);
   machine.cpu().step();
   machine.bus().write(service_address, arm);
-  const auto frozen = machine.checkpoint();
   require(machine.bus().cop_state().phase == 14 && machine.bus().cop_state().armed,
           "The seven native WAI-entry cycles still clock COP before sleeping");
-  for (unsigned attempt = 0; attempt < 2; ++attempt) {
-    machine.restore(frozen);
-    require(machine.advance_wait(held_wait) == held_wait && machine.bus().cop_state().phase == 14 &&
-                machine.bus().cop_state().armed && !machine.timing_faulted(),
-            "COPWAI freezes the exact partial counter/service sequence and checkpoint replay");
-    machine.bus().set_pin_drive(McuPort::e, {.mask = 3, .levels = 2});
-    const auto wake = machine.cpu().step();
-    require(wake.interrupt_vector == blofeld::test::xirq_vector && wake.stack_reused &&
-                machine.bus().cop_state().phase == wake_phase,
-            "The six native wake cycles resume COP on actual OSCCLK edges");
-    blofeld::test::drive_interrupts(machine.bus());
-    machine.cpu().step();
-    require(machine.cpu().state().pc == blofeld::test::entry + 1 &&
-                machine.bus().cop_state().phase == returned_phase,
-            "The eight native RTI cycles preserve and extend the same watchdog period");
-  }
+
+  require(machine.advance_wait(held_wait) == held_wait && machine.bus().cop_state().phase == 14 &&
+              machine.bus().cop_state().armed && !machine.timing_faulted(),
+          "COPWAI freezes the exact partial counter/service sequence during WAI");
+  machine.bus().set_pin_drive(McuPort::e, {.mask = 3, .levels = 2});
+  const auto wake = machine.cpu().step();
+  require(wake.interrupt_vector == blofeld::test::xirq_vector && wake.stack_reused &&
+              machine.bus().cop_state().phase == wake_phase,
+          "The six native wake cycles resume COP on actual OSCCLK edges");
+  blofeld::test::drive_interrupts(machine.bus());
+  machine.cpu().step();
+  require(machine.cpu().state().pc == blofeld::test::entry + 1 &&
+              machine.bus().cop_state().phase == returned_phase,
+          "The eight native RTI cycles preserve and extend the same watchdog period");
 }
 
 void test_wait_timeout_is_not_a_reset_stub() {
@@ -346,7 +343,6 @@ void test_wait_timeout_is_not_a_reset_stub() {
   machine.bus().write(hc12::clock_select, 0);
   machine.bus().write(control_address, 1);
   machine.cpu().step();
-  const auto before = machine.checkpoint();
   const auto fault = error([&] { machine.advance_wait(held_wait); });
   require(fault.contains("COP system reset (timeout)") && machine.timing_faulted() &&
               machine.idle_bus_cycles() == before_expiry_idle &&
@@ -356,10 +352,6 @@ void test_wait_timeout_is_not_a_reset_stub() {
           "Ungated WAI expires at the literal edge and preserves the failed-cycle prefix, not a "
           "fake boot");
   static_cast<void>(error([&] { machine.advance_wait(1); }));
-  machine.restore(before);
-  require(machine.bus().cop_state().phase == 14 &&
-              machine.bus().cop_state().reset == McuCopReset::none,
-          "Only trusted coordinated restore recovers the pre-event native owner state");
 }
 }
 
@@ -373,7 +365,7 @@ int main() {
     test_fractional_phy_edges();
     test_pure_deadline_offers();
     test_native_invalid_service();
-    test_wait_gate_checkpoint_and_wake();
+    test_wait_gate_and_wake();
     test_wait_timeout_is_not_a_reset_stub();
     std::cout << "Normal COP registers, seven rates, service/window edges, copies and native WAI "
                  "requests verified.\n";

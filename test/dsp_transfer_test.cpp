@@ -2,7 +2,7 @@
 #include "common/bus.hpp"
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_norm_expectations.hpp"
 
@@ -57,7 +57,7 @@ void set_accumulator(Program &program, const bool accumulator_b, const std::uint
   immediate(program, accumulator_seeds[first + 2], static_cast<unsigned>(value >> data_bits));
 }
 
-void run_to(OwnDspMachine &machine, const unsigned pc) {
+void run_to(DspMachine &machine, const unsigned pc) {
   unsigned count = 0;
   while (machine.cpu().registers().pc != pc) {
     constexpr unsigned instruction_limit = 100;
@@ -330,7 +330,7 @@ void check(DspBus &bus,
   check_data(bus, after, input, result);
 }
 
-void run_batch(OwnDspMachine &machine, const std::span<const Input> batch) {
+void run_batch(DspMachine &machine, const std::span<const Input> batch) {
   Program program;
   std::vector<unsigned> pcs;
   for (const auto input : batch) { pcs.push_back(initialize(program, input)); }
@@ -377,7 +377,7 @@ void test_matrix() {
   }
   constexpr unsigned expected_cases = 4896;
   require(inputs.size() == expected_cases, "Transfer matrix must cover each declared combination");
-  OwnDspMachine machine(native::native_clocks);
+  DspMachine machine(native::native_clocks);
   constexpr std::size_t batch_size = 32;
   for (std::size_t offset = 0; offset < inputs.size(); offset += batch_size) {
     run_batch(machine,
@@ -387,7 +387,7 @@ void test_matrix() {
 }
 
 void test_repeat_count_transfer() {
-  OwnDspMachine machine(native::native_clocks);
+  DspMachine machine(native::native_clocks);
   for (const unsigned scaling : {0U, scale_down, scale_up}) {
     Program program;
     set_accumulator(program, false, half);
@@ -420,7 +420,7 @@ void test_source_timing() {
   immediate(program, move_sr, masked_status);
   const auto add = program.pc();
   program.word(add_with_old_a);
-  OwnDspMachine machine(native::native_clocks);
+  DspMachine machine(native::native_clocks);
   native::reset_native(machine, program);
   run_to(machine, add);
   native::step_native(machine);
@@ -441,7 +441,7 @@ void test_unselected_growth_and_sr_write() {
   // Scaled result is itself a legal SR value, including explicitly cleared S.
   constexpr unsigned replacement = 0x400000;
   program.word(move_a_to_sr);
-  OwnDspMachine machine(native::native_clocks);
+  DspMachine machine(native::native_clocks);
   native::reset_native(machine, program);
   run_to(machine, transfer);
   native::step_native(machine);

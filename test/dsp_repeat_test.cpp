@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp56300/instruction.hpp"
 #include "dsp_rom_program.hpp"
@@ -38,7 +38,7 @@ constexpr DspRunClockInputs clocks{.extal_hz = 12000000,
                                    .timebase_hz = 540000000,
                                    .switch_timing = DspClockSwitch::reference_cycle_boundary};
 
-void reset(OwnDspMachine &machine, const DspRomProgram &program) {
+void reset(DspMachine &machine, const DspRomProgram &program) {
   machine.bus().install_rom({.start = boot, .words = program.words()});
   machine.begin_hardware_reset(
       {.mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2});
@@ -54,7 +54,7 @@ struct Trace {
   dsp56300::InstructionProgress result;
 };
 
-Trace execute(OwnDspMachine &machine) {
+Trace execute(DspMachine &machine) {
   Trace trace;
   trace.result = machine.begin_fetch();
   const auto ticks = machine.clock().elapsed_ticks();
@@ -73,7 +73,7 @@ Trace execute(OwnDspMachine &machine) {
   return trace;
 }
 
-Trace step(OwnDspMachine &machine) {
+Trace step(DspMachine &machine) {
   auto trace = execute(machine);
   if (trace.result.fault.kind != dsp56300::FaultKind::none) {
     const auto fault = trace.result.fault;
@@ -94,7 +94,7 @@ bool is_fetch(const dsp56300::InstructionEffect effect) {
          effect.kind == dsp56300::EffectKind::fetch_extension;
 }
 
-void invalid_body(OwnDspMachine &machine, const unsigned body, const unsigned opcode) {
+void invalid_body(DspMachine &machine, const unsigned body, const unsigned opcode) {
   const auto ready = machine.checkpoint();
   const auto before = machine.cpu().registers();
   const auto progress = machine.cpu().progress();
@@ -128,7 +128,7 @@ void invalid_body(OwnDspMachine &machine, const unsigned body, const unsigned op
 }
 
 void extended_target(const bool known_extension) {
-  OwnDspMachine machine(clocks);
+  DspMachine machine(clocks);
   DspRomProgram code;
   code.word(repeat_three);
   const auto body = code.pc();
@@ -140,7 +140,7 @@ void extended_target(const bool known_extension) {
 }
 
 void forbidden_flow(const unsigned opcode) {
-  OwnDspMachine machine(clocks);
+  DspMachine machine(clocks);
   DspRomProgram code;
   code.immediate(DspRomRegister::sr, masked_status | zero);
   code.word(repeat_once);
@@ -167,7 +167,7 @@ void latched_read(const Trace &trace) {
 }
 
 void valid_latched_word() {
-  OwnDspMachine machine(clocks);
+  DspMachine machine(clocks);
   DspRomProgram code;
   constexpr unsigned jump = 0x0af080;
   code.append(std::array{jump, 0U});
@@ -208,7 +208,7 @@ void valid_latched_word() {
 }
 
 void invalid_preview() {
-  OwnDspMachine machine(clocks);
+  DspMachine machine(clocks);
   DspRomProgram code;
   code.append(std::array{repeat_once, immediate_x0, literal});
   reset(machine, code);

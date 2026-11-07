@@ -6,7 +6,7 @@
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_gpio.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_machine.hpp"
@@ -25,7 +25,7 @@ constexpr unsigned notification_pin = 1U << notification_bit;
 constexpr unsigned xirq_pin = 1;
 }
 
-McuDspGpioPeer::McuDspGpioPeer(McuMachine &mcu, OwnDspMachine &dsp, const McuDspGpioWiring wiring)
+McuDspGpioPeer::McuDspGpioPeer(McuMachine &mcu, DspMachine &dsp, const McuDspGpioWiring wiring)
     : mcu_(mcu), dsp_(dsp), wiring_(wiring) {
   if (wiring.notification_pull != GpioPeerPull::none &&
       wiring.notification_pull != GpioPeerPull::up &&

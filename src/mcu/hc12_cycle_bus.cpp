@@ -31,17 +31,10 @@ Hc12CycleBus::Hc12CycleBus(Bus &bus, Clock clock, ReadTiming read_timing)
   if (!clock_) { throw Fault("HC12 timed bus requires an explicit cycle clock/memory contract"); }
 }
 
-std::uint64_t Hc12CycleBus::checkpoint_cycles() const {
+std::uint64_t Hc12CycleBus::completed_cycles_at_boundary() const {
   healthy();
-  if (active_) { throw Fault("HC12 cycle checkpoint requires a completed sequence"); }
+  if (active_) { throw Fault("HC12 cycle observation requires a completed sequence"); }
   return cycles_;
-}
-
-void Hc12CycleBus::restore_boundary(const std::uint64_t cycles, const ExecutionContext context) {
-  healthy();
-  if (active_ || cycles_ != 0) { throw Fault("HC12 cycle restore requires a fresh adapter"); }
-  cycles_ = cycles;
-  context_ = context;
 }
 
 void Hc12CycleBus::healthy() const {

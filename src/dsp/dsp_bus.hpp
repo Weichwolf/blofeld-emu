@@ -242,8 +242,7 @@ private:
   [[nodiscard]] bool commit_peripheral_bit(const DspPeripheralBitSample &sample);
   friend class DspFetchRun;
   friend class DspRunClock;
-  friend class OwnDspMachine;
-  friend class OwnDspFetch;
+  friend class DspMachine;
   void advance_reference_cycle_delays(std::uint64_t admitted_dma_cycle, bool switch_was_pending);
   void advance_core_delays(unsigned cycles);
   [[nodiscard]] DspDmaInputs resolve_dma_inputs(DspDmaInputs inputs);

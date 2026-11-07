@@ -26,13 +26,6 @@ constexpr unsigned caller = 0x2000, returned = caller + 3, stack = 0x2100;
 constexpr unsigned sync_entry = 0x138c, sync_request = 0x13c9, helper_base = 0x1200;
 constexpr unsigned reset_pin = 0x80, bkgd_pin = 2, target_period = 15, byte_mask = 255;
 
-struct Saved {
-  McuCheckpoint host;
-  Hcs08BoardWireCheckpoint target;
-  Hcs08ResetSequence reset;
-  std::uint64_t next_edge, origin, steps, received;
-};
-
 struct Fixture {
   const Firmware &firmware;
   const std::vector<std::uint8_t> &helper;
@@ -69,8 +62,6 @@ struct Fixture {
   void edge(std::uint64_t ticks);
   void step();
   void finish(unsigned timer_prescale);
-  [[nodiscard]] Saved checkpoint() const;
-  void restore(const Saved &saved);
   [[nodiscard]] std::string endpoint() const;
 };
 } // namespace blofeld::test::keyboard_board_reset

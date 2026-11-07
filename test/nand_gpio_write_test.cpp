@@ -2,7 +2,7 @@
 #include "common/bus.hpp"
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_core_fixture.hpp"
 #include "dsp_rom_program.hpp"
@@ -114,7 +114,7 @@ struct Execution {
   unsigned checks = 0;
 };
 
-Execution execute(OwnDspMachine &cpu,
+Execution execute(DspMachine &cpu,
                   NandLink &link,
                   const Layout &layout,
                   const std::vector<NandOutcome> &outcomes,
@@ -154,7 +154,7 @@ void test_write(const std::vector<NandOutcome> &outcomes, std::ostream &trace) {
   trace << '\n';
   core::Program program;
   const auto layout = own_write_program(program);
-  OwnDspMachine cpu(dma_test::native_clocks);
+  DspMachine cpu(dma_test::native_clocks);
   auto &bus = cpu.bus();
   program.install(bus);
   nand_native::reset(cpu);

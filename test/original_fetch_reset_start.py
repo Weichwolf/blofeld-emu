@@ -30,8 +30,8 @@ POSITIVE = {"release": RELEASE_TICK, "retired": 1864555, "cycles": 5388249,
 NATIVE_HELD = {**HELD, "held": HELD["common"], "phase": HELD["common"] % 45}
 FAULT = ("HC12 cycle execution pc=0xb9ad ccr=0xd8 completed-cycles=5388249: "
          "Clock/operand P address=unreconstructed-prefetch/internal: "
-         "Own DSP timeline operation=reference-cycle pc=0x000072 omr=0x600389 "
-         "attempted-ticks=96994469: Own DSP DMA/F2 cycle P:0x00007b pc=0x000072 "
+         "DSP timeline operation=reference-cycle pc=0x000072 omr=0x600389 "
+         "attempted-ticks=96994469: DSP DMA/F2 cycle P:0x00007b pc=0x000072 "
          "omr=0x600389: Unmapped DSP memory write at Y:0x002000")
 
 

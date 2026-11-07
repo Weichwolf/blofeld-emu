@@ -4,7 +4,7 @@
 #include "common/bus.hpp"
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_boot_context.hpp"
 
@@ -44,7 +44,7 @@ struct StoreProgress {
   std::optional<dsp56300::InstructionEffect> completed = std::nullopt;
 };
 
-void healthy(const OwnDspMachine &machine,
+void healthy(const DspMachine &machine,
              const dsp56300::InstructionProgress &progress,
              const unsigned ordinal) {
   try {
@@ -54,7 +54,7 @@ void healthy(const OwnDspMachine &machine,
   }
 }
 
-StoreProgress until_store(OwnDspMachine &machine, StoreProgress progress) {
+StoreProgress until_store(DspMachine &machine, StoreProgress progress) {
   constexpr unsigned effect_bound = 64;
   for (unsigned effect = 0; effect < effect_bound; ++effect) {
     healthy(machine, progress.native, progress.ordinal);
@@ -66,14 +66,14 @@ StoreProgress until_store(OwnDspMachine &machine, StoreProgress progress) {
   throw Fault("Original store exceeded its real native effect bound");
 }
 
-StoreProgress begin(OwnDspMachine &machine) {
+StoreProgress begin(DspMachine &machine) {
   // Preserve the retained access-only observation contract explicitly. The
   // normal PCU publication contract is checked separately on the same program.
   return until_store(machine,
                      {.native = machine.begin_fetch(dsp56300::InstructionPublication::retirement)});
 }
 
-StoreProgress pending(const OwnDspMachine &machine, const unsigned ordinal) {
+StoreProgress pending(const DspMachine &machine, const unsigned ordinal) {
   const auto effect = machine.cpu().pending_instruction();
   require(machine.cpu().fault().kind == dsp56300::FaultKind::none && effect &&
               effect->effect.kind == dsp56300::EffectKind::write,
@@ -89,7 +89,7 @@ dsp56300::EffectTicket ticket(const StoreProgress &progress) {
   return progress.native.pending->ticket;
 }
 
-StoreProgress advance(OwnDspMachine &machine, const StoreProgress &progress) {
+StoreProgress advance(DspMachine &machine, const StoreProgress &progress) {
   if (!progress.native.pending) { throw Fault("Original store has no pending write"); }
   require(progress.native.pending->effect.kind == dsp56300::EffectKind::write,
           "One original data-store advance requires its actual pending write");
@@ -112,7 +112,7 @@ void expect(const StoreProgress &progress, const DspAddress target, const unsign
 
 void record(const std::string_view phase,
             const StoreProgress &progress,
-            const OwnDspMachine &machine,
+            const DspMachine &machine,
             std::ostream &trace) {
   if (!progress.native.pending) { throw Fault("Cannot record an absent original store request"); }
   const auto &value = progress.native.pending->effect;
@@ -132,7 +132,7 @@ void verify_base(const State &before, const unsigned address) {
           "Original stage retains its actual fractional REP count, zero source and address");
 }
 
-void mapped_pair(OwnDspMachine &machine,
+void mapped_pair(DspMachine &machine,
                  const OwnDspCheckpoint &last_pair,
                  const State &frontier,
                  std::ostream &trace) {
@@ -185,7 +185,7 @@ void mapped_pair(OwnDspMachine &machine,
   }
 }
 
-StoreProgress pcu_prefix(OwnDspMachine &machine, const unsigned address, std::ostream &trace) {
+StoreProgress pcu_prefix(DspMachine &machine, const unsigned address, std::ostream &trace) {
   const auto before = capture(machine);
   auto expected = before;
   expected.cpu.r[4] = address + 1;
@@ -219,7 +219,7 @@ StoreProgress pcu_prefix(OwnDspMachine &machine, const unsigned address, std::os
   return result;
 }
 
-void pcu_path(OwnDspMachine &machine,
+void pcu_path(DspMachine &machine,
               const OwnDspCheckpoint &saved,
               const State &frontier,
               const bool mapped,
@@ -243,7 +243,7 @@ void pcu_path(OwnDspMachine &machine,
   const auto old_ticket = ticket(progress);
   const auto ordinal = progress.ordinal;
   for (const bool fresh : {false, true}) {
-    OwnDspMachine clone(dma_test::native_clocks);
+    DspMachine clone(dma_test::native_clocks);
     auto &target = fresh ? clone : machine;
     target.restore(held);
     static_cast<void>(rejected([&] { static_cast<void>(target.advance(old_ticket)); }));
@@ -279,9 +279,7 @@ void pcu_path(OwnDspMachine &machine,
   }
 }
 
-void strict_frontier(OwnDspMachine &machine,
-                     const OwnDspCheckpoint &frontier,
-                     std::ostream &trace) {
+void strict_frontier(DspMachine &machine, const OwnDspCheckpoint &frontier, std::ostream &trace) {
   machine.restore(frontier);
   const auto before = capture(machine);
   verify_base(before, ram_end);
@@ -324,7 +322,7 @@ void strict_frontier(OwnDspMachine &machine,
     // must preserve the fault, committed X word and blocked execution.
     const auto fault = machine.cpu().fault();
     const auto failed = machine.checkpoint();
-    OwnDspMachine diagnostic(dma_test::native_clocks);
+    DspMachine diagnostic(dma_test::native_clocks);
     diagnostic.restore(failed);
     require(diagnostic.cpu().fault() == fault && capture(diagnostic) == before &&
                 diagnostic.bus().read({.space = DspSpace::x, .address = ram_end}) == outside_value,
@@ -340,7 +338,7 @@ void strict_frontier(OwnDspMachine &machine,
 }
 }
 
-void require_original_native(const OwnDspMachine &machine,
+void require_original_native(const DspMachine &machine,
                              const dsp56300::InstructionProgress &progress) {
   if (progress.fault.kind == dsp56300::FaultKind::none) { return; }
   std::string cause = "Native original instruction fault";
@@ -358,11 +356,11 @@ void require_original_native(const OwnDspMachine &machine,
 }
 
 void verify_original_reference_access(const OwnDspCheckpoint &last_pair,
-                                      const OwnDspMachine &frontier,
+                                      const DspMachine &frontier,
                                       std::ostream &trace) {
   const auto before = capture(frontier);
   const auto saved = frontier.checkpoint();
-  OwnDspMachine branch(dma_test::native_clocks);
+  DspMachine branch(dma_test::native_clocks);
   mapped_pair(branch, last_pair, before, trace);
   strict_frontier(branch, saved, trace);
   pcu_path(branch, last_pair, before, true, trace);
@@ -372,10 +370,10 @@ void verify_original_reference_access(const OwnDspCheckpoint &last_pair,
 }
 
 namespace boot_context {
-void check_switch(const OwnDspMachine &frontier, std::ostream &trace) {
+void check_switch(const DspMachine &frontier, std::ostream &trace) {
   const auto saved = frontier.checkpoint();
   const auto state = capture(frontier);
-  OwnDspMachine branch(dma_test::native_clocks);
+  DspMachine branch(dma_test::native_clocks);
   constexpr unsigned switched_program = 0x1000;
   constexpr unsigned switch_cycles = 3;
   for (const auto elapsed : {0U, 2U, switch_cycles}) {

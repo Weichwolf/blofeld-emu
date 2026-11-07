@@ -3,8 +3,8 @@
 
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 
 #include <algorithm>
@@ -25,7 +25,7 @@ struct State {
   bool operator==(const State &) const = default;
 };
 
-inline State capture(const OwnDspMachine &machine) {
+inline State capture(const DspMachine &machine) {
   return {.cpu = machine.cpu().registers(),
           .progress = machine.cpu().progress(),
           .elapsed_ticks = machine.clock().elapsed_ticks()};
@@ -141,5 +141,5 @@ inline std::string rejected(const auto &operation) {
 }
 
 // Supplied model switch periods only, not calibrated elapsed PLL time.
-void check_switch(const OwnDspMachine &frontier, std::ostream &trace);
+void check_switch(const DspMachine &frontier, std::ostream &trace);
 }

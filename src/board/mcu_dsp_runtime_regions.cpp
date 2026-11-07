@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "board/detail/mcu_dsp_boundary.hpp"
 #include "board/mcu_dsp_runtime.hpp"
 #include "common/bus.hpp"
+#include "dsp/dsp_execution.hpp"
+#include "dsp/dsp_io.hpp"
 #include "dsp/dsp_peripheral_calendar.hpp"
-#include "dsp/own_dsp_io.hpp"
-#include "dsp/own_dsp_timeline.hpp"
 #include "dsp56300/core.hpp"
 
 #include <cstdint>
@@ -12,12 +11,7 @@
 
 namespace blofeld {
 void McuDspRuntime::prepare_native_effect(const CycleInputs &inputs) {
-  const auto before = detail::mcu_integrity(mcu_);
-  const auto registers = dsp_.cpu().registers();
   static_cast<void>(inputs());
-  if (detail::mcu_integrity(mcu_) != before || dsp_.cpu().registers() != registers) {
-    throw Fault("Native DSP peripheral preparation changed CPU state");
-  }
   timeline_->validate_boundary();
 }
 
@@ -25,30 +19,21 @@ void McuDspRuntime::observe_native_effect(const unsigned pc, const Observer &obs
   if (!observer) { return; }
   const auto ticks = inputs_.epoch_ticks + dsp_.clock().elapsed_ticks();
   const auto cycle = dsp_.bus().last_dma_cycle();
-  const auto before = detail::mcu_integrity(mcu_);
-  const auto registers = dsp_.cpu().registers();
   observer({.start_ticks = ticks,
             .completion_ticks = ticks,
             .cycle = cycle.value_or(0),
-            .result = {.dma = {},
-                       .native = std::nullopt,
-                       .native_pc = pc,
-                       .issued_address = std::nullopt},
+            .native_pc = pc,
             .phase = DspRuntimePhase::peripheral,
             .cycle_known = cycle.has_value()});
-  if (detail::mcu_integrity(mcu_) != before || dsp_.cpu().registers() != registers) {
-    throw Fault("Native DSP peripheral observation changed CPU state");
-  }
   timeline_->validate_boundary();
 }
 
 bool McuDspRuntime::advance_native_region(const std::uint64_t horizon,
-                                          const OwnDspBoundary boundary,
+                                          const DspBoundary boundary,
                                           const CycleInputs &inputs,
                                           const Observer &observer) {
-  if (!inputs || (peripheral_events_.identity && !observer) ||
-      period_cycles_ > inputs_.maximum_cycles_per_period) {
-    throw Fault("Native DSP region requires its actual input/effect owner and remaining budget");
+  if (!inputs || (peripheral_events_.identity && !observer)) {
+    throw Fault("Native DSP region requires its input and peripheral event owners");
   }
 
   struct Context {
@@ -68,38 +53,26 @@ bool McuDspRuntime::advance_native_region(const std::uint64_t horizon,
                                             const auto &call = *static_cast<Context *>(pointer);
                                             call.runtime.observe_native_effect(pc, call.observer);
                                           }};
-  const auto before = detail::mcu_integrity(mcu_);
-  const auto registers = dsp_.cpu().registers();
   const auto request = inputs();
-  if (detail::mcu_integrity(mcu_) != before || dsp_.cpu().registers() != registers) {
-    throw Fault("Native DSP region input changed CPU state");
-  }
   const auto cycles = dsp_.clock().elapsed_cycle_units();
-  const auto result = timeline_->advance_native_region(
-      horizon, boundary, request, inputs_.maximum_cycles_per_period - period_cycles_, effects);
+  const auto result = timeline_->advance_native_region(horizon, boundary, request, effects);
   if (!result) { return false; }
-  if (result->execution.fault.kind != dsp56300::FaultKind::none) {
-    reject_native(result->execution.fault);
+  if (result->execution && result->execution->fault.kind != dsp56300::FaultKind::none) {
+    reject_native(result->execution->fault);
   }
   const auto elapsed = dsp_.clock().elapsed_cycle_units() - cycles;
-  if (elapsed == 0 || elapsed > inputs_.maximum_cycles_per_period - period_cycles_) {
-    throw Fault("Native DSP region lost its actual finite cycle budget");
-  }
-  period_cycles_ += static_cast<unsigned>(elapsed);
+  if (elapsed == 0) { throw Fault("Native DSP region failed to advance device time"); }
   state_.last_native = result->completion_ticks;
   if (observer) {
     const auto actual = dsp_.bus().last_dma_cycle();
-    const auto after = dsp_.cpu().registers();
+    const auto pc = dsp_.cpu().instruction_fetch().address;
     observer({.start_ticks = result->start_ticks,
               .completion_ticks = result->completion_ticks,
               .cycle = actual.value_or(0),
-              .result = {},
+              .native_pc = pc,
               .phase = DspRuntimePhase::region,
               .region = result->execution,
               .cycle_known = actual.has_value()});
-    if (detail::mcu_integrity(mcu_) != before || dsp_.cpu().registers() != after) {
-      throw Fault("Native DSP region observer changed CPU state");
-    }
     timeline_->validate_boundary();
   }
   peripheral_cause(PeripheralCalendarCause::native, result->completion_ticks);
@@ -117,9 +90,7 @@ void McuDspRuntime::observe_input_event(const InputEvent &event) {
 
 bool McuDspRuntime::advance_region_reset(const bool native_through,
                                          const bool external_through,
-                                         const InputEvent &event,
-                                         const CycleInputs &inputs,
-                                         const Observer &observer) {
+                                         const InputEvent &event) {
   const auto native = deadline();
   const bool input_due = event.ticks && (*event.ticks < state_.end_ticks ||
                                          (*event.ticks == state_.end_ticks && external_through));
@@ -135,7 +106,8 @@ bool McuDspRuntime::advance_region_reset(const bool native_through,
     return true;
   }
   if (native_due) {
-    advance_native(native, inputs, observer);
+    advance_reset(native, true);
+    state_.last_native = native;
     return true;
   }
   advance_reset(state_.end_ticks, native_through);
@@ -149,9 +121,7 @@ void McuDspRuntime::advance_regions(const bool native_through,
   while (true) {
     const auto event = next_event();
     if (dsp_.clock().hardware_reset_active()) {
-      if (advance_region_reset(native_through, external_through, event, inputs, observer)) {
-        continue;
-      }
+      if (advance_region_reset(native_through, external_through, event)) { continue; }
       break;
     }
     const bool input_due = event.ticks && (*event.ticks < state_.end_ticks ||
@@ -159,10 +129,8 @@ void McuDspRuntime::advance_regions(const bool native_through,
     const auto horizon = input_due ? *event.ticks : state_.end_ticks;
     const bool through = (horizon != state_.end_ticks || native_through) &&
                          (!input_due || event.order == DspPeerOrder::dsp_first);
-    if (advance_native_region(horizon,
-                              through ? OwnDspBoundary::through : OwnDspBoundary::before,
-                              inputs,
-                              observer)) {
+    if (advance_native_region(
+            horizon, through ? DspBoundary::through : DspBoundary::before, inputs, observer)) {
       continue;
     }
     if (!input_due) { break; }

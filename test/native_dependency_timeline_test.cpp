@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "dsp/dsp_adapter_fetch.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_execution.hpp"
 #include "dsp/dsp_gpio.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_native_timed_execution.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_shi.hpp"
-#include "dsp/own_dsp_fetch.hpp"
-#include "dsp/own_dsp_machine.hpp"
-#include "dsp/own_dsp_timeline.hpp"
 #include "dsp56300/core.hpp"
 
 #include <array>
@@ -32,7 +32,7 @@ constexpr blofeld::DspRunClockInputs clocks{
     .extal_hz = extal,
     .timebase_hz = timebase,
     .switch_timing = blofeld::DspClockSwitch::functional_region_boundary};
-constexpr blofeld::OwnDspResetInputs reset{
+constexpr blofeld::DspResetInputs reset{
     .mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2};
 // Own FM encodings, independently assembled. INSERT -> MOVEP requires one
 // extra period; short immediate R0 -> X:(R0) requires three (FM A.2.3/A.2.4).
@@ -46,12 +46,12 @@ void require(const bool condition, const std::string &message) {
   if (!condition) { throw blofeld::Fault(message); }
 }
 
-void advance(blofeld::OwnDspMachine &chip,
-             blofeld::OwnDspTimeline &timeline,
+void advance(blofeld::DspMachine &chip,
+             blofeld::DspExecution &timeline,
              const unsigned cycles = 1) {
   const auto result =
       timeline.advance_native_region(chip.clock().elapsed_ticks() + (cycles * period),
-                                     blofeld::OwnDspBoundary::through,
+                                     blofeld::DspBoundary::through,
                                      {.known_requests = 15,
                                       .timing = blofeld::DspDmaTiming::reference_sampled_cycles,
                                       .grant = blofeld::DspDmaGrant::available},
@@ -64,8 +64,8 @@ void advance(blofeld::OwnDspMachine &chip,
 }
 
 struct Device {
-  blofeld::OwnDspMachine chip{clocks};
-  std::unique_ptr<blofeld::OwnDspTimeline> timeline;
+  blofeld::DspMachine chip{clocks};
+  std::unique_ptr<blofeld::DspExecution> timeline;
 
   explicit Device(
       const std::span<const unsigned> program,
@@ -91,7 +91,7 @@ struct Device {
     gpio.write({.reg = blofeld::DspGpioRegister::data, .value = 0});
     gpio.write({.reg = blofeld::DspGpioRegister::direction, .value = 1});
     gpio.write({.reg = blofeld::DspGpioRegister::data, .value = 0});
-    timeline = std::make_unique<blofeld::OwnDspTimeline>(
+    timeline = std::make_unique<blofeld::DspExecution>(
         chip, blofeld::OwnDspAutomaticTiming::functional_native_regions, 0, std::nullopt, policy);
   }
 
@@ -129,8 +129,8 @@ void test_real_gpio_dependency_and_captured_checkpoint() {
               device.chip.clock().elapsed_ticks() == reset_ticks + 13 * period,
           "The captured actual A1 store, not newer B1 code, commits after base plus stall time");
 
-  blofeld::OwnDspMachine clone(clocks);
-  blofeld::OwnDspTimeline restored(clone, saved);
+  blofeld::DspMachine clone(clocks);
+  blofeld::DspExecution restored(clone, saved);
   clone.bus().write({.space = blofeld::DspSpace::p, .address = gpio_store, .value = movep_b1});
   advance(clone, restored);
   require(clone.bus().gpio(blofeld::DspPort::c).outputs().levels == 1 &&
@@ -169,8 +169,8 @@ void test_partial_agu_delay_restore_and_data_mutation() {
               device.chip.clock().interlock_cycle_units() == 3 &&
               device.chip.clock().elapsed_ticks() == reset_ticks + 8 * period,
           "Two remaining stalls and one base period read actual current RAM at completion");
-  blofeld::OwnDspMachine clone(clocks);
-  blofeld::OwnDspTimeline restored(clone, saved);
+  blofeld::DspMachine clone(clocks);
+  blofeld::DspExecution restored(clone, saved);
   clone.bus().write({.space = blofeld::DspSpace::x, .address = source, .value = changed_sample});
   for (unsigned cycle = 0; cycle < 3; ++cycle) { advance(clone, restored); }
   require(clone.cpu().registers() == device.chip.cpu().registers() &&
@@ -466,8 +466,8 @@ void false_condition_decode_hole(const unsigned branch, const unsigned target) {
   require(device.output() == 1 && device.chip.cpu().progress().instructions == 5 &&
               device.chip.clock().native_cycle_units() == 11,
           "The next actual GPIO effect commits only after the false-condition hole");
-  blofeld::OwnDspMachine clone(clocks);
-  blofeld::OwnDspTimeline restored(clone, saved);
+  blofeld::DspMachine clone(clocks);
+  blofeld::DspExecution restored(clone, saved);
   advance(clone, restored);
   require(clone.cpu().progress().instructions == 4 && clone.clock().interlock_cycle_units() == 1,
           "Paired checkpoint restores the pending control-flow clock without a CPU override");
@@ -830,8 +830,8 @@ void test_conservative_timeline_checkpoint_and_reset() {
               device.chip.cpu().registers().sr == increment_status &&
               device.chip.clock().interlock_cycle_units() == serialization && device.output() == 0,
           "The genuine INC completes once after its three functional serialization clocks");
-  blofeld::OwnDspMachine pre_clone(clocks);
-  blofeld::OwnDspTimeline pre_restored(pre_clone, before_increment);
+  blofeld::DspMachine pre_clone(clocks);
+  blofeld::DspExecution pre_restored(pre_clone, before_increment);
   for (unsigned cycle = 0; cycle < serialization; ++cycle) { advance(pre_clone, pre_restored); }
   require(pre_clone.cpu().registers() == device.chip.cpu().registers() &&
               pre_clone.clock().elapsed_ticks() == device.chip.clock().elapsed_ticks() &&
@@ -853,16 +853,16 @@ void test_conservative_timeline_checkpoint_and_reset() {
               device.chip.clock().elapsed_ticks() ==
                   reset_ticks + (native_periods + 2 * serialization) * period,
           "Actual A0 reaches the GPIO once after the complete pre/base/post sequence");
-  blofeld::OwnDspMachine post_clone(clocks);
-  blofeld::OwnDspTimeline post_restored(post_clone, before_gpio);
+  blofeld::DspMachine post_clone(clocks);
+  blofeld::DspExecution post_restored(post_clone, before_gpio);
   for (unsigned cycle = 0; cycle < serialization; ++cycle) { advance(post_clone, post_restored); }
   require(post_clone.cpu().registers() == device.chip.cpu().registers() &&
               post_clone.clock().elapsed_ticks() == device.chip.clock().elapsed_ticks() &&
               post_clone.bus().gpio(blofeld::DspPort::c).outputs().levels == 1,
           "A mid-post-gap checkpoint preserves the policy and delayed genuine bus effect");
 
-  blofeld::OwnDspMachine reset_clone(clocks);
-  blofeld::OwnDspTimeline reset_restored(reset_clone, before_gpio);
+  blofeld::DspMachine reset_clone(clocks);
+  blofeld::DspExecution reset_restored(reset_clone, before_gpio);
   reset_restored.begin_hardware_reset(reset);
   require(
       reset_clone.cpu().registers().a == 1 && reset_clone.cpu().registers().pc == boot &&
@@ -914,8 +914,8 @@ void test_clocked_native_long_load_checkpoint() {
               device.chip.cpu().jit_statistics().native_move_instructions ==
                   before.native_move_instructions + 1,
           "Clocked A10 RAM load actually executes natively after the full gap with one AGU update");
-  blofeld::OwnDspMachine pre_clone(clocks);
-  blofeld::OwnDspTimeline pre_restored(pre_clone, captured);
+  blofeld::DspMachine pre_clone(clocks);
+  blofeld::DspExecution pre_restored(pre_clone, captured);
   for (unsigned cycle = 0; cycle < serialization; ++cycle) { advance(pre_clone, pre_restored); }
   require(pre_clone.cpu().registers() == device.chip.cpu().registers() &&
               pre_clone.cpu().progress() == device.chip.cpu().progress() &&
@@ -936,8 +936,8 @@ void test_clocked_native_long_load_checkpoint() {
               device.chip.clock().elapsed_ticks() ==
                   reset_ticks + (native_periods + 2 * serialization) * period,
           "The actual peripheral effect follows the unchanged native/pre/post clock sequence");
-  blofeld::OwnDspMachine post_clone(clocks);
-  blofeld::OwnDspTimeline post_restored(post_clone, post_gap);
+  blofeld::DspMachine post_clone(clocks);
+  blofeld::DspExecution post_restored(post_clone, post_gap);
   for (unsigned cycle = 0; cycle < serialization; ++cycle) { advance(post_clone, post_restored); }
   require(post_clone.cpu().registers() == device.chip.cpu().registers() &&
               post_clone.cpu().progress() == device.chip.cpu().progress() &&

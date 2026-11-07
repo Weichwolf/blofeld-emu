@@ -3,7 +3,7 @@
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_gpio.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_boot_reference.hpp"
 #include "dsp_core_fixture.hpp"
@@ -72,7 +72,7 @@ void latch(core::Program &program, const Latch input) {
   program.bit({.operand = we, .index = 9, .action = core::BitAction::set});
 }
 
-auto native_state(const OwnDspMachine &machine) {
+auto native_state(const DspMachine &machine) {
   const auto &cpu = machine.cpu();
   return std::tuple{
       cpu.registers(), cpu.progress(), cpu.fault(), cpu.processing_state(), cpu.debug_status()};
@@ -116,7 +116,7 @@ struct WireState {
 // Selected reference chip: CE is held active separately; F10 is not inferred as CE.
 class Wire {
 public:
-  Wire(OwnDspMachine &machine,
+  Wire(DspMachine &machine,
        Nand &device,
        std::ostream &trace,
        const unsigned switch_boundary,
@@ -205,7 +205,7 @@ private:
     state_.previous = control.levels;
   }
 
-  OwnDspMachine &machine_;
+  DspMachine &machine_;
   Nand &device_;
   std::ostream &trace_;
   unsigned switch_boundary_;
@@ -287,10 +287,7 @@ std::vector<std::uint8_t> cold_image(Nand model) {
   return encode_nand_image(model.persistent_image());
 }
 
-void returned(const OwnDspMachine &machine,
-              const Wire &wire,
-              const Entry entry,
-              const Helper helper) {
+void returned(const DspMachine &machine, const Wire &wire, const Entry entry, const Helper helper) {
   const auto cpu = machine.cpu().registers();
   // FM5.4.3: positive full56 result, unequal extension/sign and equal MSP top bits.
   constexpr unsigned result_flags = 0x30;
@@ -328,7 +325,7 @@ struct Saved {
 };
 
 void packing(const Firmware &firmware, const Helper helper, std::ostream &trace) {
-  OwnDspMachine machine(dma_test::native_clocks);
+  DspMachine machine(dma_test::native_clocks);
   const auto entry = install(machine.bus(), firmware, helper, false);
   const core::Driver reset(machine);
   require(reset.state().pc == DspRomProgram::boot, "Actual reset selects the authored caller");
@@ -381,7 +378,7 @@ void frontier(const Firmware &firmware,
               const bool full,
               const unsigned missing,
               std::ostream &trace) {
-  OwnDspMachine machine(dma_test::native_clocks);
+  DspMachine machine(dma_test::native_clocks);
   const auto entry = install(machine.bus(), firmware, helper, full);
   const core::Driver reset(machine);
   require(reset.state().pc == DspRomProgram::boot, "Actual reset selects the authored caller");

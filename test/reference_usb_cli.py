@@ -219,17 +219,6 @@ class UsbCli(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertIn("USB/IP", result.stderr)
 
-    def test_live_transport_rejects_automatic_replay_before_outputs(self):
-        _, trace, command, before = self.prepared("replay", "checkpoint 100 2\n")
-        trace.unlink(missing_ok=True)
-        result = subprocess.run([*command, *OPTIONS], capture_output=True, text=True,
-                                timeout=10, check=False)
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("rejects automatic checkpoint replay", result.stderr)
-        self.assertNotIn("USBIP listening=", result.stdout)
-        self.assertFalse(trace.exists())
-        for path, original in before.items():
-            self.assertEqual(path.read_bytes(), original)
 
 
 if __name__ == "__main__":

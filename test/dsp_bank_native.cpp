@@ -5,8 +5,8 @@
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "esai_fixture.hpp"
 
@@ -26,7 +26,7 @@ constexpr unsigned store_x0 = 0x447000;
 constexpr unsigned load_y0 = 0x4ef000;
 constexpr unsigned effect_limit = 16;
 
-void healthy(const OwnDspMachine &machine, const dsp56300::InstructionProgress &progress) {
+void healthy(const DspMachine &machine, const dsp56300::InstructionProgress &progress) {
   if (progress.fault.kind == dsp56300::FaultKind::none) { return; }
   constexpr std::array spaces{"P:", "X:", "Y:"};
   const auto fault = progress.fault;
@@ -47,7 +47,7 @@ void healthy(const OwnDspMachine &machine, const dsp56300::InstructionProgress &
               " tick=" + std::to_string(machine.clock().elapsed_ticks()));
 }
 
-dsp56300::PendingInstruction pending_read(const OwnDspMachine &machine) {
+dsp56300::PendingInstruction pending_read(const DspMachine &machine) {
   const auto pending = machine.cpu().pending_instruction();
   if (!pending || pending->effect.kind != dsp56300::EffectKind::read ||
       pending->effect.space != dsp56300::Space::x || pending->effect.address != transfer::source0) {
@@ -56,7 +56,7 @@ dsp56300::PendingInstruction pending_read(const OwnDspMachine &machine) {
   return *pending;
 }
 
-dsp56300::PendingInstruction seek_access(OwnDspMachine &machine,
+dsp56300::PendingInstruction seek_access(DspMachine &machine,
                                          const dsp56300::EffectKind kind,
                                          const dsp56300::Space space,
                                          const unsigned address) {
@@ -75,7 +75,7 @@ dsp56300::PendingInstruction seek_access(OwnDspMachine &machine,
               " pc=" + hex(machine.cpu().registers().pc, 6));
 }
 
-void finish_pending(OwnDspMachine &machine) {
+void finish_pending(DspMachine &machine) {
   const auto before = machine.cpu().progress().instructions;
   const auto ticks = machine.clock().elapsed_ticks();
   for (unsigned count = 0; count < effect_limit; ++count) {
@@ -93,7 +93,7 @@ void finish_pending(OwnDspMachine &machine) {
   throw Fault("Native bank instruction exceeded its bounded effect count");
 }
 
-void finish_access(OwnDspMachine &machine, const dsp56300::PendingInstruction &pending) {
+void finish_access(DspMachine &machine, const dsp56300::PendingInstruction &pending) {
   const auto before = machine.cpu().progress().instructions;
   const auto ticks = machine.clock().elapsed_ticks();
   const auto result = machine.advance(pending.ticket);
@@ -104,7 +104,7 @@ void finish_access(OwnDspMachine &machine, const dsp56300::PendingInstruction &p
           "The retained access ticket executes once and retires without charging a clock period");
 }
 
-dsp56300::InstructionEffect source_store(OwnDspMachine &machine) {
+dsp56300::InstructionEffect source_store(DspMachine &machine) {
   const auto pending =
       seek_access(machine, dsp56300::EffectKind::write, dsp56300::Space::x, transfer::ring_start);
   finish_access(machine, pending);
@@ -119,7 +119,7 @@ void native_controller_query() {
   constexpr unsigned last_word = 0x67f;
   constexpr unsigned next_half = 0x680;
   constexpr unsigned phase = 0x20;
-  OwnDspMachine machine(transfer::native_clocks);
+  DspMachine machine(transfer::native_clocks);
   transfer::NativeProgram code;
   for (const auto word :
        std::array{immediate_x0, phase, source_to_a, and_immediate, phase, compare_x0_a}) {
@@ -183,7 +183,7 @@ void native_controller_query() {
 void native_held_word() {
   constexpr unsigned prefix_units = 17;
   constexpr unsigned total_units = 19;
-  OwnDspMachine machine(transfer::native_clocks);
+  DspMachine machine(transfer::native_clocks);
   transfer::NativeProgram code;
   code.word(immediate_x0);
   code.word(first);
@@ -280,7 +280,7 @@ void native_held_word() {
 }
 
 void unqualified_conflict() {
-  OwnDspMachine machine(transfer::native_clocks);
+  DspMachine machine(transfer::native_clocks);
   transfer::NativeProgram code;
   code.word(0);
   transfer::reset_native(machine, code);

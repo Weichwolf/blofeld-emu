@@ -112,8 +112,7 @@ def refusals(binary, firmware, generator, directory):
         (directory / f"option-{index}.txt").write_text(result.stdout + result.stderr)
     config, rom, flash = board_inputs(directory / "inputs", generator, 1)
     initial = config.read_text()
-    for name, text, expected in (("no-route", re.sub(r"pcm-receive[^\n]+\n", "", initial), "pcm-receive"),
-                                 ("replay", initial + "checkpoint 10 2\n", "rejects automatic")):
+    for name, text, expected in (("no-route", re.sub(r"pcm-receive[^\n]+\n", "", initial), "pcm-receive"),):
         config.write_text(text)
         trace = directory / (name + ".trace")
         result = subprocess.run([str(binary), "--firmware", str(firmware), "--reference-board", str(config),

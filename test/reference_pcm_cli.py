@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Actual standalone ESAI pins to signed PCM, including native changes and replay."""
+"""Actual standalone ESAI pins to signed PCM, with native changes and input failures."""
 
 import sys
 import unittest
 
 import reference_esai_cli as esai
-from test_reference_cli import replay_sections
 
 
 def route(index=1, after=1200, edge="rising", slot=32, lane=0):
@@ -51,16 +50,6 @@ class PcmCli(unittest.TestCase):
             self.assertEqual(sum(row["source"] == "external" for row in pins), 516)
             self.assertEqual((pins[0]["end"], pins[0]["clock"], pins[0]["fs"]), ("1215", "0", "0"))
 
-    def test_joint_partial_and_completed_frame_snapshots_replay_exact_pcm(self):
-        for operation in (35, 180):
-            text = esai.periodic() + route() + f"checkpoint {operation} 2\n"
-            result, trace = self.invoke(f"pcm-snapshot-{operation}", text)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            prefix, suffixes = replay_sections(trace)
-            self.assertEqual(len(suffixes), 3)
-            self.assertTrue(all(suffix == suffixes[0] for suffix in suffixes))
-            self.check_frame(prefix + suffixes[0])
-            self.assertEqual(bool(records(prefix, "PCM-FRAME")), operation == 180)
 
     def test_pcm_observation_does_not_change_existing_loopback_behavior(self):
         text = esai.periodic() + "loopback B 02 E 04\n"
@@ -127,18 +116,15 @@ class PcmCli(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.check_frame(trace, samples=(1193046, 1193046), first=14006, end=25598)
 
-    def test_missing_lane_faults_with_context_and_replays_from_a_trusted_prefix(self):
-        text = esai.periodic() + route(lane=1) + "checkpoint 12 2\n"
+    def test_missing_lane_faults_with_context(self):
+        text = esai.periodic() + route(lane=1)
         result, trace = self.invoke("pcm-unknown-lane", text)
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("Unknown or undriven payload bit", result.stderr)
         self.assertIn("pin read clock=Y:0xffff96 data=Y:0xffff81 at=2230", result.stderr)
         self.assertRegex(result.stderr, r"mcu-pc=0x[0-9a-f]+ dsp-pc=0x[0-9a-f]+")
         self.assertIn("PCM frames=0 started=1 locked=1 faulted=1", result.stderr)
-        prefix, suffixes = replay_sections(trace)
-        self.assertEqual(len(suffixes), 3)
-        self.assertTrue(all(suffix == suffixes[0] for suffix in suffixes))
-        self.assertEqual(records(prefix + suffixes[0], "PCM-FRAME"), [])
+        self.assertEqual(records(trace, "PCM-FRAME"), [])
 
     def test_native_mux_change_is_observed_before_the_next_external_edge(self):
         result, trace = self.invoke("pcm-native-drop-clock", esai.periodic(start=2001) + route(),

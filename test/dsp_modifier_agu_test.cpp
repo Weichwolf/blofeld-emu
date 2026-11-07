@@ -2,7 +2,7 @@
 #include "common/bus.hpp"
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "esai_fixture.hpp"
 
@@ -32,7 +32,7 @@ constexpr unsigned load_decrement = 0x44d000;
 constexpr unsigned load_increment = 0x44d800;
 constexpr std::array upper_bytes{0U, 1U, 0x7fU, 0x80U, 0xffU};
 
-auto observe(const OwnDspMachine &machine) {
+auto observe(const DspMachine &machine) {
   return std::tuple{machine.cpu().registers(),
                     machine.cpu().progress(),
                     machine.cpu().fault(),
@@ -40,7 +40,7 @@ auto observe(const OwnDspMachine &machine) {
                     machine.clock().elapsed_ticks()};
 }
 
-void prepare(OwnDspMachine &machine, const unsigned modifier, const unsigned pointer) {
+void prepare(DspMachine &machine, const unsigned modifier, const unsigned pointer) {
   native::NativeProgram program;
   for (const auto word :
        {move_omr, ordinary_omr, move_m0, modifier, move_r0, pointer, move_sr, masked_status}) {
@@ -57,7 +57,7 @@ void prepare(OwnDspMachine &machine, const unsigned modifier, const unsigned poi
 }
 
 bool one(const unsigned upper, const unsigned low, const bool decrement) {
-  OwnDspMachine machine(native::native_clocks);
+  DspMachine machine(native::native_clocks);
   const auto modifier = (upper << high_shift) | low;
   const auto pointer = decrement ? base : base + low;
   prepare(machine, modifier, pointer);
@@ -81,7 +81,7 @@ bool one(const unsigned upper, const unsigned low, const bool decrement) {
   const auto actual = observe(machine);
   bool passed = actual == expected;
   for (unsigned replay = 0; replay < 2; ++replay) {
-    OwnDspMachine branch(native::native_clocks);
+    DspMachine branch(native::native_clocks);
     branch.restore(saved);
     require(observe(branch) == before,
             "The native snapshot retains raw modifier and the full pre-access CPU state");

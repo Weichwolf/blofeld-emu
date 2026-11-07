@@ -16,7 +16,7 @@
 #include <optional>
 
 namespace blofeld {
-class OwnDspMachine;
+class DspMachine;
 class NandWriteStore;
 }
 
@@ -74,25 +74,25 @@ private:
 // bus reference. The native owner replaces its internal bus during restoration.
 class NandPeer {
 public:
-  NandPeer(blofeld::OwnDspMachine &machine, blofeld::Nand device);
-  NandPeer(blofeld::OwnDspMachine &machine, blofeld::Nand device, NandCellProfile profile);
-  NandPeer(blofeld::OwnDspMachine &machine,
+  NandPeer(blofeld::DspMachine &machine, blofeld::Nand device);
+  NandPeer(blofeld::DspMachine &machine, blofeld::Nand device, NandCellProfile profile);
+  NandPeer(blofeld::DspMachine &machine,
            blofeld::Nand device,
            NandCellProfile profile,
            NandBusContract contract);
-  NandPeer(blofeld::OwnDspMachine &machine,
+  NandPeer(blofeld::DspMachine &machine,
            blofeld::Nand device,
            NandCellProfile profile,
            NandBusContract contract,
            NandTiming timing);
-  NandPeer(blofeld::OwnDspMachine &machine,
+  NandPeer(blofeld::DspMachine &machine,
            std::unique_ptr<NandWriteStore> store,
            NandBusContract contract);
-  NandPeer(blofeld::OwnDspMachine &machine,
+  NandPeer(blofeld::DspMachine &machine,
            std::unique_ptr<NandWriteStore> store,
            NandBusContract contract,
            NandTiming timing);
-  NandPeer(const NandPeerSnapshot &snapshot, blofeld::OwnDspMachine &target);
+  NandPeer(const NandPeerSnapshot &snapshot, blofeld::DspMachine &target);
   ~NandPeer();
   NandPeer(const NandPeer &) = delete;
   NandPeer &operator=(const NandPeer &) = delete;

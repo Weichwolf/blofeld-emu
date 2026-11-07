@@ -3,9 +3,9 @@
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_esai.hpp"
 #include "dsp/dsp_gpio.hpp"
+#include "dsp/dsp_io.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp/own_dsp_io.hpp"
-#include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "esai_fixture.hpp"
 
@@ -65,7 +65,7 @@ std::array<std::uint32_t, diagnostic_words> diagnostic(const bool secondary) {
           0};
 }
 
-void reset_native(OwnDspMachine &machine) {
+void reset_native(DspMachine &machine) {
   machine.begin_hardware_reset(
       {.mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2});
   require(machine.advance_hardware_reset_ticks(reset_hold) == reset_hold,
@@ -75,7 +75,7 @@ void reset_native(OwnDspMachine &machine) {
           "Actual native recovery completes before the first instruction");
 }
 
-void step_native(OwnDspMachine &machine) {
+void step_native(DspMachine &machine) {
   auto progress = machine.begin_fetch();
   for (unsigned effects = 0; effects < effect_limit && progress.pending && !progress.retired &&
                              progress.fault.kind == dsp56300::FaultKind::none;
@@ -128,7 +128,7 @@ std::array<std::string, 6> sample_bus(DspBus &bus,
 void native_snapshot(const bool secondary) {
   const auto which = secondary ? DspEsaiInstance::secondary : DspEsaiInstance::primary;
   const auto program = diagnostic(secondary);
-  OwnDspMachine machine(native_clocks);
+  DspMachine machine(native_clocks);
   machine.bus().install_rom({.start = boot, .words = program});
   reset_native(machine);
   for (unsigned i = 0; i < 6; ++i) { step_native(machine); }
@@ -187,7 +187,7 @@ void mux_and_contention() {
 
 void native_missing_clock_fault(const bool secondary) {
   const auto program = diagnostic(secondary);
-  OwnDspMachine machine(native_clocks);
+  DspMachine machine(native_clocks);
   machine.bus().install_rom({.start = boot, .words = program});
   reset_native(machine);
   for (unsigned i = 0; i < 6; ++i) { step_native(machine); }

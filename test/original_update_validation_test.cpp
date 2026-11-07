@@ -2,8 +2,8 @@
 #include "common/bus.hpp"
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/own_dsp_io.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_io.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_boot_reference.hpp"
 #include "dsp_core_fixture.hpp"
@@ -30,7 +30,7 @@ void require(const bool condition, const std::string &reason) {
   if (!condition) { throw blofeld::Fault(reason); }
 }
 
-auto native_state(const blofeld::OwnDspMachine &machine) {
+auto native_state(const blofeld::DspMachine &machine) {
   const auto &cpu = machine.cpu();
   return std::tuple{
       cpu.registers(), cpu.progress(), cpu.fault(), cpu.processing_state(), cpu.debug_status()};
@@ -162,7 +162,7 @@ void install(blofeld::DspBus &bus,
   }
 }
 
-void caller(blofeld::DspBus &bus, blofeld::OwnDspMachine &cpu, const Layout layout) {
+void caller(blofeld::DspBus &bus, blofeld::DspMachine &cpu, const Layout layout) {
   blofeld::test::core::Program program;
   program.immediate(blofeld::test::DspRomRegister::r0, source_cookie);
   program.immediate(blofeld::test::DspRomRegister::r1, cursor_cookie);
@@ -221,7 +221,7 @@ void verify_memory(blofeld::DspBus &bus,
   }
 }
 
-void verify_quarantine(blofeld::OwnDspMachine &cpu, std::ostream &trace) {
+void verify_quarantine(blofeld::DspMachine &cpu, std::ostream &trace) {
   require(cpu.cpu().fault().kind == dsp56300::FaultKind::memory_read && cpu.io().failure(),
           "Unknown update data retains the actual native read fault");
   const auto stopped = native_state(cpu);
@@ -256,7 +256,7 @@ struct Observations {
   }
 };
 
-void step(blofeld::OwnDspMachine &machine, Observations &observations) {
+void step(blofeld::DspMachine &machine, Observations &observations) {
   const blofeld::DspIoReadObserver reads{
       .context = &observations,
       .completed = [](void *context, const blofeld::DspIoReadAccess &access) {
@@ -287,7 +287,7 @@ void step(blofeld::OwnDspMachine &machine, Observations &observations) {
           "One actual native instruction retires without inventing clock periods");
 }
 
-void execute(blofeld::OwnDspMachine &cpu, std::ostream &trace, const Layout layout) {
+void execute(blofeld::DspMachine &cpu, std::ostream &trace, const Layout layout) {
   Observations observations{.trace = trace, .secondary = layout.secondary};
   for (unsigned steps = 0; steps < layout.count + instruction_allowance; ++steps) {
     const auto before = cpu.cpu().registers();
@@ -328,7 +328,7 @@ void run(const blofeld::Firmware &firmware, std::ostream &trace, const Layout la
   for (const auto name : selected) {
     const auto data = input(payload, name, layout);
     trace << "CASE name=" << name << '\n';
-    blofeld::OwnDspMachine cpu(blofeld::test::dma_test::native_clocks);
+    blofeld::DspMachine cpu(blofeld::test::dma_test::native_clocks);
     auto &bus = cpu.bus();
     install(bus, helper, data, layout);
     caller(bus, cpu, layout);

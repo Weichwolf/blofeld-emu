@@ -2,7 +2,7 @@
 #pragma once
 
 #include "dsp/dsp_bus.hpp"
-#include "dsp/own_dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_rom_program.hpp"
 
@@ -65,7 +65,7 @@ private:
 // Actual reset and one untimed native instruction per step; no guest state edits.
 class Driver {
 public:
-  explicit Driver(OwnDspMachine &machine);
+  explicit Driver(DspMachine &machine);
   void assert_reset(bool pinit);
   void hardware_reset();
   void step();
@@ -73,6 +73,6 @@ public:
   [[nodiscard]] dsp56300::Registers state() const { return machine_.cpu().registers(); }
 
 private:
-  OwnDspMachine &machine_;
+  DspMachine &machine_;
 };
 }

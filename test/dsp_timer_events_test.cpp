@@ -3,8 +3,8 @@
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_interrupts.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_timers.hpp"
-#include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "timer_native_fixture.hpp"
 
@@ -293,67 +293,52 @@ void native_event_case(const unsigned index) {
   program.word(0);
   program.word(native::foreground_move);
   const auto complete = program.pc();
-  OwnDspMachine machine(native_clocks);
+  DspMachine machine(native_clocks);
   reset_native(machine, program);
   native::install_vector(machine, compare_vector, native::short_r3);
   native::install_vector(machine, compare_vector + 2, native::short_r2);
   native::sample(machine.bus().timers(), index, false);
   for (unsigned instruction = 0; instruction < 8; ++instruction) { step_native(machine); }
   require(machine.cpu().registers().pc == foreground &&
-              machine.cpu().progress().instructions == 8 &&
-              machine.cpu().progress().estimated_cycles == 16,
+              machine.cpu().state().progress.instructions == 8 &&
+              machine.cpu().state().progress.estimated_cycles == 16,
           "Eight literal native setup instructions retire before any external counter edge");
   for (const bool level : {true, false, true}) {
     native::sample(machine.bus().timers(), index, level);
   }
   require(machine.bus().timers().read(csr, flags) == flags,
           "Independent preload-ffffff then wrap-zero requests both real timer sources");
-  const auto saved = machine.checkpoint();
-  std::optional<dsp56300::Registers> completed;
-  std::optional<dsp56300::Progress> progress;
-  for (unsigned replay = 0; replay < 4; ++replay) {
-    OwnDspMachine fresh(native_clocks);
-    auto &owner = replay == 3 ? fresh : machine;
-    owner.restore(saved);
-    auto expected = owner.cpu().registers();
-    const auto before = owner.cpu().progress();
-    const auto ticks = owner.clock().elapsed_ticks();
-    native::service(owner, {.vector = compare_vector + 2}, {.address = foreground, .opcode = 0});
-    expected.r[2] = 7;
-    require(
-        owner.cpu().registers() == expected && owner.bus().timers().read(csr, flags) == match,
-        "Native overflow service changes only R2 and retains the independently pending compare");
-    require(!owner.admit_interrupt({.address = foreground, .opcode = 0}) &&
-                owner.bus().interrupt_request(0) == DspInterruptRequest{.vector = compare_vector},
-            "The conservative post-vector admission hold cannot consume the pending compare");
-    step_native(owner);
-    ++expected.pc;
-    require(owner.cpu().registers() == expected && owner.bus().timers().read(csr, flags) == match,
-            "The actual foreground NOP preserves both the compare event and all data registers");
-    native::service(owner,
-                    {.vector = compare_vector},
-                    {.address = foreground + 1, .opcode = native::foreground_move});
-    expected.r[3] = 8;
-    require(owner.cpu().registers() == expected && owner.bus().timers().read(csr, flags) == 0,
-            "The retained compare executes its own real vector and clears only its source");
-    step_native(owner);
-    expected.pc = complete;
-    expected.r[7] = 9;
-    require(owner.cpu().registers() == expected && owner.bus().timers().read(csr - 3) == 0 &&
-                owner.cpu().progress().instructions == before.instructions + 6 &&
-                owner.cpu().progress().estimated_cycles == before.estimated_cycles + 6 &&
-                owner.clock().elapsed_ticks() == ticks,
-            "Six real vector/foreground instructions leave the external count unchanged");
-    if (completed && progress) {
-      require(owner.cpu().registers() == *completed && owner.cpu().progress() == *progress,
-              "Same/fresh-owner restore repeats complete native registers, stack and counters");
-    }
-    completed = owner.cpu().registers();
-    progress = owner.cpu().progress();
-  }
+  auto expected = machine.cpu().registers();
+  const auto before = machine.cpu().state().progress;
+  const auto ticks = machine.clock().elapsed_ticks();
+  native::service(machine, {.vector = compare_vector + 2}, {.address = foreground, .opcode = 0});
+  expected.r[2] = 7;
+  require(machine.cpu().registers() == expected && machine.bus().timers().read(csr, flags) == match,
+          "Native overflow service changes only R2 and retains the independently pending compare");
+  require(!machine.admit_interrupt({.address = foreground, .opcode = 0}) &&
+              machine.bus().interrupt_request(0) == DspInterruptRequest{.vector = compare_vector},
+          "The conservative post-vector admission hold cannot consume the pending compare");
+  step_native(machine);
+  ++expected.pc;
+  require(machine.cpu().registers() == expected && machine.bus().timers().read(csr, flags) == match,
+          "The actual foreground NOP preserves both the compare event and all data registers");
+  native::service(machine,
+                  {.vector = compare_vector},
+                  {.address = foreground + 1, .opcode = native::foreground_move});
+  expected.r[3] = 8;
+  require(machine.cpu().registers() == expected && machine.bus().timers().read(csr, flags) == 0,
+          "The retained compare executes its own real vector and clears only its source");
+  step_native(machine);
+  expected.pc = complete;
+  expected.r[7] = 9;
+  require(machine.cpu().registers() == expected && machine.bus().timers().read(csr - 3) == 0 &&
+              machine.cpu().state().progress.instructions == before.instructions + 6 &&
+              machine.cpu().state().progress.estimated_cycles == before.estimated_cycles + 6 &&
+              machine.clock().elapsed_ticks() == ticks,
+          "Six real vector/foreground instructions leave the external count unchanged");
 }
 
-void native_vectors_and_owner_restore() {
+void native_vectors() {
   for (unsigned index = 0; index < 2; ++index) { native_event_case(index); }
   std::cout << "PASS TIMER_NATIVE_EVENTS contexts=2 continuations=8\n";
 }
@@ -366,7 +351,7 @@ int main() {
     missing_registers_do_not_consume_edges();
     input_qualification_and_atomic_batches();
     pin_modes_and_rejections();
-    native_vectors_and_owner_restore();
+    native_vectors();
     std::cout
         << "Mode-three external/prescaled events, strict inputs, native IRQs and restore passed.\n";
     return 0;

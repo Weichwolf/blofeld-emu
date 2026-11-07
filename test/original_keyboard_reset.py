@@ -18,7 +18,7 @@ class ResetTrace:
     expected = ((1, 2), (14, 2), (1, 6))
 
     def __init__(self):
-        self.cases = self.replays = self.steps = 0
+        self.cases = self.steps = 0
         self.stage = 'closed'
         self.ended = False
 
@@ -30,7 +30,7 @@ class ResetTrace:
         if self.stage != 'closed' or self.cases >= 3 or (row['phase'], row['prescale']) != self.expected[self.cases]:
             raise ValueError('Changed case order, clock inputs or missing case completion')
         self.case, self.stage = row, 'prefix'
-        self.hosts = self.commands = self.case_replays = 0
+        self.hosts = self.commands = 0
         self.assertion = self.release = None
         self.reset_driver = 2
         self.reset_rows, self.sync_rows, self.readings = [], [], []
@@ -129,18 +129,13 @@ class ResetTrace:
             self.hosts += 1
         elif tag == 'RETURN':
             self.returned(row)
-        elif tag == 'REPLAY':
-            if self.stage != 'returned' or row != dict(index=self.case_replays, bytes=row['bytes'], identical=1) or row['bytes'] <= 0 or self.case_replays >= 2:
-                raise ValueError('Missing or duplicate fresh joint suffix replay')
-            self.case_replays += 1
-            self.replays += 1
         elif tag == 'CASE_END':
-            if self.stage != 'returned' or self.case_replays != 2 or row != dict(**self.case, steps=self.hosts):
-                raise ValueError('Missing complete case/return/replays')
+            if self.stage != 'returned' or row != dict(**self.case, steps=self.hosts):
+                raise ValueError('Missing complete case/return')
             self.stage = 'closed'
             self.cases += 1
         elif tag == 'END':
-            if self.stage != 'closed' or self.cases != 3 or self.replays != 6 or row != dict(cases=3, replays=6, accepted=2, rejected=1, **{'target-retired': 0}):
+            if self.stage != 'closed' or self.cases != 3 or row != dict(cases=3, accepted=2, rejected=1, **{'target-retired': 0}):
                 raise ValueError('Incomplete original reset/SYNC matrix')
             self.ended = True
         else:
@@ -153,7 +148,7 @@ def validate_rows(lines):
         state.consume(*fields(line))
     if not state.ended:
         raise ValueError('Missing original reset/SYNC completion')
-    return dict(cases=state.cases, fresh_joint_suffix_replays=state.replays, native_HC12_steps=state.steps,
+    return dict(cases=state.cases, native_HC12_steps=state.steps,
                 accepted_application_TIM_cases=2, rejected_recovery_TIM_cases=1,
                 actual_target_resets=3, actual_SYNC_responses=6, target_retired=0)
 
@@ -165,7 +160,7 @@ def validate(path):
 
 def changed_rows(stream, control, changed):
     prefixes = dict(reset='RESET ', target='TARGET ', returned='RETURN ', known='TARGET ',
-                    counter='COUNTER pc=5115 ', host='HOST ', replay='REPLAY ', case='CASE_END ')
+                    counter='COUNTER pc=5115 ', host='HOST ', case='CASE_END ')
     for line in stream:
         if not changed[0] and line.startswith(prefixes[control]):
             changed[0] = True
@@ -181,7 +176,7 @@ def changed_rows(stream, control, changed):
 
 
 def negative_controls(path):
-    for control in ('reset', 'target', 'returned', 'known', 'counter', 'host', 'replay', 'case'):
+    for control in ('reset', 'target', 'returned', 'known', 'counter', 'host', 'case'):
         changed = [False]
         with path.open() as stream:
             try:
@@ -191,7 +186,7 @@ def negative_controls(path):
                     raise ValueError('Directed collector mutation was not applied') from None
             else:
                 raise ValueError('Directed collector corruption accepted: ' + control)
-    return 8
+    return 7
 
 
 def main():

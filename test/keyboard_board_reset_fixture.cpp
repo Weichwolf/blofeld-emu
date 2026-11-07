@@ -365,29 +365,6 @@ void Fixture::finish(const unsigned timer_prescale) {
         << " target-retired=" << target_owner().run_state().retired_instructions << '\n';
 }
 
-Saved Fixture::checkpoint() const {
-  require(reset && target && reset_sequence().state().phase == Hcs08ResetPhase::ready,
-          "Joint snapshot follows actual completed reset into production target ownership");
-  return {.host = host.checkpoint(),
-          .target = target_owner().checkpoint(),
-          .reset = reset_sequence(),
-          .next_edge = next_edge,
-          .origin = origin,
-          .steps = steps,
-          .received = received};
-}
-
-void Fixture::restore(const Saved &saved) {
-  target.emplace(saved.target, BLOFELD_HCS08_SLA);
-  reset = saved.reset;
-  host.restore(saved.host);
-  next_edge = saved.next_edge;
-  origin = saved.origin;
-  steps = saved.steps;
-  received = saved.received;
-  bind();
-}
-
 std::string Fixture::endpoint() const {
   const auto h = host.cpu().state();
   const auto t = target_owner().cpu_state();

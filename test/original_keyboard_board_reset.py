@@ -30,8 +30,7 @@ def validate_rows(lines):
         raise ValueError('Missing complete production-board reset/SYNC matrix')
     if state.steps != 1086885:
         raise ValueError('Original reset/SYNC host instruction count changed')
-    return dict(cases=state.cases, fresh_joint_suffix_replays=state.replays,
-                native_HC12_steps=state.steps, accepted_application_TIM_cases=2,
+    return dict(cases=state.cases, native_HC12_steps=state.steps, accepted_application_TIM_cases=2,
                 rejected_recovery_TIM_cases=1, actual_target_resets=3,
                 actual_SYNC_responses=6, target_retired=0)
 
@@ -42,7 +41,7 @@ def validate(path):
 
 
 def negative_controls(path):
-    for control in ('reset', 'target', 'returned', 'known', 'counter', 'host', 'replay', 'case'):
+    for control in ('reset', 'target', 'returned', 'known', 'counter', 'host', 'case'):
         changed = [False]
         with path.open() as stream:
             try:
@@ -70,7 +69,7 @@ def negative_controls(path):
                 raise ValueError('Target-knownness collector control not applied') from None
         else:
             raise ValueError('Invented target-knownness accepted:' + key)
-    return 11
+    return 10
 
 
 def main():
