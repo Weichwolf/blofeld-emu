@@ -11,6 +11,7 @@
 #include "mcu/hc12_registers.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_machine.hpp"
+#include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_run_clock.hpp"
 #include "mcu_checkpoint_fixture.hpp"
 #include "support/isa.hpp"
@@ -32,6 +33,41 @@ constexpr unsigned entry = blofeld::test::entry;
 constexpr unsigned horizon = 1000000;
 constexpr unsigned boot_address = 0xff0000;
 constexpr Byte timer_on = 0x80, unmasked = 0xc0, loop_back = 0xfd;
+
+void cold_reset_boundary() {
+  const McuRunContract contract{
+      .clock = {.oscillator_hz = oscillator,
+                .switch_timing = McuRunClockSwitch::reference_cycle_boundary},
+      .memory_timing = McuRunMemory::internal_flash_reads};
+  McuMachine mcu(blofeld::test::checkpoint_image(isa::wai), BLOFELD_DEFAULT_SLA, contract, {3});
+  DspMachine dsp({.extal_hz = oscillator,
+                  .timebase_hz = timebase,
+                  .switch_timing = DspClockSwitch::functional_region_boundary});
+  McuDspRuntime runtime({.reset_dsp_first = true,
+                         .initial_reset = DspResetInputs{.mode_known = 15,
+                                                         .mode_levels = 5,
+                                                         .pinit = false,
+                                                         .recovery_cycles = 2}},
+                        mcu,
+                        dsp);
+  require(runtime.end_ticks() == 0 && mcu.system_reset_active() &&
+              dsp.clock().hardware_reset_active() && dsp.clock().elapsed_ticks() == 0 &&
+              dsp.cpu().state().progress.instructions == 0 && !runtime.faulted(),
+          "Both cores remain in actual reset at time zero without inventing a clock period");
+  mcu.set_reset_period_observer(
+      [&](const McuResetPeriod period) { runtime.begin_reset_period(period, {}); });
+  mcu.set_span_observer([&](McuSpan /*span*/) { runtime.synchronize({}); });
+  constexpr unsigned edges = 128 + 3 + 64;
+  require(mcu.advance_system_reset(edges, McuResetPad::high) == edges,
+          "The real MCU reset sequence reaches its vector boundary");
+  runtime.end_system_reset();
+  constexpr std::uint64_t completed_ticks = ((std::uint64_t{edges} * 5) + 50) * scale;
+  require(!mcu.system_reset_active() && mcu.cpu().state().pc == entry &&
+              dsp.clock().hardware_reset_active() && runtime.end_ticks() == completed_ticks &&
+              dsp.clock().elapsed_ticks() == completed_ticks &&
+              dsp.cpu().state().progress.instructions == 0 && !runtime.faulted(),
+          "Qualified MCU reset edges and vector time advance the held DSP without executing it");
+}
 
 void connected_execution() {
   constexpr auto program = isa::program(isa::opcode<Opcode::ldaa_immediate>(),
@@ -105,6 +141,7 @@ void connected_execution() {
 
 int main() {
   try {
+    cold_reset_boundary();
     connected_execution();
     std::cout << "Connected native MCU/DSP time, I/O effects and WAI passed\n";
   } catch (const std::exception &error) {

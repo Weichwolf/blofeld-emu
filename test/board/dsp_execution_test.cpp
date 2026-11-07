@@ -45,6 +45,11 @@ struct Device {
       DspResetInputs{.mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2}};
 
   explicit Device(const std::span<const dsp56300::Word> program) {
+    const auto held = machine.clock().hardware_reset_state();
+    require(timeline.advance_reset_to(0) == 0 && machine.clock().elapsed_ticks() == 0 &&
+                machine.clock().hardware_reset_state() == held &&
+                machine.cpu().state().progress.instructions == 0,
+            "An empty initial reset horizon preserves actual time, reset state and CPU progress");
     constexpr std::array bootstrap{jump};
     machine.bus().install_rom({.start = boot_address, .words = bootstrap});
     for (unsigned index = 0; index < program.size(); ++index) {
@@ -53,6 +58,10 @@ struct Device {
     require(timeline.advance_reset_to(recovery_ticks) == recovery_ticks,
             "Reset assertion advances actual held EXTAL time");
     timeline.release_hardware_reset();
+    require(timeline.advance_reset_to(recovery_ticks) == 0 &&
+                machine.clock().hardware_reset_active() &&
+                machine.clock().elapsed_ticks() == recovery_ticks,
+            "An empty recovery horizon cannot invent or complete a reset-recovery period");
     require(timeline.advance_reset_to(initial_ticks) == recovery_ticks &&
                 !machine.clock().hardware_reset_active(),
             "Only completed reset recovery releases native execution");

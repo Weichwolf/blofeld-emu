@@ -63,6 +63,7 @@ std::uint64_t DspExecution::advance_reset_to(const std::uint64_t horizon) {
   if (!machine_.clock().hardware_reset_active() || horizon < at) {
     throw Fault("DSP reset advance requires held reset and monotonic device time");
   }
+  if (horizon == at) { return 0; }
   return machine_.clock_.advance_hardware_reset_ticks(horizon - at);
 }
 
