@@ -34,5 +34,4 @@ void step_native(DspMachine &machine);
 // Explicit standalone reference phases with the native CPU held. These do not
 // supply automatic instruction timing or physical ESAI/core synchronization.
 [[nodiscard]] std::optional<DspDmaWord> dma(DspMachine &machine, DspDmaInputs inputs);
-[[nodiscard]] DspDmaBusResult dma(DspMachine &machine, DspDmaInputs inputs, DspCoreBusUse core);
 }

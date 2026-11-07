@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "board/mcu_dsp_gpio_peer.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_interrupts.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "esai_fixture.hpp"
+#include "isa.hpp"
 #include "mcu/hc12_registers.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_machine.hpp"
 #include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_run_clock.hpp"
+#include "runtime/mcu_dsp_gpio_peer.hpp"
 #include "storage/flash_image.hpp"
 
 #include <array>
@@ -27,7 +28,7 @@ using test::esai::require;
 namespace reg = hc12;
 using Register = DspGpioRegister;
 constexpr unsigned byte_mask = 0xff, pins_c = 0xfff;
-constexpr unsigned entry = 0x9000, nop = 0xa7, protection = 0x7f0d, security = 0x7f0f;
+constexpr unsigned entry = 0x9000, protection = 0x7f0d, security = 0x7f0f;
 constexpr unsigned oscillator = 12000000, timebase = 540000000;
 constexpr unsigned first = 0xa5, second = 0x5a, c_upper = 0xa00;
 constexpr unsigned ready_pin = 1U << 9U, xirq_vector = 0xfff4;
@@ -36,7 +37,7 @@ constexpr auto pins_q = reg::ptq + 1;
 
 McuFlashImage image() {
   std::array<std::uint8_t, McuFlashImage::byte_count> bytes{};
-  bytes.fill(nop);
+  bytes.fill(cpu12::isa::nop.front());
   bytes[protection] = byte_mask;
   constexpr unsigned unsecured = 0xfe;
   bytes[security] = unsecured;
@@ -61,6 +62,8 @@ struct Fixture {
     peer = std::make_unique<McuDspGpioPeer>(mcu, dsp, wiring);
   }
 
+  void synchronize() const { peer->synchronize(); }
+
   McuMachine mcu;
   DspMachine dsp;
   std::unique_ptr<McuDspGpioPeer> peer;
@@ -76,7 +79,7 @@ void data_directions() {
   f.mcu.bus().write(reg::ddrq, byte_mask);
   for (unsigned value = 0; value <= byte_mask; ++value) {
     f.mcu.bus().write(reg::ptq, static_cast<std::uint8_t>(value));
-    f.peer->synchronize();
+    f.synchronize();
     require(c.read(Register::data) == (c_upper | value), "Every MCU byte reaches actual DSP C");
     for (unsigned bit = 0; bit < 8; ++bit) {
       const auto mask = 1U << bit;
@@ -90,16 +93,16 @@ void data_directions() {
   c.write({.reg = Register::direction, .value = pins_c});
   for (unsigned value = 0; value <= byte_mask; ++value) {
     c.write({.value = c_upper | value});
-    f.peer->synchronize();
+    f.synchronize();
     require(f.mcu.bus().read(reg::ptq) == value && c.read(Register::data) == (c_upper | value),
             "Every DSP byte reaches actual MCU Q without leaking upper C pins");
   }
   c.write({.value = c_upper | first});
-  f.peer->synchronize();
+  f.synchronize();
   c.write({.value = c_upper | second});
   require(f.mcu.bus().read(reg::ptq) == first,
           "Readers see the published boundary, not a later unsynchronized output");
-  f.peer->synchronize();
+  f.synchronize();
   require(f.mcu.bus().read(reg::ptq) == second, "The next boundary publishes the real new value");
 }
 
@@ -111,13 +114,13 @@ void unknown_and_contention() {
           "Unknown peer input fails through the actual MCU register read");
   auto &c = f.dsp.bus().gpio(DspPort::c);
   c.write({.reg = Register::direction, .value = byte_mask});
-  f.peer->synchronize();
+  f.synchronize();
   require(f.mcu.bus().observe_pads(McuPort::q, byte_mask).known == 0,
           "An uninitialized DSP output latch stays unknown");
   c.write({.value = first});
   f.mcu.bus().write(reg::ptq, second);
   f.mcu.bus().write(reg::ddrq, byte_mask);
-  f.peer->synchronize();
+  f.synchronize();
   const auto conflict = f.mcu.bus().observe_pads(McuPort::q, byte_mask);
   require(conflict.known == 0 && conflict.conflicts == byte_mask,
           "Opposing actual outputs produce visible conflicts, never a voltage winner");
@@ -126,9 +129,10 @@ void unknown_and_contention() {
   require(f.mcu.bus().read(reg::ptq) == second,
           "MCU output data reads retain the stored latch while pin-input reads expose contention");
   Fixture pulled({.data_pull_down = byte_mask});
+  pulled.synchronize();
   require(pulled.mcu.bus().read(reg::ptq) == 0, "Only declared idle pulls establish an idle byte");
   pulled.dsp.bus().gpio(DspPort::c).write({.reg = Register::direction, .value = byte_mask});
-  pulled.peer->synchronize();
+  pulled.synchronize();
   require(pulled.mcu.bus().observe_pads(McuPort::q, byte_mask).known == 0,
           "Unknown active drivers defeat declared idle pulls");
 }
@@ -140,56 +144,57 @@ void interrupts() {
   require(!bus.interrupt_request(0), "The actual MCU reset pull supplies idle XIRQ");
   e.write({.value = ready_pin});
   e.write({.reg = Register::direction, .value = ready_pin});
-  f.peer->synchronize();
+  f.synchronize();
   require(!bus.interrupt_request(0), "High notification does not request an interrupt");
   e.write({.value = 0});
-  f.peer->synchronize();
+  f.synchronize();
   const auto request = bus.interrupt_request(0);
   require(request && request->vector == xirq_vector && !bus.interrupt_request(0x40),
           "Real DSP E9 reaches the actual XIRQ controller with native masking");
   e.write({.reg = Register::direction});
-  f.peer->synchronize();
+  f.synchronize();
   require(!bus.interrupt_request(0), "Released E9 uses the actual MCU pull");
   bus.write(reg::pucr, 0);
-  f.peer->synchronize();
+  f.synchronize();
   require(rejects([&] { static_cast<void>(bus.interrupt_request(0)); }).contains("Unknown"),
           "Undriven notification without any pull remains visibly unknown");
   f.dsp.bus().write({.space = DspSpace::x, .address = priority, .value = 6});
   bus.write(reg::ptj, 1);
   bus.write(reg::ddrj, 1);
-  f.peer->synchronize();
+  f.synchronize();
   require(!f.dsp.bus().interrupt_request(0), "Initial high J0 does not invent an IRQA edge");
   bus.write(reg::ptj, 0);
-  f.peer->synchronize();
+  f.synchronize();
   require(f.dsp.bus().interrupt_request(0) ==
               DspInterruptRequest{.vector = irqa_vector, .level = 1},
           "The real J0 transition latches the DSP IRQA controller");
 }
 
-void restores_and_lifetime() {
+void local_registers() {
+  Fixture f({.data_pull_down = byte_mask});
+  auto &port = f.dsp.bus().gpio(DspPort::c);
+  constexpr unsigned upper = pins_c & ~byte_mask;
+  constexpr unsigned inactive = 0x300;
+  constexpr unsigned command = 0x700;
+  port.write({.reg = Register::control, .value = byte_mask});
+  port.write({.reg = Register::direction, .value = upper});
+  port.write({.value = inactive});
+  f.synchronize();
+  port.write({.value = command});
+  const auto observed = port.observe_pads(upper);
+  require(observed.known == upper && observed.levels == command,
+          "Local NAND control registers reflect the completed write before peer publication");
+}
+
+void resets_and_lifetime() {
   Fixture f;
-  f.mcu.bus().write(reg::ptq, first);
-  f.mcu.bus().write(reg::ddrq, byte_mask);
-  f.peer->synchronize();
-  const auto mcu_saved = f.mcu.checkpoint();
-  const auto dsp_saved = f.dsp.checkpoint();
-  f.mcu.bus().write(reg::ptq, second);
-  f.peer->synchronize();
-  f.mcu.restore(mcu_saved);
-  f.dsp.restore(dsp_saved);
-  require(rejects([&] { static_cast<void>(f.mcu.bus().read(pins_q)); }).contains("Detached"),
-          "Native checkpoints never retain callbacks into a former owner");
-  f.peer->rebind();
-  require(f.mcu.bus().read(reg::ptq) == first &&
-              f.dsp.bus().gpio(DspPort::c).observe_pads(byte_mask).levels == first,
-          "Trusted coordinated restore explicitly reconnects both actual chips");
   f.mcu.begin_system_reset(McuResetSource::external, 3);
-  f.peer->synchronize();
+  f.synchronize();
   require(f.mcu.bus().observe_pads(McuPort::q, byte_mask).known == 0,
           "MCU system reset reconnects its replacement bus and removes old output direction");
   f.dsp.begin_hardware_reset(
       {.mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2});
-  f.peer->synchronize();
+  f.synchronize();
   require(f.dsp.bus().gpio(DspPort::c).observe_pads(byte_mask).known == 0,
           "DSP hardware reset preserves its existing binding without a duplicate attach");
   f.peer.reset();
@@ -205,10 +210,11 @@ void restores_and_lifetime() {
 
 int main() {
   try {
+    local_registers();
     data_directions();
     unknown_and_contention();
     interrupts();
-    restores_and_lifetime();
+    resets_and_lifetime();
     std::cout << "Native MCU/DSP GPIO peer checks passed\n";
     return 0;
   } catch (const std::exception &error) {

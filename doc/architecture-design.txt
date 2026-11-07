@@ -1,134 +1,64 @@
-Blofeld runtime design
+Blofeld firmware runtime
 
-This is the implementation target, not a claim about current functionality or
-performance. Original firmware and DSP synthesis remain the instrument.
+The implementation target is a minimal firmware execution and I/O layer.
+Instrument behavior, original synthesis and musical time define correctness.
 
-                         emu()
-                           |
-          memory -> persistent images -> peripherals -> cores
-                           |
-             +-------------+-------------+
-             |                           |
-       MCU worker                    DSP worker
-       cpu12::Core                   dsp56300::Core
-       mcu.run(stop)                 dsp.run(stop)
-       JIT -> JIT -> ...             JIT -> JIT -> ...
-       MCU RAM / flash               P / X / Y RAM
-       local MMIO / timers           local MMIO / audio / NAND RAM
-             |                           |
-             +--- MCU-to-DSP FIFO ------->+
-             +<-- DSP-to-MCU FIFO -------+
-             |    timestamped events     |
-             |    IRQ / reset notices    +---- PCM ring ---- audio consumer
-             |                           |
-             +------ dirty storage ------+---- storage worker ---- images
-
-       Host event loop: MIDI, optional UI, commands and shutdown
-       Host input -> bounded input queue -> MCU worker
-
-Application modes and profiles
-
-No arguments select the default local profile and start the live instrument.
-A profile names local firmware, persistent memory/sample images and unit
-identity. Profile selection changes assets, not the execution architecture.
-The instrument CLI exposes no wiring, chip-clock or instruction-budget controls.
-
-A Standard MIDI File plus WAV destination selects offline rendering. Merge tracks
-and tempo changes onto the audio timeline before dispatch; a fast render keeps
-identical musical spacing. Render completion follows the requested musical range
-and release/effect tail. Stream output to disk without a fixed capture-frame
-ceiling. Live output uses the same execution and MIDI timing path, paced by
-actual audio consumption. Both cores always execute at maximum performance;
-only due events, stop and consumer backpressure bound runahead.
-
-Progress reporting belongs to the host event loop. Offline completion prints
-actual audio duration, monotonic elapsed time and throughput, with startup and
-transport failures separate. Live mode refreshes one status line at a bounded
-rate using frame counts, queue fill and measured latency; redirected output is
-plain text. No instruction-by-instruction telemetry or core-state copying is
-required for these measurements. Unknown quantities remain unknown.
+  local firmware / persistent images
+                   |
+           stable memory mappings
+                   |
+        +----------+----------+
+        |                     |
+    cpu12::Core          dsp56300::Core
+    native MCU code      native DSP code
+    direct RAM/flash     direct P/X/Y RAM
+        |                     |
+        +--- shared I/O ------+
+        |    data, IRQ, reset  |
+        |                     +--- completed PCM words ---> audio consumer
+        +--- USB endpoints <------ USB-MIDI host transport
+        +--- LCD RAM ------------> independent display consumer
+        +--- persistent writes --> selected memory images
 
 Execution
 
-Initialization loads local images once, creates stable memory views and device
-state, then starts each core's long-lived run loop. The DSP starts in its real
-reset/bootstrap state; original MCU activity releases and loads it. Shutdown
-requests stop at safe execution boundaries, joins workers and closes storage.
+Initialize memory, persistent storage and register state, construct both cores,
+then execute native code at maximum throughput. A shared device timeline orders
+actual I/O effects, interrupt deadlines and audio transfers. Preserve elapsed
+musical time regardless of host processing speed. Core execution returns only
+for required events, I/O, backpressure, shutdown or a contextual failure.
+Ordinary guest arithmetic and memory do not invoke the instrument layer.
 
-Each worker owns its core, JIT cache, ordinary RAM and peripheral state. RAM
-accesses use direct native loads/stores. Selected MMIO accesses run the required
-local side effects. Unknown accesses remain explicit faults with PC/context.
-Do not replace firmware routines, synthesize host audio or fabricate replies.
+The runtime does not replay physical address/data lines, electrical bus slots,
+voltage networks, NAND setup/hold windows or external MIDI serial bits. Firmware
+bit-banged register accesses still require decoding into their actual commands
+and data. Those effects are implemented at register transactions and operation
+completions, without continuously resampling connections between accesses.
+MCU/DSP communication keeps actual data, readiness and interrupts; replies are
+produced by the original firmware. Unknown accesses fail with PC and address.
 
-Translations follow natural control-flow boundaries, without a fixed 64/256
-instruction cap. Generated blocks chain directly where execution state permits.
-Assume original Blofeld code remains immutable during normal instrument operation;
-this is a working assumption, not a hardware-verified fact. The emulator owns
-firmware loading and updates; it supplies new memory and resets/recreates cores
-and their translation caches. Core libraries have no firmware-update protocol.
-Do not continuously check for self-modification in the normal instrument path.
-Exit generated execution for
-pending interrupts, actual I/O effects, due device events, stop or backpressure;
-do not return through board-control code for every instruction or clock edge.
+Audio and transport
 
-Communication and time
+Read completed original DSP output words directly, retaining DMA positions,
+flags, frame order and sample timing. USB uses original control requests,
+endpoint FIFOs and interrupts. Host MIDI never passes through an external UART.
+The live audio consumer paces output through bounded queues. Callbacks cannot
+allocate, lock, throw or access files. Host APIs and capability grants remain
+outside the cores and firmware I/O handlers.
 
-Cross-core transport uses bounded single-producer/single-consumer queues and
-explicit atomic notification. A receiver handles its own interrupts and state;
-another thread never modifies its architectural registers. Device registers with
-read/pop/acknowledgement behavior retain those effects rather than becoming
-unconditionally successful plain memory.
+Offline rendering uses the same firmware path and timeline, draining audio as
+fast as possible while preserving SMF event times and release/effect tails.
+Measure throughput as valid delivered stereo frames / (44100 * host seconds).
+Separate startup, active processing, pacing, underruns and transport latency.
+A core benchmark or a boot screen does not establish a playable instrument.
 
-Core clocks use one virtual device timeline with bounded lookahead. Grants and
-communication boundaries must prevent delivery from the future and late IRQ
-service caused by blindly completing a larger grant. Synchronize at relevant
-device effects/deadlines, not every electrical edge. Derive idle time and timer
-progress in spans. The time-grant protocol is an explicit implementation task;
-independent host threads alone do not establish correct virtual ordering.
+Storage and reset
 
-Live audio consumption bounds runahead; offline consumers may drain faster than
-real time. Host capabilities do not change device clocks. Audio callbacks only
-consume bounded PCM, with no core execution, allocation, file I/O or mutex wait.
+Memory images retain identity, programs and samples across instances. Genuine
+writes and erases update the selected image; reload preserves incomplete-operation
+state after interruption. Firmware updates recreate affected core/memory owners
+and JIT translations. No firmware patch, skipped routine, fabricated success
+response or replacement synthesis path is permitted.
 
-Audio ownership
-
-Read sample words from the DSP output memory as the actual transmitter consumes
-its DMA-fed latch. Preserve repeated hardware underrun data, lane ownership,
-slot order and DMA/IRQ status. Assemble complete timestamped frames without
-serializing or decoding their bits. A frame may enter the bounded consumer queue
-before its presentation interval ends; live consumption retains device time.
-Quiet clock intervals advance arithmetically to the next visible device event.
-Bit decoding is an independent test reference, not a production output stage.
-
-Storage and observation
-
-NAND/sample reads use RAM. A storage owner persists changed pages/sectors and
-reports completion before the firmware observes durable completion. Device
-identity/MCU NVM and selectable NAND images remain distinct local resources.
-Manufacturer firmware, populated images and samples are never published.
-
-Publish display snapshots on changes. Enable diagnostics explicitly; disabled
-diagnostics perform no instruction-by-instruction copying or logging. Keep run
-artifacts outside doc/. No activity diary is maintained in the repository.
-
-Implementation gate
-
-Prioritize connected instrument execution. Core benchmark percentages do not
-block integration; fix and optimize the responsible core for measured defects
-or instrument bottlenecks. Scalar and SIMD execution are options, not mandates.
-Compile, format and statically analyze without weakening checks. Keep affected
-core correctness and sanitizer tests active. Until real time, suspend long
-firmware runs. Short optimized startup/throughput probes stop and fail unless
-playable within 10 host seconds; do not extend or automatically repeat a failed
-probe.
-
-Established references
-
-QEMU multi-threaded execution and CPU-local ownership:
-https://www.qemu.org/docs/master/devel/multi-thread-tcg.html
-QEMU translated-block chaining and invalidation:
-https://www.qemu.org/docs/master/devel/tcg.html
-Linux single-producer/single-consumer circular buffers and ordering:
-https://docs.kernel.org/core-api/circular-buffers.html
-
-These are design references. Their implementations are not copied.
+Keep telemetry runtime-selectable and disabled by default. Formatting, file I/O
+and status observation stay outside native arithmetic and the audio callback.

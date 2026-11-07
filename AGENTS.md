@@ -8,7 +8,7 @@
   physical disassembly; preserve firmware quirks. No firmware patches, skipped
   routines, invented success responses or replacement host synthesizer.
 - Use our independent cpu12 and dsp56300 cores; fix generic core defects there.
-  Separate board model, core execution, transport and audio. Unknown accesses
+  Keep firmware I/O, core execution, transport and audio separate. Unknown accesses
   fail with address, operation, PC and context. Run as a regular user.
 - Prioritize the connected instrument. Fix and optimize the responsible core for
   generic defects or measured instrument bottlenecks; core benchmark percentages
@@ -18,8 +18,8 @@
   external DIN/virtual MIDI ports, UART-bit path or serial-PCM decoding for output.
 - Query audio/MIDI capabilities separately and read actual grants; keep bounded
   queues, visible overload/disconnect errors and unchanged virtual clocks. Audio
-  callbacks must not allocate, throw, lock or access files. Native SLEIGH requires
-  exceptions outside that callback. Hardware flashing needs established recovery.
+  callbacks must not allocate, throw, lock or access files. Hardware flashing needs
+  established recovery.
 - Keep the canonical checkout on main. Publish only to configured upstream/main.
   All issue communication belongs in private Weichwolf/blofeld-src; no emulator
   issues or routine status spam. Gearmulator is read-only reference; copy no code.
@@ -47,8 +47,10 @@
   Core tests are not subject to the instrument's real-time milestone restriction.
   Avoid duplicate or full-suite runs after small changes; report gaps and scope.
 - Until the instrument reaches real time, suspend long Blofeld firmware runs.
-  Startup/throughput probes stop after at most 10 host seconds and fail unless
-  playable; never extend or automatically repeat a failed probe. Keep compilation,
+  Startup probes stop after 30 host seconds and fail unless playable. Audio
+  acceptance requires MIDI-triggered sound and at least ten seconds of output
+  at >=44100 stereo frames per host second; fail immediately on runtime faults.
+  Never extend or automatically repeat a failed probe without a concrete fix. Keep compilation,
   formatting and static analysis active.
 - README describes current supported behavior, setup and use. Keep progress,
   measurements and coordination in commit messages, not README.

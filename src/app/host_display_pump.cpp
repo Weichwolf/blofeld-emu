@@ -1,28 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/host_display_pump.hpp"
 
-#include "board/reference_board.hpp"
 #include "common/bus.hpp"
 #include "display/lcd_image.hpp"
+#include "runtime/instrument.hpp"
 
 #include <chrono>
 #include <filesystem>
 
-namespace blofeld::reference {
+namespace blofeld::runtime {
 namespace {
 constexpr auto frame_interval = std::chrono::milliseconds{20};
 }
 
 HostDisplayPump::HostDisplayPump(const std::filesystem::path &directory) : publisher_(directory) {}
 
-void HostDisplayPump::poll(const Board &board) {
+void HostDisplayPump::poll(const Instrument &board) {
   const auto now = std::chrono::steady_clock::now();
   if (now < next_) { return; }
   next_ = now + frame_interval;
   capture(board);
 }
 
-void HostDisplayPump::capture(const Board &board) {
+void HostDisplayPump::capture(const Instrument &board) {
   constexpr LcdPanel panel{.width = 128, .reverse_commons = true};
   const auto image = board.display_image(panel);
   if (!image) { throw Fault("Host display publication requires an attached LCD"); }

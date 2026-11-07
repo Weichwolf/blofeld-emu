@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "board/gpio_pads.hpp"
 #include "dsp/dsp_dax.hpp"
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_esai.hpp"
@@ -10,6 +9,7 @@
 #include "dsp/dsp_pll.hpp"
 #include "dsp/dsp_shi.hpp"
 #include "dsp/dsp_timers.hpp"
+#include "runtime/gpio_pads.hpp"
 
 #include <array>
 #include <cstddef>
@@ -42,48 +42,7 @@ struct DspStore {
   std::uint32_t value = 0;
 };
 
-enum class DspMemoryOperation : std::uint8_t { read, write };
 enum class DspWriteContract : std::uint8_t { strict, internal_writable_storage, functional_decode };
-enum class DspMemoryPhase : std::uint8_t { execute, peripheral_sample, peripheral_bit };
-enum class DspMemoryConflict : std::uint8_t { independent, protected_partition, unqualified };
-enum class DspCoreBusKnowledge : std::uint8_t { unqualified, reference_cycle_occupancy };
-
-struct DspMemoryAccess {
-  DspAddress target{};
-  DspMemoryOperation operation = DspMemoryOperation::read;
-  DspMemoryPhase phase = DspMemoryPhase::execute;
-};
-
-struct DspMemoryPair {
-  DspMemoryAccess core{};
-  DspMemoryAccess dma{};
-};
-
-// Physical storage identity resolved by the strict map, including OMR aliases.
-// block_words=0 means same-bank contention geometry is not qualified.
-struct DspMemoryResource {
-  DspSpace bank = DspSpace::p;
-  bool rom = false;
-  std::uint32_t word = 0;
-  unsigned block_words = 0;
-  // An explicitly unselected access has no storage resource.
-  bool selected = true;
-  bool operator==(const DspMemoryResource &) const = default;
-};
-
-struct DspCoreBusUse {
-  std::span<const DspMemoryAccess> accesses;
-  DspCoreBusKnowledge knowledge = DspCoreBusKnowledge::unqualified;
-  // Functional instruction reservation: drain an already sampled DMA word,
-  // then defer new DMA reads until the instruction retires (or reset discards it).
-  bool indivisible_instruction = false;
-};
-
-struct DspDmaBusResult {
-  std::optional<DspDmaWord> word = std::nullopt;
-  std::optional<DspDmaPhase> phase = std::nullopt;
-  bool core_stall = false;
-};
 
 enum class DspBitOperation : std::uint8_t { test, clear, set, change };
 
@@ -92,24 +51,6 @@ struct DspBitAccess {
   std::uint32_t address = 0;
   unsigned bit = 0;
   DspBitOperation operation = DspBitOperation::test;
-};
-
-// Private genuine bus-read payload;only native-owned RMW stages can consume it.
-class DspPeripheralBitSample {
-public:
-  DspPeripheralBitSample(const DspPeripheralBitSample &) = default;
-  DspPeripheralBitSample &operator=(const DspPeripheralBitSample &) = default;
-
-private:
-  friend class DspBus;
-  DspPeripheralBitSample() = default;
-  DspBitAccess access_;
-  std::uint32_t source_ = 0;
-  std::uint32_t memory_mode_ = 0;
-  std::uint32_t bus_control_ = 0;
-  std::optional<DspPort> port_;
-  DspGpioRegister reg_ = DspGpioRegister::data;
-  bool old_ = false;
 };
 
 struct DspRom {
@@ -159,9 +100,6 @@ public:
 
   [[nodiscard]] std::optional<bool> access_peripheral_bit(DspBitAccess access);
   [[nodiscard]] static bool handles_peripheral_bit(DspAddress access);
-  [[nodiscard]] DspMemoryResource memory_resource(DspMemoryAccess access) const;
-  [[nodiscard]] bool stable_program_context(std::uint32_t address, std::uint32_t omr) const;
-  [[nodiscard]] DspMemoryConflict memory_conflict(DspMemoryPair pair) const;
   // Actual P-memory sampling preserves absent data; map/resource checks stay strict.
   [[nodiscard]] std::optional<std::uint32_t> sample_program(std::uint32_t address) const;
   // Decoder lookahead may substitute an unknown word; never use it to admit execution.
@@ -212,6 +150,8 @@ public:
 
   [[nodiscard]] const DspPll &pll() const { return pll_; }
 
+  [[nodiscard]] std::uint64_t io_revision() const noexcept { return io_revision_; }
+
   [[nodiscard]] DspGpio &gpio(DspPort port);
 
   [[nodiscard]] DspTimers &timers() { return timers_; }
@@ -229,17 +169,13 @@ public:
   [[nodiscard]] DspEsaiClockOutputs esai_clock_outputs(DspEsaiInstance instance) const;
   // Explicit standalone reference phases; automatic native DMA bus timing rejects.
   [[nodiscard]] std::optional<DspDmaWord> advance_dma(DspDmaInputs inputs);
-  [[nodiscard]] DspDmaBusResult advance_dma(DspDmaInputs inputs, DspCoreBusUse core);
   void observe_dax(DspDaxInputs inputs);
-  [[nodiscard]] DspDaxOutput dax_output() const;
+  void advance_dax_aci(std::uint64_t transitions, DspDaxRates rates);
+  [[nodiscard]] std::optional<std::uint64_t> dax_aci_edges_until_event() const;
 
   [[nodiscard]] std::optional<std::uint32_t> once_latch() const { return once_latch_; }
 
 private:
-  friend class DspReferenceTape;
-  [[nodiscard]] DspPeripheralBitSample capture_peripheral_bit(DspBitAccess access);
-  [[nodiscard]] bool commit_peripheral_bit(const DspPeripheralBitSample &sample);
-  friend class DspFetchRun;
   friend class DspRunClock;
   friend class DspMachine;
   void advance_reference_cycle_delays(std::uint64_t admitted_dma_cycle, bool switch_was_pending);
@@ -283,8 +219,6 @@ private:
   [[nodiscard]] DspEsai &sync_esai(DspEsaiInstance instance);
   void sync_esai_port(DspPort changed);
   void sync_dax();
-  [[nodiscard]] std::optional<DspDmaWord>
-  advance_dma_with_admission(DspDmaInputs inputs, const DspDmaAdmission &admission);
   std::array<Memory, 3> ram_;
   std::array<Memory, 3> rom_;
   DspShi shi_;
@@ -298,8 +232,10 @@ private:
   std::array<DspGpio, 4> gpio_{
       DspGpio(DspPort::c), DspGpio(DspPort::e), DspGpio(DspPort::f), DspGpio(DspPort::d)};
   std::uint32_t bus_control_ = 0;
+  void note_io_change();
   void note_program_change();
   DspCodeChanges changes_;
+  std::uint64_t io_revision_ = 0;
   std::uint64_t program_revision_ = 0;
   unsigned memory_mode_ = 0;
   unsigned requested_memory_mode_ = 0;

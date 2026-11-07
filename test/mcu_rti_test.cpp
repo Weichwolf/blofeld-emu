@@ -156,7 +156,7 @@ void test_bus_domain_separation_and_relocation() {
           "Relocated W1C acknowledges without resetting the period");
   bus.reset();
   require(bus.read(control) == 0 && bus.oscillator_cycles_until_rti() == 0,
-          "Board reset disables RTI and restores its register location");
+          "Instrument reset disables RTI and restores its register location");
 }
 
 void test_timeout_through_real_cpu_isr() {

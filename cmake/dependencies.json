@@ -12,37 +12,6 @@
     "sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
     "license": "Zlib"
   },
-  "ghidra": {
-    "version": "12.1.2",
-    "source": "https://github.com/NationalSecurityAgency/ghidra",
-    "files": [
-      {
-        "file": "Ghidra/Processors/HCS12/data/languages/HC12.sla",
-        "sha256": "1a8a8d4c36dc7fd4dee64ba5bf2d26dbf2bc50b9e5db2e134727d89d848cd14a"
-      },
-      {
-        "file": "Ghidra/Processors/HCS12/data/languages/HCS_HC12.sinc",
-        "sha256": "7904b9b892232890287e0052198d6fab8167409654207484e407cef49919d276"
-      },
-      {
-        "file": "Ghidra/Features/Decompiler/src/decompile/cpp/emulate.cc",
-        "sha256": "626a556e976077f6bd3baf1bf960328e5af071aa01a894518a9cfd63f6132d0f"
-      },
-      {
-        "file": "Ghidra/Features/Decompiler/src/decompile/cpp/memstate.cc",
-        "sha256": "ef68ee18511cac1bec55a602c64e43f57bc4755ca00e8204f411434d51d27f92"
-      },
-      {
-        "file": "Ghidra/Processors/HCS08/data/languages/HCS08.slaspec",
-        "sha256": "4f6baf078d8d6ca7ed38f1321c7d6394af7757d42a84b636f16b5d0b5708bb10"
-      },
-      {
-        "file": "Ghidra/Processors/HCS08/data/languages/HCS_HC.sinc",
-        "sha256": "00f64687772e608c2e74f003227aa3af6a163e3e8e8c3fe98380131f7155b477"
-      }
-    ],
-    "hcs08_patch": "patches/ghidra-hcs08-arithmetic.patch"
-  },
   "dsp56300_assembly_tool": {
     "source": "https://github.com/xemu-project/dsp56300",
     "version": "1.0.0",

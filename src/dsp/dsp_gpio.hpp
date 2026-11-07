@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "board/gpio_pads.hpp"
+#include "runtime/gpio_pads.hpp"
 
 #include <cstdint>
 #include <string>

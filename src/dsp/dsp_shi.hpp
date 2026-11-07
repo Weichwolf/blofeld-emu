@@ -38,7 +38,7 @@ class DspShi {
 public:
   DspShi();
   void reset();
-  // Board-selected interpretation; retained through reset, copied with chip state.
+  // Instrument-selected interpretation; retained through reset, copied with chip state.
   void set_reset_contract(ShiResetContract contract);
   [[nodiscard]] std::uint32_t read(std::uint32_t address);
   void write(DspWordWrite access);

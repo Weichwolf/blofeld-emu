@@ -3,8 +3,8 @@
 #include "dsp/dsp_dax.hpp"
 #include "dsp/dsp_dax_registers.hpp"
 
+#include <algorithm>
 #include <array>
-#include <bit>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -54,52 +54,73 @@ void DspDax::begin_frame() {
     control_ &= ~dax::start_block;
   }
   if (block_frame_ + 1 == dax::frames_per_block) { status_ |= dax::last_block_frame; }
-  frame_non_audio_ = *non_audio_;
 }
 
 void DspDax::begin_subframe() {
   const unsigned channel = position_ == 0 ? 0U : 1U;
   if (channel == 0) { begin_frame(); }
-  std::uint32_t audio = 0;
   if (repeating_) {
     const auto retained = last_words_.at(channel);
     if (!retained) { throw Fault("Unknown retained DAX channel"); }
-    audio = *retained;
   } else {
     const auto word = buffers_.at(channel);
     if (!word) { throw Fault("Unknown DAX channel at upload X:0xffffd2"); }
-    audio = *word;
     buffers_.at(channel).reset();
-    last_words_.at(channel) = audio;
+    last_words_.at(channel) = word;
     promote();
   }
   if (channel == 0 && !buffers_[0] && !pending_) { status_ |= dax::empty; }
-  constexpr unsigned first_non_audio = 10;
-  const auto flags = (frame_non_audio_ >> (first_non_audio + channel * 3)) & 7U;
-  payload_ = audio | (flags << dax::audio_bits);
-  payload_ |= (static_cast<unsigned>(std::popcount(payload_)) & 1U) << dax::payload_bits;
-  preamble_ = block_frame_ == 0 ? dax::preamble_z : dax::preamble_x;
-  if (channel == 1) { preamble_ = dax::preamble_y; }
 }
 
-void DspDax::emit() {
-  if (half_bits_ == std::numeric_limits<std::uint64_t>::max()) {
-    throw Fault("DAX biphase observation counter exhausted");
+void DspDax::advance_units(std::uint64_t units) {
+  while (units != 0) {
+    if (position_ % dax::subframe_units == 0) { begin_subframe(); }
+    const auto span =
+        std::min<std::uint64_t>(units, dax::subframe_units - (position_ % dax::subframe_units));
+    position_ += static_cast<unsigned>(span);
+    units -= span;
+    if (position_ == dax::frame_units) {
+      position_ = 0;
+      ++block_frame_;
+    }
   }
+}
+
+std::optional<std::uint64_t> DspDax::aci_edges_until_event() const {
+  if (!active_ || !external_clock()) { return std::nullopt; }
+  require_clock(observed_);
+  if (!observed_.aci) { throw Fault("DAX ACI event lacks its current clock state"); }
   const auto offset = position_ % dax::subframe_units;
-  if (offset == 0) { begin_subframe(); }
-  if (offset < dax::preamble_units) {
-    level_ = ((preamble_ >> (dax::preamble_units - 1 - offset)) & 1U) != 0;
-  } else {
-    const auto data = offset - dax::preamble_units;
-    if ((data & 1U) == 0 || (payload_ & (1U << (data / 2))) != 0) { level_ = !level_; }
+  const auto units = offset == 0 ? 1U : dax::subframe_units - offset + 1U;
+  const auto rises = (units * divider()) - phase_;
+  return (std::uint64_t{rises} * 2U) - (*observed_.aci ? 0U : 1U);
+}
+
+void DspDax::advance_aci(const std::uint64_t transitions, const DspDaxRates rates) {
+  if (!observed_.aci || transitions == 0 || (active_ && !external_clock())) {
+    throw Fault("DAX span requires its external clock baseline and positive transitions");
   }
-  ++half_bits_;
-  ++position_;
-  if (position_ == dax::frame_units) {
-    position_ = 0;
-    ++block_frame_;
+  auto input = observed_;
+  input.aci = *observed_.aci != ((transitions & 1U) != 0);
+  input.rates = rates;
+  if (!active_) {
+    observe(input);
+    return;
   }
+  require_clock(input);
+  if (rates_frozen_ && input.rates != observed_.rates) {
+    throw Fault("DAX clock rates changed while enabled");
+  }
+  const auto rises = (transitions / 2U) + (!*observed_.aci && (transitions & 1U) != 0 ? 1U : 0U);
+  if (rises > std::numeric_limits<std::uint64_t>::max() - phase_) {
+    throw Fault("DAX span exceeds its clock range");
+  }
+  const auto units = rises + phase_;
+  advance_units(units / divider());
+  phase_ = static_cast<unsigned>(units % divider());
+  observed_ = input;
+  previous_ = input.aci;
+  rates_frozen_ = true;
 }
 
 void DspDax::observe_checked(const DspDaxInputs inputs) {
@@ -126,7 +147,7 @@ void DspDax::observe_checked(const DspDaxInputs inputs) {
   ++phase_;
   if (phase_ != divider()) { return; }
   phase_ = 0;
-  emit();
+  advance_units(1);
 }
 
 void DspDax::observe(const DspDaxInputs inputs) {

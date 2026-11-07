@@ -13,7 +13,7 @@ target_compile_options(blofeld_quality INTERFACE
   -Wimplicit-fallthrough -Wnon-virtual-dtor -Wold-style-cast
   -Woverloaded-virtual -Wextra-semi -Wvla -Wswitch-enum -Wswitch-default
   -ffp-contract=off -fno-omit-frame-pointer)
-# SLEIGH's error interface requires exceptions. They must not cross a future audio callback.
+# Contextual control-path exceptions must never cross the audio callback.
 target_link_options(blofeld_quality INTERFACE
   -Wl,--fatal-warnings -Wl,-z,defs)
 

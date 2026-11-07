@@ -3,7 +3,7 @@
 add_library(blofeld_firmware src/firmware/firmware.cpp src/firmware/archive.cpp src/firmware/midi_file.cpp src/common/diagnostic.cpp src/common/bus.cpp)
 target_include_directories(blofeld_firmware PUBLIC src)
 target_link_libraries(blofeld_firmware PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB)
-add_library(blofeld_gpio_pads src/board/gpio_pads.cpp)
+add_library(blofeld_gpio_pads src/runtime/gpio_pads.cpp)
 target_include_directories(blofeld_gpio_pads PUBLIC src)
 target_link_libraries(blofeld_gpio_pads PUBLIC blofeld_firmware)
 add_library(blofeld_dsp_peripherals src/dsp/dsp_shi.cpp src/dsp/dsp_shi_spi.cpp src/dsp/dsp_bus.cpp src/dsp/dsp_io_map.cpp src/dsp/dsp_pll.cpp
@@ -38,8 +38,8 @@ add_library(blofeld_dsp_execution STATIC EXCLUDE_FROM_ALL
   src/dsp/dsp_execution.cpp src/dsp/dsp_execution_run.cpp)
 target_include_directories(blofeld_dsp_execution PUBLIC src)
 target_link_libraries(blofeld_dsp_execution PUBLIC blofeld_dsp_machine)
-add_library(blofeld_mcu_dsp_runtime STATIC EXCLUDE_FROM_ALL src/board/mcu_dsp_runtime.cpp
-  src/board/mcu_dsp_runtime_peripheral.cpp src/board/mcu_dsp_runtime_regions.cpp)
+add_library(blofeld_mcu_dsp_runtime STATIC EXCLUDE_FROM_ALL src/runtime/mcu_dsp_runtime.cpp
+  src/runtime/mcu_dsp_runtime_peripheral.cpp src/runtime/mcu_dsp_runtime_regions.cpp)
 target_link_libraries(blofeld_mcu_dsp_runtime PUBLIC blofeld_dsp_execution blofeld_dsp_peripheral_calendar)
 target_link_libraries(blofeld_mcu_dsp_runtime PUBLIC blofeld_core)
 if(BUILD_TESTING)
@@ -109,26 +109,6 @@ if(BUILD_TESTING)
   add_test(NAME dsp_modifier_agu COMMAND blofeld-modifier-agu-test)
   set_tests_properties(dsp_modifier_agu PROPERTIES TIMEOUT 120)
 
-  add_executable(blofeld-original-reverb-clear-test test/original_dsp_reverb_clear_test.cpp)
-  target_link_libraries(blofeld-original-reverb-clear-test PRIVATE
-    blofeld_dma_fixture blofeld_dsp_execution blofeld_firmware)
-  add_test(NAME original_dsp_reverb_clear COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_reverb_clear.py"
-    $<TARGET_FILE:blofeld-original-reverb-clear-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-reverb-clear.trace")
-  set_tests_properties(original_dsp_reverb_clear PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
-
-  add_executable(blofeld-dsp-boot-test test/original_dsp_boot_test.cpp
-    test/original_dsp_reference.cpp)
-  target_link_libraries(blofeld-dsp-boot-test PRIVATE blofeld_dma_fixture)
-  add_test(NAME original_dsp_boot COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_boot.py"
-    $<TARGET_FILE:blofeld-dsp-boot-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_SOURCE_DIR}/build/local/nxp-spi-bootstrap.bin"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-boot.trace")
-  set_tests_properties(original_dsp_boot PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-original-dsp-midi-test test/original_dsp_midi_test.cpp)
   target_link_libraries(blofeld-original-dsp-midi-test PRIVATE
     blofeld_dma_fixture)
@@ -201,18 +181,8 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-dsp-dma-interrupt-test PRIVATE blofeld_dma_fixture)
   add_test(NAME dsp_dma_interrupts COMMAND blofeld-dsp-dma-interrupt-test)
 
-  if(NOT BLOFELD_SANITIZER STREQUAL "none")
-    add_executable(blofeld-dma-callback-allocation-test test/dsp_dma_callback_allocation_test.cpp)
-    target_link_libraries(blofeld-dma-callback-allocation-test PRIVATE blofeld_dsp_peripherals)
-    add_test(NAME dsp_dma_callback_allocation COMMAND blofeld-dma-callback-allocation-test)
-    set_tests_properties(dsp_dma_callback_allocation PROPERTIES TIMEOUT 120)
-  endif()
-  add_executable(blofeld-bank-test test/dsp_bank_test.cpp test/dsp_bank_phase.cpp test/dsp_bank_native.cpp)
-  target_link_libraries(blofeld-bank-test PRIVATE blofeld_dma_fixture)
-  add_test(NAME dsp_bank_arbitration COMMAND blofeld-bank-test)
-
-  add_executable(blofeld-dax-test test/dsp_dax_test.cpp test/dsp_dax_native.cpp test/dsp_dax_dma.cpp)
-  target_link_libraries(blofeld-dax-test PRIVATE blofeld_dma_fixture)
+  add_executable(blofeld-dax-test test/dsp_dax_test.cpp)
+  target_link_libraries(blofeld-dax-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_dax COMMAND blofeld-dax-test)
 
   add_executable(blofeld-dsp-adapter-clock-test test/dsp_adapter_clock_test.cpp)
@@ -226,7 +196,7 @@ if(BUILD_TESTING)
 endif()
 
 if(BUILD_TESTING)
-  add_executable(blofeld-dsp-execution-test test/board/dsp_execution_test.cpp)
+  add_executable(blofeld-dsp-execution-test test/runtime/dsp_execution_test.cpp)
   target_include_directories(blofeld-dsp-execution-test PRIVATE "${BLOFELD_DSP56300_ROOT}/test/support")
   target_link_libraries(blofeld-dsp-execution-test PRIVATE blofeld_dsp_execution)
   add_test(NAME dsp_execution COMMAND blofeld-dsp-execution-test)

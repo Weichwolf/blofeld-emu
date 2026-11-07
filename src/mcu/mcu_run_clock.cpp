@@ -90,16 +90,9 @@ unsigned McuRunClock::advance(McuBus &bus,
     auto cycles = maximum_cycles;
     const auto event = cycles_until_event(bus, waiting);
     if (event && *event < cycles) { cycles = static_cast<unsigned>(*event); }
-    // Two real edges settle the existing PIM input history. No peripheral or
-    // physical input may change in the quiet interior before the final edge.
-    constexpr unsigned synchronizer_edges = 2;
-    const auto prefix = std::min(cycles, synchronizer_edges);
-    for (unsigned edge = 0; edge < prefix; ++edge) { advance_cycle(bus, context, waiting); }
-    if (cycles > prefix) {
-      const auto quiet = cycles - prefix - 1;
-      if (quiet != 0) { advance_quiet(bus, quiet, waiting); }
-      advance_cycle(bus, context, waiting);
-    }
+    // Register inputs are published at I/O boundaries, without per-edge work.
+    if (cycles > 1) { advance_quiet(bus, cycles - 1, waiting); }
+    advance_cycle(bus, context, waiting);
     return cycles;
   } catch (const std::exception &error) {
     if (faulted_) { throw; }
@@ -179,7 +172,6 @@ void McuRunClock::advance_cycle(McuBus &bus, const ExecutionContext context, con
                             .bus_period_ticks = next_cycle_ticks(bus),
                             .include_endpoint = !period.cop_deadline});
     if (period.cop_deadline) { advance_to_cop_deadline(bus, static_cast<unsigned>(edges)); }
-    bus.advance_gpio_inputs();
     if (gates.sci) { bus.advance_sci(1); }
     if (gates.timer) { bus.advance_timer(1); }
     bus.advance_oscillator(static_cast<unsigned>(edges), gates.cop);

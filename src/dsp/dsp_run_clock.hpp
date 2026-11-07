@@ -59,7 +59,7 @@ public:
                         bool switch_was_pending,
                         DspClockUnits units = {.native = 1});
   // Whole-instruction functional regions retain actual PLL/CLK2/DMA cursors.
-  // Board-owned request edges and I/O cannot occur inside the admitted region.
+  // Instrument-owned request edges and I/O cannot occur inside the admitted region.
   void finish_native_region(DspBus &bus, unsigned cycles, DspDmaInputs inputs);
   // Dependency-only periods advance the same real peripheral clocks, without
   // attributing them to the independent Core's base instruction-cycle count.

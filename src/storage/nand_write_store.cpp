@@ -176,7 +176,10 @@ void NandWriteStore::command(const std::uint8_t value) {
   constexpr unsigned program = 0x10;
   constexpr unsigned erase = 0xd0;
   constexpr unsigned reset = 0xff;
-  if (value == program || value == erase || value == reset) {
+  const auto pending = impl_->model.device().pending();
+  const bool aborts_write =
+      value == reset && (pending == NandPending::program || pending == NandPending::erase);
+  if (value == program || value == erase || aborts_write) {
     impl_->transact([value](NandWriteMedium &next) { next.command(value); });
   } else {
     impl_->model.command(value);

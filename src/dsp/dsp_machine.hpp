@@ -19,7 +19,7 @@ struct DspResetInputs {
   std::uint32_t recovery_cycles = 0;
 };
 
-// Board memory and peripheral ownership around the independent native Core.
+// Instrument memory and peripheral ownership around the independent native Core.
 // Instructions execute atomically; board events and audio pacing stay outside it.
 class DspMachine {
 public:

@@ -1,670 +1,112 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/host_display_pump.hpp"
-#include "app/host_midi_runner.hpp"
-#include "app/host_midi_session.hpp"
 #include "audio/audio_runtime.hpp"
-#include "audio/host_audio.hpp"
-#include "audio/pcm_recording.hpp"
-#include "board/reference_board.hpp"
 #include "common/bus.hpp"
 #include "firmware/firmware.hpp"
-#include "mcu/hc12.hpp"
-#include "mcu/mcu_bus.hpp"
-#include "mcu/mcu_gpio.hpp"
-#include "midi/host_midi.hpp"
-#include "samples/sample_client.hpp"
-#include "storage/flash_file.hpp"
+#include "runtime/instrument.hpp"
+#include "runtime/profile.hpp"
 #include "storage/flash_image.hpp"
 #include "storage/virtual_device_state.hpp"
 #include "usb/usbip_runtime.hpp"
 
-#include <algorithm>
-#include <charconv>
-#include <cstddef>
+#include <chrono>
+#include <csignal>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <fstream>
-#include <iomanip>
 #include <iostream>
-#include <limits>
 #include <memory>
 #include <optional>
-#include <span>
-#include <string>
 #include <string_view>
-#include <system_error>
-#include <vector>
 
 namespace {
+constexpr unsigned usbip_port = 3240;
+constexpr std::uint64_t usb_ready_at = 4964626296;
+constexpr unsigned milliseconds_per_second = 1000;
+volatile std::sig_atomic_t stopping = 0;
 
-struct Options {
-  std::filesystem::path firmware;
-  std::filesystem::path specification;
-  std::filesystem::path trace;
-  std::filesystem::path flash_in;
-  std::filesystem::path flash_out;
-  std::filesystem::path device_state;
-  std::filesystem::path reference_board;
-  std::filesystem::path dsp_rom;
-  std::filesystem::path audio_out;
-  std::filesystem::path display_directory;
-  std::filesystem::path midi_file;
-  std::filesystem::path midi_device;
-  std::optional<std::string> midi_port;
-  std::optional<std::uint32_t> audio_rate;
-  std::optional<std::uint32_t> audio_buffer_frames;
-  std::optional<std::string> audio_server;
-  std::optional<std::size_t> audio_max_frames;
-  std::optional<std::uint16_t> usbip_port;
-  std::optional<std::uint64_t> usbip_after;
-  std::optional<std::uint64_t> usbip_period;
-  std::optional<std::uint64_t> usbip_probe_timeout;
-  std::uint64_t instructions = 1000000;
-  bool inspect = false;
-  bool audio_live = false;
-  std::optional<blofeld::PinDrive> port_e_input;
-};
-
-std::uint8_t hex_byte(const std::string_view value) {
-  unsigned result = 0;
-  const auto conversion = std::from_chars(value.data(), value.data() + value.size(), result, 16);
-  constexpr unsigned byte_mask = 0xff;
-  if (conversion.ec != std::errc{} || conversion.ptr != value.data() + value.size() ||
-      result > byte_mask) {
-    throw blofeld::Fault("Invalid GPIO byte value");
-  }
-  return static_cast<std::uint8_t>(result);
+void stop(const int signal) {
+  if (signal == SIGINT || signal == SIGTERM) { stopping = 1; }
 }
 
-blofeld::PinDrive pin_drive(const std::string_view value) {
-  if (value.size() != 5 || value[2] != ':') {
-    throw blofeld::Fault("GPIO input fixture requires two hexadecimal bytes: MASK:LEVELS");
+std::filesystem::path default_profile(char **environment) {
+  // Capture process-entry values before creating workers; no global environment API.
+  std::filesystem::path config;
+  std::filesystem::path home;
+  constexpr std::string_view config_key = "XDG_CONFIG_HOME=";
+  constexpr std::string_view home_key = "HOME=";
+  for (; *environment != nullptr; ++environment) {
+    const std::string_view entry(*environment);
+    if (entry.starts_with(config_key)) { config = entry.substr(config_key.size()); }
+    if (entry.starts_with(home_key)) { home = entry.substr(home_key.size()); }
   }
-  return {.mask = hex_byte(value.substr(0, 2)), .levels = hex_byte(value.substr(3, 2))};
+  if (!config.empty()) { return config / "blofeld-emu/default.profile"; }
+  if (!home.empty()) { return home / ".config/blofeld-emu/default.profile"; }
+  throw blofeld::Fault("Set XDG_CONFIG_HOME or HOME for the default profile");
 }
 
-std::uint64_t positive(const std::string_view value, const std::uint64_t maximum) {
-  std::uint64_t result = 0;
-  const auto converted = std::from_chars(value.data(), value.data() + value.size(), result);
-  if (converted.ec != std::errc{} || converted.ptr != value.data() + value.size() || result == 0 ||
-      result > maximum) {
-    throw blofeld::Fault("Invalid audio limit/rate");
-  }
-  return result;
+std::filesystem::path profile_path(const int argc, char **argv) {
+  if (argc == 3 && std::string_view(argv[1]) == "--profile") { return argv[2]; }
+  throw blofeld::Fault("Usage: blofeld-headless [--profile file]");
 }
 
-std::uint64_t
-usb_number(const std::string_view value, const std::uint64_t maximum, const bool allow_zero) {
-  std::uint64_t result = 0;
-  const auto converted = std::from_chars(value.data(), value.data() + value.size(), result);
-  if (converted.ec != std::errc{} || converted.ptr != value.data() + value.size() ||
-      (!allow_zero && result == 0) || result > maximum) {
-    throw blofeld::Fault("Invalid USB/IP port/reference tick value");
+void run(const blofeld::runtime::Profile &profile) {
+  using namespace blofeld;
+  const auto firmware = Firmware::load(profile.firmware);
+  const auto rom = runtime::load_rom(profile.boot_rom);
+  const auto device = std::make_shared<VirtualDeviceState>(profile.device_state,
+                                                           McuFlashImage::from_known(firmware.mcu));
+  const auto config = runtime::instrument_config(profile);
+  runtime::Instrument instrument(
+      config, {.image = device->image(), .rom = rom, .specification = {}, .device_state = device});
+  if (!config.pcm) { throw Fault("The instrument requires a PCM output format"); }
+  AudioRuntime audio({.output = {.pcm = config.pcm->format,
+                                 .timebase_hz = runtime::timebase_hz,
+                                 .sample_rate = runtime::sample_rate,
+                                 .server = {}}});
+  instrument.attach_pcm_output(audio);
+  UsbipRuntime usb(
+      {.tcp = {.port = usbip_port},
+       .location = {.path = "/blofeld-emu/usb/1-1", .busid = "1-1", .bus = 1, .device = 1},
+       .after_ticks = usb_ready_at,
+       .period_ticks = runtime::timebase_hz / milliseconds_per_second,
+       .probe_timeout_ticks = runtime::timebase_hz * 2});
+  std::optional<runtime::HostDisplayPump> display;
+  if (!profile.display.empty()) { display.emplace(profile.display); }
+  const auto started = std::chrono::steady_clock::now();
+  auto next_status = started;
+  instrument.initialize();
+  while (stopping == 0) {
+    instrument.advance();
+    instrument.poll_usb(usb);
+    if (display) { display->poll(instrument); }
+    const auto now = std::chrono::steady_clock::now();
+    if (now < next_status) { continue; }
+    const auto state = audio.status();
+    const auto elapsed = std::chrono::duration<double>(now - started).count();
+    std::cout << "audio-frames=" << state.written << " queued=" << state.accepted - state.written
+              << " underflows=" << state.underflows << " elapsed=" << elapsed << '\n';
+    next_status = now + std::chrono::seconds{1};
   }
-  return result;
+  audio.finish();
+}
 }
 
-void validate_usb_options(const Options &config) {
-  const bool usb =
-      config.usbip_port || config.usbip_after || config.usbip_period || config.usbip_probe_timeout;
-  if (usb && (!config.usbip_port || !config.usbip_after || !config.usbip_period ||
-              !config.usbip_probe_timeout || config.reference_board.empty() || config.inspect)) {
-    throw blofeld::Fault("USB/IP requires a reference board, --usbip-port, --usbip-after, "
-                         "--usbip-period and --usbip-probe-timeout together");
-  }
-}
-
-void validate_midi_options(const Options &config) {
-  if ((!config.midi_file.empty() && !config.midi_device.empty()) ||
-      (config.midi_port && (!config.midi_file.empty() || !config.midi_device.empty())) ||
-      ((!config.midi_file.empty() || !config.midi_device.empty() || config.midi_port) &&
-       (config.reference_board.empty() || config.inspect))) {
-    throw blofeld::Fault("MIDI requires a reference board and exactly one of --midi-file, "
-                         "--midi-device or --midi-port");
-  }
-  constexpr unsigned maximum_port_name = 63;
-  if (config.midi_port &&
-      (config.midi_port->empty() || config.midi_port->size() > maximum_port_name ||
-       config.midi_port->contains('\0'))) {
-    throw blofeld::Fault("MIDI port name must contain 1..63 non-NUL bytes");
-  }
-}
-
-void validate_audio_options(const Options &config) {
-  const bool file = !config.audio_out.empty();
-  const bool active = file || config.audio_live;
-  if (active != config.audio_rate.has_value() || file != config.audio_max_frames.has_value() ||
-      (active && (config.reference_board.empty() || config.inspect))) {
-    throw blofeld::Fault("Audio requires a reference board and --audio-rate; WAV output also "
-                         "requires --audio-out and --audio-max-frames together");
-  }
-  constexpr unsigned minimum_buffer_request = 256;
-  if ((!config.audio_live && (config.audio_server || config.audio_buffer_frames)) ||
-      (config.audio_buffer_frames && *config.audio_buffer_frames < minimum_buffer_request)) {
-    throw blofeld::Fault("Audio server/buffer options require --audio-live; buffer requests "
-                         "must be 256..65536 frames");
-  }
-}
-
-void validate_options(const Options &config) {
-  if (config.firmware.empty()) {
-    throw blofeld::Fault("Usage: blofeld-headless --firmware update.zip [--inspect] "
-                         "[--instructions N] [--trace file] [--port-e-input MASK:LEVELS] "
-                         "[--flash-in state.bfnvm] [--flash-out state.bfnvm] "
-                         "[--device-state unit.bfnvm] "
-                         "[--reference-board scenario.bfboard --dsp-rom packed24.bin] "
-                         "[--display-dir runtime-directory] "
-                         "[--midi-file bytes.bin | --midi-device /dev/snd/midiCxDy | "
-                         "--midi-port NAME] "
-                         "[--usbip-port PORT --usbip-after TICKS --usbip-period TICKS "
-                         "--usbip-probe-timeout TICKS] "
-                         "[--audio-live --audio-server SERVER --audio-buffer-frames N] "
-                         "[--audio-out capture.wav --audio-rate HZ --audio-max-frames N]");
-  }
-  if (config.inspect && (!config.flash_in.empty() || !config.flash_out.empty())) {
-    throw blofeld::Fault("--inspect cannot be combined with MCU NVM execution inputs/outputs");
-  }
-  if (!config.device_state.empty() &&
-      (config.inspect || !config.flash_in.empty() || !config.flash_out.empty())) {
-    throw blofeld::Fault("--device-state conflicts with --inspect, --flash-in or --flash-out");
-  }
-  if (config.reference_board.empty() != config.dsp_rom.empty()) {
-    throw blofeld::Fault("--reference-board and --dsp-rom must be supplied together");
-  }
-  if (!config.reference_board.empty() && (config.inspect || config.port_e_input)) {
-    throw blofeld::Fault("--reference-board conflicts with --inspect or --port-e-input");
-  }
-  if (!config.display_directory.empty() && (config.reference_board.empty() || config.inspect)) {
-    throw blofeld::Fault("Display publication requires reference-board execution");
-  }
-  validate_midi_options(config);
-  validate_audio_options(config);
-  validate_usb_options(config);
-}
-
-struct OptionValue {
-  std::string_view name;
-  std::string_view value;
-};
-
-bool numeric_option(Options &result, const OptionValue &input) {
-  if (input.name == "--usbip-port") {
-    result.usbip_port = static_cast<std::uint16_t>(
-        usb_number(input.value, std::numeric_limits<std::uint16_t>::max(), true));
-  } else if (input.name == "--usbip-after") {
-    result.usbip_after = usb_number(input.value, std::numeric_limits<std::uint64_t>::max(), true);
-  } else if (input.name == "--usbip-period") {
-    result.usbip_period = usb_number(input.value, std::numeric_limits<std::uint64_t>::max(), false);
-  } else if (input.name == "--usbip-probe-timeout") {
-    result.usbip_probe_timeout =
-        usb_number(input.value, std::numeric_limits<std::uint64_t>::max(), false);
-  } else if (input.name == "--audio-rate") {
-    result.audio_rate = static_cast<std::uint32_t>(
-        positive(input.value, std::numeric_limits<std::uint32_t>::max()));
-  } else if (input.name == "--audio-max-frames") {
-    result.audio_max_frames =
-        static_cast<std::size_t>(positive(input.value, blofeld::PcmRecording::maximum_capacity));
-  } else if (input.name == "--audio-buffer-frames") {
-    constexpr unsigned maximum_buffer_request = 65536;
-    result.audio_buffer_frames =
-        static_cast<std::uint32_t>(positive(input.value, maximum_buffer_request));
-  } else {
-    return false;
-  }
-  return true;
-}
-
-bool path_option(Options &result, const OptionValue &input) {
-  if (input.name == "--firmware") {
-    result.firmware = input.value;
-  } else if (input.name == "--sla") {
-    result.specification = input.value;
-  } else if (input.name == "--trace") {
-    result.trace = input.value;
-  } else if (input.name == "--flash-in") {
-    result.flash_in = input.value;
-  } else if (input.name == "--flash-out") {
-    result.flash_out = input.value;
-  } else if (input.name == "--device-state") {
-    result.device_state = input.value;
-  } else if (input.name == "--reference-board") {
-    result.reference_board = input.value;
-  } else if (input.name == "--dsp-rom") {
-    result.dsp_rom = input.value;
-  } else if (input.name == "--audio-out") {
-    result.audio_out = input.value;
-  } else if (input.name == "--display-dir") {
-    result.display_directory = input.value;
-  } else if (input.name == "--midi-file") {
-    result.midi_file = input.value;
-  } else if (input.name == "--midi-device") {
-    result.midi_device = input.value;
-  } else {
-    return false;
-  }
-  return true;
-}
-
-Options options(const int count, char **values) {
-  Options result;
-  for (int index = 1; index < count; ++index) {
-    const std::string_view argument(values[index]);
-    if (argument == "--inspect") {
-      result.inspect = true;
-      continue;
-    }
-    if (argument == "--audio-live") {
-      result.audio_live = true;
-      continue;
-    }
-    if (index + 1 >= count) { throw blofeld::Fault("Missing value for " + std::string(argument)); }
-    const std::string_view value(values[++index]);
-    const OptionValue input{.name = argument, .value = value};
-    if (numeric_option(result, input) || path_option(result, input)) { continue; }
-    if (argument == "--midi-port") {
-      result.midi_port = value;
-    } else if (argument == "--audio-server") {
-      result.audio_server = value;
-    } else if (argument == "--port-e-input") {
-      result.port_e_input = pin_drive(value);
-    } else if (argument == "--instructions") {
-      const auto conversion =
-          std::from_chars(value.data(), value.data() + value.size(), result.instructions);
-      if (conversion.ec != std::errc{} || conversion.ptr != value.data() + value.size()) {
-        throw blofeld::Fault("Invalid instruction limit");
-      }
-    } else {
-      throw blofeld::Fault("Unknown argument: " + std::string(argument));
-    }
-  }
-  validate_options(result);
-  return result;
-}
-
-struct FilePair {
-  std::filesystem::path first;
-  std::filesystem::path second;
-};
-
-void distinct_files(const FilePair &files) {
-  if (files.first.empty() || files.second.empty()) { return; }
-  const auto first = std::filesystem::weakly_canonical(files.first);
-  const auto second = std::filesystem::weakly_canonical(files.second);
-  bool same = first == second;
-  if (!same && std::filesystem::exists(first) && std::filesystem::exists(second)) {
-    same = std::filesystem::equivalent(first, second);
-  }
-  if (same) { throw blofeld::Fault("Input/output file collision: " + files.first.string()); }
-}
-
-void distinct_display(const Options &config, const std::filesystem::path &path) {
-  if (config.display_directory.empty()) { return; }
-  for (const auto *const name : {"display.pbm", "display.txt", ".display.lock"}) {
-    distinct_files({.first = config.display_directory / name, .second = path});
-  }
-}
-
-void validate_files(const Options &config, const std::filesystem::path &specification) {
-  if (!config.audio_out.empty() && config.audio_out.extension() != ".wav") {
-    throw blofeld::Fault("Audio output requires the .wav extension");
-  }
-  for (const auto &path : {config.flash_in, config.flash_out, config.device_state}) {
-    if (!path.empty() && path.extension() != ".bfnvm") {
-      throw blofeld::Fault("MCU NVM files require the private .bfnvm extension");
-    }
-  }
-  for (const auto &input : {config.firmware,
-                            specification,
-                            config.flash_in,
-                            config.flash_out,
-                            config.device_state,
-                            config.reference_board,
-                            config.dsp_rom,
-                            config.midi_file,
-                            config.midi_device}) {
-    distinct_files({.first = config.trace, .second = input});
-    distinct_files({.first = config.audio_out, .second = input});
-    distinct_display(config, input);
-  }
-  distinct_files({.first = config.audio_out, .second = config.trace});
-  distinct_display(config, config.trace);
-  distinct_display(config, config.audio_out);
-  for (const auto &input : {config.firmware,
-                            specification,
-                            config.reference_board,
-                            config.dsp_rom,
-                            config.midi_file,
-                            config.midi_device}) {
-    distinct_files({.first = config.flash_out, .second = input});
-    distinct_files({.first = config.device_state, .second = input});
-  }
-}
-
-void validate_nand_files(const Options &config,
-                         const std::optional<blofeld::reference::Config> &board) {
-  if (!board || !board->nand) { return; }
-  const auto &path = board->nand->source_path;
-  if (!path) { return; }
-  const auto &source = *path;
-  for (const auto &output :
-       {config.trace, config.audio_out, config.flash_out, config.device_state}) {
-    distinct_files({.first = output, .second = source});
-  }
-  distinct_display(config, source);
-}
-
-void persist_flash(const Options &config,
-                   const blofeld::McuBus &bus,
-                   blofeld::VirtualDeviceState *device) {
-  if (device != nullptr) {
-    device->save(bus.power_off_flash_image());
-    return;
-  }
-  if (config.flash_out.empty()) { return; }
-  blofeld::save_flash_image(config.flash_out, bus.power_off_flash_image());
-  std::cout << "Saved private MCU NVM image: " << config.flash_out << '\n';
-}
-
-std::filesystem::path default_specification() {
-  std::error_code error;
-  const auto executable = std::filesystem::read_symlink("/proc/self/exe", error);
-  if (!error) {
-    const auto installed = executable.parent_path().parent_path() / "share/blofeld-emu/HC12.sla";
-    if (std::filesystem::is_regular_file(installed)) { return installed; }
-  }
-  return BLOFELD_DEFAULT_SLA;
-}
-
-void print_state(std::ostream &output, const blofeld::CpuState &state) {
-  output << "pc=" << blofeld::hex(state.pc) << " d=" << blofeld::hex(state.d)
-         << " x=" << blofeld::hex(state.x) << " y=" << blofeld::hex(state.y)
-         << " sp=" << blofeld::hex(state.sp) << " ccr=" << blofeld::hex(state.ccr, 2);
-}
-
-void trace_instruction(std::ofstream &trace,
-                       const blofeld::Hc12 &cpu,
-                       const std::uint64_t executed) {
-  if (!trace.is_open()) { return; }
-  trace << executed << ' ';
-  print_state(trace, cpu.state());
-  if (const auto request = cpu.pending_interrupt()) {
-    trace << " interrupt-entry vector=" << blofeld::hex(request->vector) << '\n';
-  } else {
-    trace << ' ' << cpu.disassemble() << '\n';
-  }
-}
-
-void trace_interrupt(std::ofstream &trace, const blofeld::CpuStep result) {
-  if (!trace.is_open() || !result.interrupt_vector) { return; }
-  trace << "  interrupt-vector " << blofeld::hex(*result.interrupt_vector)
-        << " stack-reused=" << result.stack_reused << '\n';
-}
-
-int run_mcu(const Options &config,
-            const blofeld::McuFlashImage &image,
-            const std::filesystem::path &specification,
-            std::ofstream &trace,
-            blofeld::VirtualDeviceState *device) {
-  blofeld::McuBus bus(image);
-  if (config.port_e_input) {
-    bus.set_pin_drive(blofeld::McuPort::e, *config.port_e_input);
-    std::cout << "Explicit simulated port E input fixture: mask="
-              << blofeld::hex(config.port_e_input->mask, 2)
-              << " levels=" << blofeld::hex(config.port_e_input->levels, 2)
-              << "; board wiring is unverified.\n";
-  }
-  bus.set_observer([&trace](const blofeld::BusEvent &event) {
-    if (trace.is_open()) {
-      trace << "  io-write " << blofeld::hex(event.address) << '=' << blofeld::hex(event.value, 2)
-            << ' ' << event.name << '\n';
-    }
-  });
-  blofeld::Hc12 cpu(bus, specification);
-  std::uint64_t executed = 0;
-  std::uint64_t interrupts = 0;
-  bool reset_completed = false;
-  bool stopped_waiting = false;
+int main(const int argc, char **argv, char **environment) {
   try {
-    cpu.reset();
-    reset_completed = true;
-    while (executed < config.instructions) {
-      trace_instruction(trace, cpu, executed);
-      const auto result = cpu.step();
-      if (result.instruction_executed) { ++executed; }
-      if (result.interrupt_vector) { ++interrupts; }
-      trace_interrupt(trace, result);
-      if (cpu.waiting() && !cpu.pending_interrupt()) {
-        stopped_waiting = true;
-        break;
-      }
+    if (argc == 2 && std::string_view(argv[1]) == "--help") {
+      std::cout << "Usage: blofeld-headless [--profile file]\n"
+                   "Profile fields: firmware, boot-rom, device-state, nand, optional display.\n";
+      return 0;
     }
-  } catch (const blofeld::Fault &fault) {
-    if (trace.is_open()) { trace.flush(); }
-    std::cerr << "Stopped after " << executed << " completed MCU instructions: " << fault.what()
-              << "\n";
-    if (reset_completed) {
-      print_state(std::cerr, cpu.state());
-      std::cerr << '\n';
-    } else {
-      std::cerr << "MCU reset did not complete; CPU state unavailable.\n";
+    const auto path = argc == 1 ? default_profile(environment) : profile_path(argc, argv);
+    if (std::signal(SIGINT, stop) == SIG_ERR || std::signal(SIGTERM, stop) == SIG_ERR) {
+      throw blofeld::Fault("Cannot install instrument shutdown handlers");
     }
-    persist_flash(config, bus, device);
-    return 2;
-  }
-  if (trace.is_open()) { trace.flush(); }
-  std::cout << (stopped_waiting
-                    ? "MCU waiting for an external interrupt; no scheduler supplied a wakeup.\n"
-                    : "Instruction budget reached; boot completion is not established.\n");
-  std::cout << "Delivered interrupt entries: " << interrupts << '\n';
-  print_state(std::cout, cpu.state());
-  std::cout << '\n';
-  persist_flash(config, bus, device);
-  return 0;
-}
-
-void validate_board_options(const Options &config,
-                            const std::optional<blofeld::reference::Config> &board) {
-  if (!config.display_directory.empty() && (!board || !board->lcd_parallel)) {
-    throw blofeld::Fault("Display publication requires lcd-parallel in the reference board");
-  }
-  if ((!config.audio_out.empty() || config.audio_live) && (!board || !board->pcm)) {
-    throw blofeld::Fault("Audio output requires pcm-receive in the reference board");
-  }
-  const bool midi = !config.midi_file.empty() || !config.midi_device.empty() || config.midi_port;
-  if (midi && (!board || (!board->midi && !board->midi_sci_timed && !board->midi_dsp))) {
-    throw blofeld::Fault("Host MIDI requires midi-sci, midi-sci-timed or midi-dsp-tio");
-  }
-  if (config.midi_port && (!board || !board->midi_output)) {
-    throw blofeld::Fault("Host MIDI port requires midi-output PR3 or PS5 in the reference board");
-  }
-  if (config.usbip_port && !board) {
-    throw blofeld::Fault("Host USB/IP requires a reference board");
-  }
-}
-
-std::optional<blofeld::reference::AudioOutput> audio_output(const Options &config) {
-  if (config.audio_out.empty() || !config.audio_rate || !config.audio_max_frames) { return {}; }
-  return blofeld::reference::AudioOutput{.path = config.audio_out,
-                                         .sample_rate = *config.audio_rate,
-                                         .maximum_frames = *config.audio_max_frames};
-}
-
-std::unique_ptr<blofeld::reference::HostMidiSession> midi_session(const std::string &name,
-                                                                  const std::uint64_t timebase_hz) {
-  if (timebase_hz == 0) { throw blofeld::Fault("Host MIDI requires a positive timebase"); }
-  constexpr unsigned polls_per_second = 1000;
-  const auto period = std::max(std::uint64_t{1}, timebase_hz / polls_per_second);
-  auto session = std::make_unique<blofeld::reference::HostMidiSession>(name, period);
-  const auto address = session->address();
-  const auto limits = session->limits();
-  if (!address || !limits) { throw blofeld::Fault("Host MIDI port has no actual address/grants"); }
-  std::cout << "MIDI port=" << address->client << ':' << address->port
-            << " name=" << std::quoted(name) << " protocol=" << limits->protocol_version
-            << " input-events=" << limits->input_events
-            << " output-events=" << limits->output_events << " period-ticks=" << period << '\n'
-            << std::flush;
-  return session;
-}
-
-std::unique_ptr<blofeld::AudioRuntime> live_audio(const Options &config,
-                                                  const blofeld::reference::Config &board) {
-  if (!config.audio_live) { return {}; }
-  if (!config.audio_rate || !board.pcm) { throw blofeld::Fault("Live audio requires PCM/rate"); }
-  constexpr unsigned default_buffer = 4096;
-  auto audio = std::make_unique<blofeld::AudioRuntime>(blofeld::AudioRuntimeOptions{
-      .output = {.pcm = board.pcm->format,
-                 .timebase_hz = board.dsp_clock.timebase_hz,
-                 .sample_rate = *config.audio_rate,
-                 .buffer_frames = config.audio_buffer_frames.value_or(default_buffer),
-                 .server = config.audio_server.value_or("")}});
-  const blofeld::HostAudioStreamInfo initial = audio->initial_stream_info();
-  std::cout << "AUDIO initial format=s32-native rate=" << initial.sample_rate
-            << " channels=" << initial.channels << " maximum-frames=" << initial.maximum_frames
-            << " target-frames=" << initial.target_frames
-            << " prebuffer-frames=" << initial.prebuffer_frames
-            << " minimum-request-frames=" << initial.minimum_request_frames
-            << " stream=" << initial.stream_index << '\n'
-            << std::flush;
-  return audio;
-}
-
-void finish_live_audio(blofeld::AudioRuntime *audio, const int result) {
-  if (audio != nullptr) {
-    if (result == 0) { audio->finish(); }
-    const auto status = audio->status();
-    audio->invalidate();
-    std::cout << "AUDIO closed=1 accepted=" << status.accepted << " written=" << status.written
-              << " underflows=" << status.underflows << " completed=" << (result == 0) << '\n';
-  }
-}
-
-void finish_midi_session(blofeld::reference::HostMidiSession *session,
-                         blofeld::reference::Board &machine,
-                         const int result) {
-  if (session != nullptr) {
-    const auto final_bytes = result == 0 ? session->flush_output(machine) : 0;
-    session->retire();
-    std::cout << "MIDI session closed=1 final-output-bytes=" << final_bytes << '\n';
-  }
-}
-
-int run_reference(const Options &config,
-                  const blofeld::reference::Config &board,
-                  const blofeld::reference::Execution &execution) {
-  auto audio = live_audio(config, board); // The sink outlives the Board's binding.
-  blofeld::reference::Board machine(board, execution);
-  if (audio) { machine.attach_pcm_output(*audio); }
-  std::unique_ptr<blofeld::reference::HostMidiPump> input;
-  std::unique_ptr<blofeld::reference::HostMidiSession> session;
-  std::unique_ptr<blofeld::reference::HostDisplayPump> display;
-  std::unique_ptr<blofeld::UsbipRuntime> usb;
-  if (!config.display_directory.empty()) {
-    display = std::make_unique<blofeld::reference::HostDisplayPump>(config.display_directory);
-  }
-  if (!config.midi_file.empty() || !config.midi_device.empty()) {
-    const bool raw = config.midi_file.empty();
-    input = std::make_unique<blofeld::reference::HostMidiPump>(
-        raw ? config.midi_device : config.midi_file,
-        raw ? blofeld::MidiInputKind::linux_rawmidi : blofeld::MidiInputKind::bytes,
-        board.dsp_clock.timebase_hz);
-  }
-  if (config.midi_port) { session = midi_session(*config.midi_port, board.dsp_clock.timebase_hz); }
-  if (config.usbip_port && config.usbip_after && config.usbip_period &&
-      config.usbip_probe_timeout) {
-    const blofeld::UsbipRuntimeOptions usb_options{
-        .tcp = {.port = *config.usbip_port},
-        .location = {.path = "/blofeld-emu/usb/1-1", .busid = "1-1", .bus = 1, .device = 1},
-        .after_ticks = *config.usbip_after,
-        .period_ticks = *config.usbip_period,
-        .probe_timeout_ticks = *config.usbip_probe_timeout};
-    usb = std::make_unique<blofeld::UsbipRuntime>(usb_options);
-    std::cout << "USBIP listening=127.0.0.1:" << usb->port()
-              << " busid=1-1 after=" << usb_options.after_ticks
-              << " period=" << usb_options.period_ticks
-              << " probe-timeout=" << usb_options.probe_timeout_ticks
-              << " frame-timeout-ms=" << usb_options.tcp.frame_timeout.count()
-              << " output-timeout-ms=" << usb_options.tcp.output_timeout.count() << '\n'
-              << std::flush;
-  }
-  if (!input && !session && !usb && !display && !audio) { return machine.run(); }
-  const auto result = machine.run([&](auto &target) {
-    if (input) { (*input)(target); }
-    if (session) { static_cast<void>(session->poll(target)); }
-    if (usb) { target.poll_usb(*usb); }
-    if (display) { display->poll(target); }
-  });
-  finish_live_audio(audio.get(), result);
-  finish_midi_session(session.get(), machine, result);
-  if (display) { display->capture(machine); }
-  if (usb) {
-    const auto published = usb->published();
-    usb->retire();
-    std::cout << "USBIP started=" << usb->started() << " published=" << published << " closed=1\n";
-  }
-  return result;
-}
-
-blofeld::McuFlashImage execution_image(const Options &config,
-                                       const blofeld::Firmware &firmware,
-                                       const blofeld::VirtualDeviceState *device) {
-  if (device != nullptr) { return device->image(); }
-  if (!config.flash_in.empty()) { return blofeld::load_flash_image(config.flash_in); }
-  return blofeld::McuFlashImage::from_known(firmware.mcu);
-}
-
-int run(const Options &config) {
-  const auto specification =
-      config.specification.empty() ? default_specification() : config.specification;
-  validate_files(config, specification);
-  const auto board = config.reference_board.empty()
-                         ? std::optional<blofeld::reference::Config>{}
-                         : blofeld::reference::load_config(config.reference_board);
-  validate_nand_files(config, board);
-  const auto rom =
-      board ? blofeld::reference::load_rom(config.dsp_rom) : std::vector<std::uint32_t>{};
-  const auto firmware = blofeld::Firmware::load(config.firmware);
-  validate_board_options(config, board);
-  std::cout << "Firmware: " << firmware.mcu.size() << " MCU bytes, " << firmware.dsp.size()
-            << " DSP records, " << firmware.sysex_packets << " checked data packets\n";
-  if (config.inspect) { return 0; }
-  std::shared_ptr<blofeld::VirtualDeviceState> device;
-  if (!config.device_state.empty()) {
-    device = std::make_shared<blofeld::VirtualDeviceState>(
-        config.device_state, blofeld::McuFlashImage::from_known(firmware.mcu));
-  }
-  std::ofstream trace;
-  if (!config.trace.empty()) {
-    trace.open(config.trace);
-    if (!trace) { throw blofeld::Fault("Cannot create trace file"); }
-    trace.exceptions(std::ios::failbit | std::ios::badbit);
-  }
-  const auto image = execution_image(config, firmware, device.get());
-  if (board) {
-    const blofeld::reference::Execution execution{.image = image,
-                                                  .rom = rom,
-                                                  .specification = specification,
-                                                  .flash_out = config.flash_out,
-                                                  .trace = trace.is_open() ? &trace : nullptr,
-                                                  .instructions = config.instructions,
-                                                  .audio = audio_output(config),
-                                                  .device_state = device};
-    return run_reference(config, *board, execution);
-  }
-  return run_mcu(config, image, specification, trace, device.get());
-}
-
-} // namespace
-
-int main(const int argc, char **argv) {
-  try {
-    if (argc > 1 && std::string_view(argv[1]) == "samples") {
-      return blofeld::samples::run_client(std::span(argv + 2, static_cast<std::size_t>(argc - 2)),
-                                          std::cout);
-    }
-    return run(options(argc, argv));
+    run(blofeld::runtime::load_profile(path));
+    return 0;
   } catch (const std::exception &error) {
-    std::cerr << error.what() << '\n';
+    std::cerr << "blofeld-headless: " << error.what() << '\n';
     return 1;
   }
 }

@@ -21,14 +21,15 @@ void DspExecution::native_time(unsigned cycles) {
       const auto period = machine_.clock_.next_step_ticks(machine_.bus_, 1);
       count = static_cast<unsigned>(std::min<std::uint64_t>(count, *boundary / period));
     }
-    if (!previous || !machine_.bus_.native_dma_quiescent(inputs_)) { count = 1; }
+    const bool quiet = previous && machine_.bus_.native_dma_quiescent(inputs_);
+    if (!quiet) { count = 1; }
     if (count == 0 || (previous && count > std::numeric_limits<std::uint64_t>::max() - *previous)) {
       throw Fault("DSP device span cannot advance its DMA cursor");
     }
     inputs_.cycle = previous ? *previous + count : 0;
     const auto regs = machine_.cpu_.registers();
     machine_.clock_.begin_step(machine_.bus_, {.pc = regs.pc, .omr = regs.omr});
-    if (previous && machine_.bus_.native_dma_quiescent(inputs_)) {
+    if (quiet) {
       machine_.clock_.finish_native_region(machine_.bus_, count, inputs_);
     } else {
       static_cast<void>(machine_.clock_.finish_native_cycle(machine_.bus_, inputs_));

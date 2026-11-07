@@ -287,7 +287,7 @@ void test_real_cpu_configures_usb_window() {
   bus.write(clock_control, module_clock);
   bus.write(select_high, 8);
   require(bus.read_memory({.address = data_low, .size = 2}) == 0,
-          "Board reset clears USB configuration and restores its map");
+          "Instrument reset clears USB configuration and restores its map");
   constexpr unsigned enable_controller = 0xc0;
   bus.write(clock_control, enable_controller);
   require(bus.read(clock_control) == enable_controller,

@@ -59,11 +59,15 @@ void ordinary_reads() {
     persistence_reject([&] { const NandWriteStore second(path, part, timebase, profile()); }, "");
     store.set_observer([](NandFilePhase) { throw Fault("Read attempted host publication"); });
     store.observe_power_ready();
+    store.command(reset);
+    constexpr std::uint64_t reset_ticks = 5;
+    persistence_require(store.advance(reset_ticks).has_value(),
+                        "A read-only reset completes without rewriting the NAND image");
     store.command(0);
     for (const auto address : {0U, persisted_row, 0U, 0U}) {
       store.address(static_cast<std::uint8_t>(address));
     }
-    constexpr std::uint64_t read_ticks = 15;
+    constexpr std::uint64_t read_ticks = 20;
     persistence_require(!store.advance(read_ticks - 1) && store.advance(read_ticks).has_value(),
                         "Read completion follows the existing independent fifteen-us expectation");
     persistence_require(store.read() == persisted_mask, "Native controller returns actual cells");

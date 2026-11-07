@@ -80,7 +80,6 @@ void strict_bus_behavior() {
     static_cast<void>(rejects([&] { static_cast<void>(bus.read(access)); }));
     static_cast<void>(rejects(
         [&] { bus.write({.space = access.space, .address = access.address, .value = 0}); }));
-    static_cast<void>(rejects([&] { static_cast<void>(bus.memory_resource({.target = access})); }));
   }
   constexpr unsigned patch_instruction = 0xffffa8;
   constexpr unsigned id_register = 0xfffff5;

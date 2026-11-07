@@ -254,7 +254,7 @@ void test_bus_remapping_and_reset() {
   bus.retire_instruction();
   bus.write(0x2000, inverse_pattern);
   bus.reset();
-  require(bus.read(reset_ram) == pattern, "Board reset retains SMRAM bytes");
+  require(bus.read(reset_ram) == pattern, "Instrument reset retains SMRAM bytes");
   reject([&bus] { static_cast<void>(bus.read(0x2000)); }, "Reset restores QRAM mapping");
   require(bus.read(initee) == 1, "Reset INITEE readback");
   constexpr unsigned reserved = 0xfe;

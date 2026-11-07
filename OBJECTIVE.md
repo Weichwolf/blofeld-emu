@@ -195,7 +195,7 @@ gates merely because they differ from a possible physical implementation.
    publishing proprietary assets. Establish required wavetables, internal ROM
    and external flash contents from actual firmware accesses; identify missing
    data explicitly rather than supplying guessed values.
-2. Implement correct CPU/DSP execution, functional memory/peripherals for the Desktop SL instrument. Separate cores, board model, host transport and time-critical audio.
+2. Implement correct CPU/DSP execution, functional memory/peripherals for the Desktop SL instrument. Separate cores, firmware I/O, host transport and time-critical audio.
    Unknown/unsupported accesses fail with address, operation, PC and context;
    observed behavior, hypotheses and hardware-proven facts remain distinct.
    Reconstruct the behavior needed by the firmware from its accesses and available
@@ -254,7 +254,7 @@ gates merely because they differ from a possible physical implementation.
    the original Blofeld USB connection transports MIDI, not live audio.
    Existing reference/inspection/sample commands remain optional developer
    tools; their availability does not establish a working normal runtime.
-   See runtime.txt for this interface contract and its current missing evidence.
+   See README.md for the current runtime interface.
 10. Make the actual modeled LCD contents available for screenshots and live
     display in an independent GUI. Use a packed 1-bit live PBM image and text
     raster, with PNG for saved screenshots. Publish complete captures under
@@ -285,6 +285,12 @@ Current execution budget
 Core tests in cpu12 and dsp56300 remain required before the real-time milestone.
 Run affected correctness and sanitizer checks for core changes. Until real-time
 instrument operation is established, suspend long original-firmware runs; short
-optimized startup/throughput probes may establish that milestone. Stop at an absolute
-10 host seconds and fail unless playable; never extend or automatically repeat
-a failed probe. Strict compilation, formatting and static analysis remain active.
+optimized startup/throughput probes may establish that milestone. Stop startup at
+30 host seconds and fail unless playable. Then require USB-MIDI-triggered sound
+and at least ten seconds of valid original stereo output with throughput >=44100
+frames per host second. Evaluate startup, signal content and sustained throughput
+separately; silence or a boot screen cannot pass the instrument test. Stop immediately
+on runtime faults; never extend or automatically repeat a failed probe without a
+concrete fix. Use the Release profiler to distinguish native JIT/core work from
+synchronization and host I/O costs. Strict compilation, formatting and static
+analysis remain active.

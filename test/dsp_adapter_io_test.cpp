@@ -87,7 +87,7 @@ void run() {
   require(step.retired == 1 && step.fault.kind == FaultKind::none && cpu.registers().pc == 1,
           "DSP core did not execute through the real board bus");
   check_gpio(io, bus);
-  require(io.reset_peripherals(1), "Board peripheral reset failed");
+  require(io.reset_peripherals(1), "Instrument peripheral reset failed");
   require(bus.gpio(DspPort::c).outputs().mask == 0, "Peripheral reset retained GPIO outputs");
 }
 }

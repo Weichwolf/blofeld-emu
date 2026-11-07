@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "mcu/mcu_bus.hpp"
 
-#include "board/gpio_pads.hpp"
 #include "common/bus.hpp"
 #include "common/masked_bus.hpp"
 #include "mcu/hc12_registers.hpp"
@@ -14,6 +13,7 @@
 #include "mcu/mcu_sci.hpp"
 #include "mcu/mcu_timer.hpp"
 #include "mcu/mcu_usb.hpp"
+#include "runtime/gpio_pads.hpp"
 
 #include <algorithm>
 #include <array>

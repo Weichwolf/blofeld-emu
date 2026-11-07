@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "board/gpio_pads.hpp"
 #include "common/bus.hpp"
 #include "common/masked_bus.hpp"
-#include "mcu/pim_input_pipeline.hpp"
+#include "runtime/gpio_pads.hpp"
 
 #include <array>
 #include <cstddef>
@@ -52,16 +51,12 @@ struct PinOutputs {
   bool operator==(const PinOutputs &) const = default;
 };
 
-// Normal-single-chip MEBI GPIO and explicit external drives, with unknown inputs tracked.
-// Electrical transition/synchronizer timing and alternate peripheral functions
-// are not yet a complete board model.
+// Register I/O with explicit ownership and unknown input tracking.
+// Reads observe the current published peer data; no electrical sampling pipeline.
 class McuGpio {
 public:
   McuGpio();
   void reset();
-  // Attach the register input path to the IPBus domain and sample one real edge.
-  // Direct transaction fixtures have no clock history until this is first called.
-  void advance_inputs();
   void set_drive(McuPort port, PinDrive drive);
   void update_drive(McuPort port, std::uint8_t affected, PinDrive drive);
   void set_function(McuPort port, PinFunction function);
@@ -91,14 +86,11 @@ private:
   };
 
   [[nodiscard]] std::uint8_t sample(McuPort port, std::uint8_t requested) const;
-  [[nodiscard]] std::uint8_t input(McuPort port, std::uint8_t requested) const;
   [[nodiscard]] PinSample resolve(McuPort port, std::uint8_t requested) const;
   [[nodiscard]] unsigned pull_enable(McuPort port) const;
   [[nodiscard]] std::uint8_t data(McuPort port, std::uint8_t mask) const;
   [[nodiscard]] std::uint8_t tied_low(McuPort port) const;
   std::array<PortState, port_count> ports_{};
-  std::array<PimInputPipeline, port_count> inputs_{};
-  bool input_clocked_ = false;
   std::array<GpioPadBinding, port_count> pads_{};
   std::uint8_t routing_ = 0;
   std::uint8_t assignment_e_ = 0;

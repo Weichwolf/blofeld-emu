@@ -68,7 +68,7 @@ void dependencies(const unsigned opcode, const Resources resources) {
   }
 }
 
-void actual_retirement(const parallel_reference::Sample &sample) {
+void actual_retirement(const parallel_runtime::Sample &sample) {
   std::array<dsp56300::Word, 1> program{sample.opcode};
   std::array<dsp56300::Word, 1> data{};
   for (const auto backend :
@@ -123,7 +123,7 @@ void complete_selector_table() {
 unsigned native_dependency_parallel_checks() {
   checks = 0;
   complete_selector_table();
-  for (const auto &sample : parallel_reference::samples) {
+  for (const auto &sample : parallel_runtime::samples) {
     dependencies(sample.opcode,
                  {.accumulator = sample.resources, .status = sample.status_resource});
     actual_retirement(sample);

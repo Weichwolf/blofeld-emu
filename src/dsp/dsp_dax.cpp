@@ -19,8 +19,6 @@ void DspDax::reset_paths() {
   phase_ = 0;
   position_ = 0;
   block_frame_ = 0;
-  half_bits_ = 0;
-  level_ = true;
   repeating_ = false;
   clear_armed_ = false;
   rates_frozen_ = false;
@@ -93,13 +91,11 @@ void DspDax::write_checked(const Register target, const std::uint32_t value) {
 }
 
 void DspDax::write(const unsigned address, const std::uint32_t value) {
-  auto next = *this;
   try {
-    next.write_checked(reg(address), value);
+    write_checked(reg(address), value);
   } catch (const Fault &error) {
     throw Fault("DSP DAX register write at X:" + hex(address, 6) + ": " + error.what());
   }
-  *this = next;
 }
 
 std::uint32_t DspDax::read_checked(const Register target, const std::uint32_t mask) {
@@ -120,20 +116,11 @@ std::uint32_t DspDax::read_checked(const Register target, const std::uint32_t ma
 }
 
 std::uint32_t DspDax::read(const unsigned address, const std::uint32_t mask) {
-  auto next = *this;
   try {
-    const auto value = next.read_checked(reg(address), mask);
-    *this = next;
-    return value;
+    return read_checked(reg(address), mask);
   } catch (const Fault &error) {
     throw Fault("DSP DAX register read at X:" + hex(address, 6) + ": " + error.what());
   }
-}
-
-DspDaxOutput DspDax::output() const {
-  if (!active_) { return {}; }
-  require_clock(observed_);
-  return {.driven = true, .level = level_};
 }
 
 bool DspDax::request() const {

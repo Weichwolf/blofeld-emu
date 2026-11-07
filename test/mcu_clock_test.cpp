@@ -223,7 +223,7 @@ void test_bus_mapping_and_clock_reset() {
   bus.write(relocated_base + flags, byte_mask);
   bus.reset();
   require(bus.read(usb_high) == 8 && bus.read(flags) == 0,
-          "Board reset suspends PHY, restores registers and preserves cleared PORF");
+          "Instrument reset suspends PHY, restores registers and preserves cleared PORF");
 }
 
 void test_original_boot_clock_boundary(const std::filesystem::path &reference) {

@@ -24,7 +24,7 @@ void require(const bool condition) {
   if (!condition) { throw std::runtime_error("Independent AGU dependency expectation"); }
 }
 
-DspInterlockInstruction describe(const address_reference::Instruction instruction) {
+DspInterlockInstruction describe(const address_runtime::Instruction instruction) {
   const auto result = inspect_native_dependencies(instruction.words.front(), instruction.cost);
   if (!result) { throw std::runtime_error("Missing authored address dependency description"); }
   ++checks;
@@ -38,7 +38,7 @@ void retire(DspInterlocks &history, const DspInterlockInstruction &instruction) 
   require(history.complete(instruction.native_units) == delay);
 }
 
-void dependencies(const address_reference::Sample &sample, const unsigned gap) {
+void dependencies(const address_runtime::Sample &sample, const unsigned gap) {
   const auto producer = describe(sample.producer);
   const auto consumer = describe(sample.consumer);
   const auto nop = describe({.words = {}, .count = 1, .cost = 1});
@@ -51,7 +51,7 @@ void dependencies(const address_reference::Sample &sample, const unsigned gap) {
   require(restored.preview(consumer) == 0);
 }
 
-void actual_retirement(const address_reference::Sample &sample, const unsigned gap) {
+void actual_retirement(const address_runtime::Sample &sample, const unsigned gap) {
   std::array<dsp56300::Word, 8> program{};
   for (unsigned index = 0; index < sample.producer.count; ++index) {
     program.at(index) = sample.producer.words.at(index);
@@ -108,7 +108,7 @@ void actual_retirement(const address_reference::Sample &sample, const unsigned g
 
 void register_groups() {
   // Independently assembled encodings cover all eight AGU register groups.
-  for (const auto sample : address_reference::operands) {
+  for (const auto sample : address_runtime::operands) {
     const auto decoded = describe({.words = {sample.opcode}, .count = 1, .cost = sample.cost});
     require(decoded.agu_reads == (1U << sample.group) && decoded.agu_writes == 0 &&
             decoded.move_reads == sample.move_reads && decoded.move_writes == 0 &&
@@ -116,7 +116,7 @@ void register_groups() {
             !decoded.status_read && decoded.partial_status_source == sample.partial &&
             decoded.move_read_advance == sample.advance);
   }
-  for (const auto opcode : address_reference::guards) {
+  for (const auto opcode : address_runtime::guards) {
     require(!inspect_native_dependencies(opcode, 1));
   }
 }
@@ -125,7 +125,7 @@ void register_groups() {
 unsigned native_dependency_address_checks() {
   checks = 0;
   register_groups();
-  for (const auto &sample : address_reference::samples) {
+  for (const auto &sample : address_runtime::samples) {
     for (unsigned gap = 0; gap < sample.gaps; ++gap) {
       dependencies(sample, gap);
       actual_retirement(sample, gap);

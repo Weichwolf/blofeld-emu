@@ -1,0 +1,39 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#include "audio/pcm_sink.hpp"
+#include "common/bus.hpp"
+#include "runtime/instrument.hpp"
+#include "runtime/instrument_context.hpp"
+
+#include <string>
+
+namespace blofeld::runtime {
+void Instrument::attach_pcm_output(PcmFrameSink &sink) {
+  require_healthy();
+  if (!config_.pcm) { throw Fault("External audio requires a decoded PCM route"); }
+  if (pcm_output_ == &sink) { throw Fault("External audio sink is already bound"); }
+  sink.check();
+  sink.claim_source(identity_);
+  retire_pcm_output();
+  pcm_output_ = &sink;
+}
+
+void Instrument::retire_pcm_output() noexcept {
+  if (pcm_output_ != nullptr) { pcm_output_->invalidate(); }
+}
+
+void Instrument::mark_fault() noexcept {
+  control_.faulted = true;
+  retire_pcm_output();
+}
+
+void Instrument::check_pcm_output() const {
+  if (pcm_output_ == nullptr) { return; }
+  try {
+    pcm_output_->check();
+  } catch (const Fault &error) {
+    throw Fault("Reference PCM output check at=" + std::to_string(ticks()) +
+                " mcu-pc=" + mcu_pc_context(native_->mcu) +
+                " dsp-pc=" + hex(native_->dsp.cpu().registers().pc, 6) + ": " + error.what());
+  }
+}
+}

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dsp/dsp_bus.hpp"
 
-#include "board/gpio_pads.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_interrupts.hpp"
 #include "dsp/dsp_io_map.hpp"
 #include "dsp/dsp_timers.hpp"
+#include "runtime/gpio_pads.hpp"
 
 #include <algorithm>
 #include <array>
@@ -49,6 +49,21 @@ change_bit(const std::uint32_t value, const std::uint32_t mask, const DspBitOper
     case DspBitOperation::change: return value ^ mask;
     default: throw Fault("Invalid DSP peripheral bit operation");
   }
+}
+
+bool access_timer_bit(DspTimers &timers, const DspBitAccess access) {
+  const auto mask = 1U << access.bit;
+  constexpr unsigned timer_input = 0x1000;
+  const bool old = (timers.read(access.address, mask) & mask) != 0;
+  if (access.operation != DspBitOperation::test) {
+    // Only TCSR has read-only DI and W1C flags. Other timer words retain
+    // their ordinary full-word value; native register checks stay strict.
+    const auto read_mask =
+        DspTimers::is_control(access.address) ? word_mask & ~timer_input : word_mask;
+    const auto current = timers.read(access.address, read_mask);
+    timers.write({.address = access.address, .value = change_bit(current, mask, access.operation)});
+  }
+  return old;
 }
 
 struct GpioRegister {
@@ -133,6 +148,7 @@ void DspBus::reset() {
 }
 
 void DspBus::reset_peripherals() {
+  note_io_change();
   interrupts_.reset();
   shi_.reset();
   timers_.reset();
@@ -175,6 +191,7 @@ std::optional<bool> DspBus::access_peripheral_bit(const DspBitAccess access) {
     throw Fault("Unsupported DSP unselected peripheral bit access at " + address_text(target));
   }
   if (!handles_peripheral_bit(target)) { return std::nullopt; }
+  if (access.operation != DspBitOperation::test && gpio_register(target)) { note_io_change(); }
   const auto mask = 1U << access.bit;
   if (access.space == DspSpace::x && DspDax::handles(access.address)) {
     sync_dax();
@@ -192,18 +209,7 @@ std::optional<bool> DspBus::access_peripheral_bit(const DspBitAccess access) {
     return old;
   }
   if (access.space == DspSpace::x && DspTimers::handles(access.address)) {
-    constexpr unsigned timer_input = 0x1000;
-    const bool old = (timers_.read(access.address, mask) & mask) != 0;
-    if (access.operation != DspBitOperation::test) {
-      // Only TCSR has read-only DI and W1C flags. Other timer words retain
-      // their ordinary full-word value; native register checks stay strict.
-      const auto read_mask =
-          DspTimers::is_control(access.address) ? word_mask & ~timer_input : word_mask;
-      const auto current = timers_.read(access.address, read_mask);
-      timers_.write(
-          {.address = access.address, .value = change_bit(current, mask, access.operation)});
-    }
-    return old;
+    return access_timer_bit(timers_, access);
   }
   const auto mapping = gpio_register(target);
   if (!mapping.has_value()) { return std::nullopt; }
@@ -220,79 +226,6 @@ std::optional<bool> DspBus::access_peripheral_bit(const DspBitAccess access) {
   sync_esai_port(mapping->port);
   if (mapping->port == DspPort::d) { sync_dax(); }
   return old;
-}
-
-DspPeripheralBitSample DspBus::capture_peripheral_bit(const DspBitAccess access) {
-  constexpr unsigned word_bits = 24;
-  constexpr unsigned timer_input = 0x1000;
-  const DspAddress target{.space = access.space, .address = access.address};
-  static_cast<void>(bank(access.space));
-  if (access.address > word_mask || access.bit >= word_bits ||
-      access.operation == DspBitOperation::test ||
-      static_cast<unsigned>(access.operation) > static_cast<unsigned>(DspBitOperation::change) ||
-      !handles_peripheral_bit(target)) {
-    throw Fault("Unsupported owned RMW read at " + address_text(target));
-  }
-  DspPeripheralBitSample sample;
-  sample.access_ = access;
-  sample.memory_mode_ = memory_mode_;
-  sample.bus_control_ = bus_control_;
-  const auto mask = 1U << access.bit;
-  if (access.space == DspSpace::x && DspDax::handles(access.address)) {
-    sync_dax();
-    sample.source_ = dax_.read(access.address);
-  } else if (access.space == DspSpace::x && DspDma::handles(access.address)) {
-    sample.source_ = dma_.read(access.address);
-  } else if (access.space == DspSpace::x && DspTimers::handles(access.address)) {
-    const auto read_mask =
-        DspTimers::is_control(access.address) ? (word_mask & ~timer_input) | mask : word_mask;
-    sample.source_ = timers_.read(access.address, read_mask);
-  } else {
-    const auto mapping = gpio_register(target);
-    if (!mapping ||
-        (mapping->port == DspPort::f && gpio(mapping->port).contract() == DspGpioContract::strict &&
-         bus_control_ != port_f_bus_control)) {
-      throw Fault("Unsupported owned GPIO RMW read at " + address_text(target));
-    }
-    sample.port_ = mapping->port;
-    sample.reg_ = mapping->reg;
-    sample.source_ = gpio(mapping->port).read(mapping->reg, mask);
-  }
-  sample.old_ = (sample.source_ & mask) != 0;
-  return sample;
-}
-
-bool DspBus::commit_peripheral_bit(const DspPeripheralBitSample &sample) {
-  const auto access = sample.access_;
-  const DspAddress target{.space = access.space, .address = access.address};
-  if (memory_mode_ != sample.memory_mode_ || bus_control_ != sample.bus_control_) {
-    throw Fault("Owned RMW write changed its sampled bus context at " + address_text(target));
-  }
-  const auto mask = 1U << access.bit;
-  if (sample.port_) {
-    const auto port = *sample.port_;
-    gpio(port).write({.reg = sample.reg_,
-                      .value = change_bit(sample.source_, mask, access.operation),
-                      .mask = mask});
-    sync_esai_port(port);
-    if (port == DspPort::d) { sync_dax(); }
-  } else {
-    constexpr unsigned timer_input = 0x1000;
-    const bool timer = access.space == DspSpace::x && DspTimers::handles(access.address);
-    const bool timer_control = timer && DspTimers::is_control(access.address);
-    const auto source = timer_control ? sample.source_ & ~timer_input : sample.source_;
-    const auto value = change_bit(source, mask, access.operation);
-    if (timer) {
-      timers_.write({.address = access.address, .value = value});
-    } else if (access.space == DspSpace::x && DspDax::handles(access.address)) {
-      dax_.write(access.address, value);
-    } else if (access.space == DspSpace::x && DspDma::handles(access.address)) {
-      dma_.write(access.address, value);
-    } else {
-      throw Fault("Owned RMW write lost its sampled peripheral route at " + address_text(target));
-    }
-  }
-  return sample.old_;
 }
 
 DspBus::MemoryLayout DspBus::memory_layout(const unsigned mode) {
@@ -329,15 +262,6 @@ std::array<DspDataWindow, 3> DspBus::data_windows(const DspSpace space) {
                         .writable = true}};
 }
 
-bool DspBus::stable_program_context(const std::uint32_t address, const std::uint32_t omr) const {
-  if (address > word_mask || omr > word_mask) { throw Fault("Invalid DSP program context"); }
-  const unsigned requested = (omr & ms) == 0 ? 0 : 1 + ((omr >> msw_shift) & msw_mask);
-  const auto before = memory_layout(memory_mode_);
-  const auto after = memory_layout(requested);
-  return address < std::min(before.program_end, after.program_end) ||
-         address >= std::max(before.program_end, after.program_end);
-}
-
 bool DspBus::switching_address(const DspAddress access) const {
   const auto before = memory_layout(memory_mode_);
   const auto after = memory_layout(requested_memory_mode_);
@@ -360,66 +284,6 @@ DspBus::Location DspBus::locate(const DspAddress access, const Operation operati
   }
   return access.space == DspSpace::p ? locate_program(address, operation)
                                      : locate_data(access, operation);
-}
-
-DspMemoryResource DspBus::memory_resource(const DspMemoryAccess access) const {
-  const auto target = access.target;
-  if (access.operation != DspMemoryOperation::read &&
-      access.operation != DspMemoryOperation::write) {
-    throw Fault("Invalid DSP memory resource operation at " + address_text(target));
-  }
-  const auto operation =
-      access.operation == DspMemoryOperation::read ? Operation::read : Operation::write;
-  const auto selection = dsp_io_selection(target);
-  if (operation == Operation::read && access.phase != DspMemoryPhase::peripheral_bit &&
-      unselected_read(target)) {
-    return {.bank = target.space, .word = target.address, .selected = false};
-  }
-  if (operation == Operation::write && unselected_write(target)) {
-    return {.bank = target.space, .word = target.address, .selected = false};
-  }
-  if (selection != DspIoSelection::outside) {
-    throw Fault("Unqualified DSP peripheral memory resource " +
-                std::string(operation == Operation::read ? "read at " : "write at ") +
-                address_text(target));
-  }
-  const auto location = locate(target, operation);
-  if (location.rom && operation == Operation::write) {
-    throw Fault("Protected DSP ROM write at " + address_text(target));
-  }
-  constexpr std::array banks{DspSpace::p, DspSpace::x, DspSpace::y};
-  const auto physical_bank = banks.at(location.bank);
-  const auto offset = static_cast<std::uint32_t>(location.offset);
-  if (location.rom) {
-    const auto base = physical_bank == DspSpace::p ? program_rom_base : data_rom_base;
-    return {.bank = physical_bank, .rom = true, .word = base + offset};
-  }
-  constexpr unsigned lower_block_words = 1024;
-  constexpr unsigned upper_block_words = 8192;
-  if (physical_bank == DspSpace::p) { return {.word = offset, .block_words = lower_block_words}; }
-  const auto lower_words = physical_bank == DspSpace::x ? x_low_end : y_low_end;
-  if (offset < lower_words) {
-    return {.bank = physical_bank, .word = offset, .block_words = lower_block_words};
-  }
-  return {.bank = physical_bank,
-          .word = data_rom_end + offset - lower_words,
-          .block_words = upper_block_words};
-}
-
-DspMemoryConflict DspBus::memory_conflict(const DspMemoryPair pair) const {
-  const auto a = memory_resource(pair.core);
-  const auto b = memory_resource(pair.dma);
-  if (!a.selected || !b.selected) { return DspMemoryConflict::independent; }
-  if (a.bank != b.bank || a.rom != b.rom) { return DspMemoryConflict::independent; }
-  if (a.block_words == 0 || b.block_words == 0) { return DspMemoryConflict::unqualified; }
-  if (a.block_words != b.block_words || a.word / a.block_words != b.word / b.block_words) {
-    return DspMemoryConflict::independent;
-  }
-  constexpr unsigned protected_words = 1024;
-  if (a.word / protected_words != b.word / protected_words) {
-    return DspMemoryConflict::unqualified; // Same8K block, different unprotected1K subsection.
-  }
-  return DspMemoryConflict::protected_partition;
 }
 
 DspBus::Location DspBus::locate_program(const std::uint32_t address,
@@ -540,6 +404,13 @@ bool DspBus::unselected_write(const DspAddress access) const {
          (access.address < data_rom_end || access.address >= upper_end);
 }
 
+void DspBus::note_io_change() {
+  if (io_revision_ == std::numeric_limits<std::uint64_t>::max()) {
+    throw Fault("DSP peripheral I/O revision exhausted");
+  }
+  ++io_revision_;
+}
+
 void DspBus::note_program_change() {
   if (program_revision_ == std::numeric_limits<std::uint64_t>::max()) {
     throw Fault("DSP program revision exhausted");
@@ -561,6 +432,7 @@ void DspBus::write(const DspStore access) {
     return;
   }
   if (selection != DspIoSelection::outside) {
+    if (gpio_register(target)) { note_io_change(); }
     write_peripheral(access);
     return;
   }

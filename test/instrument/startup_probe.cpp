@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "audio/pcm_sink.hpp"
 #include "audio/serial_pcm.hpp"
-#include "board/reference_board.hpp"
 #include "common/bus.hpp"
 #include "display/lcd_image.hpp"
 #include "firmware/firmware.hpp"
+#include "runtime/instrument.hpp"
+#include "runtime/profile.hpp"
 #include "storage/flash_image.hpp"
 #include "storage/private_file.hpp"
 #include "storage/virtual_device_state.hpp"
@@ -14,7 +15,6 @@
 #include <exception>
 #include <filesystem>
 #include <iostream>
-#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -22,7 +22,7 @@
 namespace {
 using namespace blofeld;
 using Clock = std::chrono::steady_clock;
-constexpr auto host_limit = std::chrono::seconds{8};
+constexpr auto host_limit = std::chrono::seconds{30};
 constexpr auto report_interval = std::chrono::milliseconds{250};
 constexpr double reference_rate = 44100;
 
@@ -51,13 +51,13 @@ private:
   bool invalid_ = false;
 };
 
-void report(const reference::Board &board,
+void report(const runtime::Instrument &board,
             const Output &output,
             const Clock::time_point started,
             const std::uint64_t timebase,
             const char *phase) {
   const auto elapsed = std::chrono::duration<double>(Clock::now() - started).count();
-  const auto state = board.runtime_status();
+  const auto state = board.status();
   const auto mcu_pc = state.mcu_state_known ? hex(state.mcu.pc) : std::string("unknown");
   std::cout << "phase=" << phase << " host-seconds=" << elapsed << " device-seconds="
             << static_cast<double>(state.common_ticks) / static_cast<double>(timebase)
@@ -74,7 +74,7 @@ void report(const reference::Board &board,
             << std::flush;
 }
 
-void capture_display(const reference::Board &board, const PrivateDirectory &directory) {
+void capture_display(const runtime::Instrument &board, const PrivateDirectory &directory) {
   const auto image = board.display_image({.width = 128, .reverse_commons = true});
   if (!image) { return; }
   const auto text = encode_lcd_text(*image);
@@ -89,31 +89,30 @@ void capture_display(const reference::Board &board, const PrivateDirectory &dire
 }
 
 int probe(const char *const *argv, const Clock::time_point started) {
-  const auto firmware = Firmware::load(argv[1]);
-  const auto config = reference::load_config(argv[2]);
+  const auto profile = runtime::load_profile(argv[1]);
+  const auto firmware = Firmware::load(profile.firmware);
+  const auto config = runtime::instrument_config(profile);
   if (!config.power_on || !config.pcm || !config.lcd_parallel) {
     throw Fault("Startup observation requires a power-on, PCM and display profile");
   }
-  const auto rom = reference::load_rom(argv[3]);
-  const auto device =
-      std::make_shared<VirtualDeviceState>(argv[4], McuFlashImage::from_known(firmware.mcu));
-  const std::filesystem::path directory(argv[5]);
+  const auto rom = runtime::load_rom(profile.boot_rom);
+  const auto device = std::make_shared<VirtualDeviceState>(profile.device_state,
+                                                           McuFlashImage::from_known(firmware.mcu));
+  const std::filesystem::path directory(argv[2]);
   const PrivateDirectory output_directory(directory); // Validate before native execution.
   Output output;
-  reference::Board board(config,
-                         {.image = device->image(),
-                          .rom = rom,
-                          .specification = BLOFELD_DEFAULT_SLA,
-                          .flash_out = {},
-                          .instructions = std::numeric_limits<std::uint64_t>::max(),
-                          .device_state = device});
+  runtime::Instrument board(config,
+                            {.image = device->image(),
+                             .rom = rom,
+                             .specification = BLOFELD_DEFAULT_SLA,
+                             .device_state = device});
   board.attach_pcm_output(output);
   const auto deadline = started + host_limit;
   auto next_report = started;
   bool failed = false;
   try {
     board.initialize();
-    while (!board.finished() && Clock::now() < deadline) {
+    while (Clock::now() < deadline) {
       board.advance();
       const auto now = Clock::now();
       if (now >= next_report) {
@@ -126,11 +125,7 @@ int probe(const char *const *argv, const Clock::time_point started) {
     std::cerr << "Startup fault: " << error.what() << '\n';
   }
   const char *phase = "host-limit";
-  if (failed) {
-    phase = "fault";
-  } else if (board.finished()) {
-    phase = "configuration-limit";
-  }
+  if (failed) { phase = "fault"; }
   report(board, output, started, config.dsp_clock.timebase_hz, phase);
   capture_display(board, output_directory);
   // Observation is deliberately fail-closed: frames and a screen alone do not
@@ -143,11 +138,8 @@ int probe(const char *const *argv, const Clock::time_point started) {
 int main(const int argc, char **argv) {
   const auto started = Clock::now();
   try {
-    constexpr int arguments = 6;
-    if (argc != arguments) {
-      throw Fault(
-          "Usage: blofeld-startup-probe firmware.zip board.bfboard boot.bin unit.bfnvm output-dir");
-    }
+    constexpr int arguments = 3;
+    if (argc != arguments) { throw Fault("Usage: blofeld-startup-probe profile output-dir"); }
     return probe(argv, started);
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

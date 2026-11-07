@@ -218,7 +218,7 @@ void test_literal_bit_changes_do_not_add_dalu_status_delay() {
   constexpr unsigned clear = 0x0a2000;
   constexpr unsigned change = 0x0b2000;
   constexpr unsigned word_bits = 24;
-  // The actual mode5 Board reset sets FM S[1:0] and IPL: $c00300.
+  // The actual mode5 Instrument reset sets FM S[1:0] and IPL: $c00300.
   constexpr unsigned expected_status = 0xc00301;
   constexpr std::array operations{0x0a2020U, clear, change, 0x0b2020U};
   for (const auto opcode : operations) {

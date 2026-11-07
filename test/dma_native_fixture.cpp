@@ -77,20 +77,7 @@ void step_native(DspMachine &machine) {
           "Exactly one untimed native instruction retires without inventing clock periods");
 }
 
-DspDmaBusResult dma(DspMachine &machine, const DspDmaInputs inputs, const DspCoreBusUse core) {
-  try {
-    return machine.bus().advance_dma(inputs, core);
-  } catch (const Fault &error) {
-    const auto cpu = machine.cpu().registers();
-    throw Fault("Own DMA fixture standalone phase pc=" + hex(cpu.pc, 6) +
-                " omr=" + hex(cpu.omr, 6) + ": " + error.what());
-  }
-}
-
 std::optional<DspDmaWord> dma(DspMachine &machine, const DspDmaInputs inputs) {
-  return dma(machine,
-             inputs,
-             {.accesses = {}, .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy})
-      .word;
+  return machine.bus().advance_dma(inputs);
 }
 }

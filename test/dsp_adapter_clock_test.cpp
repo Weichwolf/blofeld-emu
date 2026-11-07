@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "board/gpio_pads.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
@@ -9,6 +8,7 @@
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_timers.hpp"
 #include "dsp56300/core.hpp"
+#include "runtime/gpio_pads.hpp"
 
 #include <array>
 #include <cstdint>

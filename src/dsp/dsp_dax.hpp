@@ -21,12 +21,6 @@ struct DspDaxInputs {
   DspDaxTiming timing = DspDaxTiming::unqualified;
 };
 
-struct DspDaxOutput {
-  bool driven = false;
-  bool level = false;
-  bool operator==(const DspDaxOutput &) const = default;
-};
-
 // DSP56371UM ch10. No implicit core/board clock, IRQ delivery or host audio sink.
 class DspDax {
 public:
@@ -37,11 +31,11 @@ public:
   void write(unsigned address, std::uint32_t value);
   void set_active(bool active);
   void observe(DspDaxInputs inputs);
-  [[nodiscard]] DspDaxOutput output() const;
   [[nodiscard]] bool request() const;
   [[nodiscard]] bool external_clock() const;
 
-  [[nodiscard]] std::uint64_t half_bits() const { return half_bits_; }
+  void advance_aci(std::uint64_t transitions, DspDaxRates rates);
+  [[nodiscard]] std::optional<std::uint64_t> aci_edges_until_event() const;
 
 private:
   enum class Register : std::uint8_t { control, non_audio, audio_a, audio_b, status };
@@ -61,7 +55,7 @@ private:
   [[nodiscard]] std::optional<bool> clock(const DspDaxInputs &inputs) const;
   [[nodiscard]] unsigned divider() const;
   void observe_checked(DspDaxInputs inputs);
-  void emit();
+  void advance_units(std::uint64_t units);
   void begin_frame();
   void begin_subframe();
 
@@ -78,12 +72,7 @@ private:
   unsigned phase_ = 0;
   unsigned position_ = 0;
   unsigned block_frame_ = 0;
-  unsigned preamble_ = 0;
-  unsigned payload_ = 0;
-  unsigned frame_non_audio_ = 0;
-  std::uint64_t half_bits_ = 0;
   bool active_ = false;
-  bool level_ = true;
   bool repeating_ = false;
   bool clear_armed_ = false;
   bool rates_frozen_ = false;

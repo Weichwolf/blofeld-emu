@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "mcu/mcu_gpio.hpp"
 
-#include "board/gpio_pads.hpp"
 #include "common/bus.hpp"
 #include "common/masked_bus.hpp"
 #include "mcu/hc12_registers.hpp"
+#include "runtime/gpio_pads.hpp"
 
 #include <array>
 #include <cstddef>
@@ -83,7 +83,6 @@ McuGpio::McuGpio() {
 }
 
 void McuGpio::reset() {
-  for (auto &input : inputs_) { input.reset(); }
   for (std::size_t index = 0; index < ports_.size(); ++index) {
     const auto external = ports_[index].external;
     ports_[index] = {.latch_known = static_cast<std::uint8_t>(specs[index].initial_latch_known),
@@ -94,36 +93,6 @@ void McuGpio::reset() {
   // S12MEBIV3 figure3-9: normal single-chip reset selects GPIO, not ECLK.
   assignment_e_ = port_e_clock_disable;
   pull_control_ = core_pull_reset;
-}
-
-void McuGpio::advance_inputs() {
-  std::array<GpioPadSample, port_count> physical{};
-  for (auto index = static_cast<std::size_t>(McuPort::t); index < ports_.size(); ++index) {
-    const auto sample =
-        resolve(static_cast<McuPort>(index), static_cast<std::uint8_t>(specs[index].valid));
-    physical[index] = {
-        .known = sample.known, .levels = sample.levels, .conflicts = sample.conflicts};
-  }
-  // Resolve every potentially failing provider before advancing any register.
-  // The pipeline updates themselves cannot throw and need no rollback copy.
-  for (auto index = static_cast<std::size_t>(McuPort::t); index < ports_.size(); ++index) {
-    inputs_[index].advance(physical[index]);
-  }
-  input_clocked_ = true;
-}
-
-std::uint8_t McuGpio::input(const McuPort port, const std::uint8_t requested) const {
-  const auto index = port_index(port);
-  if (!input_clocked_ || index < static_cast<std::size_t>(McuPort::t)) {
-    return sample(port, requested);
-  }
-  const auto observation = inputs_[index].sample(requested);
-  const auto unknown = requested & ~static_cast<unsigned>(observation.known) & specs[index].valid;
-  if (unknown != 0) {
-    throw Fault("Unknown synchronized MCU GPIO input at " + hex(specs[index].base) +
-                " mask=" + hex(unknown, 2) + " conflicts=" + hex(observation.conflicts, 2));
-  }
-  return static_cast<std::uint8_t>(observation.levels);
 }
 
 void McuGpio::set_drive(const McuPort port, const PinDrive drive) {
@@ -311,7 +280,7 @@ std::uint8_t McuGpio::data(const McuPort port, const std::uint8_t mask) const {
   }
   const auto inputs = static_cast<std::uint8_t>(~static_cast<unsigned>(state.direction) &
                                                 specs[index].valid & mask);
-  return static_cast<std::uint8_t>(((state.latch & state.direction) | input(port, inputs)) & mask);
+  return static_cast<std::uint8_t>(((state.latch & state.direction) | sample(port, inputs)) & mask);
 }
 
 std::string_view McuGpio::register_name(const std::uint16_t offset) {
@@ -353,7 +322,8 @@ std::uint8_t McuGpio::read_masked(const MaskedByteRead access) const {
   switch (reg->kind) {
     case 0: return data(reg->port, mask);
     case 1:
-      return input(reg->port, static_cast<std::uint8_t>(specs[port_index(reg->port)].valid & mask));
+      return sample(reg->port,
+                    static_cast<std::uint8_t>(specs[port_index(reg->port)].valid & mask));
     case 2: return static_cast<std::uint8_t>(state.direction & mask);
     case 3: return static_cast<std::uint8_t>(state.reduced_drive & mask);
     case 4: return static_cast<std::uint8_t>(state.pull_enable & mask);
