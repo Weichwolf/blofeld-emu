@@ -12,6 +12,7 @@
 #include <optional>
 #include <span>
 #include <string_view>
+#include <vector>
 
 namespace blofeld {
 namespace {
@@ -90,16 +91,15 @@ McuLocation McuMemory::locate(const std::uint16_t address) const {
   return {};
 }
 
-std::array<McuRamWindow, 5> McuMemory::ram_windows() {
-  // One register window can split SMRAM into two grants; QRAM can be split
-  // into three by registers and the higher-priority full SMRAM decode window.
-  std::array<McuRamWindow, 5> result{};
-  std::size_t count = 0;
+std::vector<McuMemoryWindow> McuMemory::windows() {
+  std::vector<McuMemoryWindow> result;
   constexpr auto end = std::uint32_t{std::numeric_limits<std::uint16_t>::max()} + 1;
   std::uint32_t address = 0;
   while (address < end) {
     const auto location = locate(static_cast<std::uint16_t>(address));
-    if (location.space != McuSpace::smram && location.space != McuSpace::qram) {
+    const bool flash = location.space == McuSpace::flash;
+    if ((location.space != McuSpace::smram && location.space != McuSpace::qram && !flash) ||
+        (flash && !flash_known_.test(location.offset))) {
       ++address;
       continue;
     }
@@ -108,21 +108,32 @@ std::array<McuRamWindow, 5> McuMemory::ram_windows() {
       ++address;
       if (address == end) { break; }
       const auto next = locate(static_cast<std::uint16_t>(address));
-      if (next.space != location.space || next.offset != location.offset + address - first) {
+      if (next.space != location.space || next.offset != location.offset + address - first ||
+          (flash && !flash_known_.test(next.offset))) {
         break;
       }
     } while (true);
     const auto size = address - first;
-    const auto bytes = location.space == McuSpace::smram ? std::span<std::uint8_t>{smram_}
-                                                         : std::span<std::uint8_t>{qram_};
-    const auto known = location.space == McuSpace::smram
-                           ? std::span<std::uint8_t>{smram_initialized_}
-                           : std::span<std::uint8_t>{qram_initialized_};
-    result.at(count++) = {.first = static_cast<std::uint16_t>(first),
-                          .bytes = bytes.subspan(location.offset, size),
-                          .known = known.subspan(location.offset, size)};
+    auto window = storage_window(location, size);
+    window.first = static_cast<std::uint16_t>(first);
+    result.push_back(window);
   }
   return result;
+}
+
+McuMemoryWindow McuMemory::storage_window(const McuLocation location, const std::size_t size) {
+  if (location.space == McuSpace::flash) {
+    return {
+        .bytes = std::span{flash_}.subspan(location.offset, size), .known = {}, .writable = false};
+  }
+  const auto bytes = location.space == McuSpace::smram ? std::span<std::uint8_t>{smram_}
+                                                       : std::span<std::uint8_t>{qram_};
+  const auto knowledge = location.space == McuSpace::smram
+                             ? std::span<std::uint8_t>{smram_initialized_}
+                             : std::span<std::uint8_t>{qram_initialized_};
+  auto known = knowledge.subspan(location.offset, size);
+  if (std::ranges::all_of(known, [](const auto value) { return value != 0; })) { known = {}; }
+  return {.bytes = bytes.subspan(location.offset, size), .known = known};
 }
 
 bool McuMemory::initialized(const McuLocation location) const {

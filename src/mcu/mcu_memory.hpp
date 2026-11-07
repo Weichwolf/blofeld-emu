@@ -11,6 +11,7 @@
 #include <optional>
 #include <span>
 #include <string_view>
+#include <vector>
 
 namespace blofeld {
 
@@ -29,13 +30,14 @@ struct McuMemoryByte {
   bool operator==(const McuMemoryByte &) const = default;
 };
 
-// Borrowed physical RAM and live byte knowledge, selected by the current decoder.
-// A native store updates bytes and sets the corresponding known byte to one.
-// Read/fetch of a zero known byte must fault through the owning MCU bus.
-struct McuRamWindow {
+// Borrowed ordinary storage selected by the committed decoder. Empty knowledge
+// means initialized. A native RAM store publishes the byte and its knowledge;
+// unknown reads and all read-only writes remain accesses to the owning bus.
+struct McuMemoryWindow {
   std::uint16_t first = 0;
   std::span<std::uint8_t> bytes;
   std::span<std::uint8_t> known;
+  bool writable = true;
 };
 
 // Normal single-chip MC9S12UF32 mapping. Power-on RAM is unknown until written.
@@ -45,10 +47,10 @@ public:
   explicit McuMemory(const McuFlashImage &image);
   [[nodiscard]] McuFlashImage flash_image() const;
   [[nodiscard]] McuLocation locate(std::uint16_t address) const;
-  // Sorted, disjoint grants; unused entries are empty. Refresh the descriptors
-  // after mapping retirement/reset. Storage stays borrowed until owner replacement;
-  // ordinary stores and power cycling update the existing knowledge views.
-  [[nodiscard]] std::array<McuRamWindow, 5> ram_windows();
+  // Sorted, disjoint RAM and known flash grants, including physical aliases.
+  // Refresh after mapping retirement, flash mutation or power cycling. Ordinary
+  // RAM stores update the borrowed data and knowledge; no image copy is involved.
+  [[nodiscard]] std::vector<McuMemoryWindow> windows();
   // Pure inspection: no read transaction, initialization or register side effect.
   [[nodiscard]] McuMemoryByte inspect(std::uint16_t address) const;
   [[nodiscard]] std::uint8_t read(std::uint16_t address) const;
@@ -68,6 +70,7 @@ public:
   void invalidate_flash(FlashRange range);
 
 private:
+  [[nodiscard]] McuMemoryWindow storage_window(McuLocation location, std::size_t size);
   friend class McuFlash;
   void commit_flash(const McuMemory &source) noexcept;
   static constexpr std::size_t flash_size = 32768;
