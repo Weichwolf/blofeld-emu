@@ -131,36 +131,35 @@ DspBus::esai_high_clock_edges_until_event(const DspEsaiInstance instance) const 
   return esai_.at(index(instance)).high_clock_edges_until_event();
 }
 
-void DspBus::advance_esai_high_clock(const DspEsaiInstance instance,
-                                     const std::uint64_t edges,
-                                     const DspEsaiClockObserver observer) {
+void DspBus::advance_esai_high_clock(const DspEsaiInstance instance, const std::uint64_t edges) {
   auto &serial = sync_esai(instance);
   const auto &gpio_port = gpio(port(instance));
   require_clock_mux(instance, gpio_port, serial);
-
-  struct Context {
-    const DspGpio &gpio;
-    DspEsaiClockObserver observer;
-  } context{.gpio = gpio_port, .observer = observer};
-
   auto next = serial;
-  next.advance_high_clock_checked(edges,
-                                  {.context = &context,
-                                   .transition = [](void *pointer,
-                                                    const std::uint64_t edge,
-                                                    const DspEsaiOutputs data,
-                                                    const DspEsaiClockOutputs clocks) {
-                                     const auto &call = *static_cast<Context *>(pointer);
-                                     const auto actual_data = qualify(call.gpio, data);
-                                     const auto actual_clocks = qualify_clock(call.gpio, clocks);
-                                     if (call.observer.transition != nullptr) {
-                                       call.observer.transition(
-                                           call.observer.context, edge, actual_data, actual_clocks);
-                                     }
-                                   }});
+  next.advance_high_clock_checked(edges);
   static_cast<void>(qualify(gpio_port, next.outputs()));
   static_cast<void>(qualify_clock(gpio_port, next.clock_outputs()));
   serial = next;
+}
+
+std::optional<DspEsaiSlot> DspBus::esai_transmitted_slot(const DspEsaiInstance instance) const {
+  auto slot = esai_.at(index(instance)).transmitted_slot();
+  if (!slot) { return std::nullopt; }
+  const auto selected = gpio_.at(static_cast<std::size_t>(port(instance))).outputs().peripheral;
+  constexpr unsigned clock_pads = 0x18;
+  if ((selected & clock_pads) != clock_pads) {
+    slot->driven = 0;
+    slot->known = 0;
+    return slot;
+  }
+  unsigned lanes = 0;
+  constexpr unsigned first_pad = 11;
+  for (unsigned lane = 0; lane < 6; ++lane) {
+    if ((selected & (1U << (first_pad - lane))) != 0) { lanes |= 1U << lane; }
+  }
+  slot->driven &= lanes;
+  slot->known &= lanes;
+  return slot;
 }
 
 DspEsaiOutputs DspBus::esai_transmit_outputs(const DspEsaiInstance instance) const {

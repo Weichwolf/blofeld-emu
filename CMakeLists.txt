@@ -1201,7 +1201,7 @@ if(BUILD_TESTING)
 
   add_executable(blofeld-audio-runtime-test test/audio_runtime_test.cpp
     test/audio_runtime_failure.cpp test/audio_runtime_board.cpp test/audio_runtime_underrun.cpp)
-  target_link_libraries(blofeld-audio-runtime-test PRIVATE blofeld_audio_runtime blofeld_reference_board)
+  target_link_libraries(blofeld-audio-runtime-test PRIVATE blofeld_audio_runtime blofeld_reference_board blofeld_pcm_reference)
   add_test(NAME audio_runtime COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/audio_runtime.py"
     $<TARGET_FILE:blofeld-audio-runtime-test> $<TARGET_FILE:blofeld-reference-rom-fixture>
@@ -1213,7 +1213,7 @@ if(BUILD_TESTING)
   set_tests_properties(audio_runtime PROPERTIES SKIP_RETURN_CODE 77
     TIMEOUT ${blofeld_audio_test_timeout} ENVIRONMENT "BLOFELD_TEST_SANITIZER=${BLOFELD_SANITIZER}")
   add_executable(blofeld-pcm-queue-test test/pcm_queue_test.cpp)
-  target_link_libraries(blofeld-pcm-queue-test PRIVATE blofeld_pcm_queue Threads::Threads)
+  target_link_libraries(blofeld-pcm-queue-test PRIVATE blofeld_pcm_queue Threads::Threads blofeld_pcm_reference)
   add_test(NAME pcm_queue COMMAND blofeld-pcm-queue-test)
   set_tests_properties(pcm_queue PROPERTIES TIMEOUT 40)
 
@@ -1364,7 +1364,7 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-midi-cli")
   set_tests_properties(reference_midi_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
   add_executable(blofeld-pcm-transport-test test/pcm_transport_test.cpp test/pcm_wave_test.cpp)
-  target_link_libraries(blofeld-pcm-transport-test PRIVATE blofeld_pcm_transport blofeld_private_files)
+  target_link_libraries(blofeld-pcm-transport-test PRIVATE blofeld_pcm_transport blofeld_private_files blofeld_pcm_reference)
   add_test(NAME pcm_transport COMMAND blofeld-pcm-transport-test
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/pcm-transport")
   add_executable(blofeld-esai-initialization-test test/dsp_esai_initialization_test.cpp)

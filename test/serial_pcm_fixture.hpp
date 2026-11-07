@@ -3,6 +3,7 @@
 
 #include "audio/serial_pcm.hpp"
 #include "common/bus.hpp"
+#include "support/serial_pcm.hpp"
 
 #include <cstdint>
 #include <exception>
@@ -61,5 +62,4 @@ struct Wire {
   }
 };
 
-void native_serial_pcm();
 }

@@ -90,6 +90,16 @@ Live audio consumption bounds runahead; offline consumers may drain faster than
 real time. Host capabilities do not change device clocks. Audio callbacks only
 consume bounded PCM, with no core execution, allocation, file I/O or mutex wait.
 
+Audio ownership
+
+Read sample words from the DSP output memory as the actual transmitter consumes
+its DMA-fed latch. Preserve repeated hardware underrun data, lane ownership,
+slot order and DMA/IRQ status. Assemble complete timestamped frames without
+serializing or decoding their bits. A frame may enter the bounded consumer queue
+before its presentation interval ends; live consumption retains device time.
+Quiet clock intervals advance arithmetically to the next visible device event.
+Bit decoding is an independent test reference, not a production output stage.
+
 Storage and observation
 
 NAND/sample reads use RAM. A storage owner persists changed pages/sectors and

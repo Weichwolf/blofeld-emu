@@ -194,7 +194,6 @@ McuDspRuntime::Observer Board::runtime_observer() {
     control_.return_boundary = cycle.completion_ticks;
     update_wiring();
     control_.return_boundary.reset();
-    observe_pcm(cycle.completion_ticks, "native");
     if (execution_.trace != nullptr) {
       *execution_.trace << (cycle.phase == DspRuntimePhase::region ? "DSP-REGION" : "DSP-IO")
                         << " start=" << cycle.start_ticks << " end=" << cycle.completion_ticks

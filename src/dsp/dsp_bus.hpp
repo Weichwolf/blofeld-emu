@@ -221,12 +221,11 @@ public:
   // publish the next slot/status event. The serial monitor borrows pin values.
   [[nodiscard]] std::optional<std::uint64_t>
   esai_high_clock_edges_until_event(DspEsaiInstance instance) const;
-  void advance_esai_high_clock(DspEsaiInstance instance,
-                               std::uint64_t edges,
-                               DspEsaiClockObserver observer = {});
+  void advance_esai_high_clock(DspEsaiInstance instance, std::uint64_t edges);
   void set_esai_configuration_contract(DspEsaiInstance instance,
                                        DspEsaiConfigurationContract contract);
   [[nodiscard]] DspEsaiOutputs esai_transmit_outputs(DspEsaiInstance instance) const;
+  [[nodiscard]] std::optional<DspEsaiSlot> esai_transmitted_slot(DspEsaiInstance instance) const;
   [[nodiscard]] DspEsaiClockOutputs esai_clock_outputs(DspEsaiInstance instance) const;
   // Explicit standalone reference phases; automatic native DMA bus timing rejects.
   [[nodiscard]] std::optional<DspDmaWord> advance_dma(DspDmaInputs inputs);

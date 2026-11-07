@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <optional>
 
 namespace blofeld {
 void DspEsai::start_frame() {
@@ -29,6 +30,7 @@ void DspEsai::start_slot() {
     throw Fault("DSP ESAI slot counter exhausted at " + address(esai::saisr));
   }
   ++slots_;
+  latched_slot_ = slot_;
   position_ = 0;
   const bool slot_enabled = (latched_mask_ & (1U << slot_)) != 0;
   const bool network = (control_ & esai::network) != 0;
@@ -44,6 +46,23 @@ void DspEsai::start_slot() {
   written_ &= ~running_;
   skip_ = false;
   status_ |= esai::empty | ((slot_ & 1U) == 0 ? esai::even_empty : esai::odd_empty);
+}
+
+std::optional<DspEsaiSlot> DspEsai::transmitted_slot() const {
+  if (slots_ == 0 || !slot_driven_) { return std::nullopt; }
+  const auto layout = format();
+  const unsigned top = (common_control_ & esai::alignment) != 0 ? 15U : 23U;
+  return DspEsaiSlot{.words = shift_,
+                     .sequence = slots_,
+                     .index = latched_slot_,
+                     .channels = frame_slots(),
+                     .slot_bits = layout.slot,
+                     .word_bits = layout.word,
+                     .shift = top + 1 - layout.word,
+                     .driven = running_,
+                     .known = shift_known_,
+                     .high_edges_per_bit = 4 * high_clock_divisor(),
+                     .msb_first = (control_ & esai::shift_lsb) == 0};
 }
 
 unsigned DspEsai::data_bit(const unsigned position) const {

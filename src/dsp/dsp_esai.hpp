@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 
 namespace blofeld {
@@ -38,12 +39,14 @@ struct DspEsaiOutputs {
   bool operator==(const DspEsaiOutputs &) const = default;
 };
 
-// Borrowed serial monitor, called only on generated SCKT transitions. The edge
-// ordinal is relative to the supplied HCKT span, starting at one. The monitor
-// must not mutate this chip or advance another clock. No allocation is required.
-struct DspEsaiClockObserver {
-  void *context = nullptr;
-  void (*transition)(void *, std::uint64_t, DspEsaiOutputs, DspEsaiClockOutputs) = nullptr;
+// A borrowed view of the actual transmitter latch, valid until the next write/clock.
+// No serial decoding or guessed data; lane knowledge and ownership remain explicit.
+struct DspEsaiSlot {
+  std::span<const std::uint32_t, 6> words;
+  std::uint64_t sequence;
+  unsigned index, channels, slot_bits, word_bits, shift;
+  unsigned driven, known, high_edges_per_bit;
+  bool msb_first;
 };
 
 // DSP56371UM chapters8/9: normal/network transmitter with explicit clock inputs.
@@ -62,13 +65,14 @@ public:
   // Periodic HCKT transitions from the already observed level. The caller must
   // stop at high_clock_edges_until_event() and synchronize before register/pad changes.
   // Status, DMA requests and IRQs retain the existing transmitter implementation;
-  // only the divider is advanced arithmetically between SCKT transitions.
-  void advance_high_clock(std::uint64_t edges, DspEsaiClockObserver observer = {});
+  // quiet clock spans advance arithmetically between observable events.
+  void advance_high_clock(std::uint64_t edges);
   // Pure horizon to a slot load, frame/status transition or required external
   // synchronization. nullopt means no running generator/transmitter event.
   [[nodiscard]] std::optional<std::uint64_t> high_clock_edges_until_event() const;
 
   [[nodiscard]] DspEsaiOutputs outputs() const;
+  [[nodiscard]] std::optional<DspEsaiSlot> transmitted_slot() const;
   [[nodiscard]] DspEsaiClockOutputs clock_outputs() const;
   [[nodiscard]] unsigned required_clock_pads() const;
   [[nodiscard]] bool transmit_request() const;
@@ -104,9 +108,10 @@ private:
   [[nodiscard]] unsigned high_clock_divisor() const;
   void rebaseline();
   void observe_high_clock(DspEsaiInputs inputs);
-  void advance_high_clock_checked(std::uint64_t edges, DspEsaiClockObserver observer);
+  void advance_high_clock_checked(std::uint64_t edges);
   [[nodiscard]] std::uint64_t high_edges_for_toggles(std::uint64_t toggles) const;
   [[nodiscard]] unsigned launches_until_event() const;
+  void skip_quiet_clock_toggles(std::uint64_t toggles);
   void observe_bit_clock(DspEsaiInputs inputs);
   void clock_edge(bool clock, std::optional<bool> sync);
   void generate_frame();
@@ -143,6 +148,7 @@ private:
   unsigned running_ = 0;
   unsigned stop_after_slot_ = 0;
   unsigned slot_ = 0;
+  unsigned latched_slot_ = 0;
   unsigned position_ = 0;
   std::uint64_t frames_ = 0;
   std::uint64_t slots_ = 0;

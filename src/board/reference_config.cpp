@@ -366,7 +366,7 @@ PcmRoute pcm_route(std::istringstream &line) {
   const auto polarity = token(line);
   if (polarity != "high" && polarity != "low") { throw Fault("Unknown PCM frame polarity"); }
   result.format.frame_sync_high = polarity == "high";
-  const SerialPcmReceiver validated(result.format);
+  validate_pcm_format(result.format);
   return result;
 }
 

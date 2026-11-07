@@ -30,7 +30,7 @@ constexpr unsigned container_bits = 32;
 }
 
 HostAudioOutput::Session::Session(HostAudioConfig setup) : config(std::move(setup)) {
-  const SerialPcmReceiver validated(config.pcm);
+  validate_pcm_format(config.pcm);
   if (config.pcm.channels != channels || config.sample_rate == 0 || config.timeout.count() <= 0 ||
       config.timeout > maximum_timeout || config.buffer_frames < batch_frames ||
       config.buffer_frames > maximum_buffer_frames || config.target_frames > config.buffer_frames ||

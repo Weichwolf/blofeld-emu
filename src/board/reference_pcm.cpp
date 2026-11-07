@@ -1,112 +1,68 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "audio/pcm_sink.hpp"
 #include "audio/pcm_wave.hpp"
+#include "audio/pcm_words.hpp"
 #include "audio/serial_pcm.hpp"
 #include "board/reference_board.hpp"
 #include "board/reference_context.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_esai.hpp"
-#include "dsp/dsp_gpio.hpp"
+#include "dsp/dsp_esai_registers.hpp"
 
 #include <cstdint>
-#include <limits>
 #include <optional>
 #include <ostream>
 #include <string>
 #include <string_view>
 
 namespace blofeld::reference {
-namespace {
-std::optional<bool> level(const unsigned mask, const unsigned known, const unsigned bits) {
-  return (known & mask) == 0 ? std::nullopt : std::optional{(bits & mask) != 0};
-}
-
-const char *name(const std::optional<bool> value) {
-  if (!value) { return "unknown"; }
-  return *value ? "1" : "0";
-}
-}
-
-SerialPcmPins Board::pcm_pins() const {
-  if (!config_.pcm) { throw Fault("PCM output route is absent"); }
-  const auto route = *config_.pcm;
-  const bool second = route.instance == 1;
-  const auto serial = second ? DspEsaiInstance::secondary : DspEsaiInstance::primary;
-  auto &bus = native_->dsp.bus();
-  constexpr unsigned clock_pads = 0x18;
-  if ((bus.gpio(second ? DspPort::e : DspPort::c).outputs().peripheral & clock_pads) !=
-      clock_pads) {
-    throw Fault("PCM SCKT/FST peripheral mux is absent");
-  }
-  const auto clocks = bus.esai_clock_outputs(serial);
-  const auto data = bus.esai_transmit_outputs(serial);
-  const auto &input = control_.esai_inputs.at(route.instance);
-  return {.clock = (clocks.driven & 1U) != 0 ? level(1, clocks.known, clocks.levels) : input.clock,
-          .frame_sync =
-              (clocks.driven & 2U) != 0 ? level(2, clocks.known, clocks.levels) : input.frame_sync,
-          .data = level(1U << route.lane, data.driven & data.known, data.levels)};
-}
-
-void Board::trace_pcm(const SerialPcmStamp stamp,
-                      const SerialPcmPins pins,
-                      const std::string_view source,
-                      const std::optional<SerialPcmFrame> &frame) const {
+void Board::trace_pcm(const SerialPcmFrame &frame, const std::string_view source) const {
   if (execution_.trace == nullptr) { return; }
+  if (!control_.pcm) { throw Fault("PCM frame has no output owner"); }
   auto &trace = *execution_.trace;
-  trace << "PCM-PINS end=" << stamp.ticks << " order=" << stamp.order << " source=" << source
-        << " clock=" << name(pins.clock) << " fs=" << name(pins.frame_sync)
-        << " data=" << name(pins.data) << " mcu-pc=" << mcu_pc_context(native_->mcu)
-        << " dsp-pc=" << hex(native_->dsp.cpu().registers().pc, 6) << '\n';
-  if (!frame) { return; }
-  if (!control_.pcm) { throw Fault("PCM frame has no receiver"); }
-  trace << "PCM-FRAME index=" << control_.pcm->completed_frames() << " first=" << frame->first_tick
-        << " first-order=" << frame->first_order << " end=" << frame->last_tick
-        << " order=" << frame->last_order << " channels=" << frame->channels << " samples=";
-  for (unsigned channel = 0; channel < frame->channels; ++channel) {
+  trace << "PCM-FRAME index=" << control_.pcm->completed_frames() << " first=" << frame.first_tick
+        << " end=" << frame.last_tick << " channels=" << frame.channels << " source=" << source
+        << " samples=";
+  for (unsigned channel = 0; channel < frame.channels; ++channel) {
     if (channel != 0) { trace << ','; }
-    trace << frame->samples.at(channel);
+    trace << frame.samples.at(channel);
   }
   trace << '\n';
 }
 
 void Board::observe_pcm(const std::uint64_t at, const std::string_view source) {
-  if (!config_.pcm || !control_.pcm || at < config_.pcm->after_ticks) { return; }
+  if (!config_.pcm || !control_.pcm) { return; }
+  const auto &route = *config_.pcm;
+  const auto instance = route.instance == 0 ? DspEsaiInstance::primary : DspEsaiInstance::secondary;
   try {
-    observe_pcm_pins(at, pcm_pins(), source);
+    const auto slot = native_->dsp.bus().esai_transmitted_slot(instance);
+    if (!slot) { return; }
+    std::uint64_t half_period = 0;
+    if (control_.audio_clock && config_.audio_clock &&
+        (config_.audio_clock->destinations & (1U << route.instance)) != 0) {
+      half_period = control_.audio_clock->half_period_ticks();
+    } else {
+      for (const auto &clock : config_.dsp_clocks) {
+        if (clock.index == route.instance) { half_period = clock.half_period_ticks; }
+      }
+    }
+    const auto frame =
+        control_.pcm->observe(*slot, route.lane, {.ticks = at, .high_half_period = half_period});
+    if (at >= route.after_ticks) { control_.pcm_stamp = SerialPcmStamp{.ticks = at}; }
+    if (!frame) { return; }
+    if (control_.recording) { control_.recording.append(*frame); }
+    if (pcm_output_ != nullptr) { pcm_output_->accept(*frame); }
+    control_.last_pcm = frame;
+    trace_pcm(*frame, source);
   } catch (const Fault &error) {
-    const auto route = *config_.pcm;
-    constexpr unsigned primary = 0xffffa0;
-    constexpr unsigned secondary = 0xffff80;
-    constexpr unsigned clock_control = 22;
-    const auto base = route.instance == 0 ? primary : secondary;
+    const auto base = route.instance == 0 ? 0xffffa0U : 0xffff80U;
     const auto *const space = route.instance == 0 ? "X:" : "Y:";
-    throw Fault("Reference PCM ESAI pin read clock=" + std::string(space) +
-                hex(base + clock_control, 6) + " data=" + space + hex(base + route.lane, 6) +
+    throw Fault("PCM transmitter word operation=read clock=" + std::string(space) +
+                hex(base + esai::tccr, 6) + " data=" + space + hex(base + route.lane, 6) +
                 " at=" + std::to_string(at) + " source=" + std::string(source) +
                 " mcu-pc=" + mcu_pc_context(native_->mcu) +
                 " dsp-pc=" + hex(native_->dsp.cpu().registers().pc, 6) + ": " + error.what());
   }
-}
-
-void Board::observe_pcm_pins(const std::uint64_t at,
-                             const SerialPcmPins pins,
-                             const std::string_view source) {
-  if (!config_.pcm || !control_.pcm || at < config_.pcm->after_ticks) { return; }
-  auto stamp = SerialPcmStamp{.ticks = at};
-  if (control_.pcm_stamp && control_.pcm_stamp->ticks == at) {
-    if (control_.pcm_stamp->order == std::numeric_limits<std::uint64_t>::max()) {
-      throw Fault("PCM same-tick observation order exhausted");
-    }
-    stamp.order = control_.pcm_stamp->order + 1;
-  }
-  const auto frame = control_.pcm->observe_ordered(stamp, pins);
-  control_.pcm_stamp = stamp;
-  if (frame) {
-    if (control_.recording) { control_.recording.append(*frame); }
-    if (pcm_output_ != nullptr) { pcm_output_->accept(*frame); }
-    control_.last_pcm = frame;
-  }
-  trace_pcm(stamp, pins, source, frame);
 }
 
 void Board::save_audio() const {

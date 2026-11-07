@@ -3,6 +3,7 @@
 
 #include "audio/pcm_recording.hpp"
 #include "audio/pcm_sink.hpp"
+#include "audio/pcm_words.hpp"
 #include "audio/serial_pcm.hpp"
 #include "board/mcu_dsp_gpio_peer.hpp"
 #include "board/mcu_dsp_runtime.hpp"
@@ -282,7 +283,7 @@ struct Status {
   std::optional<SquareClock> audio_clock;
   bool audio_clock_started = false;
   std::array<SerialPcmPins, 2> esai_inputs{};
-  std::optional<SerialPcmReceiver> pcm;
+  std::optional<PcmWords> pcm;
   std::optional<SerialPcmStamp> pcm_stamp;
   std::optional<SerialPcmFrame> last_pcm;
   PcmRecording recording;
@@ -378,7 +379,7 @@ private:
     bool audio_clock_started = false;
     std::array<SerialPcmPins, 2> esai_inputs{};
     std::array<std::optional<bool>, 2> held_synchronized_tio{};
-    std::optional<SerialPcmReceiver> pcm;
+    std::optional<PcmWords> pcm;
     std::optional<SerialPcmStamp> pcm_stamp;
     std::optional<SerialPcmFrame> last_pcm;
     PcmRecording recording;
@@ -453,10 +454,6 @@ private:
   [[nodiscard]] std::optional<std::uint64_t> next_audio_clock_event() const;
   void synchronize_audio_clock(std::uint64_t at);
   void advance_audio_clock_span(std::uint64_t at);
-  void observe_clock_pcm(unsigned instance,
-                         std::uint64_t at,
-                         DspEsaiOutputs data,
-                         DspEsaiClockOutputs clocks);
   void trace_audio_clock(const AudioClockRoute &route,
                          SquareClockLevel event,
                          bool baseline,
@@ -468,15 +465,10 @@ private:
   void trace_dsp_midi(std::uint64_t at);
   void observe_sci_midi(std::uint64_t at);
   void observe_pcm(std::uint64_t at, std::string_view source);
-  void observe_pcm_pins(std::uint64_t at, SerialPcmPins pins, std::string_view source);
   void check_pcm_output() const;
   void retire_pcm_output() noexcept;
   void mark_fault() noexcept;
-  [[nodiscard]] SerialPcmPins pcm_pins() const;
-  void trace_pcm(SerialPcmStamp stamp,
-                 SerialPcmPins pins,
-                 std::string_view source,
-                 const std::optional<SerialPcmFrame> &frame) const;
+  void trace_pcm(const SerialPcmFrame &frame, std::string_view source) const;
   [[nodiscard]] DspRuntimeEvents runtime_events();
   [[nodiscard]] DspRuntimePeripheralEvents peripheral_events(Owners &owners);
   [[nodiscard]] McuDspRuntime::CycleInputs runtime_inputs();

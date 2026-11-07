@@ -48,6 +48,7 @@ void DspEsai::reset_paths() {
   stop_after_slot_ = 0;
   position_ = 0;
   slot_ = 0;
+  latched_slot_ = 0;
   previous_clock_.reset();
   previous_sync_ = false;
   baseline_ = false;

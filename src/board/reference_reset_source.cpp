@@ -96,6 +96,9 @@ void Board::observe_u0_release() {
       try {
         synchronize_audio_clock(schedule_ticks());
         native_->runtime->begin_dsp_reset(config_.dsp.initial_reset.value());
+        if (control_.pcm) { control_.pcm->reset(); }
+        control_.pcm_stamp.reset();
+        control_.last_pcm.reset();
       } catch (const Fault &error) {
         throw Fault("MCU U0 DSP reset operation=assert" + context() + ": " + error.what());
       }

@@ -59,8 +59,30 @@ std::optional<std::uint64_t> DspEsai::high_clock_edges_until_event() const {
   return high_edges_for_toggles(toggles);
 }
 
-void DspEsai::advance_high_clock_checked(const std::uint64_t edges,
-                                         const DspEsaiClockObserver observer) {
+void DspEsai::skip_quiet_clock_toggles(const std::uint64_t toggles) {
+  const bool launch_level = (clock_control_ & esai::clock_polarity) == 0;
+  const auto launches =
+      (toggles / 2) + (toggles % 2 != 0 && generated_clock_ != launch_level ? 1U : 0U);
+  if (launches >= launches_until_event()) {
+    throw Fault("DSP ESAI quiet span crosses a transmitter event at " + address(esai::tccr));
+  }
+  cold_configuration_ = false;
+  generated_clock_ = generated_clock_ != (toggles % 2 != 0);
+  previous_clock_ = generated_clock_;
+  if (launches == 0) { return; }
+  const auto count = static_cast<unsigned>(launches);
+  const auto period = format().slot * frame_slots();
+  frame_position_ = (frame_position_ + count) % period;
+  update_frame_flag();
+  if (frame_ && needs_transmit_clock()) {
+    position_ += count;
+    --position_;
+    emit_bit();
+    ++position_;
+  }
+}
+
+void DspEsai::advance_high_clock_checked(const std::uint64_t edges) {
   if (edges == 0) { return; }
   const auto deadline = high_clock_edges_until_event();
   if (deadline && edges > *deadline) {
@@ -79,6 +101,16 @@ void DspEsai::advance_high_clock_checked(const std::uint64_t edges,
   // Apply the same baseline/configuration checks once for this owned span.
   observe_checked(observed_);
   std::uint64_t completed = 0;
+  const auto first_toggle = high_edges_for_toggles(1);
+  if (frame_generator() && edges >= first_toggle) {
+    const auto toggles = 1 + ((edges - first_toggle) / (std::uint64_t{2} * high_clock_divisor()));
+    if (toggles > 1) {
+      completed = high_edges_for_toggles(toggles - 1);
+      skip_quiet_clock_toggles(toggles - 1);
+      observed_.high_clock = *observed_.high_clock != (completed % 2 != 0);
+      high_phase_ = 0;
+    }
+  }
   const bool polarity = (clock_control_ & esai::high_clock_polarity) != 0;
   while (completed < edges) {
     const auto to_toggle = high_edges_for_toggles(1);
@@ -92,15 +124,12 @@ void DspEsai::advance_high_clock_checked(const std::uint64_t edges,
     high_phase_ = 0;
     generated_clock_ = !generated_clock_;
     clock_edge(generated_clock_, observed_.frame_sync);
-    if (observer.transition != nullptr) {
-      observer.transition(observer.context, completed, outputs(), clock_outputs());
-    }
   }
 }
 
-void DspEsai::advance_high_clock(const std::uint64_t edges, const DspEsaiClockObserver observer) {
+void DspEsai::advance_high_clock(const std::uint64_t edges) {
   auto next = *this;
-  next.advance_high_clock_checked(edges, observer);
+  next.advance_high_clock_checked(edges);
   *this = next;
 }
 }

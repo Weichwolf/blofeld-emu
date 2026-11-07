@@ -91,7 +91,7 @@ Board::Board(const Config &config, const Execution &execution)
     if (config.pcm->instance > 1 || config.pcm->lane > 5) {
       throw Fault("Invalid PCM output route");
     }
-    control_.pcm.emplace(config.pcm->format);
+    control_.pcm.emplace(config.pcm->format, config.pcm->after_ticks);
   }
   if (execution.audio) {
     if (!config.pcm) { throw Fault("WAV output requires pcm-receive in the reference board"); }

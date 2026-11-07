@@ -15,7 +15,7 @@ PcmRecording::PcmRecording(const SerialPcmFormat format, const std::size_t capac
     : format_(format),
       capacity_(capacity),
       frames_(std::make_shared<std::vector<SerialPcmFrame>>()) {
-  const SerialPcmReceiver validated(format);
+  validate_pcm_format(format);
   if (capacity == 0 || capacity > maximum_capacity) {
     throw Fault("Invalid PCM recording capacity");
   }
