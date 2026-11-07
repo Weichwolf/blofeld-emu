@@ -25,6 +25,11 @@ constexpr unsigned strobe = 1;
 constexpr unsigned notification_bit = 9;
 constexpr unsigned notification_pin = 1U << notification_bit;
 constexpr unsigned xirq_pin = 1;
+
+bool same_outputs(const DspGpioOutputs first, const DspGpioOutputs second) {
+  return std::array{first.mask, first.known, first.levels, first.peripheral} ==
+         std::array{second.mask, second.known, second.levels, second.peripheral};
+}
 }
 
 McuDspGpioPeer::McuDspGpioPeer(McuMachine &mcu, DspMachine &dsp, const McuDspGpioWiring wiring)
@@ -46,13 +51,22 @@ bool McuDspGpioPeer::shared_mcu_write(const std::uint16_t address) {
          (address >= port_q && address < port_q + port_registers);
 }
 
+bool McuDspGpioPeer::outputs_changed() const {
+  return mcu_revision_ != mcu_.bus().gpio_output_revision() ||
+         !same_outputs(port_c_, dsp_.bus().gpio(DspPort::c).outputs()) ||
+         !same_outputs(port_e_, dsp_.bus().gpio(DspPort::e).outputs());
+}
+
 void McuDspGpioPeer::capture_outputs() {
   port_c_ = dsp_.bus().gpio(DspPort::c).outputs();
+  port_e_ = dsp_.bus().gpio(DspPort::e).outputs();
   drivers_ = mcu_dsp_peer_drivers(data_mask,
                                   mcu_.bus().gpio_outputs(McuPort::q),
                                   mcu_.bus().gpio_biases(McuPort::q),
                                   port_c_,
                                   wiring_.data_pull_down);
+  data_ = resolve_gpio_net(data_mask, drivers_.mcu, drivers_.dsp);
+  mcu_revision_ = mcu_.bus().gpio_output_revision();
   capture_response();
 }
 
@@ -108,8 +122,7 @@ GpioPadSample McuDspGpioPeer::read_data(const std::uint32_t mask) {
 GpioPadSample McuDspGpioPeer::data_pads(const bool dsp_side, const std::uint32_t mask) const {
   const auto allowed = dsp_side ? port_c_mask : data_mask;
   if ((mask & ~allowed) != 0) { throw Fault("Invalid MCU/DSP GPIO data pad read mask"); }
-  auto result = (mask & data_mask) != 0 ? resolve_gpio_net(data_mask, drivers_.mcu, drivers_.dsp)
-                                        : GpioPadSample{};
+  auto result = data_;
   result.known &= mask;
   result.levels &= mask;
   result.conflicts &= mask;
@@ -125,7 +138,7 @@ GpioPadSample McuDspGpioPeer::data_pads(const bool dsp_side, const std::uint32_t
 }
 
 GpioPadSample McuDspGpioPeer::notification() const {
-  const auto source = dsp_.bus().gpio(DspPort::e).outputs();
+  const auto source = port_e_;
   const auto target = mcu_.bus().gpio_outputs(McuPort::e);
   const auto bias = mcu_.bus().gpio_biases(McuPort::e);
   const std::array<GpioNetDriver, 3> drivers{
@@ -196,13 +209,21 @@ void McuDspGpioPeer::rebind() {
 }
 
 void McuDspGpioPeer::synchronize() {
+  bool rebound = false;
   // MCU system reset replaces its bus and drops callbacks; DSP reset retains
   // the GPIO owner and its existing binding. Trusted restores rebind explicitly.
   if (mcu_.run_clock().native_epoch() != mcu_epoch_) {
     reset_response();
     bind_mcu();
+    rebound = true;
   }
-  if (dsp_.clock().hardware_reset_active()) { reset_response(); }
+  const bool resetting = dsp_.clock().hardware_reset_active();
+  if (resetting) { reset_response(); }
+  if (!rebound && !resetting && !outputs_changed()) {
+    // Repeated PDRC writes are distinct producer bytes even when outputs match.
+    capture_response();
+    return;
+  }
   capture_outputs();
   deliver_signals();
 }

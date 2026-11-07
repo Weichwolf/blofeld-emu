@@ -38,6 +38,7 @@ public:
 private:
   void bind_mcu();
   void capture_outputs();
+  [[nodiscard]] bool outputs_changed() const;
   void deliver_signals();
   void begin_response();
   void capture_response();
@@ -51,6 +52,9 @@ private:
   const std::shared_ptr<const bool> lifetime_ = std::make_shared<const bool>(true);
   McuDspPeerDrivers drivers_;
   DspGpioOutputs port_c_;
+  DspGpioOutputs port_e_;
+  GpioPadSample data_;
+  std::uint64_t mcu_revision_ = 0;
   std::uint64_t mcu_epoch_ = 0;
   std::uint64_t dsp_revision_ = 0;
   std::optional<bool> strobe_level_;

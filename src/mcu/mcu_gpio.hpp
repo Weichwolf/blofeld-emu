@@ -66,6 +66,10 @@ public:
   // Intended local drivers only; excludes peer levels and weak input pulls.
   [[nodiscard]] PinOutputs outputs(McuPort port) const;
   [[nodiscard]] PinBiases biases(McuPort port) const;
+
+  // Changes to local output ownership, latches or biases; peer inputs are excluded.
+  [[nodiscard]] std::uint64_t output_revision() const noexcept { return output_revision_; }
+
   [[nodiscard]] static std::string_view register_name(std::uint16_t offset);
   [[nodiscard]] std::uint8_t read(std::uint16_t offset) const;
   [[nodiscard]] std::uint8_t read_masked(MaskedByteRead access) const;
@@ -93,6 +97,7 @@ private:
   [[nodiscard]] std::uint8_t tied_low(McuPort port) const;
   std::array<PortState, port_count> ports_{};
   std::array<GpioPadBinding, port_count> pads_{};
+  std::uint64_t output_revision_ = 0;
   std::uint8_t routing_ = 0;
   std::uint8_t assignment_e_ = 0;
   std::uint8_t pull_control_ = 0;

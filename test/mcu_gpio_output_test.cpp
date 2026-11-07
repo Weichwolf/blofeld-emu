@@ -110,6 +110,46 @@ void unknown_and_peripheral_drivers() {
   rejects([&] { static_cast<void>(gpio.outputs(McuPort::q)); }, "package");
 }
 
+void output_publication_revision() {
+  blofeld::McuGpio gpio;
+  const auto initial = gpio.output_revision();
+  gpio.set_drive(McuPort::q, {.floating = byte_mask});
+  gpio.update_drive(McuPort::q, lower, {.mask = lower, .levels = lower});
+  gpio.set_function(McuPort::q, {});
+  static_cast<void>(gpio.outputs(McuPort::q));
+  static_cast<void>(gpio.observe_pads(McuPort::q, lower));
+  require(gpio.output_revision() == initial,
+          "Peer input changes and observations do not republish local output ownership");
+  const blofeld::PinFunction function{.outputs = lower, .levels = lower};
+  gpio.set_function(McuPort::q, function);
+  require(gpio.output_revision() != initial && gpio.outputs(McuPort::q).levels == lower,
+          "A peripheral output transition invalidates publication without a register write");
+  const auto peripheral = gpio.output_revision();
+  gpio.set_function(McuPort::q, function);
+  gpio.write({.address = reg::ptq + 1, .value = byte_mask});
+  require(gpio.output_revision() == peripheral,
+          "Unchanged peripheral ownership and read-only register writes are inert");
+  gpio.set_function(McuPort::q, {});
+  constexpr std::array writes{blofeld::ByteWrite{.address = reg::ptq, .value = mixed},
+                              blofeld::ByteWrite{.address = reg::ddrq, .value = upper},
+                              blofeld::ByteWrite{.address = reg::rdrq, .value = upper},
+                              blofeld::ByteWrite{.address = reg::perq, .value = lower},
+                              blofeld::ByteWrite{.address = reg::ppsq, .value = lower},
+                              blofeld::ByteWrite{.address = reg::pucr, .value = 0},
+                              blofeld::ByteWrite{.address = reg::pear, .value = 0},
+                              blofeld::ByteWrite{.address = reg::modrr, .value = 3}};
+  for (const auto write : writes) {
+    const auto before = gpio.output_revision();
+    gpio.write(write);
+    require(gpio.output_revision() != before,
+            "Latch, direction, drive, bias and routing writes invalidate local publication");
+  }
+  const auto before_reset = gpio.output_revision();
+  gpio.reset();
+  require(gpio.output_revision() != before_reset && gpio.outputs(McuPort::q).mask == 0,
+          "Reset republishes released output ownership");
+}
+
 void board_observation() {
   blofeld::McuBus bus(flash);
   bus.begin_instruction({.pc = context_pc, .ccr = context_ccr});
@@ -155,6 +195,7 @@ int main() {
   try {
     separate_driver_and_pad();
     unknown_and_peripheral_drivers();
+    output_publication_revision();
     board_observation();
     std::cout << "Local MCU drivers remain separate from peer levels, weak pulls and pad faults.\n";
     return 0;

@@ -291,6 +291,39 @@ void local_registers() {
           "Local NAND control registers reflect the completed write before peer publication");
 }
 
+void repeated_publication() {
+  Fixture fixture({.data_pull_down = byte_mask});
+  auto &bus = fixture.mcu.bus();
+  auto &c = fixture.dsp.bus().gpio(DspPort::c);
+  c.write({.reg = Register::direction, .value = byte_mask});
+  c.write({.value = first});
+  fixture.synchronize();
+  for (unsigned repeat = 0; repeat < 8; ++repeat) {
+    fixture.synchronize();
+    require(bus.read(reg::ptq) == first,
+            "Unchanged publication retains the actual shared byte across repeated register reads");
+  }
+  bus.write(reg::ptq, first);
+  bus.write(reg::ddrq, byte_mask);
+  fixture.synchronize();
+  require(bus.read(pins_q) == first, "Matching active outputs retain a known shared byte");
+  bus.write(reg::ptq, second);
+  fixture.synchronize();
+  require(bus.observe_pads(McuPort::q, byte_mask).conflicts == byte_mask,
+          "A later MCU latch write invalidates the previously published data");
+  bus.write(reg::ddrq, 0);
+  c.write({.reg = Register::direction});
+  fixture.synchronize();
+  require(bus.read(reg::ptq) == 0, "Direction release republishes the declared idle bias");
+  bus.write(reg::perq, byte_mask);
+  fixture.synchronize();
+  require(bus.observe_pads(McuPort::q, byte_mask).known == 0,
+          "A new opposing MCU bias invalidates a previously known idle byte");
+  bus.write(reg::ppsq, byte_mask);
+  fixture.synchronize();
+  require(bus.read(reg::ptq) == 0, "Changing bias direction republishes the actual input byte");
+}
+
 void resets_and_lifetime() {
   Fixture f;
   f.mcu.begin_system_reset(McuResetSource::external, 3);
@@ -324,6 +357,7 @@ int main() {
     data_directions();
     unknown_and_contention();
     interrupts();
+    repeated_publication();
     resets_and_lifetime();
     std::cout << "Native MCU/DSP GPIO peer checks passed\n";
     return 0;

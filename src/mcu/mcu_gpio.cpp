@@ -83,6 +83,7 @@ McuGpio::McuGpio() {
 }
 
 void McuGpio::reset() {
+  ++output_revision_;
   for (std::size_t index = 0; index < ports_.size(); ++index) {
     const auto external = ports_[index].external;
     ports_[index] = {.latch_known = static_cast<std::uint8_t>(specs[index].initial_latch_known),
@@ -143,7 +144,10 @@ void McuGpio::set_function(const McuPort port, const PinFunction function) {
       ((function.inputs | function.outputs) & ~specs[index].valid) != 0) {
     throw Fault("Invalid MCU GPIO peripheral-function masks");
   }
-  ports_[index].function = function;
+  if (ports_[index].function != function) {
+    ports_[index].function = function;
+    ++output_revision_;
+  }
 }
 
 std::uint8_t McuGpio::read_pad(const McuPort port, const std::uint8_t mask) const {
@@ -342,20 +346,24 @@ void McuGpio::write(const ByteWrite write) {
     if ((value & ~port_e_clock_disable) != 0) {
       throw Fault("Unimplemented MCU port E alternate function");
     }
+    ++output_revision_;
     assignment_e_ = value;
     return;
   }
   if (offset == hc12::pucr) {
+    ++output_revision_;
     pull_control_ = static_cast<std::uint8_t>(value & core_pull_mask);
     return;
   }
   if (offset == hc12::modrr) {
+    ++output_revision_;
     routing_ = static_cast<std::uint8_t>(value & routing_mask);
     return;
   }
   const auto reg = lookup(offset);
   if (!reg) { throw Fault("Unknown MCU GPIO write at " + hex(offset)); }
   const auto index = port_index(reg->port);
+  if (reg->kind != 1) { ++output_revision_; }
   auto &state = ports_[index];
   const auto masked = static_cast<std::uint8_t>(value & specs[index].valid);
   switch (reg->kind) {
