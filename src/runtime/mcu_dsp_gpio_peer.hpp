@@ -4,8 +4,10 @@
 #include "runtime/gpio_pads.hpp"
 #include "runtime/mcu_dsp_peer.hpp"
 
+#include <array>
 #include <cstdint>
 #include <memory>
+#include <optional>
 
 namespace blofeld {
 class McuMachine;
@@ -19,9 +21,9 @@ struct McuDspGpioWiring {
   GpioPeerPull notification_pull = GpioPeerPull::none;
 };
 
-// Q[7:0]<->C[7:0], J0->IRQA and PE9->PE0/XIRQ. Only native pad values cross
-// the connection; no command decoding, byte queues or synthesized replies.
-// Both chips must outlive this owner. Rebind after a trusted chip restore.
+// Q/C data registers, J0 requests and E9/XIRQ readiness. A requested report/bulk
+// block retains the sixteen bytes actually written by the DSP until MCU reads.
+// Both chips must outlive this owner; no response contents are synthesized.
 class McuDspGpioPeer {
 public:
   McuDspGpioPeer(McuMachine &mcu, DspMachine &dsp, McuDspGpioWiring wiring);
@@ -37,6 +39,10 @@ private:
   void bind_mcu();
   void capture_outputs();
   void deliver_signals();
+  void begin_response();
+  void capture_response();
+  void reset_response();
+  [[nodiscard]] GpioPadSample read_data(std::uint32_t mask);
   [[nodiscard]] GpioPadSample data_pads(bool dsp_side, std::uint32_t mask) const;
   [[nodiscard]] GpioPadSample notification() const;
   McuMachine &mcu_;
@@ -46,5 +52,12 @@ private:
   McuDspPeerDrivers drivers_;
   DspGpioOutputs port_c_;
   std::uint64_t mcu_epoch_ = 0;
+  std::uint64_t dsp_revision_ = 0;
+  std::optional<bool> strobe_level_;
+  std::array<std::uint8_t, 16> response_{};
+  unsigned produced_ = 0;
+  unsigned consumed_ = 0;
+  bool response_active_ = false;
+  bool transmitting_ = false;
 };
 }

@@ -34,6 +34,8 @@ constexpr unsigned first = 0xa5, second = 0x5a, c_upper = 0xa00;
 constexpr unsigned ready_pin = 1U << 9U, xirq_vector = 0xfff4;
 constexpr unsigned priority = 0xffffff, irqa_vector = 0x10;
 constexpr auto pins_q = reg::ptq + 1;
+constexpr unsigned c_data = 0xffffbd, c_direction = 0xffffbe, c_control = 0xffffbf;
+constexpr unsigned report_command = 13, bulk_command = 14;
 
 McuFlashImage image() {
   std::array<std::uint8_t, McuFlashImage::byte_count> bytes{};
@@ -68,6 +70,109 @@ struct Fixture {
   DspMachine dsp;
   std::unique_ptr<McuDspGpioPeer> peer;
 };
+
+void write_c(Fixture &fixture, const unsigned address, const unsigned value) {
+  fixture.dsp.bus().write({.space = DspSpace::x, .address = address, .value = value});
+  fixture.synchronize();
+}
+
+void request_block(Fixture &fixture, const unsigned command) {
+  write_c(fixture, c_control, 0);
+  write_c(fixture, c_direction, pins_c);
+  constexpr unsigned inactive_nand = 0x300;
+  write_c(fixture, c_data, inactive_nand | command);
+  fixture.mcu.bus().write(reg::ddrq, 0);
+  fixture.mcu.bus().write(reg::ptj, 1);
+  fixture.mcu.bus().write(reg::ddrj, 1);
+  fixture.synchronize();
+  fixture.mcu.bus().write(reg::ptj, 0);
+  fixture.synchronize();
+  fixture.mcu.bus().write(reg::ptj, 1);
+  fixture.synchronize();
+}
+
+void response_blocks() {
+  Fixture fixture({.data_pull_down = byte_mask});
+  constexpr std::array<std::uint8_t, 16> payload{
+      0, 0, 1, 0x7f, 0x80, 0x81, 0xff, 0xff, first, second, 0, 1, 2, 3, 4, 5};
+  constexpr unsigned upper_request_bits = 0xc0;
+  for (const auto command : {report_command,
+                             bulk_command,
+                             upper_request_bits | report_command,
+                             upper_request_bits | bulk_command}) {
+    request_block(fixture, command);
+    for (const auto byte : payload) {
+      write_c(fixture, c_data, byte);
+      fixture.synchronize();
+      static_cast<void>(fixture.mcu.bus().observe_pads(McuPort::q, byte_mask));
+    }
+    // The producer has returned to input before the consumer drains this block.
+    write_c(fixture, c_control, byte_mask);
+    write_c(fixture, c_direction, pins_c & ~byte_mask);
+    for (const auto expected : payload) {
+      require(fixture.mcu.bus().read(reg::ptq) == expected,
+              "Every actual producer byte survives independently of phase, including duplicates");
+    }
+    require(fixture.mcu.bus().read(reg::ptq) == 0,
+            "After sixteen reads, ordinary input ownership resumes without replaying a byte");
+  }
+}
+
+void response_request_edge() {
+  Fixture fixture({.data_pull_down = byte_mask});
+  write_c(fixture, c_control, 0);
+  write_c(fixture, c_direction, pins_c);
+  write_c(fixture, c_data, report_command);
+  fixture.mcu.bus().write(reg::ptj, 0);
+  fixture.mcu.bus().write(reg::ddrj, 1);
+  fixture.synchronize();
+  fixture.mcu.bus().write(reg::ptj, 1);
+  fixture.synchronize();
+  require(fixture.mcu.bus().read(reg::ptq) == report_command,
+          "A rising J0 transition leaves the command readable and does not start a byte block");
+  fixture.mcu.bus().write(reg::ptj, 0);
+  fixture.synchronize();
+  require(
+      rejects([&] { static_cast<void>(fixture.mcu.bus().read(reg::ptq)); }).contains("underrun"),
+      "Only the actual active-low request starts consumption of subsequent DSP writes");
+  write_c(fixture, c_data, first);
+  require(fixture.mcu.bus().read(reg::ptq) == first,
+          "The first actual DSP byte is retained after the falling request edge");
+}
+
+void response_failures_and_reset() {
+  Fixture fixture({.data_pull_down = byte_mask});
+  request_block(fixture, report_command);
+  require(
+      rejects([&] { static_cast<void>(fixture.mcu.bus().read(reg::ptq)); }).contains("underrun"),
+      "A request cannot manufacture a byte before the DSP actually writes it");
+  write_c(fixture, c_data, first);
+  require(rejects([&] {
+            static_cast<void>(fixture.mcu.bus().read_masked_byte({.address = reg::ptq, .mask = 1}));
+          }).contains("Partial"),
+          "A partial response read is refused without advancing the byte cursor");
+  require(fixture.mcu.bus().read(reg::ptq) == first,
+          "A refused partial read leaves the actual byte available");
+  write_c(fixture, c_data, first);
+  write_c(fixture, c_data, second);
+  fixture.mcu.begin_system_reset(McuResetSource::external, 3);
+  fixture.synchronize();
+  require(fixture.mcu.bus().read(reg::ptq) == second,
+          "MCU reset discards queued bytes and reconnects the current published data");
+
+  Fixture overflow({.data_pull_down = byte_mask});
+  request_block(overflow, bulk_command);
+  constexpr unsigned block_bytes = 16;
+  for (unsigned index = 0; index < block_bytes; ++index) { write_c(overflow, c_data, index); }
+  require(rejects([&] { write_c(overflow, c_data, block_bytes); }).contains("overflow"),
+          "An oversized producer block fails at its actual seventeenth write");
+
+  Fixture incomplete({.data_pull_down = byte_mask});
+  request_block(incomplete, report_command);
+  write_c(incomplete, c_data, first);
+  require(rejects([&] { write_c(incomplete, c_control, byte_mask); }).contains("Incomplete"),
+          "Changing direction cannot mark a short producer block complete");
+}
 
 void data_directions() {
   Fixture f;
@@ -198,19 +303,24 @@ void resets_and_lifetime() {
   require(f.dsp.bus().gpio(DspPort::c).observe_pads(byte_mask).known == 0,
           "DSP hardware reset preserves its existing binding without a duplicate attach");
   f.peer.reset();
-  require(rejects([&] {
-            static_cast<void>(f.mcu.bus().observe_pads(McuPort::q, 1));
+  require(
+      rejects([&] {
+        static_cast<void>(f.mcu.bus().observe_pads(McuPort::q, 1));
+      }).contains("Stale MCU/DSP") &&
+          rejects([&] {
+            static_cast<void>(f.dsp.bus().gpio(DspPort::c).observe_pads(1));
           }).contains("Stale MCU/DSP") &&
-              rejects([&] {
-                static_cast<void>(f.dsp.bus().gpio(DspPort::c).observe_pads(1));
-              }).contains("Stale MCU/DSP"),
-          "Destroyed peer callbacks fail without accessing the dead owner");
+          rejects([&] { static_cast<void>(f.mcu.bus().read(reg::ptq)); }).contains("Stale MCU/DSP"),
+      "Destroyed peer callbacks fail without accessing the dead owner");
 }
 }
 
 int main() {
   try {
     local_registers();
+    response_blocks();
+    response_request_edge();
+    response_failures_and_reset();
     data_directions();
     unknown_and_contention();
     interrupts();

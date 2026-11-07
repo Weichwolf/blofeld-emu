@@ -49,7 +49,7 @@ private:
   [[nodiscard]] unsigned capacity(std::uint64_t horizon, DspBoundary boundary) const;
   void native_time(unsigned cycles);
   void synchronize_prefix(unsigned pc);
-  void peripheral_completed(unsigned pc);
+  void peripheral_completed(unsigned pc, bool reschedule);
   DspMachine &machine_;
   std::shared_ptr<const bool> identity_;
   std::uint64_t epoch_ticks_;

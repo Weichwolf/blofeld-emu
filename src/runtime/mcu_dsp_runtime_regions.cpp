@@ -53,18 +53,18 @@ bool McuDspRuntime::advance_native_region(const std::uint64_t horizon,
     const Observer &observer;
   } context{.runtime = *this, .inputs = inputs, .observer = observer};
 
-  const DspPeripheralObserver effects{.context = &context,
-                                      .preparing =
-                                          [](void *pointer, const unsigned pc) {
-                                            const auto &call = *static_cast<Context *>(pointer);
-                                            call.runtime.prepare_native_effect(
-                                                pc, call.inputs, call.observer);
-                                          },
-                                      .completed =
-                                          [](void *pointer, const unsigned pc) {
-                                            const auto &call = *static_cast<Context *>(pointer);
-                                            call.runtime.observe_native_effect(pc, call.observer);
-                                          }};
+  const DspPeripheralObserver effects{
+      .context = &context,
+      .preparing =
+          [](void *pointer, const unsigned pc) {
+            const auto &call = *static_cast<Context *>(pointer);
+            call.runtime.prepare_native_effect(pc, call.inputs, call.observer);
+          },
+      .completed =
+          [](void *pointer, const unsigned pc, bool /*reschedule*/) {
+            const auto &call = *static_cast<Context *>(pointer);
+            call.runtime.observe_native_effect(pc, call.observer);
+          }};
   const auto request = inputs();
   const auto cycles = dsp_.clock().elapsed_cycle_units();
   const auto result = timeline_->advance_native_region(horizon, boundary, request, effects);

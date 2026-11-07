@@ -50,9 +50,9 @@ void DspExecution::synchronize_prefix(const unsigned pc) {
   if (observer_.preparing != nullptr) { observer_.preparing(observer_.context, pc); }
 }
 
-void DspExecution::peripheral_completed(const unsigned pc) {
-  if (observer_.completed != nullptr) { observer_.completed(observer_.context, pc); }
-  machine_.cpu_.request_yield();
+void DspExecution::peripheral_completed(const unsigned pc, const bool reschedule) {
+  if (observer_.completed != nullptr) { observer_.completed(observer_.context, pc, reschedule); }
+  if (reschedule) { machine_.cpu_.request_yield(); }
 }
 
 std::optional<DspExecutionResult>
@@ -85,8 +85,8 @@ DspExecution::advance_native_region(const std::uint64_t horizon,
               static_cast<DspExecution *>(self)->synchronize_prefix(pc);
             },
         .completed =
-            [](void *self, const unsigned pc) {
-              static_cast<DspExecution *>(self)->peripheral_completed(pc);
+            [](void *self, const unsigned pc, const bool reschedule) {
+              static_cast<DspExecution *>(self)->peripheral_completed(pc, reschedule);
             }};
     if (count > std::numeric_limits<std::uint64_t>::max() - accounted_base_) {
       throw Fault("DSP instruction timeline exhausted its base-cycle count");

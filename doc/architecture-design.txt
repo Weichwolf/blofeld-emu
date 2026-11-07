@@ -35,7 +35,12 @@ bit-banged register accesses still require decoding into their actual commands
 and data. Those effects are implemented at register transactions and operation
 completions, without continuously resampling connections between accesses.
 MCU/DSP communication keeps actual data, readiness and interrupts; replies are
-produced by the original firmware. Unknown accesses fail with PC and address.
+produced by the original firmware. Requested report/bulk blocks retain sixteen
+actual DSP register writes in a bounded buffer until the MCU consumes them.
+Observation never dequeues data; repeated byte values remain distinct writes.
+Reset discards partial transfers. Underrun, overflow and incomplete blocks fail
+explicitly instead of manufacturing a reply or relying on GPIO sampling phase.
+Unknown accesses fail with PC and address.
 
 Audio and transport
 

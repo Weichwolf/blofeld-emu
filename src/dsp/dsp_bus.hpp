@@ -152,6 +152,8 @@ public:
 
   [[nodiscard]] std::uint64_t io_revision() const noexcept { return io_revision_; }
 
+  [[nodiscard]] const std::optional<DspStore> &io_write() const noexcept { return io_write_; }
+
   [[nodiscard]] DspGpio &gpio(DspPort port);
 
   [[nodiscard]] DspTimers &timers() { return timers_; }
@@ -236,6 +238,7 @@ private:
   void note_program_change();
   DspCodeChanges changes_;
   std::uint64_t io_revision_ = 0;
+  std::optional<DspStore> io_write_;
   std::uint64_t program_revision_ = 0;
   unsigned memory_mode_ = 0;
   unsigned requested_memory_mode_ = 0;

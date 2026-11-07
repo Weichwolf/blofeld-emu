@@ -74,11 +74,13 @@ void DspIo::prepare_peripheral(const DspAddress target, const unsigned pc) const
   }
 }
 
-void DspIo::observe_peripheral(const DspAddress target, const unsigned pc) const {
+void DspIo::observe_peripheral(const DspAddress target,
+                               const unsigned pc,
+                               const bool reschedule) const {
   constexpr unsigned peripheral_base = 0xffff80;
   if (target.space != DspSpace::p && target.address >= peripheral_base &&
       peripheral_observer_.completed != nullptr) {
-    peripheral_observer_.completed(peripheral_observer_.context, pc);
+    peripheral_observer_.completed(peripheral_observer_.context, pc, reschedule);
   }
 }
 
@@ -108,7 +110,7 @@ bool DspIo::write(const dsp56300::Space space,
     const DspStore store{.space = board_space(space), .address = address, .value = value};
     prepare_peripheral({.space = store.space, .address = store.address}, pc);
     bus_.write(store);
-    observe_peripheral({.space = board_space(space), .address = address}, pc);
+    observe_peripheral({.space = board_space(space), .address = address}, pc, true);
 
     return true;
   } catch (...) { return fail(Operation::write, space, address, pc, value); }
@@ -129,7 +131,9 @@ bool DspIo::bit(const dsp56300::Space space,
                                                     .operation = board_action(action)});
     if (actual) {
       previous = *actual;
-      observe_peripheral({.space = board_space(space), .address = address}, pc);
+      observe_peripheral({.space = board_space(space), .address = address},
+                         pc,
+                         action != dsp56300::BitAction::test);
       return true;
     }
     if (action != dsp56300::BitAction::test) {
@@ -150,7 +154,7 @@ bool DspIo::reset_peripherals(const dsp56300::Word pc) noexcept {
     }
     bus_.reset_peripherals();
     if (peripheral_observer_.completed != nullptr) {
-      peripheral_observer_.completed(peripheral_observer_.context, pc);
+      peripheral_observer_.completed(peripheral_observer_.context, pc, true);
     }
     return true;
   } catch (...) { return fail(Operation::reset, dsp56300::Space::program, pc, pc); }

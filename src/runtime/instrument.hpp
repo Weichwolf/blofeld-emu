@@ -170,6 +170,9 @@ public:
   void initialize();
   void advance();
   [[nodiscard]] Status status() const;
+  // Read-only storage inspection remains available after a runtime fault.
+  [[nodiscard]] McuMemoryByte inspect_mcu(std::uint16_t address) const;
+  [[nodiscard]] std::optional<std::uint32_t> inspect_dsp(DspAddress address) const;
   // Explicit external binding; a restored model requires a fresh sink session.
   void attach_pcm_output(PcmFrameSink &sink);
   // Non-real-time input admission at an inactive native MCU operation boundary.

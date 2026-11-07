@@ -3,6 +3,7 @@
 #include "dsp/dsp_bus.hpp"
 #include "mcu/hc12.hpp"
 #include "mcu/mcu_machine.hpp"
+#include "mcu/mcu_memory.hpp"
 #include "mcu/mcu_reset.hpp"
 #include "runtime/instrument.hpp"
 #include "runtime/mcu_dsp_runtime.hpp"
@@ -10,6 +11,7 @@
 #include "usb/usbip_runtime.hpp"
 #include "usb/usbip_tcp.hpp"
 
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -132,6 +134,16 @@ Status Instrument::status() const {
           .waiting = known && native_->mcu.cpu().waiting(),
           .held_reset = dsp_reset_active(),
           .faulted = timing_faulted()};
+}
+
+McuMemoryByte Instrument::inspect_mcu(const std::uint16_t address) const {
+  require_idle();
+  return native_->mcu.bus().inspect_memory(address);
+}
+
+std::optional<std::uint32_t> Instrument::inspect_dsp(const DspAddress address) const {
+  require_idle();
+  return native_->dsp.bus().inspect_memory(address);
 }
 
 }

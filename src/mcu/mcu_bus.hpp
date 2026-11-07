@@ -80,7 +80,7 @@ public:
   [[nodiscard]] PinSample observe_pads(McuPort port, std::uint8_t mask) const;
   [[nodiscard]] PinOutputs gpio_outputs(McuPort port) const;
   [[nodiscard]] PinBiases gpio_biases(McuPort port) const;
-  void attach_gpio_pad_source(McuPort port, GpioPadReader reader);
+  void attach_gpio_pad_source(McuPort port, GpioPadReader reader, GpioPadReader consume = {});
   // Observe resolved PE0/PE1 after board pad changes, including while masked.
   // Selection remains pure; the board must deliver every edge it claims to model.
   void observe_interrupt_pads();

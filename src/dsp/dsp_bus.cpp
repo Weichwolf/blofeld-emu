@@ -409,6 +409,7 @@ void DspBus::note_io_change() {
     throw Fault("DSP peripheral I/O revision exhausted");
   }
   ++io_revision_;
+  io_write_.reset();
 }
 
 void DspBus::note_program_change() {
@@ -432,8 +433,10 @@ void DspBus::write(const DspStore access) {
     return;
   }
   if (selection != DspIoSelection::outside) {
-    if (gpio_register(target)) { note_io_change(); }
+    const bool gpio = gpio_register(target).has_value();
+    if (gpio) { note_io_change(); }
     write_peripheral(access);
+    if (gpio) { io_write_ = access; }
     return;
   }
   const auto location = locate(target, Operation::write);

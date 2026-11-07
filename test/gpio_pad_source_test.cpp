@@ -4,6 +4,7 @@
 #include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_io.hpp"
 #include "dsp56300/core.hpp"
+#include "dsp56300/memory.hpp"
 #include "mcu/hc12_registers.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_gpio.hpp"

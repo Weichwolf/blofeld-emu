@@ -108,7 +108,7 @@ void McuGpio::set_drive(const McuPort port, const PinDrive drive) {
   ports_[index].external = drive;
 }
 
-void McuGpio::attach_pad_source(const McuPort port, GpioPadReader reader) {
+void McuGpio::attach_pad_source(const McuPort port, GpioPadReader reader, GpioPadReader consume) {
   const auto index = port_index(port);
   static_cast<void>(outputs(port));
   const auto &external = ports_[index].external;
@@ -116,7 +116,7 @@ void McuGpio::attach_pad_source(const McuPort port, GpioPadReader reader) {
     throw Fault("MCU GPIO pad source conflicts with existing external observations at " +
                 hex(specs[index].base));
   }
-  pads_[index].attach(std::move(reader));
+  pads_[index].attach(std::move(reader), std::move(consume));
 }
 
 void McuGpio::update_drive(const McuPort port, const std::uint8_t affected, const PinDrive drive) {
@@ -217,11 +217,12 @@ std::uint8_t McuGpio::tied_low(const McuPort port) const {
   }
 }
 
-PinSample McuGpio::resolve(const McuPort port, const std::uint8_t requested) const {
+PinSample
+McuGpio::resolve(const McuPort port, const std::uint8_t requested, const bool consume) const {
   const auto index = port_index(port);
   if (pads_[index].required()) {
     static_cast<void>(outputs(port));
-    const auto result = pads_[index].sample(requested);
+    const auto result = consume ? pads_[index].read(requested) : pads_[index].sample(requested);
     return {.known = static_cast<std::uint8_t>(result.known),
             .levels = static_cast<std::uint8_t>(result.levels),
             .conflicts = static_cast<std::uint8_t>(result.conflicts)};
@@ -253,14 +254,15 @@ PinSample McuGpio::resolve(const McuPort port, const std::uint8_t requested) con
           .levels = static_cast<std::uint8_t>(value & known)};
 }
 
-std::uint8_t McuGpio::sample(const McuPort port, const std::uint8_t requested) const {
+std::uint8_t
+McuGpio::sample(const McuPort port, const std::uint8_t requested, const bool consume) const {
   const auto index = port_index(port);
   const auto unknown_output =
       ports_[index].function.unknown & requested & ~static_cast<unsigned>(tied_low(port));
   if (unknown_output != 0) {
     throw Fault("Unknown MCU peripheral output latch at " + hex(specs[index].base));
   }
-  const auto observation = resolve(port, requested);
+  const auto observation = resolve(port, requested, consume);
   const auto unknown = requested & ~static_cast<unsigned>(observation.known) & specs[index].valid;
   if (unknown != 0) {
     throw Fault("Unknown MCU GPIO input at " + hex(specs[index].base) + " mask=" + hex(unknown, 2) +
@@ -280,7 +282,8 @@ std::uint8_t McuGpio::data(const McuPort port, const std::uint8_t mask) const {
   }
   const auto inputs = static_cast<std::uint8_t>(~static_cast<unsigned>(state.direction) &
                                                 specs[index].valid & mask);
-  return static_cast<std::uint8_t>(((state.latch & state.direction) | sample(port, inputs)) & mask);
+  return static_cast<std::uint8_t>(((state.latch & state.direction) | sample(port, inputs, true)) &
+                                   mask);
 }
 
 std::string_view McuGpio::register_name(const std::uint16_t offset) {
@@ -322,8 +325,8 @@ std::uint8_t McuGpio::read_masked(const MaskedByteRead access) const {
   switch (reg->kind) {
     case 0: return data(reg->port, mask);
     case 1:
-      return sample(reg->port,
-                    static_cast<std::uint8_t>(specs[port_index(reg->port)].valid & mask));
+      return sample(
+          reg->port, static_cast<std::uint8_t>(specs[port_index(reg->port)].valid & mask), true);
     case 2: return static_cast<std::uint8_t>(state.direction & mask);
     case 3: return static_cast<std::uint8_t>(state.reduced_drive & mask);
     case 4: return static_cast<std::uint8_t>(state.pull_enable & mask);

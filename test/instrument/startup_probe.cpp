@@ -3,7 +3,9 @@
 #include "audio/serial_pcm.hpp"
 #include "common/bus.hpp"
 #include "display/lcd_image.hpp"
+#include "dsp/dsp_bus.hpp"
 #include "firmware/firmware.hpp"
+#include "mcu/mcu_memory.hpp"
 #include "runtime/instrument.hpp"
 #include "runtime/profile.hpp"
 #include "storage/flash_image.hpp"
@@ -88,6 +90,19 @@ void capture_display(const runtime::Instrument &board, const PrivateDirectory &d
   directory.write("display.pbm", encode_lcd_pbm(*image));
 }
 
+void peer_response(const runtime::Instrument &instrument) {
+  // Firmware 1.25 staging/storage identities, never injected response data.
+  constexpr unsigned staging = 0xf000;
+  constexpr unsigned received = 0x19bc;
+  constexpr unsigned block_bytes = 16;
+  for (unsigned index = 0; index < block_bytes; ++index) {
+    const auto source = instrument.inspect_dsp({.space = DspSpace::x, .address = staging + index});
+    const auto destination = instrument.inspect_mcu(static_cast<std::uint16_t>(received + index));
+    std::cout << "peer-byte=" << index << " dsp=" << (source ? hex(*source, 6) : "unknown")
+              << " mcu=" << (destination.value ? hex(*destination.value, 2) : "unknown") << '\n';
+  }
+}
+
 int probe(const char *const *argv, const Clock::time_point started) {
   const auto profile = runtime::load_profile(argv[1]);
   const auto firmware = Firmware::load(profile.firmware);
@@ -128,6 +143,7 @@ int probe(const char *const *argv, const Clock::time_point started) {
   if (failed) { phase = "fault"; }
   report(board, output, started, config.dsp_clock.timebase_hz, phase);
   capture_display(board, output_directory);
+  if (failed) { peer_response(board); }
   // Observation is deliberately fail-closed: frames and a screen alone do not
   // prove USB-MIDI note response, SL playback or complete instrument readiness.
   std::cout << "playability=unproven scope=startup-observation\n";

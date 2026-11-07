@@ -35,13 +35,15 @@ public:
   GpioPadBinding &operator=(GpioPadBinding &&source) noexcept;
   ~GpioPadBinding() = default;
 
-  void attach(GpioPadReader reader);
+  void attach(GpioPadReader reader, GpioPadReader consume = {});
   [[nodiscard]] bool required() const;
   [[nodiscard]] GpioPadSample sample(std::uint32_t mask) const;
+  [[nodiscard]] GpioPadSample read(std::uint32_t mask) const;
 
 private:
   bool required_ = false;
   GpioPadReader reader_;
+  GpioPadReader consumer_;
 };
 
 // Full/reduced outputs both dominate passive pulls. Known opposing active levels

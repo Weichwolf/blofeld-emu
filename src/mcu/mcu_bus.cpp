@@ -390,8 +390,10 @@ PinBiases McuBus::gpio_biases(const McuPort port) const {
   return gpio_.biases(port);
 }
 
-void McuBus::attach_gpio_pad_source(const McuPort port, GpioPadReader reader) {
-  gpio_.attach_pad_source(port, std::move(reader));
+void McuBus::attach_gpio_pad_source(const McuPort port,
+                                    GpioPadReader reader,
+                                    GpioPadReader consume) {
+  gpio_.attach_pad_source(port, std::move(reader), std::move(consume));
   if (port == McuPort::e) { observe_interrupt_pads(); }
 }
 

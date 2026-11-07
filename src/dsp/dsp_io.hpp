@@ -21,7 +21,7 @@ struct DspProgramObserver {
 struct DspPeripheralObserver {
   void *context = nullptr;
   void (*preparing)(void *context, unsigned pc) = nullptr;
-  void (*completed)(void *context, unsigned pc) = nullptr;
+  void (*completed)(void *context, unsigned pc, bool reschedule) = nullptr;
 };
 
 // Converts synchronous core accesses to the strict board bus. This does not
@@ -76,7 +76,7 @@ private:
   friend class DspMachine;
   friend class DspExecution;
   void prepare_peripheral(DspAddress target, unsigned pc) const;
-  void observe_peripheral(DspAddress target, unsigned pc) const;
+  void observe_peripheral(DspAddress target, unsigned pc, bool reschedule = false) const;
   bool fail(Operation operation,
             dsp56300::Space space,
             dsp56300::Word address,

@@ -60,7 +60,7 @@ public:
   void set_drive(McuPort port, PinDrive drive);
   void update_drive(McuPort port, std::uint8_t affected, PinDrive drive);
   void set_function(McuPort port, PinFunction function);
-  void attach_pad_source(McuPort port, GpioPadReader reader);
+  void attach_pad_source(McuPort port, GpioPadReader reader, GpioPadReader consume = {});
   [[nodiscard]] std::uint8_t read_pad(McuPort port, std::uint8_t mask) const;
   [[nodiscard]] PinSample observe_pads(McuPort port, std::uint8_t mask) const;
   // Intended local drivers only; excludes peer levels and weak input pulls.
@@ -85,8 +85,9 @@ private:
     PinFunction function{};
   };
 
-  [[nodiscard]] std::uint8_t sample(McuPort port, std::uint8_t requested) const;
-  [[nodiscard]] PinSample resolve(McuPort port, std::uint8_t requested) const;
+  [[nodiscard]] std::uint8_t
+  sample(McuPort port, std::uint8_t requested, bool consume = false) const;
+  [[nodiscard]] PinSample resolve(McuPort port, std::uint8_t requested, bool consume = false) const;
   [[nodiscard]] unsigned pull_enable(McuPort port) const;
   [[nodiscard]] std::uint8_t data(McuPort port, std::uint8_t mask) const;
   [[nodiscard]] std::uint8_t tied_low(McuPort port) const;

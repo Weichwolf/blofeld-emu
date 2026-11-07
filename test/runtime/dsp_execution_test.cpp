@@ -5,11 +5,13 @@
 #include "dsp/dsp_io.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_run_clock.hpp"
+#include "dsp/dsp_timers.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp56300/memory.hpp"
 #include "isa.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <iostream>
@@ -28,6 +30,10 @@ constexpr std::uint64_t initial_ticks = recovery_ticks * 2;
 constexpr unsigned boot_address = 0xff0000;
 constexpr auto jump = dsp56300::isa::opcode<dsp56300::isa::Opcode::jmp_absolute_short>().front();
 constexpr auto nop = dsp56300::isa::nop.front();
+constexpr unsigned x0_register = 4, priority_offset = 0x3e;
+constexpr auto read_priority =
+    dsp56300::isa::opcode<dsp56300::isa::Opcode::movep_register_high>().front() |
+    (x0_register << 8U) | priority_offset;
 unsigned checks = 0;
 
 void require(const bool condition, const std::string_view message) {
@@ -165,22 +171,24 @@ void memory_switch_boundary(const bool split) {
 struct Observed {
   Device &device;
   std::vector<std::array<std::uint64_t, 3>> calls;
+  std::vector<bool> reschedules;
 
   static void before(void *context, const unsigned pc) {
     auto &self = *static_cast<Observed *>(context);
     self.calls.push_back({0, pc, self.device.machine.clock().elapsed_ticks()});
   }
 
-  static void after(void *context, const unsigned pc) {
+  static void after(void *context, const unsigned pc, const bool reschedule) {
     auto &self = *static_cast<Observed *>(context);
     self.calls.push_back({1, pc, self.device.machine.clock().elapsed_ticks()});
+    self.reschedules.push_back(reschedule);
   }
 };
 
 void real_peripheral_boundary() {
   constexpr std::array program{nop, dsp56300::isa::reset.front(), nop, jump};
   Device device(program);
-  Observed observed{.device = device, .calls = {}};
+  Observed observed{.device = device, .calls = {}, .reschedules = {}};
   const DspPeripheralObserver observer{
       .context = &observed, .preparing = Observed::before, .completed = Observed::after};
   constexpr std::uint64_t horizon = initial_ticks + (1000 * period);
@@ -191,12 +199,74 @@ void real_peripheral_boundary() {
   const std::vector<std::array<std::uint64_t, 3>> expected{{0, 1, prefix_ticks},
                                                            {1, 1, prefix_ticks}};
   require(
-      observed.calls == expected && effect && effect->execution && effect->execution->yielded &&
+      observed.calls == expected && observed.reschedules == std::vector{true} && effect &&
+          effect->execution && effect->execution->yielded &&
           device.machine.cpu().state().progress ==
               dsp56300::Progress{.instructions = 3, .estimated_cycles = reset_completion_cycles} &&
           device.machine.clock().elapsed_ticks() ==
               initial_ticks + (reset_completion_cycles * period),
       "Real peripheral RESET observes its completed prefix once and yields after retirement");
+}
+
+void status_reads_continue_natively() {
+  constexpr unsigned write_direction = 1U << 15U;
+  constexpr auto write_priority = read_priority | write_direction;
+  constexpr std::array program{read_priority, read_priority, write_priority, nop, jump};
+  Device device(program);
+  constexpr auto after_bootstrap = initial_ticks + (3 * period);
+  while (device.machine.clock().elapsed_ticks() < after_bootstrap) {
+    require(device.advance(after_bootstrap).has_value(), "Complete the actual bootstrap JMP first");
+  }
+  Observed observed{.device = device, .calls = {}, .reschedules = {}};
+  const DspPeripheralObserver observer{
+      .context = &observed, .preparing = Observed::before, .completed = Observed::after};
+  const auto effect = device.advance(initial_ticks + (1000 * period), observer);
+  constexpr std::uint64_t completed_cycles = 6; // Bootstrap JMP + three one-cycle MOVEPs.
+  require(effect && effect->execution && effect->execution->yielded &&
+              effect->execution->retired == 3 && device.machine.cpu().registers().pc == 3 &&
+              device.machine.cpu().progress().instructions == 4 &&
+              device.machine.cpu().progress().estimated_cycles == completed_cycles &&
+              device.machine.clock().elapsed_ticks() ==
+                  initial_ticks + (completed_cycles * period) &&
+              observed.reschedules == std::vector{false, false, true},
+          "Status reads retain native execution; a genuine write still reschedules at retirement");
+  constexpr std::uint64_t first_read_cycle = 3;
+  for (std::size_t access = 0; access < 3; ++access) {
+    const auto ticks = initial_ticks + ((first_read_cycle + access) * period);
+    require(observed.calls.at(access * 2) == std::array<std::uint64_t, 3>{0, access, ticks} &&
+                observed.calls.at((access * 2) + 1) ==
+                    std::array<std::uint64_t, 3>{1, access, ticks},
+            "Every read and write observes its exact completed device-time prefix");
+  }
+}
+
+void status_reads_preserve_timer_deadlines() {
+  constexpr std::array program{read_priority, jump};
+  Device device(program);
+  constexpr auto after_bootstrap = initial_ticks + (3 * period);
+  while (device.machine.clock().elapsed_ticks() < after_bootstrap) {
+    require(device.advance(after_bootstrap).has_value(), "Complete the actual bootstrap JMP first");
+  }
+  constexpr unsigned timer_control = 0xffff87;
+  constexpr unsigned timer_compare = timer_control - 2;
+  constexpr unsigned timer_load = timer_control - 1;
+  constexpr unsigned enabled_compare_irq = 5;
+  constexpr unsigned compare_flag = 0x200000;
+  constexpr unsigned compare_vector = 0x5c;
+  auto &timers = device.machine.bus().timers();
+  timers.write({.address = timer_load, .value = 0});
+  timers.write({.address = timer_compare, .value = 2});
+  timers.write({.address = timer_control, .value = enabled_compare_irq});
+  const auto effect = device.advance(initial_ticks + (1000 * period));
+  // Three CLK/2 edges load 0, count 1 and count 2. The completed JMP left phase 1.
+  constexpr std::uint64_t event_cycle = 8;
+  require(effect && effect->execution && !effect->execution->yielded &&
+              effect->execution->retired == 3 &&
+              device.machine.clock().elapsed_ticks() == initial_ticks + (event_cycle * period) &&
+              device.machine.cpu().progress().estimated_cycles == event_cycle &&
+              timers.read(timer_control, compare_flag) == compare_flag &&
+              timers.interrupt_vectors() == std::vector<std::uint32_t>{compare_vector},
+          "Consecutive status reads stop at the actual timer IRQ deadline without extra dispatch");
 }
 
 void wait_retains_cpu_progress() {
@@ -226,6 +296,8 @@ int main() {
     memory_switch_boundary(false);
     memory_switch_boundary(true);
     real_peripheral_boundary();
+    status_reads_continue_natively();
+    status_reads_preserve_timer_deadlines();
     wait_retains_cpu_progress();
     std::cout << checks << " functional DSP execution checks passed\n";
     return 0;

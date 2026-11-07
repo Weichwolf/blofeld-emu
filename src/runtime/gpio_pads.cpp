@@ -33,6 +33,7 @@ GpioPadBinding &GpioPadBinding::operator=(const GpioPadBinding &source) {
   if (this != &source) {
     required_ = source.required_;
     reader_ = {};
+    consumer_ = {};
   }
   return *this;
 }
@@ -43,13 +44,15 @@ GpioPadBinding &GpioPadBinding::operator=(GpioPadBinding &&source) noexcept {
   if (this != &source) {
     required_ = source.required_;
     reader_ = {};
+    consumer_ = {};
   }
   return *this;
 }
 
-void GpioPadBinding::attach(GpioPadReader reader) {
+void GpioPadBinding::attach(GpioPadReader reader, GpioPadReader consume) {
   if (!reader || reader_) { throw Fault("Invalid or already attached resolved GPIO pad source"); }
   reader_ = std::move(reader);
+  consumer_ = std::move(consume);
   required_ = true;
 }
 
@@ -61,6 +64,14 @@ GpioPadSample GpioPadBinding::sample(const std::uint32_t mask) const {
   if (mask == 0) { return {}; }
   if (!reader_) { throw Fault("Detached resolved GPIO pad source mask=" + hex(mask, 6)); }
   const auto result = reader_(mask);
+  validate_sample(result, mask);
+  return result;
+}
+
+GpioPadSample GpioPadBinding::read(const std::uint32_t mask) const {
+  if (mask == 0) { return {}; }
+  if (!consumer_) { return sample(mask); }
+  const auto result = consumer_(mask);
   validate_sample(result, mask);
   return result;
 }
