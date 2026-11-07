@@ -6,7 +6,6 @@
 #include "dsp/dsp_execution.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_peripheral_calendar.hpp"
-#include "mcu/hc12_cycles.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_machine.hpp"
 #include "mcu/mcu_reset.hpp"
@@ -69,22 +68,13 @@ public:
                 DspRuntimePeripheralEvents peripheral = {});
   McuDspRuntime(const McuDspRuntime &) = delete;
   McuDspRuntime &operator=(const McuDspRuntime &) = delete;
-  // Words require the one explicitly declared shared byte; other sub-writes
-  // cannot complete its observation. Unspecified shared accesses remain byte-only.
-  void begin_cycle(Hc12BusCycle cycle,
-                   bool shared_write,
-                   const CycleInputs &inputs,
-                   const Observer &observer = {},
-                   std::optional<std::uint16_t> shared_byte = std::nullopt);
+  // Advance the peer to the MCU's completed native device-time boundary.
+  void synchronize(const CycleInputs &inputs, const Observer &observer = {});
   void observe_write(const BusEvent &event,
                      const std::function<void()> &observe,
                      const CycleInputs &inputs,
                      const Observer &observer = {});
   void end_instruction();
-  void
-  begin_wait_period(McuWaitPeriod period, const CycleInputs &inputs, const Observer &observer = {});
-  // Also closes a zero-period slice cancelled by an IRQ before the peer hook.
-  void end_wait();
   void begin_reset_period(McuResetPeriod period,
                           const CycleInputs &inputs,
                           const Observer &observer = {});
@@ -118,10 +108,6 @@ private:
     std::optional<std::uint64_t> last_native;
     std::optional<std::uint64_t> closed_external;
     bool resetting = false;
-    bool waiting = false;
-    bool offered = false;
-    bool shared_write = false;
-    std::optional<std::uint16_t> shared_address;
     bool cop_deadline = false;
   };
 
@@ -148,7 +134,6 @@ private:
   void consumed() const;
   void validate_dsp_reset_observation() const;
   void finish_boundary();
-  void offer_period(bool waiting);
   void advance(bool native_through,
                bool external_through,
                const CycleInputs &inputs,
@@ -168,7 +153,6 @@ private:
   void observe_input_event(const InputEvent &event);
   void advance_reset(std::uint64_t ticks, bool through);
   void observe_external(std::uint64_t ticks);
-  void prepare_write(const CycleInputs &inputs, const Observer &observer);
   [[noreturn]] void reject_native(const dsp56300::Fault &fault) const;
   McuDspRuntimeInputs inputs_;
   McuMachine &mcu_;
@@ -178,7 +162,6 @@ private:
   DspRuntimePeripheralEvents peripheral_events_;
   std::unique_ptr<PeripheralCalendar> peripheral_;
   State state_;
-  Hc12BusCycle cycle_;
   bool active_ = false;
   bool faulted_ = false;
   bool observing_signals_ = false;

@@ -85,8 +85,6 @@ unsigned McuRunClock::advance(McuBus &bus,
     advance_cycle(bus, context, waiting);
     return 1;
   }
-  constexpr unsigned maximum_span = 1048576;
-  if (maximum_cycles > maximum_span) { throw Fault("MCU clock span exceeds its cycle limit"); }
   bus.begin_instruction(context);
   try {
     auto cycles = maximum_cycles;

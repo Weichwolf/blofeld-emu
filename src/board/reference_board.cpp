@@ -6,14 +6,14 @@
 #include "board/reference_context.hpp"
 #include "common/bus.hpp"
 #include "mcu/hc12.hpp"
-#include "mcu/hc12_cycles.hpp"
-#include "mcu/hc12_registers.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_gpio.hpp"
+#include "mcu/mcu_machine.hpp"
 #include "midi/midi_serial.hpp"
 #include "midi/midi_timed.hpp"
 #include "storage/flash_file.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <iostream>
@@ -119,16 +119,10 @@ void Board::validate_initial_schedule() const {
 }
 
 void Board::attach(Owners &owners) {
-  owners.mcu.set_cycle_observer([this](const auto cycle) { on_cycle(cycle); });
+  owners.mcu.set_span_observer([this](const auto span) { on_span(span); });
   owners.mcu.set_reset_period_observer([this](const auto period) {
     observe_midi(period.context);
     native_->runtime->begin_reset_period(period, runtime_inputs(), runtime_observer());
-    update_wiring();
-  });
-  owners.mcu.set_wait_period_observer([this](const auto period) {
-    observe_midi(period.context);
-    check_signals();
-    native_->runtime->begin_wait_period(period, runtime_inputs(), runtime_observer());
     update_wiring();
   });
   owners.mcu.bus().set_observer([this](const auto &event) { on_write(event); });
@@ -212,25 +206,10 @@ void Board::boundary() {
   check_signals();
 }
 
-void Board::on_cycle(const Hc12BusCycle cycle) {
-  control_.context = cycle.context;
-  observe_midi(cycle.context);
-  check_signals();
-  constexpr unsigned port_b = 1;
-  const bool shared = (cycle.kind == 'w' || cycle.kind == 'W') && cycle.address &&
-                      ((*cycle.address <= port_b && port_b - *cycle.address < cycle.size) ||
-                       u0_release_write(*cycle.address, cycle.size) ||
-                       gpio_peer_write(*cycle.address, cycle.size) ||
-                       b_direction_write(*cycle.address, cycle.size));
-  std::optional<std::uint16_t> shared_byte;
-  if (shared && config_.port_b_pulls && cycle.size == 2 && cycle.address) {
-    if (b_direction_write(*cycle.address, cycle.size)) {
-      shared_byte = hc12::ddrb;
-    } else if (*cycle.address <= port_b && port_b - *cycle.address < cycle.size) {
-      shared_byte = port_b;
-    }
-  }
-  native_->runtime->begin_cycle(cycle, shared, runtime_inputs(), runtime_observer(), shared_byte);
+void Board::on_span(const McuSpan span) {
+  control_.context = span.context;
+  observe_midi(span.context);
+  native_->runtime->synchronize(runtime_inputs(), runtime_observer());
   update_wiring();
 }
 
@@ -308,19 +287,21 @@ void Board::step() {
     if (!native_->mcu.system_reset_active()) { native_->runtime->end_system_reset(); }
     return;
   }
-  if (native_->mcu.cpu().waiting() && !native_->mcu.cpu().pending_interrupt()) {
-    static_cast<void>(native_->mcu.advance_wait(1));
-    native_->runtime->end_wait();
-  } else {
-    const auto result = native_->mcu.cpu().step();
-    native_->runtime->end_instruction();
-    if (result.instruction_executed) { ++control_.instructions; }
-    if (result.interrupt_vector) {
-      ++control_.interrupts;
-      if (execution_.trace != nullptr) {
-        *execution_.trace << "IRQ vector=" << hex(*result.interrupt_vector)
-                          << " stack-reused=" << result.stack_reused << '\n';
-      }
+  const auto local = native_->mcu.run_clock().elapsed_ticks();
+  // USB transport and live input are serviced on their one-millisecond frame timeline.
+  const auto frame = native_->mcu.run_clock().timebase_hz() / 1000U;
+  auto horizon = ((local / frame) + 1U) * frame;
+  if (control_.next_event < config_.events.size()) {
+    horizon = std::min(horizon, (config_.events[control_.next_event].ticks / control_.scale) + 1U);
+  }
+  const auto result = native_->mcu.run_until(horizon);
+  native_->runtime->end_instruction();
+  control_.instructions += result.retired;
+  if (result.interrupt_vector) {
+    ++control_.interrupts;
+    if (execution_.trace != nullptr) {
+      *execution_.trace << "IRQ vector=" << hex(*result.interrupt_vector)
+                        << " stack-reused=" << result.stack_reused << '\n';
     }
   }
   synchronize_midi();

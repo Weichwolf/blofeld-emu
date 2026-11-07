@@ -23,6 +23,7 @@
 #include <optional>
 #include <span>
 #include <string_view>
+#include <vector>
 
 namespace blofeld {
 class VirtualDeviceState;
@@ -54,6 +55,8 @@ public:
   void write(std::uint16_t address, std::uint8_t value) override;
   void write_memory(MemoryWrite access) override;
   [[nodiscard]] std::uint8_t peek(std::uint16_t address) const override;
+
+  [[nodiscard]] std::vector<McuMemoryWindow> memory_windows();
 
   [[nodiscard]] McuMemoryByte inspect_memory(const std::uint16_t address) const {
     return memory_.inspect(address);

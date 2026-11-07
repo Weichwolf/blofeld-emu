@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
 #include "mcu/hc12.hpp"
-#include "mcu/hc12_cycles.hpp"
 #include "mcu/hc12_registers.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_machine.hpp"
@@ -20,7 +19,7 @@ using namespace blofeld;
 using blofeld::test::require;
 constexpr unsigned oscillator = 12000000, drive = 128, settle = 64;
 constexpr unsigned oscillator_ticks = 5, vector_periods = 5, vector_edges = 10;
-constexpr unsigned reset_vector = 0xfffe, por_flag = 0x40, marker = 0x5a;
+constexpr unsigned por_flag = 0x40, marker = 0x5a;
 constexpr unsigned nominal_reset_edges = 195;
 
 std::string rejects(const auto &operation) {
@@ -63,9 +62,8 @@ void test_all_phases() {
       check_fresh(machine);
 
       unsigned edges = 0;
-      unsigned vector = 0;
+      unsigned vector_cycles = 0;
       std::uint64_t elapsed = 0;
-      std::string slots;
       machine.set_reset_period_observer([&](const McuResetPeriod period) {
         require(period.native_epoch == 1 &&
                     period.duration_ticks ==
@@ -75,19 +73,19 @@ void test_all_phases() {
         ++edges;
         elapsed += period.duration_ticks;
       });
-      machine.set_cycle_observer([&](const Hc12BusCycle cycle) {
+      machine.set_span_observer([&](const McuSpan span) {
         require(edges == drive + sync + settle &&
                     machine.system_reset_state()->phase == McuResetPhase::ready,
                 "Native vector periods begin only after literal128+n+64 SYSCLK edges");
-        slots += cycle.kind;
-        if (cycle.kind == 'V' && cycle.address) { vector = *cycle.address; }
+        vector_cycles += span.cycles;
       });
       require(machine.advance_system_reset(drive + sync, McuResetPad::unknown) == drive + sync &&
-                  slots.empty() && machine.run_clock().bus_cycles() == 0,
+                  vector_cycles == 0 && machine.run_clock().bus_cycles() == 0,
               "Unknown external pad is legal throughout the internal drive phase");
       require(machine.advance_system_reset(settle, McuResetPad::high) == settle &&
-                  !machine.system_reset_active() && !machine.timing_faulted() && slots == "VfPPP" &&
-                  vector == reset_vector && machine.cpu().state().pc == blofeld::test::entry &&
+                  !machine.system_reset_active() && !machine.timing_faulted() &&
+                  vector_cycles == vector_periods &&
+                  machine.cpu().state().pc == blofeld::test::entry &&
                   machine.cpu().state().sp == hc12::reset_sp &&
                   machine.cpu().state().ccr == hc12::reset_ccr &&
                   machine.run_clock().bus_cycles() == vector_periods &&

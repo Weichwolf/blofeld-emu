@@ -2,7 +2,6 @@
 #pragma once
 
 #include "mcu/hc12.hpp"
-#include "mcu/hc12_cycles.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_flash_timing_state.hpp"
 #include "mcu/mcu_reset.hpp"
@@ -34,15 +33,12 @@ struct McuPowerOnInputs {
   unsigned synchronization_cycles = 0;
 };
 
-// Before an idle IPBus period; this is not an executing CPU bus-cycle slot.
-struct McuWaitCycle {
+// Completed device-time interval between actual CPU I/O or event boundaries.
+struct McuSpan {
   ExecutionContext context;
-};
-
-// After current-boundary IRQ/input checks, before a committed idle period.
-// This is not an executing CPU bus slot. Exceptions quarantine the wait owner.
-struct McuWaitPeriod {
-  ExecutionContext context;
+  std::uint64_t duration_ticks = 0;
+  unsigned cycles = 0;
+  bool waiting = false;
 };
 
 // Qualified SYSCLK edge during asserted reset; not a native CPU bus slot.
@@ -90,10 +86,9 @@ public:
   void validate_run_boundary() const;
   // Pure check for an inactive, healthy edge boundary while system reset holds the CPU.
   void validate_reset_boundary() const;
-  // Explicit pre-cycle pad observations; external callbacks are never checkpointed.
-  void set_cycle_observer(std::function<void(Hc12BusCycle)> observer);
-  void set_wait_observer(std::function<void(McuWaitCycle)> observer);
-  void set_wait_period_observer(std::function<void(McuWaitPeriod)> observer);
+  void set_span_observer(std::function<void(McuSpan)> observer);
+  // Absolute local device-time horizon. The last atomic instruction may cross it.
+  CpuStep run_until(std::uint64_t ticks);
   void set_reset_period_observer(std::function<void(McuResetPeriod)> observer);
   // Explicit test-scenario hypothesis; never selected by native registers.
   void set_sci_receive_reference(std::optional<SciReceiveReference> reference);

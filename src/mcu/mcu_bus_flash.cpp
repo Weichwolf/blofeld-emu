@@ -11,10 +11,23 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace blofeld {
 
 McuBus::McuBus(const McuFlashImage &image) : memory_(image), flash_(memory_) {}
+
+std::vector<McuMemoryWindow> McuBus::memory_windows() {
+  flash_.require_storage();
+  auto windows = memory_.windows();
+  const bool readable = !flash_.timing_.faulted && !flash_.stopped_ &&
+                        (flash_.control_ & McuFlash::key_access) == 0 && !flash_.active_ &&
+                        flash_.buffer_state_ != McuFlash::BufferState::launched;
+  if (!readable) {
+    std::erase_if(windows, [](const auto &window) { return !window.writable; });
+  }
+  return windows;
+}
 
 McuFlashImage McuBus::power_off_flash_image() const {
   return flash_.power_off_image();

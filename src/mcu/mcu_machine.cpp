@@ -2,8 +2,8 @@
 #include "mcu/mcu_machine.hpp"
 
 #include "common/bus.hpp"
+#include "cpu12/memory.hpp"
 #include "mcu/hc12.hpp"
-#include "mcu/hc12_cycles.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_cop.hpp"
 #include "mcu/mcu_flash_timing_state.hpp"
@@ -13,14 +13,17 @@
 #include "mcu/mcu_sci.hpp"
 #include "storage/flash_image.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace blofeld {
 namespace {
@@ -57,112 +60,99 @@ RunState initial_run(const std::optional<McuRunContract> contract) {
   return {.contract = contract, .clock = McuRunClock(contract->clock)};
 }
 
-bool internal_ram(const McuSpace space) {
-  return space == McuSpace::smram || space == McuSpace::qram;
-}
-
 }
 
 struct McuMachine::State {
   State(std::unique_ptr<McuBus> bus_state,
         const std::filesystem::path &specification,
         RunState run_state)
-      : bus(std::move(bus_state)),
-        run(run_state),
-        timed(run.clock ? std::make_unique<Hc12CycleBus>(
-                              *bus,
-                              [this](const auto cycle) { advance(cycle); },
-                              [this](const auto transfer) { return read_timing(transfer); })
-                        : nullptr),
-        cpu(timed ? static_cast<Bus &>(*timed) : *bus, specification) {
+      : bus(std::move(bus_state)), run(run_state), cpu(*bus, specification) {
     bus->configure_flash_timing(run.contract ? run.contract->flash_timing : FlashTimingInputs{});
-    if (const auto &clock = run.clock; timed && clock) {
-      if (run.idle_cycles > clock->bus_cycles()) { throw Fault("Invalid MCU idle clock count"); }
-      cycle_origin = clock->bus_cycles() - run.idle_cycles;
+    if (run.clock) { cycle_origin = run.clock->bus_cycles() - run.idle_cycles; }
+    refresh_memory();
+    cpu.set_clock_observer([this](const auto cycles, const auto context, const bool boundary) {
+      synchronize(cycles, context);
+      if (boundary) { refresh_memory(); }
+    });
+  }
+
+  void refresh_memory() {
+    const auto revision = bus->code_revision();
+    if (memory_revision == revision) { return; }
+    const auto windows = bus->memory_windows();
+    std::vector<cpu12::Ram> grants;
+    grants.reserve(windows.size());
+    for (const auto &window : windows) {
+      grants.push_back({.first = window.first,
+                        .bytes = window.bytes,
+                        .known = window.known,
+                        .writable = window.writable,
+                        .identity = revision});
+    }
+    cpu.bind_memory(grants.empty() ? cpu12::Memory::external() : cpu12::Memory::mapped(grants));
+    memory_revision = revision;
+  }
+
+  void notify(const ExecutionContext context,
+              const unsigned completed,
+              const std::uint64_t before,
+              const bool waiting) {
+    if (observer && run.clock) {
+      observer({.context = context,
+                .duration_ticks = run.clock->elapsed_ticks() - before,
+                .cycles = completed,
+                .waiting = waiting});
     }
   }
 
-  [[nodiscard]] Hc12ReadTiming read_timing(const MemoryRead transfer) const {
-    const auto &contract = run.contract;
-    constexpr unsigned last_address = 0xffff;
-    if (!contract || contract->memory_timing != McuRunMemory::internal_flash_reads ||
-        transfer.size != 2 || (transfer.address & 1U) == 0 || transfer.address == last_address) {
-      return Hc12ReadTiming::single_cycle;
+  void synchronize(const std::uint64_t cycles, const ExecutionContext context) {
+    if (cycles < accounted_cycles) { throw Fault("MCU nominal execution time moved backwards"); }
+    if (!run.clock) {
+      accounted_cycles = cycles;
+      return;
     }
-    const auto first = bus->memory_.locate(transfer.address);
-    const auto last = bus->memory_.locate(static_cast<std::uint16_t>(transfer.address + 1U));
-    if (first.space == McuSpace::flash && last.space == McuSpace::flash &&
-        last.offset == first.offset + 1U) {
-      return Hc12ReadTiming::byte_cycles;
-    }
-    return Hc12ReadTiming::single_cycle;
-  }
-
-  void advance(const Hc12BusCycle cycle) {
-    if (run.wait_faulted) { throw Fault("MCU wait clock failure requires coordinated recovery"); }
-    if (cycle.address) {
-      const auto first = bus->memory_.locate(*cycle.address);
-      bool qualified = first.space != McuSpace::unmapped && first.space != McuSpace::reserved;
-      if (cycle.size == 2) {
-        const auto last = bus->memory_.locate(static_cast<std::uint16_t>(*cycle.address + 1U));
-        qualified = qualified && first.space == last.space && last.offset == first.offset + 1U &&
-                    ((*cycle.address & 1U) == 0 || internal_ram(first.space));
+    while (accounted_cycles < cycles) {
+      if (run.timer_inputs != 0) { bus->sample_timer_inputs(run.timer_inputs); }
+      const auto before = run.clock->elapsed_ticks();
+      const auto count = static_cast<unsigned>(
+          std::min<std::uint64_t>(cycles - accounted_cycles, std::numeric_limits<unsigned>::max()));
+      unsigned completed = 0;
+      try {
+        completed = run.clock->advance(*bus, context, count);
+      } catch (...) {
+        notify(context, 0, before, false);
+        throw;
       }
-      if (!qualified) {
-        throw Fault("Unqualified MCU reference " + std::string(1, cycle.kind) +
-                    " address=" + hex(*cycle.address) + " size=" + std::to_string(cycle.size));
-      }
+      accounted_cycles += completed;
+      notify(context, completed, before, false);
     }
-    if (observer) { observer(cycle); }
-    if (run.timer_inputs != 0) { bus->sample_timer_inputs(run.timer_inputs); }
-    auto &clock = run.clock;
-    if (!clock) { throw Fault("MCU reference cycle has no run clock"); }
-    clock->advance_run_cycle(*bus, cycle.context);
-  }
-
-  [[nodiscard]] bool advance_wait_cycle(const ExecutionContext context) {
-    bus->begin_instruction(context);
-    if (wait_observer) { wait_observer({.context = context}); }
-    if (cpu.pending_interrupt()) { return false; }
-    const auto gates = bus->wait_clock_gates();
-    if (gates.timer && run.timer_inputs != 0) { bus->sample_timer_inputs(run.timer_inputs); }
-    if (cpu.pending_interrupt()) { return false; }
-    auto &clock = run.clock;
-    if (!clock) { throw Fault("MCU wait cycle has no run clock"); }
-    if (wait_period_observer) { wait_period_observer({.context = context}); }
-    clock->advance_wait_cycle(*bus, context);
-    ++run.idle_cycles;
-    return true;
   }
 
   void check_inactive() const {
     if (cpu.executing() || bus->notifying_ || reset_advancing) {
-      throw Fault("MCU run configuration requires an inactive CPU and bus observer");
+      throw Fault("MCU configuration requires an inactive execution owner");
     }
-    if (!timed) { throw Fault("MCU machine has no reference run clock"); }
+    if (!run.clock) { throw Fault("MCU machine has no device clock"); }
   }
 
   void check_clock_boundary() const {
-    const auto &clock = run.clock;
-    if (timed && (!clock || clock->faulted() || run.wait_faulted || run.reset_faulted ||
-                  run.idle_cycles > clock->bus_cycles() ||
-                  cycle_origin > clock->bus_cycles() - run.idle_cycles ||
-                  timed->completed_cycles_at_boundary() !=
-                      clock->bus_cycles() - run.idle_cycles - cycle_origin)) {
-      throw Fault("MCU run requires coordinated healthy cycle counters");
+    if (run.clock &&
+        (run.clock->faulted() || run.wait_faulted || run.reset_faulted ||
+         accounted_cycles != cpu.cycles() ||
+         run.clock->bus_cycles() != cycle_origin + run.idle_cycles + accounted_cycles)) {
+      throw Fault("MCU run requires a coordinated healthy native boundary");
     }
   }
 
   std::unique_ptr<McuBus> bus;
   RunState run;
-  std::unique_ptr<Hc12CycleBus> timed;
-  std::function<void(Hc12BusCycle)> observer;
-  std::function<void(McuWaitCycle)> wait_observer;
-  std::function<void(McuWaitPeriod)> wait_period_observer;
+  std::function<void(McuSpan)> observer;
   std::function<void(McuResetPeriod)> reset_period_observer;
   bool reset_advancing = false;
   Hc12 cpu;
   std::uint64_t cycle_origin = 0;
+  std::uint64_t accounted_cycles = 0;
+  std::optional<std::uint64_t> memory_revision;
 };
 
 McuMachine::McuMachine(const McuFlashImage &image, const std::filesystem::path &specification)
@@ -221,8 +211,7 @@ const McuRunClock &McuMachine::run_clock() const {
 
 bool McuMachine::timing_faulted() const {
   const auto &clock = state_->run.clock;
-  return state_->timed && (!clock || state_->timed->faulted() || clock->faulted() ||
-                           state_->run.wait_faulted || state_->run.reset_faulted);
+  return (clock && clock->faulted()) || state_->run.wait_faulted || state_->run.reset_faulted;
 }
 
 void McuMachine::validate_run_boundary() const {
@@ -240,19 +229,31 @@ void McuMachine::validate_reset_boundary() const {
   static_cast<void>(run_clock().next_reset_edge_ticks());
 }
 
-void McuMachine::set_cycle_observer(std::function<void(Hc12BusCycle)> observer) {
+void McuMachine::set_span_observer(std::function<void(McuSpan)> observer) {
   state_->check_inactive();
   state_->observer = std::move(observer);
 }
 
-void McuMachine::set_wait_observer(std::function<void(McuWaitCycle)> observer) {
-  state_->check_inactive();
-  state_->wait_observer = std::move(observer);
-}
-
-void McuMachine::set_wait_period_observer(std::function<void(McuWaitPeriod)> observer) {
-  state_->check_inactive();
-  state_->wait_period_observer = std::move(observer);
+CpuStep McuMachine::run_until(const std::uint64_t ticks) {
+  validate_run_boundary();
+  const auto &clock = run_clock();
+  if (ticks <= clock.elapsed_ticks()) { return {.instruction_executed = false}; }
+  state_->refresh_memory();
+  const auto remaining = ticks - clock.elapsed_ticks();
+  const auto period = clock.next_cycle_ticks(bus());
+  auto count = (remaining / period) + (remaining % period != 0 ? 1U : 0U);
+  if (const auto event = clock.cycles_until_event(bus(), cpu().waiting())) {
+    count = std::min(count, *event);
+  }
+  if (count > std::numeric_limits<std::uint64_t>::max() - cpu().cycles()) {
+    throw Fault("MCU event horizon exhausted nominal time");
+  }
+  if (cpu().waiting() && !cpu().pending_interrupt()) {
+    static_cast<void>(advance_wait(static_cast<unsigned>(
+        std::min<std::uint64_t>(count, std::numeric_limits<unsigned>::max()))));
+    return {.instruction_executed = false};
+  }
+  return cpu().run_until(cpu().cycles() + count);
 }
 
 void McuMachine::set_reset_period_observer(std::function<void(McuResetPeriod)> observer) {
@@ -278,6 +279,8 @@ unsigned McuMachine::advance_wait(const unsigned maximum_bus_cycles) {
   state_->check_inactive();
   state_->check_clock_boundary();
   auto &cpu = state_->cpu;
+  auto &clock = state_->run.clock;
+  if (!clock) { throw Fault("MCU wait requires a device clock"); }
   const auto registers = cpu.state();
   const ExecutionContext context{.pc = registers.pc, .ccr = registers.ccr};
   cpu.begin_wait_clock();
@@ -286,8 +289,24 @@ unsigned McuMachine::advance_wait(const unsigned maximum_bus_cycles) {
     state_->bus->begin_instruction(context);
     static_cast<void>(state_->bus->wait_clock_gates());
     while (completed < maximum_bus_cycles && !cpu.pending_interrupt()) {
-      if (!state_->advance_wait_cycle(context)) { break; }
-      ++completed;
+      const auto gates = state_->bus->wait_clock_gates();
+      if (gates.timer && state_->run.timer_inputs != 0) {
+        state_->bus->sample_timer_inputs(state_->run.timer_inputs);
+      }
+      const auto before = clock->elapsed_ticks();
+      const auto before_cycles = clock->bus_cycles();
+      unsigned count = 0;
+      try {
+        count = clock->advance(*state_->bus, context, maximum_bus_cycles - completed, true);
+      } catch (...) {
+        const auto prefix = static_cast<unsigned>(clock->bus_cycles() - before_cycles);
+        state_->run.idle_cycles += prefix;
+        state_->notify(context, prefix, before, true);
+        throw;
+      }
+      completed += count;
+      state_->run.idle_cycles += count;
+      state_->notify(context, count, before, true);
     }
     cpu.end_wait_clock(true);
     return completed;

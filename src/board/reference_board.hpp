@@ -20,7 +20,6 @@
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_shi.hpp"
 #include "dsp56300/core.hpp"
-#include "mcu/hc12_cycles.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_clocked_midi.hpp"
 #include "mcu/mcu_gpio.hpp"
@@ -489,7 +488,7 @@ private:
   [[nodiscard]] std::size_t midi_queue_size() const;
   void step();
   void release(std::uint64_t at);
-  void on_cycle(Hc12BusCycle cycle);
+  void on_span(McuSpan span);
   void on_write(const BusEvent &event);
   void report(std::ostream &stream) const;
   void persist() const;

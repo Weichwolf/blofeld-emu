@@ -267,7 +267,7 @@ add_dependencies(blofeld_core blofeld_hc12_spec)
 target_include_directories(blofeld_core PUBLIC src)
 target_link_libraries(blofeld_core PUBLIC blofeld_mcu)
 set(blofeld_independent_native_args --native dsp56300_core=$<TARGET_FILE:dsp56300_core>)
-target_link_libraries(blofeld_core PRIVATE cpu12::core blofeld_hc12_cycles)
+target_link_libraries(blofeld_core PUBLIC cpu12::core)
 list(APPEND blofeld_independent_native_args --native cpu12_core=$<TARGET_FILE:cpu12_core>)
 target_compile_definitions(blofeld_core PUBLIC
   BLOFELD_DEFAULT_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla")
@@ -1433,6 +1433,17 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-echo-cli" echo)
   set_tests_properties(reference_echo_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_executable(blofeld-mcu-dsp-execution-test test/board/mcu_dsp_execution_test.cpp)
+  target_include_directories(blofeld-mcu-dsp-execution-test PRIVATE test
+    "${BLOFELD_CPU12_ROOT}/test/support" "${BLOFELD_DSP56300_ROOT}/test")
+  target_link_libraries(blofeld-mcu-dsp-execution-test PRIVATE blofeld_mcu_dsp_runtime)
+  add_test(NAME mcu_dsp_execution COMMAND blofeld-mcu-dsp-execution-test)
+
+  add_executable(blofeld-mcu-native-execution-test test/mcu_native_execution_test.cpp)
+  target_include_directories(blofeld-mcu-native-execution-test PRIVATE "${BLOFELD_CPU12_ROOT}/test/support")
+  target_link_libraries(blofeld-mcu-native-execution-test PRIVATE blofeld_core)
+  add_test(NAME mcu_native_execution COMMAND blofeld-mcu-native-execution-test)
+
   add_executable(blofeld-mcu-power-on-test test/mcu_power_on_test.cpp)
   target_link_libraries(blofeld-mcu-power-on-test PRIVATE blofeld_core)
   add_test(NAME mcu_power_on COMMAND blofeld-mcu-power-on-test)
@@ -2322,18 +2333,6 @@ if(BUILD_TESTING)
 
   add_dependencies(quality blofeld-nand-write-store-test
     )
-endif()
-
-# Host-only mutation stamps protect the native runtime's read-only callback contract.
-
-# Explicit developer measurement; never part of routine CTest execution.
-if(BUILD_TESTING)
-  add_executable(blofeld-mcu-boundary-benchmark EXCLUDE_FROM_ALL test/mcu_boundary_benchmark.cpp)
-  target_link_libraries(blofeld-mcu-boundary-benchmark PRIVATE blofeld_mcu_dsp_runtime)
-  add_dependencies(quality blofeld-mcu-boundary-benchmark)
-  add_executable(blofeld-mcu-execution-benchmark EXCLUDE_FROM_ALL test/mcu_execution_benchmark.cpp)
-  target_link_libraries(blofeld-mcu-execution-benchmark PRIVATE blofeld_core)
-  add_dependencies(quality blofeld-mcu-execution-benchmark)
 endif()
 
 if(TARGET blofeld-dma-callback-allocation-test)

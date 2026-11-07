@@ -161,6 +161,7 @@ std::string_view McuBus::write_register(const ByteWrite write) {
   if (!flash_name.empty()) {
     try {
       flash_.write(write);
+      ++code_revision_;
     } catch (const Fault &fault) {
       throw Fault("MCU flash register pc=" + hex(context_.pc) + " ccr=" + hex(context_.ccr, 2) +
                   ": " + fault.what());
@@ -231,7 +232,12 @@ std::uint8_t McuBus::read(const std::uint16_t address) {
                   " ccr=" + hex(context_.ccr, 2) + ": " + fault.what());
     }
   }
-  return memory_.read(address);
+  try {
+    return memory_.read(address);
+  } catch (const Fault &fault) {
+    throw Fault("MCU read at " + hex(address) + " pc=" + hex(context_.pc) +
+                " ccr=" + hex(context_.ccr, 2) + ": " + fault.what());
+  }
 }
 
 std::uint8_t McuBus::read_masked_byte(const MaskedByteRead access) {
@@ -267,7 +273,12 @@ void McuBus::write(const std::uint16_t address, const std::uint8_t value) {
     stage_flash({.address = address, .size = 1, .value = value});
     return;
   } else {
-    memory_.write({.address = address, .value = value});
+    try {
+      memory_.write({.address = address, .value = value});
+    } catch (const Fault &fault) {
+      throw Fault("MCU write at " + hex(address) + " value=" + hex(value, 2) +
+                  " pc=" + hex(context_.pc) + " ccr=" + hex(context_.ccr, 2) + ": " + fault.what());
+    }
   }
   ++revision_;
   invalidate_code({.address = address});

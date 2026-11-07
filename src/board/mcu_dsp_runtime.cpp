@@ -252,82 +252,24 @@ void McuDspRuntime::advance(const bool native_through,
   advance_regions(native_through, external_through, inputs, observer);
 }
 
-void McuDspRuntime::offer_period(const bool waiting) {
-  const auto period = mcu_.run_clock().next_period(mcu_.bus(), waiting);
-  if (period.cop_deadline && !inputs_.reset_dsp_first) {
-    throw Fault("Unqualified MCU/DSP COP reset deadline pc=" + hex(cycle_.context.pc));
+void McuDspRuntime::synchronize(const CycleInputs &inputs, const Observer &observer) {
+  if (active_ || faulted_ || timeline_->faulted() || dsp_.clock().faulted() ||
+      mcu_.run_clock().native_epoch() != state_.epoch) {
+    throw Fault("MCU/DSP synchronization requires its current native epoch");
   }
-  const auto factor = dsp_.clock().timebase_hz() / mcu_.run_clock().timebase_hz();
-  constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
-  if (state_.cycles == maximum || period.duration_ticks > (maximum - state_.end_ticks) / factor) {
-    throw Fault("MCU/DSP runtime period exhausted common time");
-  }
-  state_.end_ticks += period.duration_ticks * factor;
-  state_.cop_deadline = period.cop_deadline;
-  if (!state_.cop_deadline) { ++state_.cycles; }
-}
-
-void McuDspRuntime::prepare_write(const CycleInputs &inputs, const Observer &observer) {
-  const auto reject = [this](const std::string_view reason) {
-    throw Fault(
-        std::string(reason) + " at " + (cycle_.address ? hex(*cycle_.address) : "<unaddressed>") +
-        " mcu-pc=" + hex(cycle_.context.pc) + " dsp-pc=" + hex(dsp_.cpu().registers().pc, 6) +
-        " tick=" + std::to_string(state_.end_ticks));
-  };
-  const bool native = deadline() == state_.end_ticks;
-  const auto input = next_input();
-  const bool external = input && *input == state_.end_ticks;
-  if (native) {
-    ++state_.ties;
-    if (inputs_.writes != McuWriteOrder::before_mcu && inputs_.writes != McuWriteOrder::after_mcu) {
-      reject("Unqualified simultaneous DSP cycle and MCU shared write");
-    }
-  }
-  if (external && inputs_.external_writes != McuWriteOrder::before_mcu &&
-      inputs_.external_writes != McuWriteOrder::after_mcu) {
-    reject("Unqualified simultaneous external event and MCU shared write");
-  }
-  const bool native_first = inputs_.writes == McuWriteOrder::before_mcu;
-  const bool external_first = inputs_.external_writes == McuWriteOrder::before_mcu;
-  if (native && external &&
-      (input_order(state_.end_ticks) == DspPeerOrder::reject_tie ||
-       (native_first != external_first &&
-        (input_order(state_.end_ticks) == DspPeerOrder::peer_first) != external_first))) {
-    reject("Cyclic MCU/DSP/external shared-write ordering");
-  }
-  advance(native_first, external_first, inputs, observer);
-  const auto pending = next_input();
-  if (pending && *pending == state_.end_ticks &&
-      inputs_.external_writes != McuWriteOrder::before_mcu &&
-      inputs_.external_writes != McuWriteOrder::after_mcu) {
-    reject("Unqualified newborn external event at MCU shared write");
-  }
-}
-
-void McuDspRuntime::begin_cycle(const Hc12BusCycle cycle,
-                                const bool shared_write,
-                                const CycleInputs &inputs,
-                                const Observer &observer,
-                                const std::optional<std::uint16_t> shared_byte) {
-  healthy();
   const Guard guard(*this);
-  consumed();
-  const auto address = cycle.address;
-  const bool byte = address && cycle.size == 1 && (!shared_byte || *shared_byte == *address);
-  const bool word = address && cycle.kind == 'W' && cycle.size == 2 && shared_byte &&
-                    *shared_byte >= *address && *shared_byte - *address < 2;
-  if (state_.waiting || state_.shared_write || (shared_byte && !shared_write) ||
-      (shared_write && ((cycle.kind != 'w' && cycle.kind != 'W') || (!byte && !word)))) {
-    throw Fault("MCU/DSP runtime requires a consumed byte-sized or declared word shared write");
+  const auto next = mcu_ticks();
+  if (next < state_.end_ticks) { throw Fault("MCU/DSP device time moved backwards"); }
+  state_.end_ticks = next;
+  state_.cycles = mcu_.run_clock().bus_cycles();
+  state_.idle = mcu_.idle_bus_cycles();
+  state_.reset_edges = mcu_.run_clock().reset_sysclk_edges();
+  state_.cop_deadline =
+      mcu_.run_clock().faulted() && mcu_.bus().cop_state().reset == McuCopReset::timeout;
+  if (mcu_.timing_faulted() && !state_.cop_deadline) {
+    throw Fault("MCU/DSP synchronization encountered a failed MCU clock");
   }
-  cycle_ = cycle;
-  offer_period(false);
-  state_.offered = true;
-  state_.shared_write = shared_write && !state_.cop_deadline;
-  state_.shared_address.reset();
-  if (state_.shared_write) { state_.shared_address = shared_byte ? shared_byte : address; }
-  advance(!state_.shared_write, !state_.shared_write, inputs, observer);
-  if (state_.shared_write) { prepare_write(inputs, observer); }
+  advance(true, true, inputs, observer);
 }
 
 void McuDspRuntime::observe_write(const BusEvent &event,
@@ -337,83 +279,34 @@ void McuDspRuntime::observe_write(const BusEvent &event,
   healthy();
   const Guard guard(*this);
   consumed();
-  if (!state_.offered || !state_.shared_write || !event.write || !cycle_.address ||
-      state_.shared_address != event.address || !observe) {
-    throw Fault("MCU/DSP observation must match the consumed shared-write period");
-  }
+  if (!event.write || !observe) { throw Fault("MCU/DSP effect requires a real owner write"); }
   {
     const SignalObservation signals(observing_signals_);
     observe();
   }
-  if (faulted()) {
-    throw Fault("MCU/DSP signal observation changed MCU ownership or faulted its runtime");
-  }
+  if (faulted()) { throw Fault("MCU/DSP effect changed its healthy native epoch"); }
   consumed();
   peripheral_cause(PeripheralCalendarCause::peer, state_.end_ticks);
-  const auto next = next_external();
-  if (next && *next == state_.end_ticks && inputs_.external_writes != McuWriteOrder::after_mcu) {
-    throw Fault("Newborn external event cannot precede its MCU write cause");
-  }
-  const auto peripheral = next_peripheral();
-  if (peripheral && *peripheral == state_.end_ticks &&
-      inputs_.external_writes != McuWriteOrder::after_mcu) {
-    throw Fault("Newborn peripheral event cannot precede its MCU write cause");
-  }
   advance(true, true, inputs, observer);
-  state_.shared_write = false;
-  state_.shared_address.reset();
 }
 
 void McuDspRuntime::finish_boundary() {
   mcu_.validate_run_boundary();
   consumed();
-  if (state_.shared_write || state_.cop_deadline || deadline() <= state_.end_ticks) {
-    throw Fault("MCU/DSP completion lost a shared write, reset or native deadline");
+  if (state_.cop_deadline || deadline() <= state_.end_ticks) {
+    throw Fault("MCU/DSP completion lost a reset or native deadline");
   }
   const auto event = next_input();
   if (event && *event <= state_.end_ticks) {
     throw Fault("MCU/DSP completion lost an external event");
   }
-  state_.offered = false;
 }
 
 void McuDspRuntime::end_instruction() {
   healthy();
   const Guard guard(*this);
-  if (state_.resetting || state_.waiting || (mcu_.cpu().waiting() && !inputs_.wait_dsp_first)) {
-    throw Fault("MCU/DSP native completion requires its correct reset/wait boundary");
-  }
+  if (state_.resetting) { throw Fault("MCU/DSP native completion is held in reset"); }
   finish_boundary();
-}
-
-void McuDspRuntime::begin_wait_period(const McuWaitPeriod period,
-                                      const CycleInputs &inputs,
-                                      const Observer &observer) {
-  healthy();
-  const Guard guard(*this);
-  consumed();
-  const auto cpu = mcu_.cpu().state();
-  if (!inputs_.wait_dsp_first || state_.resetting || state_.offered || state_.shared_write ||
-      !mcu_.cpu().waiting() || cpu.pc != period.context.pc || cpu.ccr != period.context.ccr) {
-    throw Fault("MCU/DSP idle offer requires native WAI and explicit ordering");
-  }
-  state_.waiting = true;
-  offer_period(true);
-  if (!state_.cop_deadline) { ++state_.idle; }
-  advance(true, true, inputs, observer);
-}
-
-void McuDspRuntime::end_wait() {
-  healthy();
-  const Guard guard(*this);
-  // A pending or pre-observed IRQ can cancel advance_wait before any native
-  // period is offered. Its empty boundary still closes, without owning time.
-  if (!inputs_.wait_dsp_first || state_.resetting || !mcu_.cpu().waiting() ||
-      (!state_.waiting && state_.offered)) {
-    throw Fault("MCU/DSP idle boundary is missing");
-  }
-  finish_boundary();
-  state_.waiting = false;
 }
 
 void McuDspRuntime::begin_reset_period(const McuResetPeriod period,
@@ -458,8 +351,7 @@ void McuDspRuntime::begin_system_reset(const McuResetSource source,
   timeline_->validate_boundary();
   const Guard guard(*this);
   consumed();
-  if (!inputs_.reset_dsp_first || state_.resetting || state_.shared_write ||
-      (state_.waiting && !state_.cop_deadline) ||
+  if (!inputs_.reset_dsp_first || state_.resetting ||
       (state_.cop_deadline &&
        (!mcu_.run_clock().faulted() || mcu_.bus().cop_state().reset != McuCopReset::timeout))) {
     throw Fault("MCU/DSP system reset lacks its consumed native reset cause");
@@ -467,8 +359,6 @@ void McuDspRuntime::begin_system_reset(const McuResetSource source,
   mcu_.begin_system_reset(source, synchronization_cycles);
   state_.epoch = mcu_.run_clock().native_epoch();
   state_.reset_edges = mcu_.run_clock().reset_sysclk_edges();
-  state_.offered = false;
-  state_.waiting = false;
   state_.cop_deadline = false;
   state_.resetting = true;
 }
@@ -492,7 +382,6 @@ void McuDspRuntime::validate_dsp_reset_observation() const {
   }
   consumed();
   if (state_.cop_deadline ||
-      (!observing_signals_ && (state_.offered || state_.waiting || state_.shared_write)) ||
       inputs_.epoch_ticks + dsp_.clock().elapsed_ticks() != state_.end_ticks) {
     throw Fault("MCU/DSP reset control cannot discard unconsumed peer time pc=" +
                 hex(dsp_.cpu().registers().pc, 6) + " mcu-pc=" + hex(mcu_.cpu().state().pc) +
