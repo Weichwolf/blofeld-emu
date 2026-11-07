@@ -36,6 +36,7 @@
 - Prefer simple native execution, direct memory and large bounded runs. Keep device
   effects and event boundaries explicit; avoid per-clock work and unnecessary copies.
   Telemetry is runtime-selectable and off by default; keep its work out of hot paths.
+- Run builds, tests and benchmarks locally; do not add GitHub workflows or pipelines.
 - Use C++23, LLVM 19 and CMake/Ninja. Keep strict compiler/linker flags, warnings
   as errors, clang-format, clang-tidy with zero findings and functions <=120 lines.
   Never weaken checks or hide findings with suppressions or diagnostic baselines.
