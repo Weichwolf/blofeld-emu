@@ -2,6 +2,7 @@
 #include "dsp/dsp_io.hpp"
 
 #include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_dma.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp56300/memory.hpp"
 
@@ -12,6 +13,11 @@
 
 namespace blofeld {
 namespace {
+bool dma_snapshot(const DspPeripheralObserver &observer, const DspAddress target) {
+  return observer.stable_dma_reads && target.space == DspSpace::x &&
+         DspDma::handles(target.address);
+}
+
 DspSpace board_space(const dsp56300::Space space) {
   switch (space) {
     case dsp56300::Space::program: return DspSpace::p;
@@ -55,13 +61,22 @@ bool DspIo::fail(const Operation operation,
                  const dsp56300::Word value,
                  const dsp56300::BitAction action) noexcept {
   if (!failure_) {
+    auto cause = std::current_exception();
+    const bool read = operation == Operation::read ||
+                      (operation == Operation::bit && action == dsp56300::BitAction::test);
+    if (read && space == dsp56300::Space::x &&
+        dma_snapshot(peripheral_observer_, {.space = DspSpace::x, .address = address})) {
+      try {
+        prepare_peripheral({.space = DspSpace::x, .address = address}, pc);
+      } catch (...) { cause = std::current_exception(); }
+    }
     failure_ = Failure{.operation = operation,
                        .space = space,
                        .address = address,
                        .pc = pc,
                        .value = value,
                        .action = action,
-                       .cause = std::current_exception()};
+                       .cause = cause};
   }
   return false;
 }
@@ -91,9 +106,10 @@ bool DspIo::read(const dsp56300::Space space,
   if (failure_) { return false; }
   try {
     const DspAddress target{.space = board_space(space), .address = address};
-    prepare_peripheral(target, pc);
+    const bool snapshot = dma_snapshot(peripheral_observer_, target);
+    if (!snapshot) { prepare_peripheral(target, pc); }
     value = bus_.read(target);
-    observe_peripheral({.space = board_space(space), .address = address}, pc);
+    if (!snapshot) { observe_peripheral(target, pc); }
     if (space == dsp56300::Space::program && program_observer_.completed != nullptr) {
       program_observer_.completed(program_observer_.context, address);
     }
@@ -124,16 +140,17 @@ bool DspIo::bit(const dsp56300::Space space,
                 bool &previous) noexcept {
   if (failure_) { return false; }
   try {
-    prepare_peripheral({.space = board_space(space), .address = address}, pc);
+    const DspAddress target{.space = board_space(space), .address = address};
+    const bool snapshot =
+        action == dsp56300::BitAction::test && dma_snapshot(peripheral_observer_, target);
+    if (!snapshot) { prepare_peripheral(target, pc); }
     const auto actual = bus_.access_peripheral_bit({.space = board_space(space),
                                                     .address = address,
                                                     .bit = bit,
                                                     .operation = board_action(action)});
     if (actual) {
       previous = *actual;
-      observe_peripheral({.space = board_space(space), .address = address},
-                         pc,
-                         action != dsp56300::BitAction::test);
+      if (!snapshot) { observe_peripheral(target, pc, action != dsp56300::BitAction::test); }
       return true;
     }
     if (action != dsp56300::BitAction::test) {

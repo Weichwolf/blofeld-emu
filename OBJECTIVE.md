@@ -286,7 +286,7 @@ Core tests in cpu12 and dsp56300 remain required before the real-time milestone.
 Run affected correctness and sanitizer checks for core changes. Until real-time
 instrument operation is established, suspend long original-firmware runs; short
 optimized startup/throughput probes may establish that milestone. Stop startup at
-30 host seconds and fail unless playable. Then require USB-MIDI-triggered sound
+10 host seconds and fail unless playable. Then require USB-MIDI-triggered sound
 and at least ten seconds of valid original stereo output with throughput >=44100
 frames per host second. Evaluate startup, signal content and sustained throughput
 separately; silence or a boot screen cannot pass the instrument test. Stop immediately

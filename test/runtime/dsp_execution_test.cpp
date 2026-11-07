@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_dma_registers.hpp"
 #include "dsp/dsp_execution.hpp"
 #include "dsp/dsp_io.hpp"
 #include "dsp/dsp_machine.hpp"
@@ -240,12 +241,126 @@ void status_reads_continue_natively() {
   }
 }
 
-void status_reads_preserve_timer_deadlines() {
-  constexpr std::array program{read_priority, jump};
+constexpr unsigned dma_source_offset = 0x2f;
+constexpr unsigned dma_bit = 5;
+constexpr auto read_dma_source =
+    dsp56300::isa::opcode<dsp56300::isa::Opcode::movep_register_high>().front() |
+    (x0_register << 8U) | dma_source_offset;
+constexpr auto test_dma_source =
+    dsp56300::isa::opcode<dsp56300::isa::Opcode::btst_port_high>().front() |
+    (dma_source_offset << 8U) | dma_bit;
+
+void finish_bootstrap(Device &device) {
+  constexpr auto after_bootstrap = initial_ticks + (3 * period);
+  while (device.machine.clock().elapsed_ticks() < after_bootstrap) {
+    require(device.advance(after_bootstrap).has_value(), "Complete the actual bootstrap JMP");
+  }
+}
+
+void dma_reads_share_bounded_time() {
+  constexpr auto clear_source =
+      dsp56300::isa::opcode<dsp56300::isa::Opcode::bclr_port_high>().front() |
+      (dma_source_offset << 8U) | dma_bit;
+  constexpr std::array program{nop, read_dma_source, test_dma_source, clear_source, nop, jump};
+  Device device(program);
+  finish_bootstrap(device);
+  constexpr unsigned source = 0x60;
+  device.machine.bus().write({.space = DspSpace::x, .address = dma::first_source, .value = source});
+  Observed observed{.device = device, .calls = {}, .reschedules = {}};
+  const DspPeripheralObserver observer{
+      .context = &observed, .preparing = Observed::before, .completed = Observed::after};
+  const auto result = device.advance(initial_ticks + (1000 * period), observer);
+  constexpr std::uint64_t prefix_cycles = 7; // JMP3, NOP1, MOVEP1, BTST2.
+  constexpr std::uint64_t completed_cycles = prefix_cycles + 2;
+  constexpr auto prefix_ticks = initial_ticks + (prefix_cycles * period);
+  const std::vector<std::array<std::uint64_t, 3>> expected{{0, 3, prefix_ticks},
+                                                           {1, 3, prefix_ticks}};
+  require(result && result->execution && result->execution->yielded &&
+              result->execution->retired == 4 && device.machine.cpu().registers().pc == 4 &&
+              (device.machine.cpu().registers().x & dsp56300::word_mask) == source &&
+              (device.machine.cpu().registers().sr & 1U) != 0 &&
+              device.machine.bus().read({.space = DspSpace::x, .address = dma::first_source}) ==
+                  (source & ~(1U << dma_bit)) &&
+              device.machine.clock().elapsed_ticks() ==
+                  initial_ticks + (completed_cycles * period) &&
+              observed.calls == expected && observed.reschedules == std::vector{true},
+          "DMA word/bit reads share a bounded snapshot; real bit writes synchronize once");
+}
+
+void dma_snapshot_fault_prefix(const bool bit) {
+  const std::array program{nop, bit ? test_dma_source : read_dma_source, nop, jump};
+  Device device(program);
+  finish_bootstrap(device);
+  Observed observed{.device = device, .calls = {}, .reschedules = {}};
+  const auto result = device.advance(
+      initial_ticks + (1000 * period),
+      {.context = &observed, .preparing = Observed::before, .completed = Observed::after});
+  constexpr auto prefix_ticks = initial_ticks + (4 * period);
+  const auto &failure = device.machine.io().failure();
+  bool unknown = false;
+  if (failure && failure->cause) {
+    try {
+      std::rethrow_exception(failure->cause);
+    } catch (const std::exception &error) {
+      unknown = std::string_view(error.what()).contains("Unknown DSP DMA address/counter");
+    }
+  }
+  const std::vector<std::array<std::uint64_t, 3>> expected{{0, 1, prefix_ticks}};
+  require(result && result->execution &&
+              result->execution->fault.kind != dsp56300::FaultKind::none && failure &&
+              failure->address == dma::first_source && failure->pc == 1 && unknown &&
+              device.machine.cpu().progress().estimated_cycles == 4 &&
+              device.machine.clock().elapsed_ticks() == prefix_ticks && observed.calls == expected,
+          "An unknown DMA snapshot fails at its genuine completed prefix, including bit reads");
+}
+
+void dma_reads_preserve_transfers() {
+  constexpr std::array program{read_dma_source, jump};
+  Device device(program);
+  finish_bootstrap(device);
+  constexpr unsigned source = 0x60;
+  constexpr unsigned destination = 0x80;
+  constexpr unsigned words = 3;
+  constexpr unsigned data = 0x12340;
+  constexpr unsigned software_copy = 0x9802d4; // DTM3, linear X source to linear Y destination.
+  auto &bus = device.machine.bus();
+  for (unsigned index = 0; index < words; ++index) {
+    bus.write({.space = DspSpace::x, .address = source + index, .value = data + index});
+  }
+  bus.write({.space = DspSpace::x, .address = dma::first_source, .value = source});
+  bus.write({.space = DspSpace::x, .address = dma::first_source - 1, .value = destination});
+  bus.write({.space = DspSpace::x, .address = dma::first_source - 2, .value = words - 1});
+  bus.write({.space = DspSpace::x, .address = dma::first_source - 3, .value = software_copy});
+  constexpr unsigned final_cycle = 35;
+  for (unsigned cycle = 4; cycle <= final_cycle; ++cycle) {
+    const auto before = bus.read({.space = DspSpace::x, .address = dma::first_source});
+    const auto pc = device.machine.cpu().registers().pc;
+    const auto result = device.advance(initial_ticks + (cycle * period));
+    require(result &&
+                (!result->execution || result->execution->fault.kind == dsp56300::FaultKind::none),
+            "Actual DMA source/destination phases retain their event boundary");
+    if (pc == 0 && result && result->execution && result->execution->retired != 0) {
+      require((device.machine.cpu().registers().x & dsp56300::word_mask) == before,
+              "Every DMA snapshot matches the real pre-transfer source address");
+    }
+  }
+  require(bus.read({.space = DspSpace::x, .address = dma::first_source}) == source + words,
+          "The actual DMA copied all three words and advanced its source cursor");
+  for (unsigned index = 0; index < words; ++index) {
+    require(bus.read({.space = DspSpace::y, .address = destination + index}) == data + index,
+            "Deferred DMA reads preserve independently expected destination contents");
+  }
+}
+
+void status_reads_preserve_timer_deadlines(const bool snapshot) {
+  const std::array program{snapshot ? read_dma_source : read_priority, jump};
   Device device(program);
   constexpr auto after_bootstrap = initial_ticks + (3 * period);
   while (device.machine.clock().elapsed_ticks() < after_bootstrap) {
     require(device.advance(after_bootstrap).has_value(), "Complete the actual bootstrap JMP first");
+  }
+  if (snapshot) {
+    device.machine.bus().write({.space = DspSpace::x, .address = dma::first_source, .value = 0});
   }
   constexpr unsigned timer_control = 0xffff87;
   constexpr unsigned timer_compare = timer_control - 2;
@@ -297,7 +412,12 @@ int main() {
     memory_switch_boundary(true);
     real_peripheral_boundary();
     status_reads_continue_natively();
-    status_reads_preserve_timer_deadlines();
+    status_reads_preserve_timer_deadlines(false);
+    status_reads_preserve_timer_deadlines(true);
+    dma_reads_share_bounded_time();
+    dma_snapshot_fault_prefix(false);
+    dma_snapshot_fault_prefix(true);
+    dma_reads_preserve_transfers();
     wait_retains_cpu_progress();
     std::cout << checks << " functional DSP execution checks passed\n";
     return 0;

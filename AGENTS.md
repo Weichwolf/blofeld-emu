@@ -47,7 +47,7 @@
   Core tests are not subject to the instrument's real-time milestone restriction.
   Avoid duplicate or full-suite runs after small changes; report gaps and scope.
 - Until the instrument reaches real time, suspend long Blofeld firmware runs.
-  Startup probes stop after 30 host seconds and fail unless playable. Audio
+  Startup probes stop after 10 host seconds and fail unless playable. Audio
   acceptance requires MIDI-triggered sound and at least ten seconds of output
   at >=44100 stereo frames per host second; fail immediately on runtime faults.
   Never extend or automatically repeat a failed probe without a concrete fix. Keep compilation,

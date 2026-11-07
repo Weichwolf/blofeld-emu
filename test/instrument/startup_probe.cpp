@@ -24,7 +24,8 @@
 namespace {
 using namespace blofeld;
 using Clock = std::chrono::steady_clock;
-constexpr auto host_limit = std::chrono::seconds{30};
+// Leave room for profiler setup and final diagnostics within the ten-second process guard.
+constexpr auto host_limit = std::chrono::seconds{8};
 constexpr auto report_interval = std::chrono::milliseconds{250};
 constexpr double reference_rate = 44100;
 

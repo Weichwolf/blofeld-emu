@@ -87,7 +87,8 @@ DspExecution::advance_native_region(const std::uint64_t horizon,
         .completed =
             [](void *self, const unsigned pc, const bool reschedule) {
               static_cast<DspExecution *>(self)->peripheral_completed(pc, reschedule);
-            }};
+            },
+        .stable_dma_reads = true};
     if (count > std::numeric_limits<std::uint64_t>::max() - accounted_base_) {
       throw Fault("DSP instruction timeline exhausted its base-cycle count");
     }

@@ -16,15 +16,18 @@ struct DspProgramObserver {
   void (*completed)(void *context, unsigned address) = nullptr;
 };
 
-// Required wiring/protocol observation after a real peripheral access or RESET.
+// Event boundaries for time-dependent peripheral reads, device effects and RESET.
 // No invented whole-word value is needed for a bit operation.
 struct DspPeripheralObserver {
   void *context = nullptr;
   void (*preparing)(void *context, unsigned pc) = nullptr;
   void (*completed)(void *context, unsigned pc, bool reschedule) = nullptr;
+  // The execution owner stops at every DMA transition. Reads use the current
+  // register snapshot; writes and faults still synchronize their exact prefix.
+  bool stable_dma_reads = false;
 };
 
-// Converts synchronous core accesses to the strict board bus. This does not
+// Converts synchronous core accesses to instrument registers and storage. This does not
 // schedule clocks, DMA, interrupts or a complete device.
 class DspIo final : public dsp56300::Io {
 public:

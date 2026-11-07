@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Run one explicit startup observation with a 32-second external deadline."""
+"""Run one explicit startup observation with a ten-second external deadline."""
 import hashlib
 import json
 import shlex
@@ -47,7 +47,7 @@ def main():
         child = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT,
                                  start_new_session=True)
         try:
-            code = child.wait(timeout=32)
+            code = child.wait(timeout=10)
         except subprocess.TimeoutExpired:
             timed_out = True
             os.killpg(child.pid, signal.SIGKILL)
