@@ -1,7 +1,7 @@
 {
   "independent_dsp56300": {
     "source": "https://github.com/Weichwolf/dsp56300",
-    "revision": "d8ba0be6c537b8fa38f2448e9471580f8b2c2a20",
+    "revision": "3b0a24510e357fe3444b67f1859cbd137724f315",
     "license": "GPL-3.0-only"
   },
   "zlib": {
@@ -78,7 +78,7 @@
   },
   "independent_cpu12": {
     "source": "https://github.com/Weichwolf/cpu12",
-    "revision": "340848dfaa5fb4b5445ac9217333facace111f33",
+    "revision": "eaf46550d91fc0ae303a6a35a3eac33b7cc82b6c",
     "license": "GPL-3.0-only"
   }
 }
