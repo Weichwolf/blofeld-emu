@@ -1,8 +1,8 @@
 # blofeld-emu
 
-Headless standalone execution of original Blofeld firmware 1.25, using our
+Headless emulator for original Blofeld firmware 1.25, using our
 [cpu12](https://github.com/Weichwolf/cpu12) and
-[dsp56300](https://github.com/Weichwolf/dsp56300) JIT cores. The emulator supplies
+[dsp56300](https://github.com/Weichwolf/dsp56300) JIT cores. It contains models for
 memory, peripherals, MIDI/USB, display and persistent storage. Real-time playable
 instrument operation is not yet qualified.
 
