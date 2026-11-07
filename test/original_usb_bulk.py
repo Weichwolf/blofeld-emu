@@ -8,7 +8,7 @@ import re
 import subprocess
 import sys
 
-from original_mcu_scan import original_mcu
+from original_firmware import original_mcu
 
 ROOT = Path(__file__).resolve().parents[1]
 
