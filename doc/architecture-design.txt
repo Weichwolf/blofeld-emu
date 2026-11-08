@@ -65,5 +65,7 @@ throughput, design for 10x; see OBJECTIVE.md for measurement and full acceptance
 Threads, a short synthetic kernel or lower callback counts are not success proofs.
 
 Architecture reference: Gearmulator's independent core execution and coupling
-through audioframes, buffers and device communication. Reference only; copy no code.
+through audioframes, buffers and device communication. Consult its local source
+for established register maps, protocols and algorithms. Write our implementation
+independently in the small typed bindings; keep the reference checkout unchanged.
 https://github.com/dsp56300/gearmulator

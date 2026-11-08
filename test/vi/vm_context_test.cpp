@@ -172,7 +172,7 @@ void timer_wakes_mcu() {
   constexpr std::uint16_t stack = 0x1fff;
   constexpr std::uint16_t isr = 0x8100;
   constexpr std::uint16_t marker = 0x1801;
-  constexpr std::uint16_t sink = 0x7000;
+  constexpr std::uint16_t sink = 0x3000;
   constexpr std::uint16_t vector = 0xffee;
   constexpr cpu12::Byte enable_interrupt_and_stop = 0x6f;
   constexpr cpu12::Byte mark = 0x5a;
@@ -223,6 +223,59 @@ void timer_wakes_mcu() {
               result.failure->address == sink && result.failure->value == mark,
           "The timer wakes native WAI, the actual ISR writes RAM, and RTI resumes foreground code");
 }
+
+void flash_rejects_byte_write() {
+  constexpr std::uint16_t sink = 0x3000;
+  constexpr std::uint8_t access_error_status = 0xd0;
+  namespace isa = cpu12::isa;
+  constexpr auto program = isa::program(isa::opcode<isa::Opcode::ldaa_immediate>(),
+                                        std::array<cpu12::Byte, 1>{8},
+                                        isa::opcode<isa::Opcode::staa_extended>(),
+                                        std::array<cpu12::Byte, 2>{0xff, 0xff},
+                                        isa::opcode<isa::Opcode::ldaa_extended>(),
+                                        std::array<cpu12::Byte, 2>{1, 5},
+                                        isa::opcode<isa::Opcode::staa_extended>(),
+                                        std::array<cpu12::Byte, 2>{0x30, 0});
+  auto flash = image();
+  std::ranges::copy(program, flash->bytes.begin());
+  const auto previous = flash->bytes.back();
+  blofeld::vi::Shi shi;
+  const auto result = blofeld::vi::mcu::execute(*flash, shi, {});
+  require(result.failure && result.failure->operation == blofeld::vi::Access::write &&
+              result.failure->address == sink && result.failure->value == access_error_status &&
+              flash->bytes.back() == previous,
+          "Native execution observes ACCERR after a rejected Flash byte store");
+}
+
+void flash_rejects_protected_word() {
+  namespace isa = cpu12::isa;
+  constexpr std::uint16_t sink = 0x3000;
+  constexpr std::uint16_t protection_byte = 0x7f0d;
+  constexpr std::uint8_t protect_all = 0x7f;
+  constexpr std::uint8_t protection_error_status = 0xe0;
+  constexpr auto program = isa::program(isa::opcode<isa::Opcode::ldaa_immediate>(),
+                                        std::array<cpu12::Byte, 1>{4},
+                                        isa::opcode<isa::Opcode::staa_extended>(),
+                                        std::array<cpu12::Byte, 2>{1, 0},
+                                        isa::opcode<isa::Opcode::ldd_immediate>(),
+                                        std::array<cpu12::Byte, 2>{0x12, 0x34},
+                                        isa::opcode<isa::Opcode::std_extended>(),
+                                        std::array<cpu12::Byte, 2>{0x40, 0},
+                                        isa::opcode<isa::Opcode::ldaa_extended>(),
+                                        std::array<cpu12::Byte, 2>{1, 5},
+                                        isa::opcode<isa::Opcode::staa_extended>(),
+                                        std::array<cpu12::Byte, 2>{0x30, 0});
+  auto flash = image();
+  flash->bytes[protection_byte] = protect_all;
+  std::ranges::copy(program, flash->bytes.begin());
+  const auto previous = flash->bytes[0];
+  blofeld::vi::Shi shi;
+  const auto result = blofeld::vi::mcu::execute(*flash, shi, {});
+  require(result.failure && result.failure->operation == blofeld::vi::Access::write &&
+              result.failure->address == sink && result.failure->value == protection_error_status &&
+              flash->bytes[0] == previous,
+          "Native STD through the Flash alias raises PVIOL, not two byte-write ACCERRs");
+}
 }
 
 int main() try {
@@ -230,6 +283,8 @@ int main() try {
   boot_transfer();
   masked_port_read();
   timer_wakes_mcu();
+  flash_rejects_byte_write();
+  flash_rejects_protected_word();
   auto flash = image();
   constexpr auto words = dsp56300::isa::program(dsp56300::isa::nop, dsp56300::isa::stop);
   const std::vector<dsp56300::Word> boot(words.begin(), words.end());

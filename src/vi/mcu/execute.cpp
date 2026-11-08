@@ -2,6 +2,7 @@
 #include "mcu/execute.hpp"
 
 #include "execution.hpp"
+#include "io/mcu_flash.hpp"
 #include "io/shi.hpp"
 #include "mcu/memory.hpp"
 #include "mcu/ports.hpp"
@@ -27,8 +28,13 @@ constexpr auto no_deadline = std::numeric_limits<Timer::Cycle>::max() / 2;
 
 class Io {
 public:
-  Io(Memory &memory, Timer &timer, const Timer::Cycle &idle, Shi &shi, const std::stop_token &stop)
-      : memory_(memory), ports_(shi), timer_(timer), idle_(idle), stop_(stop) {}
+  Io(Memory &memory,
+     const FlashImage &image,
+     Timer &timer,
+     const Timer::Cycle &idle,
+     Shi &shi,
+     const std::stop_token &stop)
+      : memory_(memory), flash_(image), ports_(shi), timer_(timer), idle_(idle), stop_(stop) {}
 
   void bind(cpu12::Core &core) noexcept { core_ = &core; }
 
@@ -58,6 +64,9 @@ private:
             const std::uint8_t mask = all_bits) noexcept {
     if (interrupted()) { return false; }
     const auto at = memory_.locate(address);
+    if (at.space == Space::registers && McuFlash::contains(at.offset)) {
+      return flash_.read(at.offset, value);
+    }
     if (at.space == Space::registers && Timer::contains(at.offset)) {
       std::uint16_t word = 0;
       const auto accepted = access_timer([&] { return timer_.read({.offset = at.offset}, word); });
@@ -77,6 +86,12 @@ private:
   bool write(const cpu12::ByteWrite access) noexcept {
     if (interrupted()) { return false; }
     const auto at = memory_.locate(access.address);
+    if (at.space == Space::flash) {
+      return flash_.write_array({.offset = at.offset, .value = access.value});
+    }
+    if (at.space == Space::registers && McuFlash::contains(at.offset)) {
+      return flash_.write({.offset = at.offset, .value = access.value});
+    }
     if (at.space == Space::registers && Timer::contains(at.offset)) {
       return access_timer(
           [&] { return timer_.write({.offset = at.offset, .value = access.value}); });
@@ -112,6 +127,10 @@ private:
   bool write_word(const cpu12::WordWrite access) noexcept {
     if (interrupted()) { return false; }
     const auto at = memory_.locate(access.address);
+    const auto next = memory_.locate(static_cast<std::uint16_t>(access.address + 1));
+    if (at.space == Space::flash && next.space == Space::flash && next.offset == at.offset + 1) {
+      return flash_.write_array({.offset = at.offset, .value = access.value, .bytes = 2});
+    }
     if (at.space == Space::registers && Timer::contains(at.offset) &&
         Timer::contains(static_cast<std::uint16_t>(at.offset + 1))) {
       return access_timer(
@@ -124,6 +143,7 @@ private:
   }
 
   Memory &memory_;
+  McuFlash flash_;
   Ports ports_;
   Timer &timer_;
   const Timer::Cycle &idle_;
@@ -234,7 +254,7 @@ ExecutionReport execute(FlashImage &image, Shi &shi, const std::stop_token &stop
   Timer timer;
   Timer::Cycle idle = 0;
   auto grants = memory.regions();
-  Io io(memory, timer, idle, shi, stop);
+  Io io(memory, image, timer, idle, shi, stop);
   auto callbacks = io.callbacks();
   cpu12::Core core(cpu12::Memory::mapped(grants), &callbacks);
   io.bind(core);

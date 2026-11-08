@@ -39,6 +39,8 @@
   upstream/main (blofeld-emu) or origin/main (cores). No backup branches or
   --all/--mirror; preserve unrelated work and coordinate consumer dependency pins.
 - Issues belong only in private Weichwolf/blofeld-src; no routine status spam.
-  Gearmulator is read-only reference: copy no code. Preserve dependency notices;
-  do not import GPL-2.0-only octa-capture code. Run as a regular user.
+  Consult local implementations such as Gearmulator for known register maps,
+  protocols and algorithms; write our implementation independently. Keep
+  reference checkouts unchanged and preserve existing dependency notices.
+  Do not import GPL-2.0-only octa-capture code. Run as a regular user.
 - Validate ARM64 on macOS and x86-64 on Linux; communicate revisions in commits.
