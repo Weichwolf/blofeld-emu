@@ -2,6 +2,8 @@
 #include "mcu/execute.hpp"
 
 #include "execution.hpp"
+#include "io/shi.hpp"
+#include "mcu/boot_port.hpp"
 #include "mcu/memory.hpp"
 #include "storage/flash_image.hpp"
 
@@ -18,7 +20,8 @@ constexpr std::uint16_t mapping_last = 0x13;
 
 class Io {
 public:
-  Io(Memory &memory, const std::stop_token &stop) : memory_(memory), stop_(stop) {}
+  Io(Memory &memory, Shi &shi, const std::stop_token &stop)
+      : memory_(memory), port_(shi), stop_(stop) {}
 
   void bind(cpu12::Core &core) noexcept { core_ = &core; }
 
@@ -34,6 +37,9 @@ private:
   bool read(const std::uint16_t address, std::uint8_t &value) noexcept {
     if (interrupted()) { return false; }
     const auto at = memory_.locate(address);
+    if (at.space == Space::registers && (at.offset == 1 || at.offset == 3)) {
+      return port_.read(at.offset, value);
+    }
     if (at.space == Space::registers && at.offset >= mapping_first && at.offset <= mapping_last) {
       value = memory_.read_mapping(at.offset);
       return true;
@@ -44,6 +50,9 @@ private:
   bool write(const cpu12::ByteWrite access) noexcept {
     if (interrupted()) { return false; }
     const auto at = memory_.locate(access.address);
+    if (at.space == Space::registers && (at.offset == 1 || at.offset == 3)) {
+      return port_.write({.offset = at.offset, .value = access.value});
+    }
     if (at.space == Space::registers && at.offset >= mapping_first && at.offset <= mapping_last) {
       if (memory_.write_mapping({.address = at.offset, .value = access.value})) {
         core_->request_yield();
@@ -54,6 +63,7 @@ private:
   }
 
   Memory &memory_;
+  BootPort port_;
   const std::stop_token &stop_;
   cpu12::Core *core_ = nullptr;
 };
@@ -90,10 +100,10 @@ Access operation(const cpu12::Fault fault) {
 }
 }
 
-ExecutionReport execute(FlashImage &image, const std::stop_token &stop) {
+ExecutionReport execute(FlashImage &image, Shi &shi, const std::stop_token &stop) {
   Memory memory(image);
   auto grants = memory.regions();
-  Io io(memory, stop);
+  Io io(memory, shi, stop);
   auto callbacks = io.callbacks();
   cpu12::Core core(cpu12::Memory::mapped(grants), &callbacks);
   io.bind(core);

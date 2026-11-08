@@ -2,6 +2,7 @@
 #pragma once
 
 #include "execution.hpp"
+#include "io/shi.hpp"
 #include "storage/flash_image.hpp"
 
 #include <array>
@@ -26,6 +27,7 @@ public:
 private:
   std::unique_ptr<FlashImage> image_;
   std::vector<dsp56300::Word> boot_;
+  Shi shi_;
   std::array<ExecutionReport, 2> reports_;
   std::atomic<unsigned> completed_{0};
   std::jthread mcu_;
