@@ -59,7 +59,7 @@ target_include_directories(blofeld_vi_mcu_memory PUBLIC src/vi)
 target_link_libraries(blofeld_vi_mcu_memory PUBLIC blofeld_vi_storage cpu12::core)
 add_library(blofeld_vi_execution
   src/vi/io/shi.cpp src/vi/io/mcu_flash.cpp
-  src/vi/mcu/boot_port.cpp src/vi/mcu/ports.cpp src/vi/mcu/timer.cpp
+  src/vi/mcu/boot_port.cpp src/vi/mcu/ports.cpp src/vi/mcu/timer.cpp src/vi/mcu/clock.cpp
   src/vi/mcu/execute.cpp src/vi/dsp/execute.cpp src/vi/vm_context.cpp)
 target_include_directories(blofeld_vi_execution PUBLIC src/vi)
 target_link_libraries(blofeld_vi_execution PUBLIC
@@ -121,6 +121,7 @@ if(BUILD_TESTING)
   blofeld_unit(vi-boot-port-test test/vi/mcu/boot_port_test.cpp blofeld_vi_execution)
   blofeld_unit(vi-mcu-ports-test test/vi/mcu/ports_test.cpp blofeld_vi_execution)
   blofeld_unit(vi-mcu-timer-test test/vi/mcu/timer_test.cpp blofeld_vi_execution)
+  blofeld_unit(vi-mcu-clock-test test/vi/mcu/clock_test.cpp blofeld_vi_execution)
   target_include_directories(vi-vm-context-test PRIVATE
     "${BLOFELD_CPU12_ROOT}/test/support" "${BLOFELD_DSP56300_ROOT}/test")
   blofeld_unit(app-profile-test test/app/profile_test.cpp blofeld_app_profile)

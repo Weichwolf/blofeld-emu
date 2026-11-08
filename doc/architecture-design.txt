@@ -37,6 +37,13 @@ Local ISA timing remains correct; cross-core coupling serves observable instrume
 behavior rather than hypothetical silicon phases. Qualify ordering, IRQ delivery,
 partial transactions and musical latency against firmware and independent tests.
 
+Use documented nominal device clocks and analytical divider/deadline arithmetic.
+The UF32 uses its 12 MHz reference and nominal 60 MHz PHY output; qualify clock
+availability through the documented detector window, without analog PLL or
+external waveform models. Keep oscillator-driven RTI independent of CPU clock
+selection. Convert device deadlines to Core progress without counting idle time
+twice, and arbitrate actual pending interrupt vectors before resuming native work.
+
 Audio comes from the final original DSP output buffer. Publish complete ordered
 frames/blocks, preserving DMA/FIFO status and sample times. Split processing at
 relevant MIDI/device events. Live consumption bounds lookahead and paces output;

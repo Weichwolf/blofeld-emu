@@ -4,15 +4,18 @@
 #include "execution.hpp"
 #include "io/mcu_flash.hpp"
 #include "io/shi.hpp"
+#include "mcu/clock.hpp"
 #include "mcu/memory.hpp"
 #include "mcu/ports.hpp"
 #include "mcu/timer.hpp"
 #include "storage/flash_image.hpp"
 
+#include <algorithm>
 #include <cpu12/core.hpp>
 #include <cpu12/memory.hpp>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <stop_token>
 
@@ -26,28 +29,72 @@ constexpr std::uint8_t all_bits = 0xff;
 // This unreachable horizon selects that Core path without an execution quantum.
 constexpr auto no_deadline = std::numeric_limits<Timer::Cycle>::max() / 2;
 
+struct Devices {
+  Timer timer;
+  Clock clock;
+  Timer::Cycle idle = 0;
+
+  bool advance(const cpu12::Core &core) noexcept {
+    const auto cycles = core.progress().estimated_cycles;
+    return idle <= std::numeric_limits<Timer::Cycle>::max() - cycles &&
+           timer.advance(cycles + idle) && clock.advance(cycles + idle);
+  }
+
+  [[nodiscard]] std::optional<std::uint16_t> pending() const noexcept {
+    return std::max(timer.pending(), clock.pending());
+  }
+
+  [[nodiscard]] std::optional<Timer::Cycle> deadline() const noexcept {
+    const auto next_timer = timer.deadline();
+    const auto next_clock = clock.deadline();
+    if (!next_timer) { return next_clock; }
+    return next_clock ? std::min(*next_timer, *next_clock) : next_timer;
+  }
+
+  [[nodiscard]] bool interrupts_enabled() const noexcept {
+    return timer.interrupts_enabled() || clock.interrupts_enabled();
+  }
+
+  void activity(const cpu12::ExecutionState state) {
+    switch (state) {
+      case cpu12::ExecutionState::running:
+        clock.activity(Clock::Activity::running);
+        timer.activity(Timer::Activity::running);
+        break;
+      case cpu12::ExecutionState::waiting:
+        clock.activity(Clock::Activity::waiting);
+        timer.activity(clock.bus_running() ? Timer::Activity::waiting : Timer::Activity::stopped);
+        break;
+      case cpu12::ExecutionState::stopped:
+        clock.activity(Clock::Activity::stopped);
+        timer.activity(Timer::Activity::stopped);
+        break;
+      default: throw std::logic_error("Unknown MCU execution state");
+    }
+  }
+};
+
 class Io {
 public:
   Io(Memory &memory,
      const FlashImage &image,
-     Timer &timer,
-     const Timer::Cycle &idle,
+     Devices &devices,
      Shi &shi,
      const std::stop_token &stop)
-      : memory_(memory), flash_(image), ports_(shi), timer_(timer), idle_(idle), stop_(stop) {}
+      : memory_(memory), flash_(image), ports_(shi), devices_(devices), stop_(stop) {}
 
   void bind(cpu12::Core &core) noexcept { core_ = &core; }
 
   cpu12::Io callbacks() noexcept;
 
 private:
-  template <typename Action> bool access_timer(const Action &action) noexcept {
-    const auto pending = timer_.pending();
-    const auto deadline = timer_.deadline();
-    const auto enabled = timer_.interrupts_enabled();
-    if (!timer_.advance(core_->progress().estimated_cycles + idle_) || !action()) { return false; }
-    if (pending != timer_.pending() || deadline != timer_.deadline() ||
-        enabled != timer_.interrupts_enabled()) {
+  template <typename Action> bool access_devices(const Action &action) noexcept {
+    const auto pending = devices_.pending();
+    const auto deadline = devices_.deadline();
+    const auto enabled = devices_.interrupts_enabled();
+    if (!devices_.advance(*core_) || !action()) { return false; }
+    if (pending != devices_.pending() || deadline != devices_.deadline() ||
+        enabled != devices_.interrupts_enabled()) {
       core_->request_yield();
     }
     return true;
@@ -67,9 +114,13 @@ private:
     if (at.space == Space::registers && McuFlash::contains(at.offset)) {
       return flash_.read(at.offset, value);
     }
+    if (at.space == Space::registers && Clock::contains(at.offset)) {
+      return access_devices([&] { return devices_.clock.read(at.offset, value); });
+    }
     if (at.space == Space::registers && Timer::contains(at.offset)) {
       std::uint16_t word = 0;
-      const auto accepted = access_timer([&] { return timer_.read({.offset = at.offset}, word); });
+      const auto accepted =
+          access_devices([&] { return devices_.timer.read({.offset = at.offset}, word); });
       value = static_cast<std::uint8_t>(word);
       return accepted;
     }
@@ -92,9 +143,13 @@ private:
     if (at.space == Space::registers && McuFlash::contains(at.offset)) {
       return flash_.write({.offset = at.offset, .value = access.value});
     }
+    if (at.space == Space::registers && Clock::contains(at.offset)) {
+      return access_devices(
+          [&] { return devices_.clock.write({.offset = at.offset, .value = access.value}); });
+    }
     if (at.space == Space::registers && Timer::contains(at.offset)) {
-      return access_timer(
-          [&] { return timer_.write({.offset = at.offset, .value = access.value}); });
+      return access_devices(
+          [&] { return devices_.timer.write({.offset = at.offset, .value = access.value}); });
     }
     if (at.space == Space::registers && Ports::contains(at.offset)) {
       return ports_.write({.offset = at.offset, .value = access.value});
@@ -113,7 +168,8 @@ private:
     const auto at = memory_.locate(address);
     if (at.space == Space::registers && Timer::contains(at.offset) &&
         Timer::contains(static_cast<std::uint16_t>(at.offset + 1))) {
-      return access_timer([&] { return timer_.read({.offset = at.offset, .bytes = 2}, value); });
+      return access_devices(
+          [&] { return devices_.timer.read({.offset = at.offset, .bytes = 2}, value); });
     }
     std::uint8_t high = 0;
     std::uint8_t low = 0;
@@ -131,10 +187,17 @@ private:
     if (at.space == Space::flash && next.space == Space::flash && next.offset == at.offset + 1) {
       return flash_.write_array({.offset = at.offset, .value = access.value, .bytes = 2});
     }
+    if (at.space == Space::registers && Clock::contains(at.offset) &&
+        Clock::contains(static_cast<std::uint16_t>(at.offset + 1))) {
+      return access_devices([&] {
+        return devices_.clock.write({.offset = at.offset, .value = access.value, .bytes = 2});
+      });
+    }
     if (at.space == Space::registers && Timer::contains(at.offset) &&
         Timer::contains(static_cast<std::uint16_t>(at.offset + 1))) {
-      return access_timer(
-          [&] { return timer_.write({.offset = at.offset, .value = access.value, .bytes = 2}); });
+      return access_devices([&] {
+        return devices_.timer.write({.offset = at.offset, .value = access.value, .bytes = 2});
+      });
     }
     return write({.address = access.address,
                   .value = static_cast<std::uint8_t>(access.value >> 8U)}) &&
@@ -145,8 +208,7 @@ private:
   Memory &memory_;
   McuFlash flash_;
   Ports ports_;
-  Timer &timer_;
-  const Timer::Cycle &idle_;
+  Devices &devices_;
   const std::stop_token &stop_;
   cpu12::Core *core_ = nullptr;
 };
@@ -194,8 +256,8 @@ Access operation(const cpu12::Fault fault) {
   }
 }
 
-bool interrupt(cpu12::Core &core, const Timer &timer, ExecutionReport &report) {
-  const auto vector = timer.pending();
+bool interrupt(cpu12::Core &core, const Devices &devices, ExecutionReport &report) {
+  const auto vector = devices.pending();
   if (!vector || !core.interrupt_ready(cpu12::InterruptKind::maskable)) { return false; }
   const auto entered = core.interrupt({.vector = *vector});
   if (entered.fault != cpu12::Fault::none) {
@@ -204,57 +266,47 @@ bool interrupt(cpu12::Core &core, const Timer &timer, ExecutionReport &report) {
                              .address = entered.address,
                              .value = entered.value,
                              .code = static_cast<std::uint32_t>(entered.fault),
-                             .reason = "MCU timer interrupt entry failed"};
+                             .reason = "MCU device interrupt entry failed"};
     return false;
   }
-  if (!entered.accepted) { throw std::logic_error("Eligible MCU timer interrupt was refused"); }
+  if (!entered.accepted) { throw std::logic_error("Eligible MCU device interrupt was refused"); }
   return true;
 }
 
-void advance(const cpu12::Core &core, Timer &timer, const Timer::Cycle idle) {
-  const auto cycles = core.progress().estimated_cycles;
-  if (idle > std::numeric_limits<Timer::Cycle>::max() - cycles || !timer.advance(cycles + idle)) {
+void advance(const cpu12::Core &core, Devices &devices) {
+  if (!devices.advance(core)) {
     throw std::overflow_error("MCU device time is not representable or monotonic");
   }
 }
 
 enum class Dispatch : std::uint8_t { run, again, done };
 
-Dispatch prepare(cpu12::Core &core, Timer &timer, Timer::Cycle &idle, ExecutionReport &report) {
-  advance(core, timer, idle);
+Dispatch prepare(cpu12::Core &core, Devices &devices, ExecutionReport &report) {
+  advance(core, devices);
   const auto state = core.state().execution;
   if (state == cpu12::ExecutionState::stopped) { return Dispatch::done; }
-  if (interrupt(core, timer, report)) {
-    timer.activity(Timer::Activity::running);
+  if (interrupt(core, devices, report)) {
+    devices.activity(cpu12::ExecutionState::running);
     return Dispatch::again;
   }
   if (report.failure) { return Dispatch::done; }
   if (core.state().returned_frame) { core.close_return_window(); }
   if (state == cpu12::ExecutionState::waiting) {
-    const auto next = timer.deadline();
+    const auto next = devices.deadline();
     if (!next) { return Dispatch::done; }
-    idle = *next - core.progress().estimated_cycles;
+    devices.idle = *next - core.progress().estimated_cycles;
     return Dispatch::again;
   }
   return Dispatch::run;
 }
 
-Timer::Activity activity(const cpu12::ExecutionState state) {
-  switch (state) {
-    case cpu12::ExecutionState::running: return Timer::Activity::running;
-    case cpu12::ExecutionState::waiting: return Timer::Activity::waiting;
-    case cpu12::ExecutionState::stopped: return Timer::Activity::stopped;
-    default: throw std::logic_error("Unknown MCU execution state");
-  }
-}
 }
 
 ExecutionReport execute(FlashImage &image, Shi &shi, const std::stop_token &stop) {
   Memory memory(image);
-  Timer timer;
-  Timer::Cycle idle = 0;
+  Devices devices;
   auto grants = memory.regions();
-  Io io(memory, image, timer, idle, shi, stop);
+  Io io(memory, image, devices, shi, stop);
   auto callbacks = io.callbacks();
   cpu12::Core core(cpu12::Memory::mapped(grants), &callbacks);
   io.bind(core);
@@ -270,12 +322,13 @@ ExecutionReport execute(FlashImage &image, Shi &shi, const std::stop_token &stop
     return report;
   }
   while (!stop.stop_requested()) {
-    const auto dispatch = prepare(core, timer, idle, report);
+    const auto dispatch = prepare(core, devices, report);
     if (dispatch == Dispatch::done) { break; }
     if (dispatch == Dispatch::again) { continue; }
-    const auto deadline = timer.deadline();
-    const auto result =
-        timer.interrupts_enabled() ? core.run_until(deadline.value_or(no_deadline)) : core.run();
+    const auto deadline = devices.deadline();
+    const auto result = deadline || devices.interrupts_enabled()
+                            ? core.run_until(deadline ? *deadline - devices.idle : no_deadline)
+                            : core.run();
     report.instructions += result.retired;
     if (stop.stop_requested()) { break; }
     if (result.fault != cpu12::Fault::none) {
@@ -291,8 +344,8 @@ ExecutionReport execute(FlashImage &image, Shi &shi, const std::stop_token &stop
       grants = memory.regions();
       core.set_memory(cpu12::Memory::mapped(grants));
     }
-    advance(core, timer, idle);
-    timer.activity(activity(result.state));
+    advance(core, devices);
+    devices.activity(result.state);
   }
 
   return report;

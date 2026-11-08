@@ -276,6 +276,88 @@ void flash_rejects_protected_word() {
               flash->bytes[0] == previous,
           "Native STD through the Flash alias raises PVIOL, not two byte-write ACCERRs");
 }
+
+void rti_keeps_time_after_wait() {
+  namespace isa = cpu12::isa;
+  constexpr std::uint16_t isr = 0x8100;
+  constexpr std::uint16_t vector = 0xfff0;
+  constexpr std::uint16_t sink = 0x3000;
+  constexpr std::uint16_t shortest_period = 504;
+  constexpr std::uint16_t longest_period = 520;
+  constexpr cpu12::Byte enable_interrupt_and_stop = 0x6f;
+  constexpr auto program =
+      isa::program(isa::opcode<isa::Opcode::lds_immediate>(),
+                   std::array<cpu12::Byte, 2>{0x1f, 0xff},
+                   isa::opcode<isa::Opcode::ldd_immediate>(),
+                   std::array<cpu12::Byte, 2>{0, 0},
+                   isa::opcode<isa::Opcode::std_extended>(),
+                   std::array<cpu12::Byte, 2>{0x18, 0},
+                   isa::opcode<isa::Opcode::clr_extended>(),
+                   std::array<cpu12::Byte, 2>{0x18, 8},
+                   isa::opcode<isa::Opcode::ldaa_immediate>(),
+                   std::array<cpu12::Byte, 1>{0x80},
+                   isa::opcode<isa::Opcode::staa_direct>(),
+                   std::array<cpu12::Byte, 1>{0x46},
+                   isa::opcode<isa::Opcode::ldaa_immediate>(),
+                   std::array<cpu12::Byte, 1>{0x10},
+                   isa::opcode<isa::Opcode::staa_direct>(),
+                   std::array<cpu12::Byte, 1>{0x3b},
+                   isa::opcode<isa::Opcode::ldaa_immediate>(),
+                   std::array<cpu12::Byte, 1>{0x80},
+                   isa::opcode<isa::Opcode::staa_direct>(),
+                   std::array<cpu12::Byte, 1>{0x38},
+                   isa::opcode<isa::Opcode::andcc_immediate>(),
+                   std::array{enable_interrupt_and_stop},
+                   isa::wai,
+                   isa::opcode<isa::Opcode::ldx_immediate>(),
+                   std::array<cpu12::Byte, 2>{1, 0},
+                   isa::nop,
+                   isa::opcode<isa::Opcode::dbne_relative>(),
+                   std::array<cpu12::Byte, 2>{0x34, 0xfc}, // DBNE X, back to NOP.
+                   isa::opcode<isa::Opcode::ldaa_extended>(),
+                   std::array<cpu12::Byte, 2>{0x18, 8},
+                   isa::opcode<isa::Opcode::cmpa_immediate>(),
+                   std::array<cpu12::Byte, 1>{3},
+                   isa::opcode<isa::Opcode::bcs_relative>(),
+                   std::array<cpu12::Byte, 1>{6},
+                   isa::opcode<isa::Opcode::ldd_extended>(),
+                   std::array<cpu12::Byte, 2>{0x18, 2},
+                   isa::opcode<isa::Opcode::std_extended>(),
+                   std::array<cpu12::Byte, 2>{0x30, 0},
+                   isa::opcode<isa::Opcode::ldaa_extended>(),
+                   std::array<cpu12::Byte, 2>{0x30, 1});
+  constexpr auto handler = isa::program(isa::opcode<isa::Opcode::ldd_direct>(),
+                                        std::array<cpu12::Byte, 1>{0x44},
+                                        isa::opcode<isa::Opcode::std_extended>(),
+                                        std::array<cpu12::Byte, 2>{0x18, 6},
+                                        isa::opcode<isa::Opcode::subd_extended>(),
+                                        std::array<cpu12::Byte, 2>{0x18, 0},
+                                        isa::opcode<isa::Opcode::std_extended>(),
+                                        std::array<cpu12::Byte, 2>{0x18, 2},
+                                        isa::opcode<isa::Opcode::ldd_extended>(),
+                                        std::array<cpu12::Byte, 2>{0x18, 6},
+                                        isa::opcode<isa::Opcode::std_extended>(),
+                                        std::array<cpu12::Byte, 2>{0x18, 0},
+                                        isa::opcode<isa::Opcode::inc_extended>(),
+                                        std::array<cpu12::Byte, 2>{0x18, 8},
+                                        isa::opcode<isa::Opcode::ldaa_immediate>(),
+                                        std::array<cpu12::Byte, 1>{0x80},
+                                        isa::opcode<isa::Opcode::staa_direct>(),
+                                        std::array<cpu12::Byte, 1>{0x37},
+                                        isa::rti);
+  auto flash = image();
+  std::ranges::copy(program, flash->bytes.begin());
+  std::ranges::copy(handler, flash->bytes.begin() + (isr - 0x8000));
+  flash->bytes[vector - 0x8000] = static_cast<cpu12::Byte>(isr >> 8U);
+  flash->bytes[vector - 0x8000 + 1] = static_cast<cpu12::Byte>(isr);
+  blofeld::vi::Shi shi;
+  const auto result = blofeld::vi::mcu::execute(*flash, shi, {});
+  require(
+      result.failure && result.failure->operation == blofeld::vi::Access::write &&
+          result.failure->address == sink && result.failure->value >= shortest_period &&
+          result.failure->value <= longest_period,
+      "After WAI, repeated RTIs retain their 512 bus-cycle period during native foreground work");
+}
 }
 
 int main() try {
@@ -285,6 +367,7 @@ int main() try {
   timer_wakes_mcu();
   flash_rejects_byte_write();
   flash_rejects_protected_word();
+  rti_keeps_time_after_wait();
   auto flash = image();
   constexpr auto words = dsp56300::isa::program(dsp56300::isa::nop, dsp56300::isa::stop);
   const std::vector<dsp56300::Word> boot(words.begin(), words.end());
