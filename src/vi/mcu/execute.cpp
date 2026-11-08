@@ -96,6 +96,10 @@ public:
      DspReset &reset,
      const std::stop_token &stop)
       : memory_(memory), flash_(image), ports_(shi), devices_(devices), reset_(reset), stop_(stop) {
+    // B3/B5..B7 are passive controls, with no input producer in the firmware
+    // contract. Use an inactive sample while they are inputs, not a device reply.
+    constexpr std::uint8_t passive_controls = 0xe8;
+    ports_.input(Port::b, {.mask = passive_controls, .known = passive_controls, .value = 0});
     // DSP56371 RESET has an internal pull-up. U0 drives it low or releases it.
     ports_.input(Port::u, {.mask = 1, .known = 1, .value = 1});
   }

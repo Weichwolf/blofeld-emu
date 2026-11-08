@@ -10,16 +10,68 @@
 #include <array>
 #include <atomic>
 #include <cpu12/memory.hpp>
+#include <cstdint>
 #include <exception>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <stop_token>
 #include <thread>
+#include <vector>
 
 namespace {
 void require(const bool condition, const char *message) {
   if (!condition) { throw std::runtime_error(message); }
+}
+
+void native_boot_word() {
+  namespace isa = cpu12::isa;
+  constexpr std::uint32_t control = 0xffff91;
+  constexpr std::uint32_t receive = 0xffff94;
+  constexpr std::uint32_t fifo24 = 0x29;
+  constexpr std::uint32_t datum = 0xa591e7;
+  constexpr std::uint8_t serial_outputs = 0x17;
+  constexpr std::uint8_t data_bit = 0x10;
+  constexpr cpu12::Address marker = 0x3000;
+  std::vector<cpu12::Byte> program;
+  const auto append = [&program](const auto &bytes) {
+    program.insert(program.end(), bytes.begin(), bytes.end());
+  };
+  const auto store = [&](const cpu12::Byte value, const cpu12::Byte address) {
+    append(std::array{isa::opcode<isa::Opcode::ldab_immediate>()[0],
+                      value,
+                      isa::opcode<isa::Opcode::stab_direct>()[0],
+                      address});
+  };
+  store(3, 1);
+  store(serial_outputs, 3);
+  store(1, 1);
+  constexpr unsigned bits = 24;
+  for (unsigned bit = bits; bit != 0; --bit) {
+    store(static_cast<cpu12::Byte>(1 | (((datum >> (bit - 1)) & 1) * data_bit)), 1);
+    append(isa::program(isa::opcode<isa::Opcode::bset_direct>(),
+                        std::array<cpu12::Byte, 2>{1, 4},
+                        isa::opcode<isa::Opcode::bclr_direct>(),
+                        std::array<cpu12::Byte, 2>{1, 4}));
+  }
+  store(3, 1);
+  constexpr auto finish =
+      isa::program(isa::opcode<isa::Opcode::ldaa_extended>(), std::array<cpu12::Byte, 2>{0x30, 0});
+  append(finish);
+  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  image->known.fill(1);
+  std::ranges::copy(program, image->bytes.begin());
+  image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
+  image->bytes.back() = 0;
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  require(shi.write({.address = control, .value = fifo24}), "Configure actual SPI receive");
+  const auto report = blofeld::vi::mcu::execute(*image, shi, reset, {});
+  require(report.failure && report.failure->address == marker,
+          "Native BSET/BCLR completes without requiring a reply from passive controls");
+  std::uint32_t word = 0;
+  require(shi.read(receive, word) && word == datum && !shi.read(receive, word),
+          "Full-byte RMW preserves data/select bits and delivers exactly one original word");
 }
 
 void firmware_controls_reset() {
@@ -70,7 +122,10 @@ void firmware_controls_reset() {
 }
 }
 
-int main() try { firmware_controls_reset(); } catch (const std::exception &error) {
+int main() try {
+  native_boot_word();
+  firmware_controls_reset();
+} catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';
   return 1;

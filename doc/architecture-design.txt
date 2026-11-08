@@ -39,6 +39,11 @@ reset outside its JIT callback after that acknowledgement; stop cancels either
 wait. Restart creates a fresh Core/JIT and retains SRAM. The U0 assignment is
 inferred from the firmware hold/release sequence and the documented RESET pull-up.
 
+Port B3/B5..B7 have no input producer in the current instrument contract. Their
+input-mode samples are inactive low; output-mode reads still use the MCU latch.
+This deterministic VM choice for passive controls is not a claim about PCB pulls.
+Active data/status inputs must come from their devices, never from this policy.
+
 Local ISA timing remains correct; cross-core coupling serves observable instrument
 behavior rather than hypothetical silicon phases. Qualify ordering, IRQ delivery,
 partial transactions and musical latency against firmware and independent tests.
