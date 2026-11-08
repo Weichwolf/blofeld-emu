@@ -84,6 +84,16 @@ St7565State St7565::state() const {
   return state_;
 }
 
+std::uint8_t St7565::status() const {
+  require_reset();
+  // ST7565S Status Read: ADC is 1 for normal segment order; ON/OFF is
+  // active low. Completed synchronous transactions have no pending busy/reset.
+  constexpr unsigned adc = 0x40;
+  constexpr unsigned display_off = 0x20;
+  return static_cast<std::uint8_t>((state_.adc_reverse ? 0 : adc) |
+                                   (state_.display_on ? 0 : display_off));
+}
+
 void St7565::write_data(const std::uint8_t value) {
   require_reset();
   if (parameter_ != Parameter::none) {

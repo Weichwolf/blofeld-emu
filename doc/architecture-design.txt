@@ -45,6 +45,13 @@ This deterministic VM choice for passive controls is not a claim about PCB pulls
 Active data/status inputs must come from their devices, never from this policy.
 The attached SHI SS/SCK/MOSI pull-ups supply released B1/B2/B4 input samples.
 
+Display A/B/E writes decode complete controller transactions. The E4 latch
+delimits accesses even after firmware releases DDRE: this is a functional VM
+binding, not a recovered physical enable route. B7/B6 select, B5 selects reading
+and B0 data. Status reflects completed LCD state; dummy reads retain the actual
+holder, RAM reads advance once per completed transaction, and unknown RAM fails.
+Peripheral reset is supplied by VM lifecycle; no PCB reset net is assumed.
+
 A selected boot transaction whose SHI receive mode is not published yields its
 MCU owner. Outside the native callback, wait for the DSP's actual HCSR write or
 shutdown, then capture with that mode. This orders transaction ownership across

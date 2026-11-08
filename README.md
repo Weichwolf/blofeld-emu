@@ -4,7 +4,7 @@ Blofeld firmware VM project using the independent
 [cpu12](https://github.com/Weichwolf/cpu12) and
 [dsp56300](https://github.com/Weichwolf/dsp56300) JIT cores.
 
-The current source contains the LCD register/data contract, image capture,
+The current source contains the LCD register/data contract and MCU port binding, image capture,
 atomic PBM/text publication, GTK viewer, 1.25 update-container loader, MCU
 image codec, direct MCU memory mapping, GPIO, Flash reset/protection/error registers,
 free-running timer capture/compare, CRG/USB clock selection, periodic interrupts

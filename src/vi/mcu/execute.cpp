@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "mcu/execute.hpp"
 
+#include "display/port.hpp"
 #include "execution.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/mcu_flash.hpp"
@@ -120,6 +121,10 @@ public:
     return ports_.complete_boot_transfer(stop_);
   }
 
+  [[nodiscard]] const char *error() const noexcept {
+    return display_.error() != nullptr ? display_.error() : devices_.sci.error();
+  }
+
 private:
   template <typename Action> bool access_devices(const Action &action) noexcept {
     const auto pending = devices_.pending();
@@ -172,6 +177,7 @@ private:
       return accepted;
     }
     if (at.space == Space::registers && Ports::contains(at.offset)) {
+      if (at.offset == 0 && display_.reading()) { return display_.read(value, mask); }
       return ports_.read(at.offset, value, mask);
     }
     if (at.space == Space::registers && at.offset >= mapping_first && at.offset <= mapping_last) {
@@ -192,7 +198,7 @@ private:
   bool write_port(const Ports::Write access) noexcept {
     constexpr std::uint16_t data_u = 0x278;
     constexpr std::uint16_t direction_u = 0x27a;
-    if (!ports_.write(access)) { return false; }
+    if (!ports_.write(access) || !display_.write(ports_, access)) { return false; }
     if (ports_.boot_pending()) { core_->request_yield(); }
     if (access.offset != data_u && access.offset != direction_u) { return true; }
     const auto output = ports_.output(Port::u);
@@ -312,6 +318,7 @@ private:
   Memory &memory_;
   McuFlash flash_;
   Ports ports_;
+  DisplayPort display_;
   Devices &devices_;
   DspReset &reset_;
   bool release_reset_ = false;
@@ -450,14 +457,14 @@ ExecutionReport execute(FlashImage &image, Shi &shi, DspReset &reset, const std:
     report.instructions += result.retired;
     if (stop.stop_requested()) { break; }
     if (result.fault != cpu12::Fault::none) {
-      report.failure = Failure{.operation = operation(result.fault),
-                               .pc = result.pc,
-                               .address = result.address,
-                               .value = result.value,
-                               .code = static_cast<std::uint32_t>(result.fault),
-                               .reason = devices.sci.error() != nullptr
-                                             ? devices.sci.error()
-                                             : "MCU access or instruction is not implemented"};
+      report.failure =
+          Failure{.operation = operation(result.fault),
+                  .pc = result.pc,
+                  .address = result.address,
+                  .value = result.value,
+                  .code = static_cast<std::uint32_t>(result.fault),
+                  .reason = io.error() != nullptr ? io.error()
+                                                  : "MCU access or instruction is not implemented"};
       break;
     }
     if (!io.complete_events()) { break; }

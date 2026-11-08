@@ -58,12 +58,13 @@ add_library(blofeld_vi_mcu_memory src/vi/mcu/memory.cpp)
 target_include_directories(blofeld_vi_mcu_memory PUBLIC src/vi)
 target_link_libraries(blofeld_vi_mcu_memory PUBLIC blofeld_vi_storage cpu12::core)
 add_library(blofeld_vi_execution
+  src/vi/display/port.cpp
   src/vi/io/memory_controller.cpp src/vi/io/dsp_reset.cpp src/vi/io/shi.cpp src/vi/io/sci.cpp src/vi/io/usb.cpp src/vi/io/mcu_flash.cpp
   src/vi/mcu/boot_port.cpp src/vi/mcu/ports.cpp src/vi/mcu/timer.cpp src/vi/mcu/clock.cpp
   src/vi/mcu/execute.cpp src/vi/dsp/clock.cpp src/vi/dsp/memory.cpp src/vi/dsp/ports.cpp src/vi/dsp/execute.cpp src/vi/vm_context.cpp)
 target_include_directories(blofeld_vi_execution PUBLIC src/vi)
 target_link_libraries(blofeld_vi_execution PUBLIC
-  blofeld_vi_mcu_memory dsp56300::core Threads::Threads)
+  blofeld_vi_mcu_memory blofeld_vi_display dsp56300::core Threads::Threads)
 add_library(blofeld_app_profile src/app/profile.cpp)
 add_library(blofeld_host_process src/host/process/configuration.cpp)
 target_include_directories(blofeld_host_process PUBLIC src/host)
@@ -88,6 +89,7 @@ if(BUILD_TESTING)
     set_property(GLOBAL APPEND PROPERTY BLOFELD_UNIT_TARGETS ${name})
   endfunction()
   blofeld_unit(vi-display-test test/vi/display/st7565_test.cpp blofeld_vi_display)
+  blofeld_unit(vi-display-port-test test/vi/display/port_test.cpp blofeld_vi_execution)
   blofeld_unit(vi-lcd-image-test test/vi/display/lcd_image_test.cpp blofeld_vi_display)
   blofeld_unit(host-directory-test test/host/files/directory_test.cpp blofeld_host_files)
   blofeld_unit(app-display-test test/app/display/publication_test.cpp blofeld_app_display)

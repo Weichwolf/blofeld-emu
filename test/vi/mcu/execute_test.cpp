@@ -126,11 +126,54 @@ void firmware_controls_reset() {
               report.failure->operation == blofeld::vi::Access::read && !reset.state().held,
           "Native GPIO reads see driven low, then the released RESET pull-up");
 }
+
+void native_display_status() {
+  namespace isa = cpu12::isa;
+  constexpr cpu12::Byte outputs = 0xe1;
+  constexpr cpu12::Byte all_bits = 0xff;
+  constexpr cpu12::Byte display_on = 0xaf;
+  constexpr cpu12::Byte read_mode = 0x60;
+  constexpr cpu12::Byte read_enable = 0x14;
+  std::vector<cpu12::Byte> program;
+  const auto store = [&](const cpu12::Byte value, const cpu12::Byte address) {
+    const auto bytes = std::array{isa::opcode<isa::Opcode::ldab_immediate>()[0],
+                                  value,
+                                  isa::opcode<isa::Opcode::stab_direct>()[0],
+                                  address};
+    program.insert(program.end(), bytes.begin(), bytes.end());
+  };
+  store(outputs, 3);
+  store(0x40, 1);
+  store(all_bits, 2);
+  store(display_on, 0);
+  store(0x10, 8);
+  store(0, 8);
+  store(0, 2);
+  store(read_mode, 1);
+  store(read_enable, 8);
+  constexpr auto finish = isa::program(isa::opcode<isa::Opcode::ldaa_direct>(),
+                                       std::array<cpu12::Byte, 1>{0},
+                                       isa::opcode<isa::Opcode::staa_extended>(),
+                                       std::array<cpu12::Byte, 2>{0x30, 0});
+  program.insert(program.end(), finish.begin(), finish.end());
+  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  image->known.fill(1);
+  std::ranges::copy(program, image->bytes.begin());
+  image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
+  image->bytes.back() = 0;
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  const auto report = blofeld::vi::mcu::execute(*image, shi, reset, {});
+  constexpr cpu12::Address marker = 0x3000;
+  require(report.failure && report.failure->address == marker && report.failure->value == 0x40,
+          "Native MCU stores and reads observe the LCD's actual command-derived status");
+}
 }
 
 int main() try {
   native_boot_word();
   firmware_controls_reset();
+  native_display_status();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';
