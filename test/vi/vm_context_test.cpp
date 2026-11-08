@@ -358,6 +358,53 @@ void rti_keeps_time_after_wait() {
           result.failure->value <= longest_period,
       "After WAI, repeated RTIs retain their 512 bus-cycle period during native foreground work");
 }
+
+void sci_wakes_mcu() {
+  namespace isa = cpu12::isa;
+  constexpr std::uint16_t isr = 0x8100;
+  constexpr std::uint16_t vector = 0xffd6;
+  constexpr std::uint16_t sink = 0x3000;
+  constexpr cpu12::Byte mark = 0x5a;
+  constexpr cpu12::Byte tx_complete_irq = 0x48;
+  constexpr cpu12::Byte enable_interrupt_and_stop = 0x6f;
+  constexpr auto program = isa::program(isa::opcode<isa::Opcode::lds_immediate>(),
+                                        std::array<cpu12::Byte, 2>{0x1f, 0xff},
+                                        isa::opcode<isa::Opcode::ldd_immediate>(),
+                                        std::array<cpu12::Byte, 2>{0, 1},
+                                        isa::opcode<isa::Opcode::std_direct>(),
+                                        std::array<cpu12::Byte, 1>{0xc8},
+                                        isa::opcode<isa::Opcode::ldaa_immediate>(),
+                                        std::array{tx_complete_irq},
+                                        isa::opcode<isa::Opcode::staa_direct>(),
+                                        std::array<cpu12::Byte, 1>{0xcb},
+                                        isa::opcode<isa::Opcode::andcc_immediate>(),
+                                        std::array{enable_interrupt_and_stop},
+                                        isa::wai,
+                                        isa::opcode<isa::Opcode::ldaa_extended>(),
+                                        std::array<cpu12::Byte, 2>{0x18, 1},
+                                        isa::opcode<isa::Opcode::staa_extended>(),
+                                        std::array<cpu12::Byte, 2>{0x30, 0});
+  constexpr auto handler = isa::program(isa::opcode<isa::Opcode::ldaa_immediate>(),
+                                        std::array<cpu12::Byte, 1>{8},
+                                        isa::opcode<isa::Opcode::staa_direct>(),
+                                        std::array<cpu12::Byte, 1>{0xcb},
+                                        isa::opcode<isa::Opcode::ldaa_immediate>(),
+                                        std::array{mark},
+                                        isa::opcode<isa::Opcode::staa_extended>(),
+                                        std::array<cpu12::Byte, 2>{0x18, 1},
+                                        isa::rti);
+  auto flash = image();
+  std::ranges::copy(program, flash->bytes.begin());
+  std::ranges::copy(handler, flash->bytes.begin() + (isr - 0x8000));
+  flash->bytes[vector - 0x8000] = static_cast<cpu12::Byte>(isr >> 8U);
+  flash->bytes[vector - 0x8000 + 1] = static_cast<cpu12::Byte>(isr);
+  blofeld::vi::Shi shi;
+  const auto result = blofeld::vi::mcu::execute(*flash, shi, {});
+  require(
+      result.failure && result.failure->operation == blofeld::vi::Access::write &&
+          result.failure->address == sink && result.failure->value == mark,
+      "The SCI preamble completes, its real vector wakes WAI, and RTI resumes native execution");
+}
 }
 
 int main() try {
@@ -368,6 +415,7 @@ int main() try {
   flash_rejects_byte_write();
   flash_rejects_protected_word();
   rti_keeps_time_after_wait();
+  sci_wakes_mcu();
   auto flash = image();
   constexpr auto words = dsp56300::isa::program(dsp56300::isa::nop, dsp56300::isa::stop);
   const std::vector<dsp56300::Word> boot(words.begin(), words.end());

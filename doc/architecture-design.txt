@@ -44,6 +44,11 @@ external waveform models. Keep oscillator-driven RTI independent of CPU clock
 selection. Convert device deadlines to Core progress without counting idle time
 twice, and arbitrate actual pending interrupt vectors before resuming native work.
 
+SCI exchanges decoded characters with explicit start/completion times, baud and
+format, without pad sampling or serial line replay. Preserve its status/data clear
+sequences, preamble and transmit-buffer handoff, receive overrun and wakeup effects.
+Bound completed output and report an undrained consumer instead of losing data.
+
 Audio comes from the final original DSP output buffer. Publish complete ordered
 frames/blocks, preserving DMA/FIFO status and sample times. Split processing at
 relevant MIDI/device events. Live consumption bounds lookahead and paces output;

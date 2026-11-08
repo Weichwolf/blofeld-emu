@@ -3,6 +3,7 @@
 
 #include "execution.hpp"
 #include "io/mcu_flash.hpp"
+#include "io/sci.hpp"
 #include "io/shi.hpp"
 #include "mcu/clock.hpp"
 #include "mcu/memory.hpp"
@@ -32,27 +33,32 @@ constexpr auto no_deadline = std::numeric_limits<Timer::Cycle>::max() / 2;
 struct Devices {
   Timer timer;
   Clock clock;
+  Sci sci;
   Timer::Cycle idle = 0;
 
   bool advance(const cpu12::Core &core) noexcept {
     const auto cycles = core.progress().estimated_cycles;
     return idle <= std::numeric_limits<Timer::Cycle>::max() - cycles &&
-           timer.advance(cycles + idle) && clock.advance(cycles + idle);
+           timer.advance(cycles + idle) && clock.advance(cycles + idle) &&
+           sci.advance(cycles + idle);
   }
 
   [[nodiscard]] std::optional<std::uint16_t> pending() const noexcept {
-    return std::max(timer.pending(), clock.pending());
+    return std::max({timer.pending(), clock.pending(), sci.pending()});
   }
 
   [[nodiscard]] std::optional<Timer::Cycle> deadline() const noexcept {
-    const auto next_timer = timer.deadline();
-    const auto next_clock = clock.deadline();
-    if (!next_timer) { return next_clock; }
-    return next_clock ? std::min(*next_timer, *next_clock) : next_timer;
+    auto next = timer.deadline();
+    const auto offer = [&next](const std::optional<Timer::Cycle> candidate) {
+      if (candidate && (!next || *candidate < *next)) { next = candidate; }
+    };
+    offer(clock.deadline());
+    offer(sci.deadline());
+    return next;
   }
 
   [[nodiscard]] bool interrupts_enabled() const noexcept {
-    return timer.interrupts_enabled() || clock.interrupts_enabled();
+    return timer.interrupts_enabled() || clock.interrupts_enabled() || sci.interrupts_enabled();
   }
 
   void activity(const cpu12::ExecutionState state) {
@@ -71,6 +77,8 @@ struct Devices {
         break;
       default: throw std::logic_error("Unknown MCU execution state");
     }
+    sci.activity(
+        {.waiting = state == cpu12::ExecutionState::waiting, .clocked = clock.bus_running()});
   }
 };
 
@@ -114,6 +122,13 @@ private:
     if (at.space == Space::registers && McuFlash::contains(at.offset)) {
       return flash_.read(at.offset, value);
     }
+    if (at.space == Space::registers && Sci::contains(at.offset)) {
+      std::uint16_t word = 0;
+      const auto accepted =
+          access_devices([&] { return devices_.sci.read({.offset = at.offset}, word); });
+      value = static_cast<std::uint8_t>(word);
+      return accepted;
+    }
     if (at.space == Space::registers && Clock::contains(at.offset)) {
       return access_devices([&] { return devices_.clock.read(at.offset, value); });
     }
@@ -143,6 +158,10 @@ private:
     if (at.space == Space::registers && McuFlash::contains(at.offset)) {
       return flash_.write({.offset = at.offset, .value = access.value});
     }
+    if (at.space == Space::registers && Sci::contains(at.offset)) {
+      return access_devices(
+          [&] { return devices_.sci.write({.offset = at.offset, .value = access.value}); });
+    }
     if (at.space == Space::registers && Clock::contains(at.offset)) {
       return access_devices(
           [&] { return devices_.clock.write({.offset = at.offset, .value = access.value}); });
@@ -166,6 +185,11 @@ private:
   bool read_word(const std::uint16_t address, std::uint16_t &value) noexcept {
     if (interrupted()) { return false; }
     const auto at = memory_.locate(address);
+    if (at.space == Space::registers && Sci::contains(at.offset) &&
+        Sci::contains(static_cast<std::uint16_t>(at.offset + 1))) {
+      return access_devices(
+          [&] { return devices_.sci.read({.offset = at.offset, .bytes = 2}, value); });
+    }
     if (at.space == Space::registers && Timer::contains(at.offset) &&
         Timer::contains(static_cast<std::uint16_t>(at.offset + 1))) {
       return access_devices(
@@ -186,6 +210,12 @@ private:
     const auto next = memory_.locate(static_cast<std::uint16_t>(access.address + 1));
     if (at.space == Space::flash && next.space == Space::flash && next.offset == at.offset + 1) {
       return flash_.write_array({.offset = at.offset, .value = access.value, .bytes = 2});
+    }
+    if (at.space == Space::registers && Sci::contains(at.offset) &&
+        Sci::contains(static_cast<std::uint16_t>(at.offset + 1))) {
+      return access_devices([&] {
+        return devices_.sci.write({.offset = at.offset, .value = access.value, .bytes = 2});
+      });
     }
     if (at.space == Space::registers && Clock::contains(at.offset) &&
         Clock::contains(static_cast<std::uint16_t>(at.offset + 1))) {
@@ -275,6 +305,7 @@ bool interrupt(cpu12::Core &core, const Devices &devices, ExecutionReport &repor
 
 void advance(const cpu12::Core &core, Devices &devices) {
   if (!devices.advance(core)) {
+    if (devices.sci.error() != nullptr) { throw std::runtime_error(devices.sci.error()); }
     throw std::overflow_error("MCU device time is not representable or monotonic");
   }
 }
@@ -337,7 +368,9 @@ ExecutionReport execute(FlashImage &image, Shi &shi, const std::stop_token &stop
                                .address = result.address,
                                .value = result.value,
                                .code = static_cast<std::uint32_t>(result.fault),
-                               .reason = "MCU access or instruction is not implemented"};
+                               .reason = devices.sci.error() != nullptr
+                                             ? devices.sci.error()
+                                             : "MCU access or instruction is not implemented"};
       break;
     }
     if (memory.commit_mapping()) {
