@@ -15,6 +15,7 @@
 #include "io/shi.hpp"
 #include "storage/media_image.hpp"
 
+#include <array>
 #include <cstdint>
 #include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
@@ -29,14 +30,14 @@ constexpr dsp56300::Word boot_first = 0xff0000;
 constexpr dsp56300::Word reset_status = 0xc00300;
 constexpr dsp56300::Word reset_mode = 0x305;
 constexpr dsp56300::Word once_data_address = 0xfffffc;
-constexpr dsp56300::Word dma_status_address = 0xfffff4;
-constexpr dsp56300::Word dax_status_address = 0xffffd4;
 constexpr dsp56300::Word reserved_x_address = 0xffff80;
 constexpr unsigned esai1_transmit_request = 22;
 constexpr unsigned dax_request = 10;
 constexpr unsigned timer_request_first = 18;
 constexpr dsp56300::Word timer0_control = 0xffff8f;
 constexpr dsp56300::Word timer0_compare_vector = 0x54;
+constexpr dsp56300::Word timer2_overflow_vector = 0x5e;
+constexpr dsp56300::Word dma0_vector = 0x18, dma5_vector = 0x22, vector_base_mask = 0xffff00;
 
 struct BitAccess {
   dsp56300::Space space;
@@ -58,6 +59,8 @@ public:
     epoch_ = epoch;
     reset_interrupted_ = false;
     program_changed_ = false;
+    waiting_ = false;
+    idle_ = 0;
     once_data_.reset();
     clock_.reset(true);
     interrupts_.reset();
@@ -110,31 +113,7 @@ public:
       revision_ ^= 1U;
       program_changed_ = false;
     }
-    if (const auto vector = dax_.interrupt()) {
-      report.failure = Failure{.operation = Access::execute,
-                               .pc = core_->registers().pc,
-                               .address = dax_status_address,
-                               .code = *vector,
-                               .space = 'X',
-                               .reason = "DAX interrupt delivery is not bound"};
-      return false;
-    }
-    if (const auto vector = timers_.interrupt()) {
-      report.failure =
-          Failure{.operation = Access::execute,
-                  .pc = core_->registers().pc,
-                  .address = timer0_control - (((*vector - timer0_compare_vector) / 4) * 4),
-                  .code = *vector,
-                  .space = 'X',
-                  .reason = "DSP timer interrupt delivery is not bound"};
-      return false;
-    }
-    if (dma_.interrupts() == 0) { return true; }
-    report.failure = Failure{.operation = Access::execute,
-                             .pc = dma_pc_,
-                             .address = dma_status_address,
-                             .reason = "DMA interrupt delivery is not bound"};
-    return false;
+    return true;
   }
 
   [[nodiscard]] std::uint64_t program_revision() const noexcept override { return revision_; }
@@ -145,8 +124,30 @@ public:
   }
 
   [[nodiscard]] dsp56300::RunResult run() {
+    if (waiting_ && !interrupts_.select(interrupt_sources(), core_->registers().sr)) {
+      if (const auto next = timers_.deadline()) {
+        idle_ = *next - core_->progress().estimated_cycles;
+        if (!synchronize_timers()) { throw std::runtime_error(timers_.error()); }
+      }
+    }
+    const auto sources = interrupt_sources();
+    if (interrupts_.select(sources, 0)) {
+      const auto state = core_->registers();
+      const auto request = interrupts_.select(sources, state.sr);
+      if (request && core_->interrupt_ready()) {
+        core_->request_interrupt((state.vba & vector_base_mask) | request->vector, request->level);
+        acknowledge(request->vector);
+      }
+      // A pending request must observe SR changes, REP completion and the
+      // architectural interrupt shadow before another normal instruction.
+      return completed(core_->step());
+    }
     const auto next = timers_.deadline();
-    return next ? core_->run_until(*next) : core_->run();
+    return completed(next ? core_->run_until(*next - idle_) : core_->run());
+  }
+
+  [[nodiscard]] bool waiting_event() const noexcept {
+    return waiting_ && (timers_.deadline() || interrupts_.select(interrupt_sources(), 0));
   }
 
   [[nodiscard]] bool reset_interrupted() const noexcept { return reset_interrupted_; }
@@ -202,7 +203,7 @@ public:
     if (Dax::contains(address)) { return dax_.write({.address = address, .value = value}); }
     if (Dma::contains(address)) { return write_dma({.address = address, .value = value}, pc); }
     if (Interrupts::contains(address)) {
-      return interrupts_.write({.address = address, .value = value});
+      return write_priority({.address = address, .value = value});
     }
     if (address == Clock::address) { return clock_.write(value); }
     if (address != once_data_address) { return shi_.write({.address = address, .value = value}); }
@@ -265,15 +266,49 @@ public:
       return write_dma({.address = request.address, .value = value}, request.pc);
     }
     if (Interrupts::contains(request.address)) {
-      return interrupts_.write({.address = request.address, .value = value});
+      return write_priority({.address = request.address, .value = value});
     }
     if (request.address == Clock::address) { return clock_.write(value); }
     return shi_.write({.address = request.address, .value = value});
   }
 
 private:
+  [[nodiscard]] std::array<dsp56300::Word, 8> interrupt_sources() const noexcept {
+    std::array<dsp56300::Word, 8> sources{};
+    const auto pending = dma_.interrupts();
+    for (unsigned channel = 0; channel < 6; ++channel) {
+      if ((pending & (1U << channel)) != 0) { sources[channel] = dma0_vector + (channel * 2); }
+    }
+    sources[6] = timers_.interrupt().value_or(0);
+    sources[7] = dax_.interrupt().value_or(0);
+    return sources;
+  }
+
+  void acknowledge(const dsp56300::Word vector) {
+    if (vector >= dma0_vector && vector <= dma5_vector &&
+        !dma_.acknowledge((vector - dma0_vector) / 2)) {
+      throw std::logic_error("Admitted DMA interrupt has no actual pending request");
+    }
+    if (vector >= timer0_compare_vector && vector <= timer2_overflow_vector &&
+        !timers_.acknowledge(vector)) {
+      throw std::logic_error("Admitted timer interrupt has no actual pending flag");
+    }
+    // DAX uses level requests: only firmware data writes clear its conditions.
+  }
+
+  dsp56300::RunResult completed(const dsp56300::RunResult result) noexcept {
+    waiting_ = result.state == dsp56300::ExecutionState::waiting;
+    return result;
+  }
+
+  bool write_priority(const Interrupts::Write access) noexcept {
+    if (!interrupts_.write(access)) { return false; }
+    core_->request_yield();
+    return true;
+  }
+
   bool synchronize_timers(const bool in_callback = false) noexcept {
-    if (!timers_.advance(core_->progress().estimated_cycles)) { return false; }
+    if (!timers_.advance(core_->progress().estimated_cycles + idle_)) { return false; }
     bool ready = false;
     if (controller_.ready(ready) && !timers_.input(1, ready)) { return false; }
     if (in_callback && (timers_.requests() != 0 || timers_.interrupt())) { core_->request_yield(); }
@@ -395,6 +430,8 @@ private:
   std::uint64_t epoch_ = 0;
   bool reset_interrupted_ = false;
   bool program_changed_ = false;
+  bool waiting_ = false;
+  std::uint64_t idle_ = 0;
   std::uint64_t revision_ = 0;
   dsp56300::Word dma_pc_ = 0;
   const std::stop_token &stop_;
@@ -479,7 +516,7 @@ bool run_instance(Io &io,
       restart = io.reset_interrupted();
       break;
     }
-    if (result.state != dsp56300::ExecutionState::running) { break; }
+    if (result.state != dsp56300::ExecutionState::running && !io.waiting_event()) { break; }
   }
   io.unbind();
   return restart;

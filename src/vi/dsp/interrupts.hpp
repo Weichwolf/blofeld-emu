@@ -2,15 +2,25 @@
 #pragma once
 
 #include <dsp56300/memory.hpp>
+#include <optional>
+#include <span>
 
 namespace blofeld::vi::dsp {
-// DSP56371UM 4.4: stored priorities and external IRQ trigger modes. Delivery
-// is separate and requires an actual device request; configuration creates none.
+// DSP56371UM 4.4: configured priorities and arbitration of actual device requests.
 class Interrupts {
 public:
   struct Write {
     dsp56300::Word address = 0, value = 0;
   };
+
+  struct Request {
+    dsp56300::Word vector = 0; // Relative to VBA.
+    unsigned level = 0;
+    bool operator==(const Request &) const = default;
+  };
+
+  [[nodiscard]] std::optional<Request> select(std::span<const dsp56300::Word> vectors,
+                                              dsp56300::Word status) const noexcept;
 
   static constexpr dsp56300::Word core_address = 0xffffff;
   static constexpr dsp56300::Word peripheral_address = 0xfffffe;
@@ -39,6 +49,7 @@ public:
   }
 
 private:
+  [[nodiscard]] unsigned priority(dsp56300::Word vector) const noexcept;
   dsp56300::Word core_ = 0, peripheral_ = 0;
 };
 }

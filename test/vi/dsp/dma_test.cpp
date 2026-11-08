@@ -198,6 +198,13 @@ void triggered_modes_and_chaining() {
               chain_memory.stores[0].value == 32 && chain_memory.stores[1].value == 64 &&
               chained.interrupts() == 1 && read(chained, status_address) == all_done,
           "An actual completed block triggers its dependent channel and latches its requested IRQ");
+  put(chained, {.address = first_source - 3, .value = 0});
+  require(chained.interrupts() == 0, "DIE masks a latched completion without acknowledging it");
+  put(chained, {.address = first_source - 3, .value = irq_enable});
+  require(chained.interrupts() == 1 && chained.acknowledge(0) && chained.interrupts() == 0 &&
+              !chained.acknowledge(0) && !chained.acknowledge(6),
+          "Re-enabling DIE exposes the retained request; accepted admission acknowledges only that "
+          "channel");
   Dma line;
   put(line, {.address = offset_zero, .value = 10});
   constexpr Word line_mode = 0x900204;

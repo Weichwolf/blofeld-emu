@@ -86,6 +86,10 @@ void compare_overflow_and_flags() {
           "Wrap preserves both matching flags and overflow has higher local priority");
   put(timers, {.address = control, .value = tof | 7});
   require(timers.interrupt() == compare_vector, "Overflow acknowledgement preserves compare");
+  require(timers.acknowledge(compare_vector) && !timers.interrupt() &&
+              !timers.acknowledge(compare_vector) && !timers.acknowledge(compare_vector + 1),
+          "Actual interrupt admission clears its own flag once and cannot acknowledge a "
+          "nonexistent event");
   put(timers, {.address = control, .value = 0});
   require(read(timers, control) == 0 && !timers.interrupt(),
           "Disable clears both documented flags");

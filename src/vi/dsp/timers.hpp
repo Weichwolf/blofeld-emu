@@ -23,6 +23,7 @@ public:
   [[nodiscard]] bool input(unsigned index, bool level) noexcept;
   [[nodiscard]] std::optional<std::uint64_t> deadline() const noexcept;
   [[nodiscard]] std::optional<dsp56300::Word> interrupt() const noexcept;
+  [[nodiscard]] bool acknowledge(dsp56300::Word vector) noexcept;
 
   [[nodiscard]] unsigned requests() const noexcept { return requests_; }
 

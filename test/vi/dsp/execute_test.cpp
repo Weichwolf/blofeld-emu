@@ -270,6 +270,87 @@ void native_timer_events() {
           "Native execution reaches a real timer compare deadline and reads its sticky TCF");
 }
 
+void native_timer_interrupt(const bool waiting) {
+  namespace isa = dsp56300::isa;
+  using dsp56300::Word;
+  constexpr Word immediate = 0x34;
+  constexpr Word absolute = 0x30;
+  constexpr Word write = 0x8000;
+  constexpr Word x0 = 4;
+  constexpr Word vba_selector = 0x10;
+  constexpr Word vba = 0x200;
+  constexpr Word vector = vba + 0x54;
+  constexpr Word handler = 0x100;
+  constexpr Word result_address = 0x40;
+  constexpr Word marker = 0xc000;
+  constexpr Word timer_port = 15;
+  constexpr Word load_port = 14;
+  constexpr Word compare_port = 13;
+  constexpr Word priority_port = 0x3e;
+  constexpr Word priority = 0x100;
+  constexpr Word timer_enable = 5;
+  constexpr Word clear_mask = 0xfc;
+  constexpr Word repeat = 64;
+  constexpr Word sleeping_compare = 512;
+  constexpr auto literal =
+      isa::opcode<isa::Opcode::move_x_effective>()[0] | (immediate << 8U) | write;
+  constexpr auto store_p = isa::opcode<isa::Opcode::movem_effective>()[0] | (absolute << 8U) | x0;
+  constexpr auto store_x = isa::opcode<isa::Opcode::move_x_effective>()[0] | (absolute << 8U);
+  constexpr auto port = isa::opcode<isa::Opcode::movep_memory_low>()[0] | (immediate << 8U) | write;
+  constexpr auto read_status =
+      isa::opcode<isa::Opcode::movep_register_low>()[0] | (x0 << 8U) | timer_port;
+  constexpr auto unmask = isa::opcode<isa::Opcode::andi_control>()[0] | (clear_mask << 8U);
+  constexpr auto call = isa::opcode<isa::Opcode::jsr_effective>()[0] | (absolute << 8U);
+  std::vector<Word> program;
+  const auto put_code = [&](const Word address, const Word value) {
+    const std::array words{literal, value, store_p, address};
+    program.insert(program.end(), words.begin(), words.end());
+  };
+  put_code(vector, call);
+  put_code(vector + 1, handler);
+  constexpr std::array interrupt_handler{
+      read_status, store_x, result_address, port | timer_port, Word{0}, isa::rti[0]};
+  for (unsigned index = 0; index < interrupt_handler.size(); ++index) {
+    put_code(handler + index, interrupt_handler[index]);
+  }
+  const std::array setup{
+      literal,
+      vba,
+      isa::opcode<isa::Opcode::movec_register>()[0] | (x0 << 8U) | write | vba_selector,
+      isa::opcode<isa::Opcode::movep_memory_high>()[0] | (immediate << 8U) | write | priority_port,
+      priority,
+      port | load_port,
+      Word{0},
+      port | compare_port,
+      waiting ? sleeping_compare : Word{16},
+      port | timer_port,
+      timer_enable};
+  program.insert(program.end(), setup.begin(), setup.end());
+  if (waiting) {
+    program.push_back(unmask);
+    program.push_back(isa::wait[0]);
+  } else {
+    program.push_back(isa::opcode<isa::Opcode::rep_immediate>()[0] | (repeat << 8U));
+    program.push_back(isa::nop[0]);
+    program.push_back(unmask);
+    program.push_back(isa::nop[0]);
+    program.push_back(isa::nop[0]);
+  }
+  program.push_back(store_x | write);
+  program.push_back(result_address);
+  program.push_back(store_p);
+  program.push_back(marker);
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+  constexpr Word boot = 0xff0000;
+  require(report.failure && report.failure->space == 'P' && report.failure->address == marker &&
+              report.failure->value == timer_enable &&
+              report.failure->pc == boot + program.size() - 2,
+          "A real timer IRQ observes masks/REP or wakes WAIT, uses VBA, acknowledges TCF and "
+          "returns via RTI");
+}
+
 void native_transmit_registers() {
   namespace isa = dsp56300::isa;
   constexpr dsp56300::Word immediate = 0x34;
@@ -511,6 +592,8 @@ int main(const int argc, char **argv) try {
   native_dma_esai_write();
   native_dma_dax_write();
   native_timer_events();
+  native_timer_interrupt(false);
+  native_timer_interrupt(true);
   consecutive_receive_registers();
   reset_running_core();
 } catch (const std::exception &error) {

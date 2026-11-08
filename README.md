@@ -11,17 +11,20 @@ free-running timer capture/compare, CRG/USB clock selection, periodic interrupts
 and interrupt wakeup, SCI character/register handling, USB configuration and direct
 endpoint-buffer windows, and independent
 MCU/DSP execution threads and DSP56371 PLL register/nominal ratio handling.
-DSP interrupt-priority registers retain configuration; device interrupt delivery remains incomplete.
+DSP interrupt arbitration uses configured priorities, SR masks and source ordering.
+Timer, DMA and DAX requests enter native vectors with VBA/REP/RTI handling;
+timer and DMA acknowledgements occur on accepted admission. SHI and ESAI
+interrupt delivery remains incomplete.
 DMA registers, A–E counters and address modes handle requested transfers and software blocks.
 ESAI_1 transmit registers bind DMA writes to actual words; explicit slot events
 preserve masks, word precision, empty requests and retained-data underruns.
-Its instrument clock source, receive path and DMA interrupt admission remain incomplete.
+Its instrument clock source and receive path remain incomplete.
 DAX register access and DMA writes retain the distinct XADR/channel buffers,
 non-audio metadata, block position, refill requests and observed-underrun clearing.
-Its subframe clock source and interrupt delivery are not yet connected to execution.
+Its subframe clock source is not yet connected to execution.
 DSP timer registers, CLK/2 and shared prescaling implement GPIO timer, event-counter
-and capture modes with deadlines, W1C flags and compare DMA requests. Timer IRQ
-admission and the other timer modes remain incomplete.
+and capture modes with deadlines, W1C flags and compare DMA requests. The other
+timer modes remain incomplete. WAIT advances device time to the next timer event.
 The MCU samples a VM-owned pedal input; firmware retains its polarity/change handling.
 Low/high X/Y RAM uses direct native grants with initialization tracking and
 OMR-selected program-bank sharing. Optional data-ROM views borrow local contents.

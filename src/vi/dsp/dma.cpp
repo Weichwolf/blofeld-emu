@@ -57,6 +57,21 @@ bool Dma::contains(const Word address) noexcept {
   return address >= last_control && address <= status_address;
 }
 
+unsigned Dma::interrupts() const noexcept {
+  if (interrupts_ == 0) { return 0; }
+  unsigned result = 0;
+  for (unsigned index = 0; index < channel_count; ++index) {
+    if ((channels_[index].control & irq_enable) != 0) { result |= interrupts_ & (1U << index); }
+  }
+  return result;
+}
+
+bool Dma::acknowledge(const unsigned channel) noexcept {
+  if (channel >= channel_count || (interrupts_ & (1U << channel)) == 0) { return false; }
+  interrupts_ &= ~(1U << channel);
+  return true;
+}
+
 bool Dma::read(const Word address, Word &value) const noexcept {
   if (!contains(address)) { return false; }
   if (address == status_address) {

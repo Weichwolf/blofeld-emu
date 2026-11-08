@@ -262,6 +262,18 @@ std::optional<Word> Timers::interrupt() const noexcept {
   return {};
 }
 
+bool Timers::acknowledge(const Word vector) noexcept {
+  constexpr Word first_vector = 0x54;
+  constexpr Word last_vector = 0x5e;
+  if (vector < first_vector || vector > last_vector || (vector & 1) != 0) { return false; }
+  const auto relative = vector - first_vector;
+  auto &timer = timers_[relative / 4];
+  const auto flag = (relative & 2) != 0 ? overflow : compare;
+  if ((timer.control & flag) == 0) { return false; }
+  timer.control &= ~flag;
+  return true;
+}
+
 unsigned Timers::take_requests() noexcept {
   return std::exchange(requests_, 0);
 }

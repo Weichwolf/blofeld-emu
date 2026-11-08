@@ -32,7 +32,8 @@ public:
 
   [[nodiscard]] bool pending() const noexcept { return pending_ != 0; }
 
-  [[nodiscard]] unsigned interrupts() const noexcept { return interrupts_; }
+  [[nodiscard]] unsigned interrupts() const noexcept;
+  [[nodiscard]] bool acknowledge(unsigned channel) noexcept;
 
   [[nodiscard]] const std::optional<Failure> &failure() const noexcept { return failure_; }
 

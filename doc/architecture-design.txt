@@ -136,6 +136,13 @@ External events supply capture/count input; media readiness is Timer1's input.
 Unspecified TLR/TCPR power-on contents use deterministic VM zeroes and survive
 RESET; this is a VM choice, not a recovered factory value.
 
+Arbitrate actual interrupt conditions by configured IPL, SR mask and documented
+source order. Admit through the Core's native vector path with VBA; acknowledge
+only the accepted timer/DMA request. DAX level conditions remain until firmware
+clears them. A pending request observes individual architectural boundaries while
+masked or inhibited; ordinary execution retains long native runs. WAIT advances
+device time analytically without manufacturing retired CPU work.
+
 Storage port writes decode commands, addresses and byte ownership locally. A
 complete address publishes an operation; the DSP owner resolves the actual image
 page outside its native callback before publishing ready. Read strobes retain a
