@@ -83,6 +83,40 @@ void native_memory_switch() {
           "Guest OMR remaps retained X RAM into executable P without copying or a new Core");
 }
 
+void native_transmit_registers() {
+  namespace isa = dsp56300::isa;
+  constexpr dsp56300::Word immediate = 0x34;
+  constexpr dsp56300::Word absolute = 0x30;
+  constexpr dsp56300::Word write = 0x8000;
+  constexpr dsp56300::Word status_port = 0x11;
+  constexpr dsp56300::Word transmit_port = 0x13;
+  constexpr dsp56300::Word x0 = 4;
+  constexpr dsp56300::Word sink = 0xc000;
+  constexpr dsp56300::Word mode = 9;
+  constexpr dsp56300::Word first = 0xa591e7;
+  constexpr dsp56300::Word second = 0x5391e7;
+  constexpr dsp56300::Word expected_status = 0x209;
+  constexpr auto store =
+      isa::opcode<isa::Opcode::movep_memory_low>()[0] | (immediate << 8U) | write;
+  constexpr auto read = isa::opcode<isa::Opcode::movep_register_low>()[0] | (x0 << 8U);
+  constexpr auto output = isa::opcode<isa::Opcode::movem_effective>()[0] | (absolute << 8U) | x0;
+  constexpr auto program = isa::program(std::array{store | status_port,
+                                                   mode,
+                                                   store | transmit_port,
+                                                   first,
+                                                   store | transmit_port,
+                                                   second,
+                                                   read | status_port,
+                                                   output,
+                                                   sink});
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+  require(report.failure && report.failure->space == 'P' && report.failure->address == sink &&
+              report.failure->value == expected_status,
+          "Native HTX writes occupy both real transmit stages; HCSR reports HTX full");
+}
+
 void native_interrupt_priorities() {
   namespace isa = dsp56300::isa;
   constexpr dsp56300::Word immediate = 0x34;
@@ -216,7 +250,8 @@ void consecutive_receive_registers() {
   blofeld::vi::DspReset reset;
   require(shi.write({.address = control, .value = fifo24}) && shi.select(true).has_value(),
           "Configure actual 24-bit boot reception");
-  require(shi.receive(1) && shi.receive(0) && shi.receive(isa::stop[0]),
+  require(shi.transfer(1).accepted && shi.transfer(0).accepted &&
+              shi.transfer(isa::stop[0]).accepted,
           "Queue separate length, destination and code words");
   const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
   dsp56300::Word word = 0;
@@ -270,7 +305,8 @@ void reset_running_core() {
   require(reset.assert_reset() && reset.release({}), "A running DSP acknowledges real reset");
   require(reset.state().epoch == 1, "Reset advances the execution lifetime");
   wait_boot();
-  require(shi.receive(isa::stop[0]), "Send a real instruction after the new boot enables SHI");
+  require(shi.transfer(isa::stop[0]).accepted,
+          "Send a real instruction after the new boot enables SHI");
   worker.join();
   require(!report.exception && !report.failure && report.instructions > 0,
           "A fresh Core boots, loads PRAM and executes STOP after reset");
@@ -281,6 +317,7 @@ int main(const int argc, char **argv) try {
   require(argc == 3, "Supply artifact and fixture directories");
   native_media_read(argv[2]);
   native_clock_register();
+  native_transmit_registers();
   native_interrupt_priorities();
   native_memory_switch();
   consecutive_receive_registers();

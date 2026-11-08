@@ -11,6 +11,7 @@ namespace blofeld::vi {
 namespace {
 constexpr std::uint32_t clock_address = 0xffff90;
 constexpr std::uint32_t status_address = 0xffff91;
+constexpr std::uint32_t transmit_address = 0xffff93;
 constexpr std::uint32_t receive_address = 0xffff94;
 constexpr std::uint32_t enabled = 1, i2c = 2, fifo_enabled = 0x20, master = 0x40;
 constexpr std::uint32_t idle = 0x200, transmit_empty = 0x8000, underrun = 0x4000;
@@ -26,11 +27,20 @@ unsigned width(const std::uint32_t control) noexcept {
 
 void Shi::publish() noexcept {
   const auto capacity = (control_ & fifo_enabled) != 0 ? fifo_.size() : 1;
-  auto value = control_ | idle | transmit_empty | errors_;
+  auto value = control_ | idle | errors_;
+  if (!transmit_) { value |= transmit_empty; }
   if (count_ != 0) { value |= receive_not_empty; }
   if (count_ >= capacity) { value |= receive_full; }
   if (selected_ && (control_ & enabled) != 0) { value |= busy; }
   status_.store(value, std::memory_order_release);
+}
+
+void Shi::prime_transmit() noexcept {
+  // CPHA=0 loads only while deselected; CPHA=1 can refill between words.
+  if (!shifting_ && transmit_ && (control_ & enabled) != 0 && ((clock_ & 1) != 0 || !selected_)) {
+    shifting_ = transmit_;
+    transmit_.reset();
+  }
 }
 
 void Shi::reset() noexcept {
@@ -40,6 +50,9 @@ void Shi::reset() noexcept {
   // DSP56371UM 7.4.5: CPHA resets set; all other HCKR fields reset clear.
   clock_ = 1;
   observed_overrun_ = false;
+  observed_underrun_ = phase_zero_complete_ = false;
+  transmit_.reset();
+  shifting_.reset();
   publish();
   ready_.notify_all();
 }
@@ -48,6 +61,7 @@ bool Shi::read(const std::uint32_t address, std::uint32_t &value) noexcept {
   if (address == status_address) {
     value = status_.load(std::memory_order_acquire);
     if ((value & overrun) != 0) { observed_overrun_ = true; }
+    if ((value & underrun) != 0) { observed_underrun_ = true; }
     return true;
   }
   const std::lock_guard lock(mutex_);
@@ -71,6 +85,20 @@ bool Shi::write(const Write access) noexcept {
   const std::lock_guard lock(mutex_);
   if (access.address == clock_address) {
     clock_ = access.value & clock_mask;
+    prime_transmit();
+    publish();
+    return true;
+  }
+  if (access.address == transmit_address) {
+    if ((control_ & enabled) == 0 || access.value > word_mask) { return false; }
+    // An unpolled write overwrites HTX, not the word already in IOSR (7.4.2).
+    transmit_ = access.value;
+    if (observed_underrun_) {
+      errors_ &= ~underrun;
+      observed_underrun_ = false;
+    }
+    prime_transmit();
+    publish();
     return true;
   }
   if (access.address != status_address) { return false; }
@@ -84,6 +112,9 @@ bool Shi::write(const Write access) noexcept {
     head_ = count_ = 0;
     errors_ = 0;
     observed_overrun_ = false;
+    observed_underrun_ = phase_zero_complete_ = false;
+    transmit_.reset();
+    shifting_.reset();
   }
   publish();
   ready_.notify_all();
@@ -93,6 +124,8 @@ bool Shi::write(const Write access) noexcept {
 std::optional<Shi::Mode> Shi::select(const bool active) noexcept {
   const std::lock_guard lock(mutex_);
   selected_ = active;
+  if (!active) { phase_zero_complete_ = false; }
+  prime_transmit();
   publish();
   return mode();
 }
@@ -113,15 +146,24 @@ std::optional<Shi::Mode> Shi::wait_mode(const std::stop_token &stop) {
   return mode();
 }
 
-bool Shi::receive(const std::uint32_t word) noexcept {
+Shi::Transfer Shi::transfer(const std::uint32_t word) noexcept {
   const std::lock_guard lock(mutex_);
-  if (!selected_ || (control_ & enabled) == 0 || word > word_mask) { return false; }
+  if (!selected_ || (control_ & enabled) == 0 || word > word_mask ||
+      ((clock_ & 1) == 0 && phase_zero_complete_)) {
+    return {};
+  }
   const auto padding = 24 - width(control_);
-  if (word > (word_mask >> padding)) { return false; }
+  if (word > (word_mask >> padding)) { return {}; }
+  Transfer result{.accepted = true, .output = {}};
+  if (shifting_) {
+    result.output = *shifting_ >> padding;
+    shifting_.reset();
+  } else {
+    errors_ |= underrun;
+  }
+  phase_zero_complete_ = (clock_ & 1) == 0;
+  prime_transmit();
   const auto capacity = (control_ & fifo_enabled) != 0 ? fifo_.size() : 1;
-  // The receive-only binding has no initialized HTX word: the actual SPI
-  // transaction sets HTUE. HTX/MISO remain explicit unsupported accesses.
-  errors_ |= underrun;
   if (count_ >= capacity) {
     errors_ |= overrun;
   } else {
@@ -129,6 +171,6 @@ bool Shi::receive(const std::uint32_t word) noexcept {
     ++count_;
   }
   publish();
-  return true;
+  return result;
 }
 }

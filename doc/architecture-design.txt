@@ -64,6 +64,12 @@ MCU owner. Outside the native callback, wait for the DSP's actual HCSR write or
 shutdown, then capture with that mode. This orders transaction ownership across
 host scheduling/JIT latency without synthesizing readiness or advancing clocks.
 
+SHI transfers complete words through one bounded receive FIFO and the distinct
+HTX/IOSR transmit stages. HTDE follows actual HTX ownership; CPHA=0 loads IOSR
+while deselected, CPHA=1 can load between words. Unpolled writes overwrite HTX,
+never the active shift word. Underflow output remains unknown and HCSR/HTX clear
+the observed error; no idle word or peer response is manufactured by the host.
+
 Local ISA timing remains correct; cross-core coupling serves observable instrument
 behavior rather than hypothetical silicon phases. Qualify ordering, IRQ delivery,
 partial transactions and musical latency against firmware and independent tests.

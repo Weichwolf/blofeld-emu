@@ -18,11 +18,12 @@ OMR-selected program-bank sharing. Optional data-ROM views borrow local contents
 DSP GPIO and decoded page-read transactions use the profile's validated media
 image directly. Media program/erase, ID/status and automatic page continuation
 are not yet implemented.
-The SHI receive FIFO connects MCU port writes to DSP program loading; MCU U0
+The SHI receive FIFO connects MCU port writes to DSP program loading; HTX and
+IOSR retain actual full-duplex words, with phase-dependent loading and underrun handling. MCU U0
 assertions retire the previous DSP Core before peripheral reset and ROM restart.
 `blofeld-headless` loads local images and executes their native JIT paths;
 unimplemented device accesses stop with context. Flash program/erase and interrupts,
-watchdog reset/recovery, USB transactions, SHI transmit/interrupt delivery,
+watchdog reset/recovery, USB transactions, MCU MISO sampling and SHI interrupt delivery,
 the remaining device contracts, audio and host MIDI are incomplete, so it is not yet
 a playable instrument. Complete requirements are in
 [OBJECTIVE.md](OBJECTIVE.md) and [ACCEPTANCE.tsv](ACCEPTANCE.tsv).

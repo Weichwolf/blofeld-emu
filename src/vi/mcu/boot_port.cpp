@@ -45,11 +45,11 @@ bool BootPort::write(const Write access) noexcept {
   word_ = (word_ << 1U) | ((access.value & data_bit) != 0 ? 1U : 0U);
   ++bits_;
   if (bits_ != mode_->bits) { return true; }
-  const auto accepted = shi_.receive(word_);
+  const auto transferred = shi_.transfer(word_);
   if (mode_->continuous) {
     bits_ = 0;
     word_ = 0;
   }
-  return accepted;
+  return transferred.accepted;
 }
 }
