@@ -3,6 +3,7 @@
 
 #include "dsp/clock.hpp"
 #include "dsp/dma.hpp"
+#include "dsp/esai.hpp"
 #include "dsp/interrupts.hpp"
 #include "dsp/memory.hpp"
 #include "dsp/ports.hpp"
@@ -27,6 +28,8 @@ constexpr dsp56300::Word reset_status = 0xc00300;
 constexpr dsp56300::Word reset_mode = 0x305;
 constexpr dsp56300::Word once_data_address = 0xfffffc;
 constexpr dsp56300::Word dma_status_address = 0xfffff4;
+constexpr dsp56300::Word reserved_x_address = 0xffff80;
+constexpr unsigned esai1_transmit_request = 22;
 
 struct BitAccess {
   dsp56300::Space space;
@@ -52,6 +55,7 @@ public:
     clock_.reset(true);
     interrupts_.reset();
     dma_.reset();
+    esai_1_.reset();
     memory_.configure(0);
     ports_.reset();
     controller_.reset();
@@ -65,6 +69,7 @@ public:
       report.failure->reason = controller_.error();
       return false;
     }
+    if (esai_1_.take_request()) { static_cast<void>(dma_.trigger(esai1_transmit_request)); }
     if (!dma_.service(
             dma_pc_,
             [this](const Dma::Address access, dsp56300::Word &value) {
@@ -90,7 +95,9 @@ public:
 
   [[nodiscard]] std::uint64_t program_revision() const noexcept override { return revision_; }
 
-  [[nodiscard]] const char *error() const noexcept { return controller_.error(); }
+  [[nodiscard]] const char *error() const noexcept {
+    return esai_1_.error() != nullptr ? esai_1_.error() : controller_.error();
+  }
 
   [[nodiscard]] bool reset_interrupted() const noexcept { return reset_interrupted_; }
 
@@ -115,6 +122,9 @@ public:
     if (interrupted()) { return false; }
     if (memory_.read(space, address, value)) { return true; }
     if (Ports::contains(space, address)) { return ports_.read(space, address, value); }
+    if (space == dsp56300::Space::y && Esai::contains(address)) {
+      return esai_1_.read(address, value);
+    }
     if (space == dsp56300::Space::x) { return read_x(address, value); }
     const auto word = space == dsp56300::Space::program ? inspect_program(address) : std::nullopt;
     if (!word) { return false; }
@@ -131,7 +141,13 @@ public:
     if (Ports::contains(space, address)) {
       return write_port({.space = space, .address = address, .value = value}, pc);
     }
+    if (space == dsp56300::Space::y && Esai::contains(address)) {
+      return esai_1_.write({.address = address, .value = value});
+    }
     if (space != dsp56300::Space::x) { return false; }
+    // DSP56371UM table 3-7 reserves X:$FFFF80. The original audio
+    // initializer writes it; discard the write without creating a readable latch.
+    if (address == reserved_x_address) { return true; }
     if (Dma::contains(address)) { return write_dma({.address = address, .value = value}, pc); }
     if (Interrupts::contains(address)) {
       return interrupts_.write({.address = address, .value = value});
@@ -162,11 +178,16 @@ public:
       return controller_.ready(previous);
     }
     dsp56300::Word value = 0;
-    if (!memory_.read(request.space, request.address, value) &&
-        !(Ports::contains(request.space, request.address)
-              ? ports_.read(request.space, request.address, value)
-              : request.space == dsp56300::Space::x && read_x(request.address, value))) {
-      return false;
+    if (!memory_.read(request.space, request.address, value)) {
+      bool accepted = false;
+      if (Ports::contains(request.space, request.address)) {
+        accepted = ports_.read(request.space, request.address, value);
+      } else if (request.space == dsp56300::Space::x) {
+        accepted = read_x(request.address, value);
+      } else if (request.space == dsp56300::Space::y) {
+        accepted = esai_1_.read(request.address, value);
+      }
+      if (!accepted) { return false; }
     }
     const auto mask = dsp56300::Word{1} << request.index;
     previous = (value & mask) != 0;
@@ -183,6 +204,9 @@ public:
     if (Ports::contains(request.space, request.address)) {
       return write_port({.space = request.space, .address = request.address, .value = value},
                         request.pc);
+    }
+    if (request.space == dsp56300::Space::y && Esai::contains(request.address)) {
+      return esai_1_.write({.address = request.address, .value = value});
     }
     if (request.space != dsp56300::Space::x) { return false; }
     if (Dma::contains(request.address)) {
@@ -224,6 +248,9 @@ private:
     constexpr dsp56300::Word peripheral_first = 0xffff80;
     constexpr dsp56300::Word shi_transmit = 0xffff93;
     if (access.space != dsp56300::Space::program && access.address >= peripheral_first) {
+      if (access.space == dsp56300::Space::y && Esai::data_register(access.address)) {
+        return esai_1_.connected() && esai_1_.write({.address = access.address, .value = value});
+      }
       return access.space == dsp56300::Space::x && access.address == shi_transmit &&
              shi_.write({.address = access.address, .value = value});
     }
@@ -248,6 +275,7 @@ private:
   }
 
   bool update_ports() noexcept {
+    esai_1_.connected(ports_.peripheral(Port::e) != 0);
     constexpr dsp56300::Word control_mask = 0xf00;
     constexpr dsp56300::Word data_mask = 0xff;
     const auto controls = ports_.output(Port::c);
@@ -297,6 +325,7 @@ private:
   Clock clock_;
   Interrupts interrupts_;
   Dma dma_;
+  Esai esai_1_;
   Memory memory_;
   Ports ports_;
   MemoryController controller_;

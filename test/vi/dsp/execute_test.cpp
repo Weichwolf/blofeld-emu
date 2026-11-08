@@ -148,6 +148,51 @@ void native_dma_program_write() {
           "A real software DMA transfer changes a previously translated function's literal");
 }
 
+void native_dma_esai_write() {
+  namespace isa = dsp56300::isa;
+  using dsp56300::Word;
+  constexpr Word immediate = 0x34;
+  constexpr Word absolute = 0x30;
+  constexpr Word load = 0x8000;
+  constexpr Word x0 = 4;
+  constexpr Word source = 0x40;
+  constexpr Word marker = 0xc000;
+  constexpr Word payload = 0x123456;
+  constexpr Word software_x_to_y = 0x980244;
+  constexpr Word done_port = 0x34;
+  constexpr Word all_done = 0x3f;
+  std::vector<Word> program;
+  const auto put = [&](const blofeld::vi::dsp::Ports::Write access) {
+    const auto store = access.space == dsp56300::Space::x ? isa::Opcode::move_x_effective
+                                                          : isa::Opcode::move_y_effective;
+    program.push_back(isa::opcode<isa::Opcode::move_x_effective>()[0] | (immediate << 8U) | load);
+    program.push_back(access.value);
+    program.push_back(static_cast<Word>(store) | (absolute << 8U));
+    program.push_back(access.address);
+  };
+  using Write = blofeld::vi::dsp::Ports::Write;
+  constexpr std::array configuration{
+      Write{.space = dsp56300::Space::y, .address = 0xffff9f, .value = 0x83b},
+      Write{.space = dsp56300::Space::y, .address = 0xffff9e, .value = 0xebc},
+      Write{.space = dsp56300::Space::y, .address = 0xffff96, .value = 0x640301},
+      Write{.space = dsp56300::Space::y, .address = 0xffff95, .value = 0x7d01},
+      Write{.space = dsp56300::Space::x, .address = source, .value = payload},
+      Write{.space = dsp56300::Space::x, .address = 0xffffef, .value = source},
+      Write{.space = dsp56300::Space::x, .address = 0xffffee, .value = 0xffff80},
+      Write{.space = dsp56300::Space::x, .address = 0xffffed, .value = 0},
+      Write{.space = dsp56300::Space::x, .address = 0xffffec, .value = software_x_to_y}};
+  for (const auto access : configuration) { put(access); }
+  program.push_back(isa::opcode<isa::Opcode::movep_register_high>()[0] | (x0 << 8U) | done_port);
+  program.push_back(isa::opcode<isa::Opcode::movem_effective>()[0] | (absolute << 8U) | x0);
+  program.push_back(marker);
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+  require(report.failure && report.failure->space == 'P' && report.failure->address == marker &&
+              report.failure->value == all_done,
+          "Native software DMA completes only after the connected ESAI TX register accepts data");
+}
+
 void native_transmit_registers() {
   namespace isa = dsp56300::isa;
   constexpr dsp56300::Word immediate = 0x34;
@@ -386,6 +431,7 @@ int main(const int argc, char **argv) try {
   native_interrupt_priorities();
   native_memory_switch();
   native_dma_program_write();
+  native_dma_esai_write();
   consecutive_receive_registers();
   reset_running_core();
 } catch (const std::exception &error) {

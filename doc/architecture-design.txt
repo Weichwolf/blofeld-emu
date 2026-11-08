@@ -118,6 +118,12 @@ after the destination accepts the word. Preserve counter reloads and circular
 buffer positions; configuration alone does not produce audio. Program writes
 publish one changed code revision before native execution resumes.
 
+ESAI_1 consumes complete slot events from its clock source, not individual audio
+bits. Its format determines HCKT ticks per slot and slots per frame. Each event
+consumes actual transmit-register words and requests DMA refill; unknown data
+cannot become valid PCM. Port assignment and personal reset govern activity.
+Bind the clock source separately; register initialization alone advances no time.
+
 Storage port writes decode commands, addresses and byte ownership locally. A
 complete address publishes an operation; the DSP owner resolves the actual image
 page outside its native callback before publishing ready. Read strobes retain a

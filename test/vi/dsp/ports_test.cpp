@@ -43,6 +43,27 @@ void registers() {
           "Reset clears direction/function without erasing retained data latches");
 }
 
+void peripheral_selection() {
+  Ports ports;
+  constexpr dsp56300::Word e_direction = 0xffff9e;
+  constexpr dsp56300::Word e_function = 0xffff9f;
+  constexpr dsp56300::Word function = 0x83b;
+  constexpr dsp56300::Word direction = 0xebc;
+  constexpr dsp56300::Word selected = 0x838;
+  require(ports.peripheral(Port::e) == 0 &&
+              ports.write({.space = Space::y, .address = e_function, .value = function}) &&
+              ports.peripheral(Port::e) == 0 &&
+              ports.write({.space = Space::y, .address = e_direction, .value = direction}) &&
+              ports.peripheral(Port::e) == selected,
+          "Peripheral assignments require both direction and function, independently of GPIO data");
+  constexpr dsp56300::Word f_direction = 0xfffff6;
+  constexpr dsp56300::Word f_function = 0xfffff7;
+  require(ports.write({.space = Space::y, .address = f_direction, .value = 1}) &&
+              ports.write({.space = Space::y, .address = f_function, .value = 1}) &&
+              ports.peripheral(Port::f) == 0,
+          "The reserved Port F mode cannot activate a peripheral");
+}
+
 void receive_data() {
   Ports ports;
   constexpr dsp56300::Word data = 0xfffff5;
@@ -74,6 +95,7 @@ void receive_data() {
 
 int main() try {
   registers();
+  peripheral_selection();
   receive_data();
 } catch (const std::exception &error) {
 

@@ -31,6 +31,7 @@ public:
   [[nodiscard]] bool write(Write access) noexcept;
   void input(Port port, Input sample);
   [[nodiscard]] Output output(Port port) const;
+  [[nodiscard]] dsp56300::Word peripheral(Port port) const;
 
 private:
   struct Registers {

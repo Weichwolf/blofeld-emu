@@ -109,4 +109,11 @@ Ports::Output Ports::output(const Port port) const {
           .known = value.known,
           .value = value.data};
 }
+
+dsp56300::Word Ports::peripheral(const Port port) const {
+  const auto index = static_cast<std::size_t>(port);
+  if (index >= registers_.size()) { throw std::out_of_range("Unknown DSP port"); }
+  const auto &value = registers_[index];
+  return index == 3 ? 0 : value.direction & value.function & specs[index].mask;
+}
 }
