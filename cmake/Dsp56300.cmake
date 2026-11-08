@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-# Pinned independent core used by the regular Board and headless runtime.
+# Pinned independent core used by the instrument and headless runtime.
 set(BLOFELD_DSP56300_ROOT "$ENV{BLOFELD_DSP56300_ROOT}" CACHE PATH "Independent DSP core source checkout")
 if(NOT BLOFELD_DSP56300_ROOT)
   set(BLOFELD_DSP56300_ROOT "$ENV{HOME}/Git/dsp56300")
