@@ -10,6 +10,9 @@
 - Use our independent cpu12 and dsp56300 cores; fix generic core defects there.
   Keep firmware I/O, core execution, transport and audio separate. Unknown accesses
   fail with address, operation, PC and context. Run as a regular user.
+- Build a native firmware VM with one stable VmContext for live memory/I/O
+  bindings, deadlines, pending events and bounded buffers. Cores own their state;
+  consolidate existing runtime data rather than adding mirrors or checkpoints.
 - Prioritize the connected instrument. Fix and optimize the responsible core for
   generic defects or measured instrument bottlenecks; core benchmark percentages
   do not block integration. SIMD is optional and needs measured benefit.
@@ -36,6 +39,9 @@
 - Prefer simple native execution, direct memory and large bounded runs. Keep device
   effects and event boundaries explicit; avoid per-clock work and unnecessary copies.
   Telemetry is runtime-selectable and off by default; keep its work out of hot paths.
+- A host call need not end a native run. Return for actual rescheduling, IRQs,
+  mapping/reset transitions, backpressure or faults; retain every I/O effect and
+  deterministic virtual time. Profile the connected Release VM toward >=4x RTF.
 - Run builds, tests and benchmarks locally; do not add GitHub workflows or pipelines.
 - Use C++23, LLVM 19 and CMake/Ninja. Keep strict compiler/linker flags, warnings
   as errors, clang-format, clang-tidy with zero findings and functions <=120 lines.

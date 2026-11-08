@@ -1,5 +1,22 @@
 # Objective
 
+Native firmware VM
+
+Build a small native firmware VM with the independent cpu12 and dsp56300 JITs.
+Consolidate execution bindings, typed I/O entry points, virtual deadlines, pending
+events and bounded USB/audio buffers in one stable VmContext per instrument.
+The cores own their complete ISA/register/JIT state; retain direct references
+rather than mirrors, checkpoints or an additional universal core abstraction.
+Ordinary host calls return to native code when their effects preserve the current
+event horizon. Return to the scheduler for pending interrupts, changed deadlines
+or mappings, reset, backpressure, shutdown and faults. Preserve exact observable
+guest-cycle prefixes; host wall-clock epochs cannot replace device time.
+Use native ABI, memory-locality and targeted polling principles from established
+VMs, as specified in doc/architecture-design.txt. Measure the connected instrument
+with the Release profiler. The complete acceptance scope below and the minimum
+4x sustained offline throughput target remain unchanged; context refactoring or
+a fast isolated core benchmark cannot substitute for those results.
+
 User-facing execution
 
 `blofeld-headless` without arguments opens the default local instrument profile,

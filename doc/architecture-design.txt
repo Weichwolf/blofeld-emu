@@ -1,6 +1,6 @@
 Blofeld firmware runtime
 
-The implementation target is a minimal firmware execution and I/O layer.
+The implementation target is a small native firmware VM with two ISA cores.
 Instrument behavior, original synthesis and musical time define correctness.
 
   local firmware / persistent images
@@ -25,9 +25,59 @@ Execution
 Initialize memory, persistent storage and register state, construct both cores,
 then execute native code at maximum throughput. A shared device timeline orders
 actual I/O effects, interrupt deadlines and audio transfers. Preserve elapsed
-musical time regardless of host processing speed. Core execution returns only
-for required events, I/O, backpressure, shutdown or a contextual failure.
+musical time regardless of host processing speed. Core execution returns for
+pending events, a changed execution horizon, backpressure, shutdown or a fault.
 Ordinary guest arithmetic and memory do not invoke the instrument layer.
+
+VmContext and native calls
+
+One stable VmContext belongs to each instrument. It consolidates existing live
+execution data instead of adding another layer around it. Cores own their complete
+ISA/register/JIT state; the context holds direct bindings, not register mirrors,
+checkpoints or copies of that state. Each core retains its private native context.
+The instrument context does not introduce a common virtual base class for cores.
+
+  VmContext
+    hot:   core/memory bindings and mapping generations
+           typed I/O entry points and device state references
+           next virtual deadline and pending event flags
+           USB endpoint and PCM buffer pointers, positions and ownership
+    cold:  configuration, image/file owners and optional diagnostics
+
+Keep frequently accessed fields compact and cache-local, with fixed offsets and
+stable lifetimes. Allocate and validate bindings outside native execution. Reset,
+overlay replacement and firmware reload explicitly retire and rebind affected
+resources before execution resumes; stale pointers must never remain usable.
+
+A host call is an ordinary typed native call. Emit direct RAM accesses and calls
+to already selected effect handlers, with a small, fixed ABI and no argument boxing
+or general dispatcher lookup. A completed I/O access normally returns directly
+to generated code. It does not inherently return to the outer execution loop.
+Retain every register/FIFO effect and its actual virtual timestamp, including
+repeated identical writes; amortize administration rather than deleting effects.
+Keep allocation, logging, formatting and exceptional error handling on cold paths.
+
+Native code checks pending work and virtual deadlines at region entries, loop
+backedges and necessary effect boundaries. Account guest cycles in aggregates
+while preserving exact observable prefixes. Admit a whole region when its cost
+fits; use precise native execution near a deadline. An I/O handler that creates
+an earlier event, changes a mapping or requires peer synchronization requests a
+return. Acknowledgements and stored-register accesses may continue when their
+effects leave the current horizon valid. Interrupt admission still occurs at
+legal architectural boundaries; unknown effects remain explicit failures.
+
+Host wakeups and device time have separate contracts. Host event flags/epochs may
+request service, but wall-clock polling must not replace deterministic virtual
+timer, MIDI or audio deadlines. Buffer pressure controls host pacing. It never
+changes guest clock rates, event order or sample counts.
+
+Linux execution uses stable memory mappings and native code with W^X protection.
+Guard pages are suitable for rare invalid accesses, not routine MMIO dispatch.
+Use bounded producer/consumer buffers for host I/O, with parking/wakeup outside
+the arithmetic and audio callback paths. Begin with a single execution owner for
+both cores and the shared timeline; parallel core execution requires a measured
+benefit and preserved causality. Use perf and native JIT symbols to locate costs;
+telemetry is optional and disabled in the normal performance path.
 
 Initialized MCU RAM overlays bind as read-only program grants to the JIT while
 remaining architecturally writable through their consumer. The first write retires
@@ -75,3 +125,14 @@ response or replacement synthesis path is permitted.
 
 Keep telemetry runtime-selectable and disabled by default. Formatting, file I/O
 and status observation stay outside native arithmetic and the audio callback.
+
+Primary design references
+
+Wasmtime VMContext, native ABIs, trampolines and linear memory:
+https://docs.wasmtime.dev/contributing-architecture.html
+Wasmtime deterministic fuel versus lightweight epoch interruption:
+https://docs.wasmtime.dev/examples-interrupting-wasm.html
+V8 typed calls from optimized code and fast-call restrictions:
+https://chromium.googlesource.com/v8/v8/+/refs/heads/main/include/v8-fast-api-calls.h
+HotSpot pending-work polling and thread-local handshakes:
+https://github.com/openjdk/jdk/blob/master/src/hotspot/share/runtime/safepointMechanism.inline.hpp
