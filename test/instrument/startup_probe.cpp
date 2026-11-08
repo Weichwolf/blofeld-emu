@@ -18,6 +18,7 @@
 #include <bit>
 #include <chrono>
 #include <cstdint>
+#include <ctime>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -34,6 +35,20 @@ using Clock = std::chrono::steady_clock;
 constexpr auto host_limit = std::chrono::seconds{8};
 constexpr auto report_interval = std::chrono::milliseconds{250};
 constexpr double reference_rate = 44100;
+
+double cpu_time() {
+  const auto ticks = std::clock();
+  if (ticks == static_cast<std::clock_t>(-1)) { throw Fault("Cannot read process CPU time"); }
+  return static_cast<double>(ticks) / static_cast<double>(CLOCKS_PER_SEC);
+}
+
+void report_cpu(const double before, const Clock::time_point started) {
+  const auto used = cpu_time() - before;
+  const auto elapsed = std::chrono::duration<double>(Clock::now() - started).count();
+  std::cout << "cpu-scope=loading-and-startup wall-seconds=" << elapsed
+            << " process-cpu-seconds=" << used << " average-occupied-cores=" << used / elapsed
+            << '\n';
+}
 
 class Output final : public PcmFrameSink {
 public:
@@ -136,7 +151,7 @@ void peer_response(const vi::VirtualInstrument &instrument) {
   }
 }
 
-int probe(const char *const *argv, const Clock::time_point started) {
+int probe(const char *const *argv, const Clock::time_point started, const double cpu_started) {
   const auto profile = vi::load_profile(argv[1]);
   const auto firmware = Firmware::load(profile.firmware);
   const auto config = vi::vi_config(profile);
@@ -177,6 +192,7 @@ int probe(const char *const *argv, const Clock::time_point started) {
   const char *phase = "host-limit";
   if (failed) { phase = "fault"; }
   report(board, output, started, config.dsp_clock.timebase_hz, phase);
+  report_cpu(cpu_started, started);
   midi.report();
   output.finish();
   capture_display(board, output_directory);
@@ -191,9 +207,10 @@ int probe(const char *const *argv, const Clock::time_point started) {
 int main(const int argc, char **argv) {
   const auto started = Clock::now();
   try {
+    const auto cpu_started = cpu_time();
     constexpr int arguments = 3;
     if (argc != arguments) { throw Fault("Usage: blofeld-startup-probe profile output-dir"); }
-    return probe(argv, started);
+    return probe(argv, started, cpu_started);
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
     return 1;
