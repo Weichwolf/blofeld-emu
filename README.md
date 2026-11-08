@@ -6,8 +6,9 @@ Blofeld firmware VM project using the independent
 
 The current source contains the LCD register/data contract, image capture,
 atomic PBM/text publication, GTK viewer, 1.25 update-container loader, MCU
-image codec, direct MCU memory mapping, GPIO contracts and independent MCU/DSP execution
-threads. The SHI receive FIFO connects MCU port writes to DSP program loading.
+image codec, direct MCU memory mapping, GPIO, free-running timer capture/compare
+flags and interrupt wakeup, and independent MCU/DSP execution threads. The SHI
+receive FIFO connects MCU port writes to DSP program loading.
 `blofeld-headless` loads local images and executes their native JIT paths;
 unimplemented device accesses stop with context. SHI transmit/interrupt delivery,
 the remaining device contracts, audio and MIDI are incomplete, so it is not yet

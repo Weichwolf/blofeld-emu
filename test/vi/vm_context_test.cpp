@@ -166,12 +166,70 @@ void masked_port_read() {
   executed(result, "Native BRSET reads only its requested GPIO bit");
   require(result.instructions == 6, "The known bit branches around the unknown-memory access");
 }
+
+void timer_wakes_mcu() {
+  namespace isa = cpu12::isa;
+  constexpr std::uint16_t stack = 0x1fff;
+  constexpr std::uint16_t isr = 0x8100;
+  constexpr std::uint16_t marker = 0x1801;
+  constexpr std::uint16_t sink = 0x7000;
+  constexpr std::uint16_t vector = 0xffee;
+  constexpr cpu12::Byte enable_interrupt_and_stop = 0x6f;
+  constexpr cpu12::Byte mark = 0x5a;
+  constexpr auto program = isa::program(
+      isa::opcode<isa::Opcode::lds_immediate>(),
+      std::array{static_cast<cpu12::Byte>(stack >> 8U), static_cast<cpu12::Byte>(stack)},
+      isa::opcode<isa::Opcode::ldaa_immediate>(),
+      std::array<cpu12::Byte, 1>{1},
+      isa::opcode<isa::Opcode::staa_direct>(),
+      std::array<cpu12::Byte, 1>{0x40},
+      isa::opcode<isa::Opcode::ldd_immediate>(),
+      std::array<cpu12::Byte, 2>{1, 0},
+      isa::opcode<isa::Opcode::std_direct>(),
+      std::array<cpu12::Byte, 1>{0x50},
+      isa::opcode<isa::Opcode::ldaa_immediate>(),
+      std::array<cpu12::Byte, 1>{1},
+      isa::opcode<isa::Opcode::staa_direct>(),
+      std::array<cpu12::Byte, 1>{0x4c},
+      isa::opcode<isa::Opcode::ldaa_immediate>(),
+      std::array<cpu12::Byte, 1>{0x80},
+      isa::opcode<isa::Opcode::staa_direct>(),
+      std::array<cpu12::Byte, 1>{0x46},
+      isa::opcode<isa::Opcode::andcc_immediate>(),
+      std::array{enable_interrupt_and_stop},
+      isa::wai,
+      isa::opcode<isa::Opcode::ldaa_extended>(),
+      std::array{static_cast<cpu12::Byte>(marker >> 8U), static_cast<cpu12::Byte>(marker)},
+      isa::opcode<isa::Opcode::staa_extended>(),
+      std::array{static_cast<cpu12::Byte>(sink >> 8U), static_cast<cpu12::Byte>(sink)});
+  constexpr auto handler = isa::program(
+      isa::opcode<isa::Opcode::ldaa_immediate>(),
+      std::array<cpu12::Byte, 1>{1},
+      isa::opcode<isa::Opcode::staa_direct>(),
+      std::array<cpu12::Byte, 1>{0x4e},
+      isa::opcode<isa::Opcode::ldaa_immediate>(),
+      std::array{mark},
+      isa::opcode<isa::Opcode::staa_extended>(),
+      std::array{static_cast<cpu12::Byte>(marker >> 8U), static_cast<cpu12::Byte>(marker)},
+      isa::rti);
+  auto flash = image();
+  std::ranges::copy(program, flash->bytes.begin());
+  std::ranges::copy(handler, flash->bytes.begin() + (isr - 0x8000));
+  flash->bytes[vector - 0x8000] = static_cast<cpu12::Byte>(isr >> 8U);
+  flash->bytes[vector - 0x8000 + 1] = static_cast<cpu12::Byte>(isr);
+  blofeld::vi::Shi shi;
+  const auto result = blofeld::vi::mcu::execute(*flash, shi, {});
+  require(result.failure && result.failure->operation == blofeld::vi::Access::write &&
+              result.failure->address == sink && result.failure->value == mark,
+          "The timer wakes native WAI, the actual ISR writes RAM, and RTI resumes foreground code");
+}
 }
 
 int main() try {
   debug_output();
   boot_transfer();
   masked_port_read();
+  timer_wakes_mcu();
   auto flash = image();
   constexpr auto words = dsp56300::isa::program(dsp56300::isa::nop, dsp56300::isa::stop);
   const std::vector<dsp56300::Word> boot(words.begin(), words.end());
