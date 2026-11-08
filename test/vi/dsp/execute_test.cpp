@@ -83,6 +83,71 @@ void native_memory_switch() {
           "Guest OMR remaps retained X RAM into executable P without copying or a new Core");
 }
 
+void native_dma_program_write() {
+  namespace isa = dsp56300::isa;
+  constexpr dsp56300::Word immediate = 0x34;
+  constexpr dsp56300::Word absolute = 0x30;
+  constexpr dsp56300::Word load = 0x8000;
+  constexpr dsp56300::Word x0 = 4;
+  constexpr dsp56300::Word source = 0x40;
+  constexpr dsp56300::Word function = 0x100;
+  constexpr dsp56300::Word marker = 0xc000;
+  constexpr dsp56300::Word replacement = 0x123456;
+  constexpr dsp56300::Word source_port = 0x2f;
+  constexpr dsp56300::Word destination_port = 0x2e;
+  constexpr dsp56300::Word count_port = 0x2d;
+  constexpr dsp56300::Word control_port = 0x2c;
+  constexpr dsp56300::Word software_x_to_p = 0x980248;
+  constexpr auto literal =
+      isa::opcode<isa::Opcode::move_x_effective>()[0] | (immediate << 8U) | load;
+  constexpr auto store_p = isa::opcode<isa::Opcode::movem_effective>()[0] | (absolute << 8U) | x0;
+  constexpr auto store_x = isa::opcode<isa::Opcode::move_x_effective>()[0] | (absolute << 8U);
+  constexpr auto call = isa::opcode<isa::Opcode::jsr_effective>()[0] | (absolute << 8U);
+  constexpr auto port_store =
+      isa::opcode<isa::Opcode::movep_memory_high>()[0] | (immediate << 8U) | load;
+  const std::array program{literal,
+                           literal,
+                           store_p,
+                           function,
+                           literal,
+                           dsp56300::Word{0},
+                           store_p,
+                           function + 1,
+                           literal,
+                           isa::rts[0],
+                           store_p,
+                           function + 2,
+                           call,
+                           function,
+                           literal,
+                           replacement,
+                           store_x,
+                           source,
+                           port_store | source_port,
+                           source,
+                           port_store | destination_port,
+                           function + 1,
+                           port_store | count_port,
+                           dsp56300::Word{0},
+                           port_store | control_port,
+                           software_x_to_p,
+                           call,
+                           function,
+                           store_p,
+                           marker};
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+  if (report.failure && report.failure->address != marker) {
+    std::cerr << "DMA native failure pc=" << report.failure->pc
+              << " address=" << report.failure->address << " reason=" << report.failure->reason
+              << '\n';
+  }
+  require(report.failure && report.failure->space == 'P' && report.failure->address == marker &&
+              report.failure->value == replacement,
+          "A real software DMA transfer changes a previously translated function's literal");
+}
+
 void native_transmit_registers() {
   namespace isa = dsp56300::isa;
   constexpr dsp56300::Word immediate = 0x34;
@@ -320,6 +385,7 @@ int main(const int argc, char **argv) try {
   native_transmit_registers();
   native_interrupt_priorities();
   native_memory_switch();
+  native_dma_program_write();
   consecutive_receive_registers();
   reset_running_core();
 } catch (const std::exception &error) {

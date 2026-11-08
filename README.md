@@ -12,6 +12,8 @@ and interrupt wakeup, SCI character/register handling, USB configuration and dir
 endpoint-buffer windows, and independent
 MCU/DSP execution threads and DSP56371 PLL register/nominal ratio handling.
 DSP interrupt-priority registers retain configuration; device interrupt delivery remains incomplete.
+DMA registers, A–E counters and address modes handle requested transfers and software blocks.
+Peripheral request production, audio data-register binding and DMA interrupt admission remain incomplete.
 The MCU samples a VM-owned pedal input; firmware retains its polarity/change handling.
 Low/high X/Y RAM uses direct native grants with initialization tracking and
 OMR-selected program-bank sharing. Optional data-ROM views borrow local contents.

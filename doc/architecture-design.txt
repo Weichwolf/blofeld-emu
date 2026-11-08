@@ -111,6 +111,13 @@ relevant MIDI/device events. Live consumption bounds lookahead and paces output;
 offline draining runs as fast as possible. No wall-clock substitution for musical
 time, missing frames, duplicate frames or serial-PCM bit decoding.
 
+DMA consumes real request edges or a software DE trigger. Arbitrate pending
+channels by priority and word ownership, using native memory accesses and typed
+data-register transactions. Advance addresses/counters and signal completion only
+after the destination accepts the word. Preserve counter reloads and circular
+buffer positions; configuration alone does not produce audio. Program writes
+publish one changed code revision before native execution resumes.
+
 Storage port writes decode commands, addresses and byte ownership locally. A
 complete address publishes an operation; the DSP owner resolves the actual image
 page outside its native callback before publishing ready. Read strobes retain a

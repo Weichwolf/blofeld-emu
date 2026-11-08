@@ -2,6 +2,7 @@
 #include "dsp/execute.hpp"
 
 #include "dsp/clock.hpp"
+#include "dsp/dma.hpp"
 #include "dsp/interrupts.hpp"
 #include "dsp/memory.hpp"
 #include "dsp/ports.hpp"
@@ -25,6 +26,7 @@ constexpr dsp56300::Word boot_first = 0xff0000;
 constexpr dsp56300::Word reset_status = 0xc00300;
 constexpr dsp56300::Word reset_mode = 0x305;
 constexpr dsp56300::Word once_data_address = 0xfffffc;
+constexpr dsp56300::Word dma_status_address = 0xfffff4;
 
 struct BitAccess {
   dsp56300::Space space;
@@ -45,9 +47,11 @@ public:
     core_ = &core;
     epoch_ = epoch;
     reset_interrupted_ = false;
+    program_changed_ = false;
     once_data_.reset();
     clock_.reset(true);
     interrupts_.reset();
+    dma_.reset();
     memory_.configure(0);
     ports_.reset();
     controller_.reset();
@@ -56,12 +60,35 @@ public:
   void unbind() noexcept { core_ = nullptr; }
 
   bool complete_events(ExecutionReport &report) {
-    if (!controller_.pending()) { return true; }
-    if (controller_.complete()) { return true; }
-    report.failure = completion_failure_;
-    report.failure->reason = controller_.error();
+    if (controller_.pending() && !controller_.complete()) {
+      report.failure = completion_failure_;
+      report.failure->reason = controller_.error();
+      return false;
+    }
+    if (!dma_.service(
+            dma_pc_,
+            [this](const Dma::Address access, dsp56300::Word &value) {
+              return dma_read(access, value);
+            },
+            [this](const Dma::Address access, const dsp56300::Word value) {
+              return dma_write(access, value);
+            })) {
+      if (!stop_.stop_requested() && !reset_interrupted_) { report.failure = dma_.failure(); }
+      return false;
+    }
+    if (program_changed_) {
+      revision_ ^= 1U;
+      program_changed_ = false;
+    }
+    if (dma_.interrupts() == 0) { return true; }
+    report.failure = Failure{.operation = Access::execute,
+                             .pc = dma_pc_,
+                             .address = dma_status_address,
+                             .reason = "DMA interrupt delivery is not bound"};
     return false;
   }
+
+  [[nodiscard]] std::uint64_t program_revision() const noexcept override { return revision_; }
 
   [[nodiscard]] const char *error() const noexcept { return controller_.error(); }
 
@@ -105,6 +132,7 @@ public:
       return write_port({.space = space, .address = address, .value = value}, pc);
     }
     if (space != dsp56300::Space::x) { return false; }
+    if (Dma::contains(address)) { return write_dma({.address = address, .value = value}, pc); }
     if (Interrupts::contains(address)) {
       return interrupts_.write({.address = address, .value = value});
     }
@@ -157,6 +185,9 @@ public:
                         request.pc);
     }
     if (request.space != dsp56300::Space::x) { return false; }
+    if (Dma::contains(request.address)) {
+      return write_dma({.address = request.address, .value = value}, request.pc);
+    }
     if (Interrupts::contains(request.address)) {
       return interrupts_.write({.address = request.address, .value = value});
     }
@@ -165,6 +196,44 @@ public:
   }
 
 private:
+  bool write_dma(const Dma::Write access, const dsp56300::Word pc) noexcept {
+    if (!dma_.write(access)) { return false; }
+    if (dma_.pending() || dma_.interrupts() != 0) {
+      dma_pc_ = pc;
+      core_->request_yield();
+    }
+    return true;
+  }
+
+  bool dma_read(const Dma::Address access, dsp56300::Word &value) noexcept {
+    if (interrupted()) { return false; }
+    if (memory_.read(access.space, access.address, value)) { return true; }
+    constexpr dsp56300::Word shi_receive = 0xffff94;
+    if (access.space == dsp56300::Space::x && access.address == shi_receive) {
+      return shi_.read(access.address, value);
+    }
+    if (access.space != dsp56300::Space::program) { return false; }
+    const auto word = inspect_program(access.address);
+    if (!word) { return false; }
+    value = *word;
+    return true;
+  }
+
+  bool dma_write(const Dma::Address access, const dsp56300::Word value) noexcept {
+    if (interrupted()) { return false; }
+    constexpr dsp56300::Word peripheral_first = 0xffff80;
+    constexpr dsp56300::Word shi_transmit = 0xffff93;
+    if (access.space != dsp56300::Space::program && access.address >= peripheral_first) {
+      return access.space == dsp56300::Space::x && access.address == shi_transmit &&
+             shi_.write({.address = access.address, .value = value});
+    }
+    if (!memory_.write({.space = access.space, .address = access.address, .value = value})) {
+      return false;
+    }
+    if (access.space == dsp56300::Space::program) { program_changed_ = true; }
+    return true;
+  }
+
   bool write_port(const Ports::Write access, const dsp56300::Word pc) noexcept {
     if (!ports_.write(access) || !update_ports()) { return false; }
     if (controller_.pending()) {
@@ -196,6 +265,7 @@ private:
   }
 
   bool read_x(const dsp56300::Word address, dsp56300::Word &value) noexcept {
+    if (Dma::contains(address)) { return dma_.read(address, value); }
     if (Interrupts::contains(address)) { return interrupts_.read(address, value); }
     if (address != Clock::address) { return shi_.read(address, value); }
     value = clock_.read();
@@ -218,11 +288,15 @@ private:
   DspReset &reset_;
   std::uint64_t epoch_ = 0;
   bool reset_interrupted_ = false;
+  bool program_changed_ = false;
+  std::uint64_t revision_ = 0;
+  dsp56300::Word dma_pc_ = 0;
   const std::stop_token &stop_;
   dsp56300::Core *core_ = nullptr;
   std::optional<dsp56300::Word> once_data_;
   Clock clock_;
   Interrupts interrupts_;
+  Dma dma_;
   Memory memory_;
   Ports ports_;
   MemoryController controller_;
@@ -292,7 +366,10 @@ bool run_instance(Io &io,
       restart = true;
       break;
     }
-    if (!io.complete_events(report)) { break; }
+    if (!io.complete_events(report)) {
+      restart = io.reset_interrupted();
+      break;
+    }
     if (result.state != dsp56300::ExecutionState::running) { break; }
   }
   io.unbind();
