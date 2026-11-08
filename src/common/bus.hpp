@@ -54,6 +54,11 @@ public:
   virtual void write(std::uint16_t address, std::uint8_t value) = 0;
   [[nodiscard]] virtual std::uint64_t read_memory(MemoryRead access);
   virtual void write_memory(MemoryWrite access);
+
+  // Continue a native run only when a successful read leaves scheduling and
+  // mapping contracts unchanged. Unclassified devices retain an owner boundary.
+  [[nodiscard]] virtual bool read_requires_boundary(MemoryRead /*access*/) const { return true; }
+
   [[nodiscard]] virtual std::uint8_t peek(std::uint16_t address) const = 0;
   [[nodiscard]] virtual std::uint64_t revision() const = 0;
 

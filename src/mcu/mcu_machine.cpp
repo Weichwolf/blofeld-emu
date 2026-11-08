@@ -292,6 +292,7 @@ unsigned McuMachine::advance_wait(const unsigned maximum_bus_cycles) {
       const auto gates = state_->bus->wait_clock_gates();
       if (gates.timer && state_->run.timer_inputs != 0) {
         state_->bus->sample_timer_inputs(state_->run.timer_inputs);
+        if (cpu.pending_interrupt()) { break; }
       }
       const auto before = clock->elapsed_ticks();
       const auto before_cycles = clock->bus_cycles();

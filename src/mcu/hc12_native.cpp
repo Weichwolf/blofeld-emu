@@ -78,14 +78,19 @@ public:
            .read_masked = read_masked},
         core(cpu12::Memory::external(), &io) {}
 
-  template <typename Operation> bool callback(const Operation &operation) noexcept {
+  template <bool boundary = true, typename Operation>
+  bool callback(const Operation &operation, const MemoryRead access = {}) noexcept {
     if (failure) { return false; }
     try {
+      const auto revision = boundary ? std::uint64_t{0} : bus.revision();
       synchronize();
       const auto registers = core.registers();
       bus.begin_instruction({.pc = registers.pc, .ccr = registers.ccr});
       operation();
-      core.request_yield();
+      if (boundary || bus.revision() != revision || bus.read_requires_boundary(access) ||
+          core.state().irq_delay != 0 || bus.interrupt_request(core.registers().ccr)) {
+        core.request_yield();
+      }
       return true;
     } catch (...) {
       failure = std::current_exception();
@@ -95,24 +100,28 @@ public:
 
   static bool read(void *owner, const std::uint16_t address, std::uint8_t &value) noexcept {
     auto &self = *static_cast<Impl *>(owner);
-    return self.callback([&] {
-      const auto result = self.bus.read_memory({.address = address});
-      if (result > std::numeric_limits<std::uint8_t>::max()) {
-        throw Fault("Native CPU12 byte read exceeds eight bits at " + hex(address));
-      }
-      value = static_cast<std::uint8_t>(result);
-    });
+    return self.callback<false>(
+        [&] {
+          const auto result = self.bus.read_memory({.address = address});
+          if (result > std::numeric_limits<std::uint8_t>::max()) {
+            throw Fault("Native CPU12 byte read exceeds eight bits at " + hex(address));
+          }
+          value = static_cast<std::uint8_t>(result);
+        },
+        {.address = address});
   }
 
   static bool read_word(void *owner, const std::uint16_t address, std::uint16_t &value) noexcept {
     auto &self = *static_cast<Impl *>(owner);
-    return self.callback([&] {
-      const auto result = self.bus.read_memory({.address = address, .size = 2});
-      if (result > std::numeric_limits<std::uint16_t>::max()) {
-        throw Fault("Native CPU12 word read exceeds sixteen bits at " + hex(address));
-      }
-      value = static_cast<std::uint16_t>(result);
-    });
+    return self.callback<false>(
+        [&] {
+          const auto result = self.bus.read_memory({.address = address, .size = 2});
+          if (result > std::numeric_limits<std::uint16_t>::max()) {
+            throw Fault("Native CPU12 word read exceeds sixteen bits at " + hex(address));
+          }
+          value = static_cast<std::uint16_t>(result);
+        },
+        {.address = address, .size = 2});
   }
 
   static bool write(void *owner, const cpu12::ByteWrite access) noexcept {
@@ -131,9 +140,11 @@ public:
   static bool
   read_masked(void *owner, const cpu12::MaskedByteRead access, std::uint8_t &value) noexcept {
     auto &self = *static_cast<Impl *>(owner);
-    return self.callback([&] {
-      value = observe_masked_byte(self.bus, {.address = access.address, .mask = access.mask});
-    });
+    return self.callback<false>(
+        [&] {
+          value = observe_masked_byte(self.bus, {.address = access.address, .mask = access.mask});
+        },
+        {.address = access.address});
   }
 
   static bool fetch(void *owner, const std::uint16_t address, std::uint8_t &value) noexcept {

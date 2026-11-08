@@ -347,6 +347,7 @@ if(BUILD_TESTING)
   add_test(NAME mcu_power_on COMMAND blofeld-mcu-power-on-test)
 
   add_executable(blofeld-mcu-wait-clock-test test/mcu_wait_clock_test.cpp)
+  target_include_directories(blofeld-mcu-wait-clock-test PRIVATE "${BLOFELD_CPU12_ROOT}/test/support")
   target_link_libraries(blofeld-mcu-wait-clock-test PRIVATE blofeld_core)
   add_test(NAME mcu_wait_clock COMMAND blofeld-mcu-wait-clock-test)
 

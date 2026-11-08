@@ -240,6 +240,18 @@ std::uint8_t McuBus::read(const std::uint16_t address) {
   }
 }
 
+bool McuBus::read_requires_boundary(const MemoryRead access) const {
+  for (unsigned index = 0; index < access.size; ++index) {
+    const auto location = memory_.locate(static_cast<std::uint16_t>(access.address + index));
+    // GPIO input/FIFO ownership has no local clock deadline. Timer, SCI, USB,
+    // flash-controller and other register reads may acknowledge or arm effects.
+    if (location.space == McuSpace::registers && McuGpio::register_name(location.offset).empty()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 std::uint8_t McuBus::read_masked_byte(const MaskedByteRead access) {
   const auto address = access.address;
   const auto mask = access.mask;

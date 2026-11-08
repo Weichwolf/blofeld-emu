@@ -3,7 +3,6 @@
 #include "mcu/mcu_timer.hpp"
 
 #include <array>
-#include <bit>
 #include <cstdint>
 #include <exception>
 #include <iostream>
@@ -36,7 +35,9 @@ void require(const bool condition, const std::string &message) {
 }
 
 void record(const unsigned value) {
-  signature = std::rotl(signature, 7) ^ value;
+  constexpr unsigned width = 64;
+  constexpr unsigned shift = 7;
+  signature = ((signature << shift) | (signature >> (width - shift))) ^ value;
 }
 
 void write(blofeld::McuTimer &timer, const std::uint16_t address, const unsigned value) {

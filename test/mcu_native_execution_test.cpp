@@ -11,6 +11,7 @@
 #include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_run_clock.hpp"
 #include "mcu_checkpoint_fixture.hpp"
+#include "runtime/gpio_pads.hpp"
 
 #include <algorithm>
 #include <array>
@@ -36,6 +37,7 @@ constexpr Byte timer_on = 0x80;
 constexpr Byte loop_back = 0xfd;
 constexpr Byte sample_high = 0x12, sample_low = 0x34;
 constexpr unsigned sample_value = 0x1234;
+constexpr unsigned read_byte_result = 0x3400;
 
 McuRunContract contract() {
   return {.clock = {.oscillator_hz = oscillator_hz,
@@ -108,6 +110,154 @@ void io_boundary() {
               machine.bus().read_memory({.address = timer_counter, .size = 2}) == 15 &&
               machine.run_clock().bus_cycles() == completed_cycles,
           "Native stores publish borrowed RAM and timer time without emitting RAM I/O events");
+  machine.validate_run_boundary();
+}
+
+void gpio_reads_continue() {
+  constexpr Byte selected_bit = 4;
+  constexpr unsigned doubled_sample = 0x3434;
+  constexpr auto program = isa::program(
+      isa::opcode<Opcode::ldaa_extended>(),
+      std::array<Byte, 2>{hc12::ptq >> 8U, hc12::ptq & blofeld::test::byte_mask},
+      isa::opcode<Opcode::ldd_extended>(),
+      std::array<Byte, 2>{hc12::ptq >> 8U, hc12::ptq & blofeld::test::byte_mask},
+      isa::opcode<Opcode::brclr_extended>(),
+      std::array<Byte, 4>{hc12::ptq >> 8U, hc12::ptq & blofeld::test::byte_mask, selected_bit, 1},
+      isa::inx,
+      isa::wai);
+  McuMachine machine(blofeld::test::checkpoint_image(program), BLOFELD_DEFAULT_SLA, contract());
+  prepare(machine);
+  std::vector<std::uint32_t> masks;
+  std::vector<std::uint64_t> times;
+  machine.bus().attach_gpio_pad_source(McuPort::q, [&](const std::uint32_t mask) {
+    masks.push_back(mask);
+    times.push_back(machine.run_clock().bus_cycles());
+    return GpioPadSample{.known = mask, .levels = sample_low & mask};
+  });
+  const auto result = machine.run_until(horizon);
+  constexpr unsigned completed_cycles = 24; // Reset + LDAA/LDD/BRCLR/INX/WAI.
+  require(result.retired == 5 && machine.cpu().waiting() &&
+              machine.cpu().state().pc == entry + program.size() &&
+              machine.cpu().state().d == doubled_sample && machine.cpu().state().x == 1 &&
+              machine.run_clock().bus_cycles() == completed_cycles &&
+              masks == std::vector<std::uint32_t>{blofeld::test::byte_mask,
+                                                  blofeld::test::byte_mask,
+                                                  blofeld::test::byte_mask,
+                                                  selected_bit} &&
+              times == std::vector<std::uint64_t>{5, 8, 8, 11},
+          "Byte, word and masked GPIO reads keep their exact input times and continue in one "
+          "native run");
+  machine.validate_run_boundary();
+}
+
+enum class ReadIrq : std::uint8_t { before, during, masked };
+
+void gpio_read_irq(const ReadIrq arrival) {
+  constexpr auto program =
+      isa::program(isa::nop,
+                   isa::opcode<Opcode::ldaa_extended>(),
+                   std::array<Byte, 2>{hc12::ptq >> 8U, hc12::ptq & blofeld::test::byte_mask},
+                   isa::inx,
+                   isa::wai);
+  McuMachine machine(blofeld::test::checkpoint_image(program), BLOFELD_DEFAULT_SLA, contract());
+  prepare(machine);
+  constexpr Byte all_masked = 0xd0;
+  if (arrival == ReadIrq::masked) {
+    machine.cpu().set_state({.pc = entry, .sp = stack, .ccr = all_masked});
+  }
+  constexpr Byte edge_control = 0xc0;
+  machine.bus().write(hc12::irq_control, edge_control);
+  bool raised = false;
+  const auto raise = [&] {
+    require(!raised, "The external source supplies only one actual IRQ edge");
+    raised = true;
+    machine.bus().update_pin_drive(McuPort::e, 2, {.mask = 2, .levels = 0});
+    machine.bus().update_pin_drive(McuPort::e, 2, {.mask = 2, .levels = 2});
+  };
+  machine.set_span_observer([&](McuSpan /*span*/) {
+    if (arrival == ReadIrq::before && !raised) { raise(); }
+  });
+  machine.bus().attach_gpio_pad_source(McuPort::q, [&](const std::uint32_t mask) {
+    if (arrival != ReadIrq::before && !raised) { raise(); }
+    return GpioPadSample{.known = mask, .levels = sample_low & mask};
+  });
+  const auto first = machine.run_until(horizon);
+  require(raised, "The actual GPIO read or its preceding device span supplies the IRQ edge");
+  if (arrival == ReadIrq::masked) {
+    const auto pending = machine.bus().interrupt_request(unmasked);
+    require(first.retired == 4 && machine.cpu().waiting() && machine.cpu().state().x == 1 &&
+                !machine.cpu().pending_interrupt() && pending &&
+                pending->vector == blofeld::test::irq_vector,
+            "A masked IRQ cannot break read continuation or acknowledge its latched edge");
+    return;
+  }
+  require(first.retired == 2 && !machine.cpu().waiting() && machine.cpu().state().x == 0 &&
+              machine.cpu().state().pc == entry + 4 &&
+              machine.cpu().state().d == read_byte_result && machine.cpu().cycles() == 9,
+          "A new IRQ returns after the whole real read, before the next foreground instruction");
+  constexpr unsigned interrupt_cycles = 18; // Reset + NOP/LDAA + IRQ entry.
+  const auto interrupt = machine.run_until(horizon);
+  require(!interrupt.instruction_executed &&
+              interrupt.interrupt_vector == blofeld::test::irq_vector && !interrupt.stack_reused &&
+              machine.cpu().state().pc == blofeld::test::handler && machine.cpu().state().x == 0 &&
+              machine.cpu().cycles() == interrupt_cycles,
+          "The pending source enters its actual vector before foreground continuation");
+  require(machine.run_until(horizon).retired == 1 && machine.cpu().state().pc == entry + 4 &&
+              machine.cpu().state().sp == stack && machine.cpu().state().x == 0,
+          "RTI restores the real read continuation exactly once");
+  require(machine.run_until(horizon).retired == 2 && machine.cpu().waiting() &&
+              machine.cpu().state().x == 1,
+          "Foreground execution resumes only after the real interrupt return");
+  machine.validate_run_boundary();
+}
+
+void gpio_read_revision(const bool during_read) {
+  constexpr auto program =
+      isa::program(isa::nop,
+                   isa::opcode<Opcode::ldaa_extended>(),
+                   std::array<Byte, 2>{hc12::ptq >> 8U, hc12::ptq & blofeld::test::byte_mask},
+                   isa::inx,
+                   isa::wai);
+  McuMachine machine(blofeld::test::checkpoint_image(program), BLOFELD_DEFAULT_SLA, contract());
+  prepare(machine);
+  bool changed = false;
+  const auto enable_timer = [&] {
+    require(!changed, "The owner changes local scheduling only once");
+    changed = true;
+    machine.bus().write(hc12::tscr1, timer_on);
+  };
+  machine.set_span_observer([&](McuSpan /*span*/) {
+    if (!during_read && !changed) { enable_timer(); }
+  });
+  machine.bus().attach_gpio_pad_source(McuPort::q, [&](const std::uint32_t mask) {
+    if (during_read && !changed) { enable_timer(); }
+    return GpioPadSample{.known = mask, .levels = sample_low & mask};
+  });
+  const auto first = machine.run_until(horizon);
+  require(changed && first.retired == 2 && machine.cpu().state().pc == entry + 4 &&
+              machine.cpu().state().x == 0 && machine.cpu().cycles() == 9,
+          "A bus mutation during prefix synchronization or input consumption retains its owner "
+          "boundary");
+  require(machine.run_until(horizon).retired == 2 && machine.cpu().waiting() &&
+              machine.cpu().state().x == 1,
+          "The next native run uses the actual updated scheduling contract");
+  machine.validate_run_boundary();
+}
+
+void status_reads_keep_boundary() {
+  constexpr unsigned counter = 0x44;
+  constexpr auto program = isa::program(
+      isa::opcode<Opcode::ldd_extended>(), std::array<Byte, 2>{0, counter}, isa::inx, isa::wai);
+  McuMachine machine(blofeld::test::checkpoint_image(program), BLOFELD_DEFAULT_SLA, contract());
+  prepare(machine);
+  machine.bus().write(hc12::tscr1, timer_on);
+  require(
+      machine.run_until(horizon).retired == 1 && machine.cpu().state().pc == entry + 3 &&
+          machine.cpu().state().d == 0 && machine.cpu().state().x == 0,
+      "Counter/status reads retain an owner boundary because they can acknowledge device flags");
+  require(machine.run_until(horizon).retired == 2 && machine.cpu().waiting() &&
+              machine.cpu().state().x == 1 && machine.cpu().cycles() == 16,
+          "Status-read rescheduling retains exact subsequent instruction and clock progress");
   machine.validate_run_boundary();
 }
 
@@ -261,6 +411,12 @@ int main() {
   try {
     resident_loop();
     io_boundary();
+    gpio_reads_continue();
+    for (const auto arrival : {ReadIrq::before, ReadIrq::during, ReadIrq::masked}) {
+      gpio_read_irq(arrival);
+    }
+    for (const bool during_read : {false, true}) { gpio_read_revision(during_read); }
+    status_reads_keep_boundary();
     mapping_retirement();
     unknown_ram();
     flash_grants_follow_controller();
