@@ -196,6 +196,10 @@ if(BUILD_TESTING)
 endif()
 
 if(BUILD_TESTING)
+  add_executable(blofeld-peripheral-calendar-test test/runtime/peripheral_calendar_test.cpp)
+  target_link_libraries(blofeld-peripheral-calendar-test PRIVATE blofeld_dsp_peripheral_calendar)
+  add_test(NAME peripheral_calendar COMMAND blofeld-peripheral-calendar-test)
+
   add_executable(blofeld-dsp-execution-test test/runtime/dsp_execution_test.cpp)
   target_include_directories(blofeld-dsp-execution-test PRIVATE "${BLOFELD_DSP56300_ROOT}/test/support")
   target_link_libraries(blofeld-dsp-execution-test PRIVATE blofeld_dsp_execution)

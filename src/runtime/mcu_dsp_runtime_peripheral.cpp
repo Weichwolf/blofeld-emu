@@ -72,7 +72,4 @@ void McuDspRuntime::observe_peripheral(const std::uint64_t ticks) {
   peripheral_cause(PeripheralCalendarCause::peripheral, ticks);
 }
 
-std::optional<PeripheralCalendarState> McuDspRuntime::peripheral_state() const {
-  return peripheral_ ? std::optional{peripheral_->state()} : std::nullopt;
-}
 }

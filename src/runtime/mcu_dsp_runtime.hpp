@@ -84,7 +84,6 @@ public:
   [[nodiscard]] std::uint64_t end_ticks() const { return state_.end_ticks; }
 
   [[nodiscard]] std::uint64_t completed_cycles() const;
-  [[nodiscard]] std::optional<PeripheralCalendarState> peripheral_state() const;
 
 private:
   class Guard;
