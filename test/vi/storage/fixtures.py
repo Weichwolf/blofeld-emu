@@ -108,6 +108,13 @@ for page in (0, 31, 32, 131071):
     for column in range(528):
         media += bytes((0, 0)) if page == 32 and column == 17 else bytes(((page + column) & 255, 255))
 (root / "media.bfnand").write_bytes(media + struct.pack("<I", zlib.crc32(media)))
+# Writable metadata: valid, program-protected, erase-protected, invalid, unknown.
+write_blocks = ((0, 7, 1), (1, 7, 3), (2, 7, 5), (3, 7, 0), (4, 0, 0), (4095, 7, 1))
+writable = bytearray(b"BLFNAND\n" + struct.pack("<IIIIII", 1, 1, 4, len(write_blocks), 528, 0))
+for record in write_blocks:
+    writable += struct.pack("<HBB", *record)
+writable += media[36:]
+(root / "media-writable.bfnand").write_bytes(writable + struct.pack("<I", zlib.crc32(writable)))
 corrupt = bytearray(media)
 corrupt[36 + 8] = 1
 corrupt[36 + 9] = 0

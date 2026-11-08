@@ -201,3 +201,14 @@ through audioframes, buffers and device communication. Consult its local source
 for established register maps, protocols and algorithms. Write our implementation
 independently in the small typed bindings; keep the reference checkout unchanged.
 https://github.com/dsp56300/gearmulator
+
+Confirmed block erases decode 60h, three row bytes and D0h. Only completion
+mutates the selected block and publishes ready/pass/fail. Validity and erase
+protection come from image metadata; unknown metadata stops execution. Sparse
+images materialize only the erased block; populated images update in place.
+Read Status overlays the pending operation, including a held sample refreshed
+at completion. VM nominal erase duration is 22580 reference periods (about 2 ms),
+not measured chip timing. Reset/teardown before completion marks affected contents
+unknown; a subsequent full erase can recover them. No cell-physics model is used.
+Image serialization refreshes CRC outside ordinary data transfers; host durability
+and remaining program/update/recovery contracts still need application bindings.

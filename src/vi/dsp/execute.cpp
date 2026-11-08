@@ -55,7 +55,7 @@ public:
      Shi &shi,
      DspReset &reset,
      const std::stop_token &stop,
-     const MediaImage *image,
+     MediaImage *image,
      const PcmOutput output)
       : boot_(boot),
         shi_(shi),
@@ -94,7 +94,7 @@ public:
 
   bool complete_events(ExecutionReport &report) {
     if (media_deadline_ && device_cycles() >= *media_deadline_) {
-      if (!controller_.complete()) {
+      if (!controller_.complete() || !update_ports()) {
         report.failure = completion_failure_;
         report.failure->reason = controller_.error();
         return false;
@@ -643,7 +643,7 @@ ExecutionReport execute(const std::span<const dsp56300::Word> boot,
                         Shi &shi,
                         DspReset &reset,
                         const std::stop_token &stop,
-                        const MediaImage *image,
+                        MediaImage *image,
                         const PcmOutput output) {
   if (boot.empty() || boot.size() > dsp56300::address_words - boot_first) {
     throw std::invalid_argument("DSP boot ROM has invalid bounds");

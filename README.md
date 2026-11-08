@@ -32,8 +32,12 @@ Low/high X/Y RAM uses direct native grants with initialization tracking and
 OMR-selected program-bank sharing. Optional data-ROM views borrow local contents.
 DSP GPIO and decoded page-read transactions use the profile's validated media
 image directly. Read/reset operations complete at their own virtual deadlines;
-PLL configuration converts nominal reference periods to DSP cycles. Media program/erase, ID/status and automatic page continuation
-are not yet implemented.
+PLL configuration converts nominal reference periods to DSP cycles. Confirmed block erases
+update the actual image at completion, respecting stored validity/protection. Status reads
+retain busy/pass/fail state; interrupted erase contents become unknown and can be recovered
+by another complete erase. Serialization refreshes the encoded image checksum on demand.
+Media program, ID and automatic page continuation remain incomplete. The application
+does not yet persist changed images to disk.
 The SHI receive FIFO connects MCU port writes to DSP program loading; HTX and
 IOSR retain actual full-duplex words, with phase-dependent loading and underrun handling.
 Completed bootstrap words use bounded FIFO admission outside native callbacks;

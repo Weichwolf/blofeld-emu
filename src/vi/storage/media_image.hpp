@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -26,11 +27,18 @@ public:
   [[nodiscard]] std::span<const std::uint8_t> page(std::uint32_t index) const noexcept;
   [[nodiscard]] bool read(Read access, std::uint8_t &value) const noexcept;
 
-  [[nodiscard]] std::span<const std::uint8_t> encoded() const noexcept { return bytes_; }
+  // false is a known device failure; unknown metadata cannot claim an outcome.
+  [[nodiscard]] std::optional<bool> erase(std::uint32_t block);
+  void interrupt_erase(std::uint32_t block) noexcept;
+  // Refresh the checksum only on explicit serialization. Views are borrowed;
+  // materializing missing pages may invalidate previous page/encoded views.
+  [[nodiscard]] std::span<const std::uint8_t> encoded() noexcept;
 
 private:
   void validate();
   std::vector<std::uint8_t> bytes_;
   std::array<std::uint32_t, pages> offsets_;
+  std::array<std::uint32_t, pages / block_pages> block_offsets_;
+  bool checksum_dirty_ = false;
 };
 }

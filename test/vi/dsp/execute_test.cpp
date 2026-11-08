@@ -16,6 +16,7 @@
 #include <exception>
 #include <filesystem>
 #include <iostream>
+#include <span>
 #include <stdexcept>
 #include <stop_token>
 #include <thread>
@@ -493,7 +494,7 @@ void native_interrupt_priorities() {
   }
 }
 
-void native_media_read(const std::filesystem::path &root) {
+void native_media_read(const std::filesystem::path &root, const bool erasing) {
   namespace isa = dsp56300::isa;
   constexpr dsp56300::Word immediate = 0x34;
   constexpr dsp56300::Word absolute = 0x30;
@@ -525,7 +526,8 @@ void native_media_read(const std::filesystem::path &root) {
   put({.space = dsp56300::Space::x, .address = c_function, .value = inputs});
   put({.space = dsp56300::Space::y, .address = f_function, .value = upper_inputs});
   put({.space = dsp56300::Space::y, .address = f_direction, .value = word_output});
-  put({.space = dsp56300::Space::y, .address = f_data, .value = 0});
+  constexpr dsp56300::Word erase_setup = 0x60;
+  put({.space = dsp56300::Space::y, .address = f_data, .value = erasing ? erase_setup : 0});
   constexpr dsp56300::Word command_high = 0x700;
   constexpr dsp56300::Word command_low = 0x500;
   constexpr dsp56300::Word address_low = 0x900;
@@ -533,13 +535,30 @@ void native_media_read(const std::filesystem::path &root) {
   control(command_high);
   control(command_low);
   control(command_high);
-  put({.space = dsp56300::Space::y, .address = f_data, .value = 1});
-  control(address_low);
-  control(address_high);
-  for (unsigned byte = 0; byte < 3; ++byte) {
+  constexpr std::array<dsp56300::Word, 4> read_address{1, 0, 0, 0};
+  constexpr std::array<dsp56300::Word, 3> erase_address{31, 0, 0};
+  const auto addresses = erasing ? std::span<const dsp56300::Word>(erase_address)
+                                 : std::span<const dsp56300::Word>(read_address);
+  for (const auto byte : addresses) {
     control(address_low);
-    put({.space = dsp56300::Space::y, .address = f_data, .value = 0});
+    put({.space = dsp56300::Space::y, .address = f_data, .value = byte});
     control(address_high);
+  }
+  constexpr dsp56300::Word active_read = 0x200;
+  constexpr dsp56300::Word receive_inputs = 0x3ff;
+  constexpr dsp56300::Word single_output = 0x400;
+  if (erasing) {
+    constexpr std::array<dsp56300::Word, 2> commands{0xd0, 0x70};
+    for (const auto byte : commands) {
+      control(command_high);
+      put({.space = dsp56300::Space::y, .address = f_data, .value = byte});
+      control(command_low);
+      control(command_high);
+    }
+    control(upper_inputs);
+    control(active_read); // Hold a busy status sample through the actual completion.
+    put({.space = dsp56300::Space::y, .address = f_function, .value = receive_inputs});
+    put({.space = dsp56300::Space::y, .address = f_direction, .value = single_output});
   }
   constexpr dsp56300::Word boot = 0xff0000;
   constexpr dsp56300::Word ready_port = 0x0b;
@@ -547,13 +566,12 @@ void native_media_read(const std::filesystem::path &root) {
   const auto wait_ready = boot + static_cast<dsp56300::Word>(program.size());
   program.push_back(isa::opcode<isa::Opcode::jclr_port_low>()[0] | (ready_port << 8U) | ready_bit);
   program.push_back(wait_ready);
-  control(upper_inputs);
-  constexpr dsp56300::Word active_read = 0x200;
-  constexpr dsp56300::Word receive_inputs = 0x3ff;
-  constexpr dsp56300::Word single_output = 0x400;
-  control(active_read);
-  put({.space = dsp56300::Space::y, .address = f_function, .value = receive_inputs});
-  put({.space = dsp56300::Space::y, .address = f_direction, .value = single_output});
+  if (!erasing) {
+    control(upper_inputs);
+    control(active_read);
+    put({.space = dsp56300::Space::y, .address = f_function, .value = receive_inputs});
+    put({.space = dsp56300::Space::y, .address = f_direction, .value = single_output});
+  }
   constexpr dsp56300::Word y_space = 0x10000;
   constexpr dsp56300::Word x0 = 4;
   constexpr dsp56300::Word data_port = 0x35;
@@ -561,21 +579,28 @@ void native_media_read(const std::filesystem::path &root) {
                     data_port);
   program.push_back(isa::opcode<isa::Opcode::movem_effective>()[0] | (absolute << 8U) | x0);
   program.push_back(sink);
-  const blofeld::vi::MediaImage image(
-      blofeld::host::read_file(root / "media.bfnand", blofeld::vi::MediaImage::max_bytes));
+  blofeld::vi::MediaImage image(
+      blofeld::host::read_file(root / (erasing ? "media-writable.bfnand" : "media.bfnand"),
+                               blofeld::vi::MediaImage::max_bytes));
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
   const auto report = blofeld::vi::dsp::execute(program, shi, reset, {}, &image);
+  constexpr dsp56300::Word complete_status = 0xc0;
+  const auto expected = erasing ? complete_status : 1U;
   const bool matched = report.failure && report.failure->space == 'P' &&
-                       report.failure->address == sink && report.failure->value == 1;
+                       report.failure->address == sink && report.failure->value == expected;
   if (!matched && report.failure) {
     const auto &failure = *report.failure;
     std::cerr << "pc=" << failure.pc << " address=" << failure.address << " value=" << failure.value
               << " code=" << failure.code << " reason=" << failure.reason << '\n';
   }
+  std::uint8_t byte = 0;
+  constexpr std::uint8_t erased_byte = 0xff;
+  require(!erasing || (image.read({}, byte) && byte == erased_byte),
+          "The native erase operation changes the real selected image");
   require(matched,
-          "Native polling waits for real asynchronous completion before reading the image through "
-          "Port F");
+          "Native polling observes actual media data/status completion through Port F, including "
+          "held status refresh without another read edge");
 }
 
 void consecutive_receive_registers() {
@@ -664,7 +689,8 @@ void reset_running_core() {
 
 int main(const int argc, char **argv) try {
   require(argc == 3, "Supply artifact and fixture directories");
-  native_media_read(argv[2]);
+  native_media_read(argv[2], false);
+  native_media_read(argv[2], true);
   native_clock_register();
   native_transmit_registers();
   native_interrupt_priorities();

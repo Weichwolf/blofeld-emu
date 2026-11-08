@@ -16,6 +16,6 @@ namespace blofeld::vi::dsp {
                                       Shi &shi,
                                       DspReset &reset,
                                       const std::stop_token &stop,
-                                      const MediaImage *image = nullptr,
+                                      MediaImage *image = nullptr,
                                       PcmOutput output = {});
 }
