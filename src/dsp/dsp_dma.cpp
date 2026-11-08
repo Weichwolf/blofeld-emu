@@ -170,6 +170,8 @@ void DspDma::write(const unsigned address, const std::uint32_t value) {
   auto next = *this;
   try {
     next.write_checked(address, value);
+    next.requested_sources_cache_.reset();
+    next.quiescent_cache_.reset();
   } catch (const Fault &error) {
     throw Fault("DSP DMA register write" + location(address) + ": " + error.what());
   }
@@ -177,13 +179,16 @@ void DspDma::write(const unsigned address, const std::uint32_t value) {
 }
 
 std::uint32_t DspDma::requested_sources() const {
-  std::uint32_t result = 0;
-  for (const auto &channel : channels_) {
-    if ((channel.control & dma::enable) != 0 && mode(channel) != 3) {
-      result |= 1U << request(channel);
+  if (!requested_sources_cache_) {
+    std::uint32_t result = 0;
+    for (const auto &channel : channels_) {
+      if ((channel.control & dma::enable) != 0 && mode(channel) != 3) {
+        result |= 1U << request(channel);
+      }
     }
+    requested_sources_cache_ = result;
   }
-  return result;
+  return *requested_sources_cache_;
 }
 
 bool DspDma::active() const {

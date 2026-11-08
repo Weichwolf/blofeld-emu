@@ -179,6 +179,7 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-dma-interrupt-test test/dsp_dma_interrupt_test.cpp
     test/dsp_dma_interrupt_native.cpp)
   target_link_libraries(blofeld-dsp-dma-interrupt-test PRIVATE blofeld_dma_fixture)
+  target_include_directories(blofeld-dsp-dma-interrupt-test PRIVATE "${BLOFELD_DSP56300_ROOT}/test/support")
   add_test(NAME dsp_dma_interrupts COMMAND blofeld-dsp-dma-interrupt-test)
 
   add_executable(blofeld-dax-test test/dsp_dax_test.cpp)

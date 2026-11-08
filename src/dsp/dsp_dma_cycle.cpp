@@ -124,7 +124,10 @@ std::optional<DspDmaWord> DspDma::advance_checked(const DspDmaInputs inputs, con
   next_channel_.at(priority) = (word.channel + 1) % channels_.size();
   active_.reset();
   const bool disabled = (channel.control & dma::enable) == 0;
-  if (last && mode(channel) != 5) { channel.control &= ~dma::enable; }
+  if (last && mode(channel) != 5) {
+    channel.control &= ~dma::enable;
+    requested_sources_cache_.reset();
+  }
   if (last || disabled) {
     if ((channel.control & dma::interrupt) != 0) { channel.interrupt_pending = true; }
     channel.settling = 0;
@@ -140,6 +143,7 @@ std::optional<DspDmaWord> DspDma::advance_checked(const DspDmaInputs inputs, con
 }
 
 std::optional<DspDmaWord> DspDma::advance(const DspDmaInputs inputs, const DspDmaIo &io) {
+  quiescent_cache_.reset();
   std::optional<DspDma> next;
   try {
     if (!active()) {

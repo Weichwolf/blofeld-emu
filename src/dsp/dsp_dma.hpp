@@ -124,6 +124,9 @@ private:
   admitted(DspDmaGrant grant, const DspDmaPhase &phase, const DspDmaAdmission &admission);
   [[nodiscard]] std::optional<DspDmaWord> advance_checked(DspDmaInputs inputs, const DspDmaIo &io);
 
+  // Derived queries stay valid until a real register or transfer transition.
+  mutable std::optional<std::uint32_t> requested_sources_cache_;
+  mutable std::optional<bool> quiescent_cache_;
   std::array<Channel, 6> channels_;
   std::array<unsigned, 4> offsets_{};
   unsigned known_offsets_ = 0;

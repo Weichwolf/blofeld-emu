@@ -133,7 +133,8 @@ void test_waiting_channel_and_transfer(const unsigned channel) {
   Device device;
   require(!device.tick(levels(0)), "Establish known-low request levels before enabling");
   device.configure({.channel = channel, .control = word_copy | blofeld::dma::interrupt});
-  require(!device.dma.quiescent(), "Enable settling and first sampling remain real transitions");
+  require(!device.dma.quiescent() && device.dma.requested_sources() == 1,
+          "Enable settling, first sampling and the selected IRQA request are real transitions");
   device.unchanged_rejection(levels(distant_cycle));
   for (unsigned cycle = 1; cycle <= blofeld::dma::settling_cycles; ++cycle) {
     require(!device.tick(levels(cycle)), "Low request levels cannot transfer a word");
@@ -162,12 +163,50 @@ void test_waiting_channel_and_transfer(const unsigned channel) {
   const auto word = device.tick(request);
   require(word && word->channel == channel && word->value == sample_value && device.writes == 1 &&
               device.dma.read(status_register) == all_done &&
-              device.dma.interrupt_sources() == bit && device.dma.quiescent(),
+              device.dma.interrupt_sources() == bit && device.dma.quiescent() &&
+              device.dma.requested_sources() == 0,
           "The consecutive destination cycle commits the genuine word and interrupt");
   request.cycle += distant_cycle;
   device.dma.advance_quiescent(request);
   require(device.dma.interrupt_sources() == bit && device.reads == 1 && device.writes == 1,
           "A pending masked IRQ does not block a genuinely idle span or retrigger a word");
+}
+
+void test_request_selection_changes() {
+  Device device;
+  require(!device.tick(levels(0)) && device.dma.requested_sources() == 0 && device.dma.quiescent(),
+          "An actually sampled empty controller has no requested source");
+  unsigned expected = 0;
+  for (unsigned channel = 0; channel < 6; ++channel) {
+    const auto request = channel + 1;
+    device.configure(
+        {.channel = channel, .control = word_copy | (request << blofeld::dma::request_shift)});
+    expected |= 1U << request;
+    require(device.dma.requested_sources() == expected && !device.dma.quiescent(),
+            "Each enabled channel contributes its independently chosen request");
+  }
+  for (unsigned cycle = 1; cycle <= blofeld::dma::settling_cycles; ++cycle) {
+    require(!device.tick(levels(cycle)), "Known-low requests settle without copying data");
+  }
+  require(device.dma.quiescent() && device.dma.requested_sources() == expected,
+          "All settled channels wait without losing their selected request sources");
+  for (unsigned channel = 0; channel < 6; ++channel) {
+    const auto request = channel + 1;
+    device.dma.write(control_register - (channel * 4),
+                     (word_copy & ~blofeld::dma::enable) |
+                         (request << blofeld::dma::request_shift));
+    expected &= ~(1U << request);
+    require(device.dma.requested_sources() == expected && device.dma.quiescent(),
+            "Disabling each waiting channel removes only its own request source");
+  }
+  device.configure({.channel = 0, .control = word_copy});
+  require(device.dma.requested_sources() == 1 && !device.dma.quiescent(),
+          "Re-enabling an idle channel restores request sampling and settling");
+  const auto copied = device.dma;
+  device.dma.reset();
+  require(device.dma.requested_sources() == 0 && device.dma.quiescent() &&
+              copied.requested_sources() == 1 && !copied.quiescent(),
+          "Reset and value copies retain independent complete controller states");
 }
 
 void test_pending_and_first_sample() {
@@ -190,6 +229,7 @@ int main() {
       test_waiting_channel_and_transfer(channel);
     }
     test_pending_and_first_sample();
+    test_request_selection_changes();
     std::cout << "DMA quiescent spans: " << assertions << " assertions passed\n";
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

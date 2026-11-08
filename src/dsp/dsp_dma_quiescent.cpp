@@ -8,11 +8,13 @@
 
 namespace blofeld {
 bool DspDma::quiescent() const noexcept {
-  if (active_) { return false; }
-  return std::ranges::none_of(channels_, [](const Channel &channel) {
-    return channel.pending || channel.settling != 0 ||
-           ((channel.control & dma::enable) != 0 && channel.first_sample);
-  });
+  if (!quiescent_cache_.has_value()) {
+    quiescent_cache_ = !active_ && std::ranges::none_of(channels_, [](const Channel &channel) {
+      return channel.pending || channel.settling != 0 ||
+             ((channel.control & dma::enable) != 0 && channel.first_sample);
+    });
+  }
+  return *quiescent_cache_;
 }
 
 bool DspDma::request_levels_held(const DspDmaInputs inputs) const noexcept {
