@@ -66,6 +66,17 @@ constexpr std::array<std::string_view, controls_size> names{"TIOS",
                                                             "TSCR2",
                                                             "TFLG1",
                                                             "TFLG2"};
+
+unsigned selected_channels(const std::uint8_t low, const std::uint8_t high) {
+  constexpr unsigned pairs = 0x5555;
+  constexpr unsigned nibbles = 0x3333;
+  constexpr unsigned bytes = 0x0f0f;
+  auto bits = static_cast<unsigned>(low) | (static_cast<unsigned>(high) << 8U);
+  bits = (bits | (bits >> 1U)) & pairs;
+  bits = (bits | (bits >> 1U)) & nibbles;
+  bits = (bits | (bits >> 2U)) & bytes;
+  return (bits | (bits >> 4U)) & byte_mask;
+}
 }
 
 bool McuTimer::runs_in_wait() const {
@@ -101,20 +112,14 @@ unsigned McuTimer::output_mode(const unsigned channel) const {
 
 unsigned McuTimer::capture_mask() const {
   if (!enabled()) { return 0; }
-  unsigned mask = 0;
-  for (unsigned channel = 0; channel < channel_count; ++channel) {
-    const auto bit = 1U << channel;
-    if ((controls_[0] & bit) == 0 && edge_mode(channel) != 0) { mask |= bit; }
-  }
-  return mask;
+  return selected_channels(controls_[edge_control2], controls_[edge_control1]) &
+         ~static_cast<unsigned>(controls_[0]);
 }
 
 unsigned McuTimer::output_mask() const {
-  unsigned mask = controls_[2];
-  for (unsigned channel = 0; channel < channel_count; ++channel) {
-    if (output_mode(channel) != 0) { mask |= 1U << channel; }
-  }
-  return mask & controls_[0];
+  return (controls_[2] |
+          selected_channels(controls_[output_control2], controls_[output_control1])) &
+         controls_[0];
 }
 
 PinFunction McuTimer::pins() const {
@@ -352,6 +357,20 @@ void McuTimer::advance(const unsigned bus_cycles) {
   if ((capture_mask() & ~static_cast<unsigned>(inputs_known_)) != 0) {
     throw Fault("Unknown active timer capture inputs mask=" +
                 hex(capture_mask() & ~static_cast<unsigned>(inputs_known_), 2));
+  }
+  if (controls_[0] == 0 && !reset_pending_ &&
+      active_prescale_ == (controls_[system_control2] & prescale_mask)) {
+    // Input capture observes external edges separately. With no compare channel
+    // and a stable divider, only the free-running count and overflow can change.
+    const auto divider = 1U << active_prescale_;
+    const auto ticks = ((prescaler_phase_ % divider) + bus_cycles) / divider;
+    const auto total = static_cast<unsigned>(counter_) + ticks;
+    prescaler_phase_ = (prescaler_phase_ + bus_cycles) & prescaler_mask;
+    counter_ = static_cast<std::uint16_t>(total & word_mask);
+    if (total > word_mask) { controls_[overflow_flags] = overflow_flag; }
+    activation_pending_ = 0;
+    clocked_since_observation_ = true;
+    return;
   }
   check_activation();
   clocked_since_observation_ = true;

@@ -647,6 +647,12 @@ void McuBus::advance_timer(const unsigned bus_cycles) {
   try {
     constexpr unsigned maximum_cycles = 1048576;
     if (bus_cycles > maximum_cycles) { throw Fault("Timer board clock slice exceeds cycle limit"); }
+    // Configuration writes publish timer ownership immediately. Without an
+    // output there is no pin effect to split or revalidate inside this interval.
+    if (peripheral_pins_ && peripheral_pins_->timer.outputs == 0) {
+      timer_.advance(bus_cycles);
+      return;
+    }
     unsigned remaining = bus_cycles;
     bool validated = false;
     while (remaining != 0) {

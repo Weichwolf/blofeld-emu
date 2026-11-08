@@ -98,6 +98,30 @@ void literal_counts_and_overflow() {
   }
 }
 
+void all_free_running_phases() {
+  constexpr unsigned phases = 128;
+  constexpr std::array lengths{0U, 1U, 2U, 3U, 127U, 128U, 129U, 65535U, 65536U, maximum_slice};
+  for (unsigned prescale = 0; prescale < 8; ++prescale) {
+    const auto divider = 1U << prescale;
+    for (unsigned phase = 0; phase < phases; ++phase) {
+      for (const auto length : lengths) {
+        blofeld::McuTimer timer;
+        write(timer, control2, prescale);
+        write(timer, control1, enabled);
+        timer.advance(phase);
+        timer.advance(length);
+        const auto ticks = (phase + length) / divider;
+        require(counter(timer) == ticks % counter_range &&
+                    timer.read(flags2) == (ticks >= counter_range ? enabled : 0U) &&
+                    timer.read(flags1) == 0 &&
+                    timer.cycles_until_tick() == divider - ((phase + length) % divider),
+                "Every initial phase and divider retain independently counted ticks, sticky "
+                "overflow, absent compare flags and the next tick boundary");
+      }
+    }
+  }
+}
+
 void delayed_prescale_and_splits() {
   blofeld::McuTimer timer;
   write(timer, control1, enabled);
@@ -197,6 +221,7 @@ void visible_failures_and_partial_state() {
 int main() {
   try {
     literal_counts_and_overflow();
+    all_free_running_phases();
     delayed_prescale_and_splits();
     compares_and_reset_phase();
     visible_failures_and_partial_state();

@@ -384,6 +384,69 @@ void test_unknown_peripheral_pad_latches() {
   require(gpio.read_pad(blofeld::McuPort::s, 1) == 1, "A known output resolves the peripheral pad");
 }
 
+void test_all_channel_mode_masks() {
+  constexpr std::array directions{0U, 0x96U, byte_mask};
+  constexpr unsigned override_mask = 0x24;
+  for (const auto direction : directions) {
+    for (unsigned modes = 0; modes < word_wrap; ++modes) {
+      blofeld::McuTimer timer;
+      const auto low = static_cast<std::uint8_t>(modes & byte_mask);
+      const auto high = static_cast<std::uint8_t>(modes >> 8U);
+      timer.write({.address = tios, .value = static_cast<std::uint8_t>(direction)});
+      timer.write({.address = mask7, .value = override_mask});
+      timer.write({.address = outputs_low, .value = low});
+      timer.write({.address = outputs_high, .value = high});
+      timer.write({.address = edges_low, .value = low});
+      timer.write({.address = edges_high, .value = high});
+      timer.write({.address = control1, .value = timer_on});
+      unsigned inputs = 0;
+      unsigned outputs = 0;
+      for (unsigned channel = 0; channel < 8; ++channel) {
+        const auto bit = 1U << channel;
+        const bool selected = ((modes >> (2 * channel)) & 3U) != 0;
+        if ((direction & bit) == 0 && selected) { inputs |= bit; }
+        if ((direction & bit) != 0 && (selected || (override_mask & bit) != 0)) { outputs |= bit; }
+      }
+      const auto pins = timer.pins();
+      require(pins.inputs == inputs && pins.outputs == outputs && pins.unknown == outputs &&
+                  pins.levels == 0,
+              "All two-bit mode combinations select exactly their independent channel masks");
+      timer.write({.address = control1, .value = 0});
+      require(timer.pins() == blofeld::PinFunction{}, "TEN clear releases every selected channel");
+    }
+  }
+}
+
+void test_bus_output_ownership_changes() {
+  const std::array<std::uint8_t, 32768> flash{};
+  blofeld::McuBus bus(flash);
+  bus.write(control1, timer_on);
+  bus.advance_timer(3);
+  require(read_word(bus, counter_address) == 3 && bus.gpio_outputs(blofeld::McuPort::t).mask == 0,
+          "A free-running timer advances without acquiring GPIO output ownership");
+  bus.write(tios, 1);
+  bus.write(channel0, 0);
+  bus.write(channel0 + 1, 9);
+  bus.write(interrupt_enable, 1);
+  bus.advance_timer(6);
+  require(read_word(bus, counter_address) == 9 && bus.read(flags1) == 1 &&
+              bus.gpio_outputs(blofeld::McuPort::t).mask == 0,
+          "An internal compare still sets its real IRQ flag without an observable output");
+  bus.set_pin_drive(blofeld::McuPort::t, {.mask = 1});
+  bus.write(outputs_low, 3);
+  bus.write(force, 1);
+  reject([&] { bus.advance_timer(idle_cycles); },
+         "Selecting an actual output restores its first contested pin-validation boundary");
+  require(read_word(bus, counter_address) == 10,
+          "A newly active contested output stops after its first actual timer tick");
+  bus.write(outputs_low, 0);
+  bus.advance_timer(10);
+  constexpr unsigned resumed_counter = 20;
+  require(read_word(bus, counter_address) == resumed_counter &&
+              bus.gpio_outputs(blofeld::McuPort::t).mask == 0,
+          "Disabling the output restores pin-free progress without losing internal timer state");
+}
+
 void test_bus_compare_deadline_contention() {
   const std::array<std::uint8_t, 32768> flash{};
   blofeld::McuBus bus(flash);
@@ -418,6 +481,8 @@ int main() {
     test_overflow_toggle_and_unsupported_cases();
     test_bus_capture_routing_and_mux_ownership();
     test_unknown_peripheral_pad_latches();
+    test_all_channel_mode_masks();
+    test_bus_output_ownership_changes();
     test_bus_compare_deadline_contention();
     std::cout << "Timer counting, captures, compare actions, flags and routing checks passed\n";
     return 0;
