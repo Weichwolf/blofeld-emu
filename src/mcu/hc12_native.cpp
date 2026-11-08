@@ -78,17 +78,30 @@ public:
            .read_masked = read_masked},
         core(cpu12::Memory::external(), &io) {}
 
-  template <bool boundary = true, typename Operation>
-  bool callback(const Operation &operation, const MemoryRead access = {}) noexcept {
+  [[nodiscard]] bool needs_boundary(const MemoryRead access, const std::uint64_t revision) const {
+    return bus.revision() != revision || bus.read_requires_boundary(access);
+  }
+
+  [[nodiscard]] bool needs_boundary(const MemoryWrite access, const std::uint64_t revision) const {
+    return bus.write_requires_boundary(access, revision);
+  }
+
+  [[nodiscard]] static bool needs_boundary(InstructionFetch /*access*/,
+                                           std::uint64_t /*revision*/) {
+    return true;
+  }
+
+  template <typename Operation, typename Access>
+  bool callback(const Operation &operation, const Access access) noexcept {
     if (failure) { return false; }
     try {
-      const auto revision = boundary ? std::uint64_t{0} : bus.revision();
+      const auto revision = bus.revision();
       synchronize();
       const auto registers = core.registers();
       bus.begin_instruction({.pc = registers.pc, .ccr = registers.ccr});
       operation();
-      if (boundary || bus.revision() != revision || bus.read_requires_boundary(access) ||
-          core.state().irq_delay != 0 || bus.interrupt_request(core.registers().ccr)) {
+      if (needs_boundary(access, revision) || core.state().irq_delay != 0 ||
+          bus.interrupt_request(core.registers().ccr)) {
         core.request_yield();
       }
       return true;
@@ -100,7 +113,7 @@ public:
 
   static bool read(void *owner, const std::uint16_t address, std::uint8_t &value) noexcept {
     auto &self = *static_cast<Impl *>(owner);
-    return self.callback<false>(
+    return self.callback(
         [&] {
           const auto result = self.bus.read_memory({.address = address});
           if (result > std::numeric_limits<std::uint8_t>::max()) {
@@ -108,12 +121,12 @@ public:
           }
           value = static_cast<std::uint8_t>(result);
         },
-        {.address = address});
+        MemoryRead{.address = address});
   }
 
   static bool read_word(void *owner, const std::uint16_t address, std::uint16_t &value) noexcept {
     auto &self = *static_cast<Impl *>(owner);
-    return self.callback<false>(
+    return self.callback(
         [&] {
           const auto result = self.bus.read_memory({.address = address, .size = 2});
           if (result > std::numeric_limits<std::uint16_t>::max()) {
@@ -121,39 +134,44 @@ public:
           }
           value = static_cast<std::uint16_t>(result);
         },
-        {.address = address, .size = 2});
+        MemoryRead{.address = address, .size = 2});
   }
 
   static bool write(void *owner, const cpu12::ByteWrite access) noexcept {
     auto &self = *static_cast<Impl *>(owner);
     return self.callback(
-        [&] { self.bus.write_memory({.address = access.address, .value = access.value}); });
+        [&] { self.bus.write_memory({.address = access.address, .value = access.value}); },
+        MemoryWrite{.address = access.address, .value = access.value});
   }
 
   static bool write_word(void *owner, const cpu12::WordWrite access) noexcept {
     auto &self = *static_cast<Impl *>(owner);
-    return self.callback([&] {
-      self.bus.write_memory({.address = access.address, .size = 2, .value = access.value});
-    });
+    return self.callback(
+        [&] {
+          self.bus.write_memory({.address = access.address, .size = 2, .value = access.value});
+        },
+        MemoryWrite{.address = access.address, .size = 2, .value = access.value});
   }
 
   static bool
   read_masked(void *owner, const cpu12::MaskedByteRead access, std::uint8_t &value) noexcept {
     auto &self = *static_cast<Impl *>(owner);
-    return self.callback<false>(
+    return self.callback(
         [&] {
           value = observe_masked_byte(self.bus, {.address = access.address, .mask = access.mask});
         },
-        {.address = access.address});
+        MemoryRead{.address = access.address});
   }
 
   static bool fetch(void *owner, const std::uint16_t address, std::uint8_t &value) noexcept {
     auto &self = *static_cast<Impl *>(owner);
-    return self.callback([&] {
-      self.bus.check_execute({.address = address, .length = 1});
-      value = self.bus.peek(address);
-      self.bus.note_code_byte(address);
-    });
+    return self.callback(
+        [&] {
+          self.bus.check_execute({.address = address, .length = 1});
+          value = self.bus.peek(address);
+          self.bus.note_code_byte(address);
+        },
+        InstructionFetch{.address = address, .length = 1});
   }
 
   void synchronize(const bool boundary = false) const {

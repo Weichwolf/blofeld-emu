@@ -59,6 +59,13 @@ public:
   // mapping contracts unchanged. Unclassified devices retain an owner boundary.
   [[nodiscard]] virtual bool read_requires_boundary(MemoryRead /*access*/) const { return true; }
 
+  // Classify a completed write using the revision before its prefix was synchronized.
+  // Unclassified effects and intervening mutations retain an execution-owner boundary.
+  [[nodiscard]] virtual bool write_requires_boundary(MemoryWrite /*access*/,
+                                                     std::uint64_t /*previous_revision*/) const {
+    return true;
+  }
+
   [[nodiscard]] virtual std::uint8_t peek(std::uint16_t address) const = 0;
   [[nodiscard]] virtual std::uint64_t revision() const = 0;
 

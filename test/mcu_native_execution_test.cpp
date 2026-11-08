@@ -244,20 +244,18 @@ void gpio_read_revision(const bool during_read) {
   machine.validate_run_boundary();
 }
 
-void status_reads_keep_boundary() {
-  constexpr unsigned counter = 0x44;
+void unclassified_reads_keep_boundary() {
+  constexpr unsigned controls = hc12::sci_control1;
   constexpr auto program = isa::program(
-      isa::opcode<Opcode::ldd_extended>(), std::array<Byte, 2>{0, counter}, isa::inx, isa::wai);
+      isa::opcode<Opcode::ldd_extended>(), std::array<Byte, 2>{0, controls}, isa::inx, isa::wai);
   McuMachine machine(blofeld::test::checkpoint_image(program), BLOFELD_DEFAULT_SLA, contract());
   prepare(machine);
-  machine.bus().write(hc12::tscr1, timer_on);
-  require(
-      machine.run_until(horizon).retired == 1 && machine.cpu().state().pc == entry + 3 &&
-          machine.cpu().state().d == 0 && machine.cpu().state().x == 0,
-      "Counter/status reads retain an owner boundary because they can acknowledge device flags");
+  require(machine.run_until(horizon).retired == 1 && machine.cpu().state().pc == entry + 3 &&
+              machine.cpu().state().d == 0 && machine.cpu().state().x == 0,
+          "Unclassified SCI reads retain their conservative owner boundary");
   require(machine.run_until(horizon).retired == 2 && machine.cpu().waiting() &&
               machine.cpu().state().x == 1 && machine.cpu().cycles() == 16,
-          "Status-read rescheduling retains exact subsequent instruction and clock progress");
+          "Unclassified read rescheduling retains exact subsequent instruction and clock progress");
   machine.validate_run_boundary();
 }
 
@@ -416,7 +414,7 @@ int main() {
       gpio_read_irq(arrival);
     }
     for (const bool during_read : {false, true}) { gpio_read_revision(during_read); }
-    status_reads_keep_boundary();
+    unclassified_reads_keep_boundary();
     mapping_retirement();
     unknown_ram();
     flash_grants_follow_controller();

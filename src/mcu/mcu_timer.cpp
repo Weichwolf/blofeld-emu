@@ -160,6 +160,15 @@ void McuTimer::clear_accumulator_flags() {
   if (enabled() && (controls_[system_control1] & fast_clear) != 0) { pulse_flags_ = 0; }
 }
 
+bool McuTimer::write_requires_boundary(const std::uint16_t offset) const {
+  if (offset == accumulator_high || offset == accumulator_high + 1) {
+    return (pulse_control_ & accumulator_enable) != 0;
+  }
+  return offset != base + counter_high && offset != base + counter_low &&
+         offset != base + channel_flags && offset != base + overflow_flags &&
+         offset != accumulator_flags;
+}
+
 std::uint8_t McuTimer::read_accumulator(const std::uint16_t offset) {
   if (offset == accumulator_control) { return pulse_control_; }
   if (offset == accumulator_flags) { return pulse_flags_; }

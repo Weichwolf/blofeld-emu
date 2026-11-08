@@ -20,6 +20,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
@@ -244,9 +245,26 @@ std::uint8_t McuBus::read(const std::uint16_t address) {
 bool McuBus::read_requires_boundary(const MemoryRead access) const {
   for (unsigned index = 0; index < access.size; ++index) {
     const auto location = memory_.locate(static_cast<std::uint16_t>(access.address + index));
-    // GPIO input/FIFO ownership has no local clock deadline. Timer, SCI, USB,
-    // flash-controller and other register reads may acknowledge or arm effects.
-    if (location.space == McuSpace::registers && McuGpio::register_name(location.offset).empty()) {
+    // GPIO and timer reads observe/acknowledge existing state without arming
+    // earlier local events. SCI, USB and flash retain their owner boundaries.
+    if (location.space == McuSpace::registers && McuGpio::register_name(location.offset).empty() &&
+        McuTimer::register_name(location.offset).empty()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool McuBus::write_requires_boundary(const MemoryWrite access,
+                                     const std::uint64_t previous_revision) const {
+  if (access.size == 0 || access.size > 2 ||
+      previous_revision > std::numeric_limits<std::uint64_t>::max() - access.size ||
+      revision_ != previous_revision + access.size) {
+    return true;
+  }
+  for (unsigned index = 0; index < access.size; ++index) {
+    const auto location = memory_.locate(static_cast<std::uint16_t>(access.address + index));
+    if (location.space != McuSpace::registers || timer_.write_requires_boundary(location.offset)) {
       return true;
     }
   }

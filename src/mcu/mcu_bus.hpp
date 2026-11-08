@@ -56,6 +56,8 @@ public:
   void write(std::uint16_t address, std::uint8_t value) override;
   void write_memory(MemoryWrite access) override;
   [[nodiscard]] bool read_requires_boundary(MemoryRead access) const override;
+  [[nodiscard]] bool write_requires_boundary(MemoryWrite access,
+                                             std::uint64_t previous_revision) const override;
   [[nodiscard]] std::uint8_t peek(std::uint16_t address) const override;
 
   [[nodiscard]] std::vector<McuMemoryWindow> memory_windows();

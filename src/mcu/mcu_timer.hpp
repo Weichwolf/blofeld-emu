@@ -24,6 +24,8 @@ public:
   [[nodiscard]] static std::string_view register_name(std::uint16_t offset);
   [[nodiscard]] std::uint8_t read(std::uint16_t offset);
   void write(ByteWrite write);
+  // Only acknowledgements and inactive/ignored counters preserve an existing horizon.
+  [[nodiscard]] bool write_requires_boundary(std::uint16_t offset) const;
   void advance(unsigned bus_cycles);
   void observe_inputs(TimerInputs inputs);
   [[nodiscard]] unsigned cycles_until_tick() const;
