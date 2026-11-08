@@ -56,7 +56,7 @@ void reset_format_and_data() {
   put(esai, {.address = control_address, .value = tx_format});
   put(esai, {.address = tx0, .value = first});
   put(esai, {.address = control_address, .value = active_format});
-  require(!esai.clock_slot() && !esai.take_request(), "Disconnected ports produce no clock event");
+  require(!esai.clock_slot() && !esai.request(), "Disconnected ports produce no clock event");
   esai.connected(true);
   const auto format = esai.format();
   require(format && format->word_bits == sample_bits && format->slots == 2 &&
@@ -64,8 +64,8 @@ void reset_format_and_data() {
           "The original configuration selects 24-bit words, two slots and HCKT/128 slots");
   const auto left = esai.clock_slot();
   require(left && left->index == 0 && left->enabled == 1 && left->known == 1 &&
-              left->samples[0] == first && esai.take_request() && !esai.take_request(),
-          "A real slot transfers the primed word and publishes one DMA request");
+              left->samples[0] == first && esai.request() && esai.request(),
+          "A real slot transfers the primed word and holds its DMA request until refill");
   require(read(esai, status_address) == (frame_sync | empty | even_empty),
           "First-slot sync and empty flags describe the actual transfer");
   put(esai, {.address = tx0, .value = second});
@@ -91,7 +91,6 @@ void unknown_mask_and_reset() {
               (read(esai, status_address) & underrun) != 0,
           "Unwritten registers never become valid silent samples");
   put(esai, {.address = tx0, .value = first});
-  static_cast<void>(esai.take_request());
   put(esai, {.address = mask_low, .value = 1});
   const auto old_frame = esai.clock_slot();
   require(old_frame && old_frame->enabled == 1, "A mask write cannot alter the current frame");
@@ -106,7 +105,7 @@ void unknown_mask_and_reset() {
   require(skipped && skipped->enabled == 0, "TSR disables the next available slot");
   esai.connected(false);
   require(read(esai, status_address) == 0 && read(esai, clock_address) == clock_config &&
-              !esai.clock_slot() && !esai.take_request(),
+              !esai.clock_slot() && !esai.request(),
           "Individual reset clears activity and requests while retaining configuration");
   esai.reset();
   require(read(esai, mask_low) == mask_half && !esai.format(),
@@ -144,7 +143,7 @@ void widths_and_multiple_transmitters() {
   require((read(esai, status_address) & empty) == 0, "Every enabled lane must be refilled");
   constexpr Word reserved_length = 11;
   auto invalid = configured((reserved_length << 10U) | network_enable);
-  require(!invalid.clock_slot() && invalid.error() != nullptr && !invalid.take_request(),
+  require(!invalid.clock_slot() && invalid.error() != nullptr && !invalid.request(),
           "An unsupported format fails without fabricating a clock or DMA event");
 }
 
@@ -171,7 +170,7 @@ void dma_stereo_words() {
   for (unsigned word = 0; word < 32; ++word) {
     const auto slot = esai.clock_slot();
     require(slot && slot->index == word % 2 && slot->known == 1 &&
-                slot->samples[0] == buffer[word] && esai.take_request(),
+                slot->samples[0] == buffer[word] && esai.request(),
             "Actual memory words arrive in complete stereo slot order");
     require(dma.trigger(dma_request) &&
                 dma.service(

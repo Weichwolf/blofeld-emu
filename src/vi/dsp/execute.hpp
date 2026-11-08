@@ -3,6 +3,7 @@
 
 #include "execution.hpp"
 #include "io/dsp_reset.hpp"
+#include "io/pcm_output.hpp"
 #include "io/shi.hpp"
 #include "storage/media_image.hpp"
 
@@ -15,5 +16,6 @@ namespace blofeld::vi::dsp {
                                       Shi &shi,
                                       DspReset &reset,
                                       const std::stop_token &stop,
-                                      const MediaImage *image = nullptr);
+                                      const MediaImage *image = nullptr,
+                                      PcmOutput output = {});
 }

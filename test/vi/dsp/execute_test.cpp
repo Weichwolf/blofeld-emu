@@ -4,12 +4,14 @@
 #include "execution.hpp"
 #include "files/read.hpp"
 #include "io/dsp_reset.hpp"
+#include "io/pcm_output.hpp"
 #include "io/shi.hpp"
 #include "storage/media_image.hpp"
 #include "support/isa.hpp"
 
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <dsp56300/memory.hpp>
 #include <exception>
 #include <filesystem>
@@ -351,6 +353,78 @@ void native_timer_interrupt(const bool waiting) {
           "returns via RTI");
 }
 
+void native_audio_dma() {
+  namespace isa = dsp56300::isa;
+  using dsp56300::Word;
+  constexpr Word immediate = 0x34;
+  constexpr Word absolute = 0x30;
+  constexpr Word write = 0x8000;
+  constexpr Word base = 0x660;
+  constexpr Word sign = 0x800000;
+  constexpr Word boot = 0xff0000;
+  constexpr auto literal =
+      isa::opcode<isa::Opcode::move_x_effective>()[0] | (immediate << 8U) | write;
+  std::vector<Word> program;
+  const auto put = [&](const blofeld::vi::dsp::Ports::Write access) {
+    const auto opcode = access.space == dsp56300::Space::x ? isa::Opcode::move_x_effective
+                                                           : isa::Opcode::move_y_effective;
+    const std::array words{
+        literal, access.value, static_cast<Word>(opcode) | (absolute << 8U), access.address};
+    program.insert(program.end(), words.begin(), words.end());
+  };
+  for (unsigned index = 0; index < 64; ++index) {
+    put({.address = base + index, .value = ((index + 1) << 16U) | ((index & 1) != 0 ? sign : 0)});
+  }
+  using Write = blofeld::vi::dsp::Ports::Write;
+  constexpr std::array configuration{
+      Write{.space = dsp56300::Space::y, .address = 0xffff9f, .value = 0x83b},
+      Write{.space = dsp56300::Space::y, .address = 0xffff9e, .value = 0xebc},
+      Write{.space = dsp56300::Space::y, .address = 0xffff96, .value = 0x640301},
+      Write{.space = dsp56300::Space::y, .address = 0xffff95, .value = 0x7d00},
+      Write{.space = dsp56300::Space::y, .address = 0xffff80, .value = 0x10000},
+      Write{.address = 0xfffff3, .value = 1},
+      Write{.address = 0xfffff2, .value = 0xffffc1},
+      Write{.address = 0xffffef, .value = base + 1},
+      Write{.address = 0xffffee, .value = 0xffff80},
+      Write{.address = 0xffffed, .value = 0xfc0},
+      Write{.address = 0xffffec, .value = 0xaab604},
+      Write{.space = dsp56300::Space::y, .address = 0xffff95, .value = 0x7d01}};
+  for (const auto access : configuration) { put(access); }
+  const auto loop = boot + static_cast<Word>(program.size());
+  program.push_back(isa::opcode<isa::Opcode::jmp_effective>()[0] | (absolute << 8U));
+  program.push_back(loop);
+
+  struct Consumer {
+    std::stop_source stop;
+    bool correct = false;
+  } consumer;
+
+  const blofeld::vi::PcmOutput output{
+      .owner = &consumer,
+      .write = [](void *owner, const blofeld::vi::PcmOutput::Block block, const std::stop_token &) {
+        auto &result = *static_cast<Consumer *>(owner);
+        result.correct =
+            block.frames.size() == 16 && block.first_frame == 0 && block.underruns == 0;
+        constexpr std::int32_t scale = 65536;
+        constexpr std::int32_t negative = 8388608;
+        for (unsigned index = 0; index < block.frames.size(); ++index) {
+          const auto left = static_cast<std::int32_t>((index * 2) + 1) * scale;
+          const auto right = (static_cast<std::int32_t>((index * 2) + 2) * scale) - negative;
+          result.correct =
+              result.correct && block.frames[index] == blofeld::vi::PcmOutput::Frame{left, right};
+        }
+        result.stop.request_stop();
+        return true;
+      }};
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  const auto report =
+      blofeld::vi::dsp::execute(program, shi, reset, consumer.stop.get_token(), nullptr, output);
+  require(!report.failure && consumer.correct,
+          "Native guest RAM, real timed DMA and ESAI deliver sixteen exact stereo frames to the "
+          "consumer");
+}
+
 void native_transmit_registers() {
   namespace isa = dsp56300::isa;
   constexpr dsp56300::Word immediate = 0x34;
@@ -598,6 +672,7 @@ int main(const int argc, char **argv) try {
   native_dma_program_write();
   native_dma_esai_write();
   native_dma_dax_write();
+  native_audio_dma();
   native_timer_events();
   native_timer_interrupt(false);
   native_timer_interrupt(true);

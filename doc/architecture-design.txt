@@ -124,6 +124,16 @@ consumes actual transmit-register words and requests DMA refill; unknown data
 cannot become valid PCM. Port assignment and personal reset govern activity.
 Bind the clock source separately; register initialization alone advances no time.
 
+The current VM binding shares a nominal 11.2896 MHz reference between EXTAL,
+HCKT_1 and ACI. PLL and serial-receive divisors are consistent with this hypothesis;
+it remains unmeasured. Audio deadlines retain fractional phase and advance only
+at complete word/subframe events. DMA empty requests remain asserted until refill,
+including when a channel is enabled after transmission has started.
+ESAI TX0 slots form signed stereo blocks with explicit hardware underrun flags.
+The app consumer receives bounded borrowed spans outside native callbacks and
+owns pacing/backpressure. DAX retains its own device effects without duplicating
+the host stream. Host audio/MIDI still need their application bindings.
+
 DAX uploads complete words from XADR and its two channel buffers. Both audio
 addresses share alternating A/B ownership; metadata is captured at frame start.
 Refill requests and block/underrun interrupts follow actual buffer transactions.

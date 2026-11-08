@@ -39,7 +39,7 @@ public:
   // A starts a frame, captures non-audio bits and requests refill. B completes
   // its pair. Unknown first data stays unknown; underruns repeat the last pair.
   [[nodiscard]] std::optional<Frame> clock_subframe() noexcept;
-  [[nodiscard]] bool take_request() noexcept;
+  [[nodiscard]] bool request() const noexcept;
   [[nodiscard]] std::optional<dsp56300::Word> interrupt() const noexcept;
 
 private:
@@ -57,6 +57,6 @@ private:
   dsp56300::Word control_ = 0, status_ = 0;
   Frame current_, previous_;
   unsigned write_channel_ = 0, channel_ = 0, frame_ = 0, clear_writes_ = 0;
-  bool connected_ = false, observed_underrun_ = false, request_ = false;
+  bool connected_ = false, observed_underrun_ = false;
 };
 }

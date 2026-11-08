@@ -18,10 +18,12 @@ interrupt delivery remains incomplete.
 DMA registers, A–E counters and address modes handle requested transfers and software blocks.
 ESAI_1 transmit registers bind DMA writes to actual words; explicit slot events
 preserve masks, word precision, empty requests and retained-data underruns.
-Its instrument clock source and receive path remain incomplete.
+ESAI_1 and DAX run from nominal VM clock deadlines, including PLL conversion.
+ESAI_1 supplies signed stereo PCM blocks to an application consumer with positions
+and explicit underrun bits. Its receive path remains incomplete.
 DAX register access and DMA writes retain the distinct XADR/channel buffers,
 non-audio metadata, block position, refill requests and observed-underrun clearing.
-Its subframe clock source is not yet connected to execution.
+Its output does not create a second host PCM stream.
 DSP timer registers, CLK/2 and shared prescaling implement GPIO timer, event-counter
 and capture modes with deadlines, W1C flags and compare DMA requests. The other
 timer modes remain incomplete. WAIT advances device time to the next timer event.

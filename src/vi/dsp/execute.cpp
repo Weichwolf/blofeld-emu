@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dsp/execute.hpp"
 
+#include "dsp/audio.hpp"
 #include "dsp/clock.hpp"
 #include "dsp/dax.hpp"
 #include "dsp/dma.hpp"
@@ -12,6 +13,7 @@
 #include "execution.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/memory_controller.hpp"
+#include "io/pcm_output.hpp"
 #include "io/shi.hpp"
 #include "storage/media_image.hpp"
 
@@ -32,6 +34,7 @@ constexpr dsp56300::Word reset_status = 0xc00300;
 constexpr dsp56300::Word reset_mode = 0x305;
 constexpr dsp56300::Word once_data_address = 0xfffffc;
 constexpr dsp56300::Word reserved_x_address = 0xffff80;
+constexpr dsp56300::Word audio_data_address = 0xffff80;
 constexpr unsigned esai1_transmit_request = 22;
 constexpr unsigned dax_request = 10;
 constexpr unsigned timer_request_first = 18;
@@ -52,8 +55,14 @@ public:
      Shi &shi,
      DspReset &reset,
      const std::stop_token &stop,
-     const MediaImage *image)
-      : boot_(boot), shi_(shi), reset_(reset), stop_(stop), controller_(image) {}
+     const MediaImage *image,
+     const PcmOutput output)
+      : boot_(boot),
+        shi_(shi),
+        reset_(reset),
+        stop_(stop),
+        audio_(esai_1_, dax_, output, stop),
+        controller_(image) {}
 
   void bind(dsp56300::Core &core, const std::uint64_t epoch) noexcept {
     core_ = &core;
@@ -71,6 +80,8 @@ public:
     dma_.reset();
     esai_1_.reset();
     dax_.reset();
+    audio_.reset(epoch);
+    audio_dirty_ = true;
     timers_.reset();
     memory_.configure(0);
     ports_.reset();
@@ -97,8 +108,25 @@ public:
                                .reason = timers_.error()};
       return false;
     }
-    if (esai_1_.take_request()) { static_cast<void>(dma_.trigger(esai1_transmit_request)); }
-    if (dax_.take_request()) { static_cast<void>(dma_.trigger(dax_request)); }
+    if (audio_dirty_) {
+      if (!audio_.configure(device_cycles(), clock_.ratio())) { return audio_failure(report); }
+      audio_dirty_ = false;
+    }
+    while (const auto next = audio_.deadline()) {
+      if (*next > device_cycles()) { break; }
+      if (!audio_.clock()) { return audio_failure(report); }
+      if (!service_dma(report)) { return false; }
+      if (!audio_.submit()) { return audio_failure(report); }
+    }
+    return service_dma(report);
+  }
+
+  [[nodiscard]] bool flush_audio(ExecutionReport &report) {
+    return audio_.submit(true) || audio_failure(report);
+  }
+
+  bool service_dma(ExecutionReport &report) {
+    trigger_audio_requests();
     const auto requests = timers_.take_requests();
     for (unsigned index = 0; index < 3; ++index) {
       if ((requests & (1U << index)) != 0) {
@@ -126,6 +154,7 @@ public:
   [[nodiscard]] std::uint64_t program_revision() const noexcept override { return revision_; }
 
   [[nodiscard]] const char *error() const noexcept {
+    if (audio_.error() != nullptr) { return audio_.error(); }
     if (media_error_ != nullptr) { return media_error_; }
     if (timers_.error() != nullptr) { return timers_.error(); }
     return esai_1_.error() != nullptr ? esai_1_.error() : controller_.error();
@@ -201,19 +230,19 @@ public:
       return write_port({.space = space, .address = address, .value = value}, pc);
     }
     if (space == dsp56300::Space::y && Esai::contains(address)) {
-      return esai_1_.write({.address = address, .value = value});
+      return write_esai({.address = address, .value = value});
     }
     if (space != dsp56300::Space::x) { return false; }
     // DSP56371UM table 3-7 reserves X:$FFFF80. The original audio
     // initializer writes it; discard the write without creating a readable latch.
     if (address == reserved_x_address) { return true; }
     if (Timers::contains(address)) { return write_timer({.address = address, .value = value}); }
-    if (Dax::contains(address)) { return dax_.write({.address = address, .value = value}); }
+    if (Dax::contains(address)) { return write_dax({.address = address, .value = value}); }
     if (Dma::contains(address)) { return write_dma({.address = address, .value = value}, pc); }
     if (Interrupts::contains(address)) {
       return write_priority({.address = address, .value = value});
     }
-    if (address == Clock::address) { return clock_.write(value); }
+    if (address == Clock::address) { return write_clock(value); }
     if (address != once_data_address) { return shi_.write({.address = address, .value = value}); }
     // DSP56300FM Rev.5, 7.2.4: OGDBR is a 24-bit output latch, readable
     // only through JTAG. A core write also enables the ROM-secured OnCE port.
@@ -261,14 +290,14 @@ public:
                         request.pc);
     }
     if (request.space == dsp56300::Space::y && Esai::contains(request.address)) {
-      return esai_1_.write({.address = request.address, .value = value});
+      return write_esai({.address = request.address, .value = value});
     }
     if (request.space != dsp56300::Space::x) { return false; }
     if (Timers::contains(request.address)) {
       return write_timer({.address = request.address, .value = value});
     }
     if (Dax::contains(request.address)) {
-      return dax_.write({.address = request.address, .value = value});
+      return write_dax({.address = request.address, .value = value});
     }
     if (Dma::contains(request.address)) {
       return write_dma({.address = request.address, .value = value}, request.pc);
@@ -276,19 +305,62 @@ public:
     if (Interrupts::contains(request.address)) {
       return write_priority({.address = request.address, .value = value});
     }
-    if (request.address == Clock::address) { return clock_.write(value); }
+    if (request.address == Clock::address) { return write_clock(value); }
     return shi_.write({.address = request.address, .value = value});
   }
 
 private:
+  bool audio_failure(ExecutionReport &report) const {
+    if (!stop_.stop_requested() && !report.failure) {
+      report.failure = Failure{.operation = Access::execute,
+                               .pc = core_->registers().pc,
+                               .address = audio_data_address,
+                               .space = 'Y',
+                               .reason = audio_.error()};
+    }
+    return false;
+  }
+
+  void audio_changed() noexcept {
+    audio_dirty_ = true;
+    core_->request_yield();
+  }
+
+  bool write_esai(const Esai::Write access) noexcept {
+    if (!esai_1_.write(access)) { return false; }
+    constexpr dsp56300::Word skip = 0xffff92;
+    if (!Esai::data_register(access.address) && access.address != skip) { audio_changed(); }
+    return true;
+  }
+
+  bool write_dax(const Dax::Write access) noexcept {
+    if (!dax_.write(access)) { return false; }
+    constexpr dsp56300::Word control = 0xffffd0;
+    if (access.address == control) { audio_changed(); }
+    return true;
+  }
+
+  bool write_clock(const dsp56300::Word value) noexcept {
+    if (!clock_.write(value)) { return false; }
+    audio_changed();
+    return true;
+  }
+
+  void trigger_audio_requests() noexcept {
+    if (esai_1_.request()) { static_cast<void>(dma_.trigger(esai1_transmit_request)); }
+    if (dax_.request()) { static_cast<void>(dma_.trigger(dax_request)); }
+  }
+
   [[nodiscard]] std::uint64_t device_cycles() const noexcept {
     return core_->progress().estimated_cycles + idle_;
   }
 
   [[nodiscard]] std::optional<std::uint64_t> deadline() const noexcept {
-    const auto timer = timers_.deadline();
-    if (!media_deadline_ || (timer && *timer < *media_deadline_)) { return timer; }
-    return media_deadline_;
+    auto result = timers_.deadline();
+    for (const auto next : {media_deadline_, audio_.deadline()}) {
+      if (next && (!result || *next < *result)) { result = next; }
+    }
+    return result;
   }
 
   bool schedule_media() noexcept {
@@ -358,6 +430,7 @@ private:
 
   bool write_dma(const Dma::Write access, const dsp56300::Word pc) noexcept {
     if (!dma_.write(access)) { return false; }
+    trigger_audio_requests();
     if (dma_.pending() || dma_.interrupts() != 0) {
       dma_pc_ = pc;
       core_->request_yield();
@@ -415,8 +488,13 @@ private:
   }
 
   bool update_ports() noexcept {
+    const bool esai_connected = esai_1_.connected();
+    const bool dax_connected = dax_.connected();
     esai_1_.connected(ports_.peripheral(Port::e) != 0);
     dax_.connected(ports_.peripheral(Port::d) != 0);
+    if (esai_connected != esai_1_.connected() || dax_connected != dax_.connected()) {
+      audio_changed();
+    }
     constexpr dsp56300::Word control_mask = 0xf00;
     constexpr dsp56300::Word data_mask = 0xff;
     const auto controls = ports_.output(Port::c);
@@ -462,6 +540,7 @@ private:
   std::uint64_t epoch_ = 0;
   bool reset_interrupted_ = false;
   bool program_changed_ = false;
+  bool audio_dirty_ = true;
   bool waiting_ = false;
   std::uint64_t idle_ = 0;
   std::uint64_t media_epoch_ = 0;
@@ -477,6 +556,7 @@ private:
   Dma dma_;
   Esai esai_1_;
   Dax dax_;
+  Audio audio_;
   Timers timers_;
   Memory memory_;
   Ports ports_;
@@ -553,6 +633,7 @@ bool run_instance(Io &io,
     }
     if (result.state != dsp56300::ExecutionState::running && !io.waiting_event()) { break; }
   }
+  static_cast<void>(io.flush_audio(report));
   io.unbind();
   return restart;
 }
@@ -562,11 +643,12 @@ ExecutionReport execute(const std::span<const dsp56300::Word> boot,
                         Shi &shi,
                         DspReset &reset,
                         const std::stop_token &stop,
-                        const MediaImage *image) {
+                        const MediaImage *image,
+                        const PcmOutput output) {
   if (boot.empty() || boot.size() > dsp56300::address_words - boot_first) {
     throw std::invalid_argument("DSP boot ROM has invalid bounds");
   }
-  Io io(boot, shi, reset, stop, image);
+  Io io(boot, shi, reset, stop, image, output);
   ExecutionReport report;
   std::uint64_t applied = 0;
   while (!stop.stop_requested()) {

@@ -4,7 +4,6 @@
 #include <array>
 #include <dsp56300/memory.hpp>
 #include <optional>
-#include <utility>
 
 namespace blofeld::vi::dsp {
 namespace {
@@ -22,7 +21,7 @@ void Dax::reset_transmit() noexcept {
   pending_.reset();
   current_ = previous_ = {};
   write_channel_ = channel_ = frame_ = clear_writes_ = 0;
-  observed_underrun_ = request_ = false;
+  observed_underrun_ = false;
 }
 
 void Dax::reset() noexcept {
@@ -109,10 +108,7 @@ void Dax::upload(const unsigned channel) noexcept {
     current_.repeated = true;
   }
   transfer();
-  if (!buffers_[0] && !pending_) {
-    request_ = request_ || (status_ & empty) == 0;
-    status_ |= empty;
-  }
+  if (!buffers_[0] && !pending_) { status_ |= empty; }
 }
 
 std::optional<Dax::Frame> Dax::clock_subframe() noexcept {
@@ -140,8 +136,8 @@ std::optional<Dax::Frame> Dax::clock_subframe() noexcept {
   return current_;
 }
 
-bool Dax::take_request() noexcept {
-  return std::exchange(request_, false);
+bool Dax::request() const noexcept {
+  return connected_ && (status_ & empty) != 0;
 }
 
 std::optional<Word> Dax::interrupt() const noexcept {

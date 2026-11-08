@@ -5,7 +5,6 @@
 #include <cstddef>
 #include <dsp56300/memory.hpp>
 #include <optional>
-#include <utility>
 
 namespace blofeld::vi::dsp {
 namespace {
@@ -64,7 +63,7 @@ constexpr std::array<Length, 32> lengths{Length{.slot = 8, .word = 8},
 void Esai::reset_transmit() noexcept {
   status_ &= ~(frame_sync | underrun | empty_flags);
   written_ = slot_ = active_transmitters_ = 0;
-  skip_ = observed_underrun_ = request_ = false;
+  skip_ = observed_underrun_ = false;
 }
 
 void Esai::reset() noexcept {
@@ -205,10 +204,8 @@ std::optional<Esai::Slot> Esai::clock_slot() noexcept {
     for (std::size_t index = 0; index < data_.size(); ++index) {
       result.samples[index] = data_[index] & sample_mask;
     }
-    if (!skip_ && (written_ & active_transmitters_) != active_transmitters_) {
-      status_ |= underrun;
-    }
-    request_ = request_ || (status_ & empty) == 0;
+    result.repeated = !skip_ && (written_ & active_transmitters_) != active_transmitters_;
+    if (result.repeated) { status_ |= underrun; }
     status_ |= empty | ((slot_ & 1) == 0 ? even_empty : odd_empty);
     written_ &= ~active_transmitters_;
     skip_ = false;
@@ -217,7 +214,11 @@ std::optional<Esai::Slot> Esai::clock_slot() noexcept {
   return result;
 }
 
-bool Esai::take_request() noexcept {
-  return std::exchange(request_, false);
+bool Esai::active() const noexcept {
+  return connected_ && (control_ & transmitters) != 0 && (control_ & reset_bit) == 0;
+}
+
+bool Esai::request() const noexcept {
+  return active() && (status_ & empty) != 0;
 }
 }

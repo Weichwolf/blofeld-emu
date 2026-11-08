@@ -46,7 +46,7 @@ void reset_and_registers() {
   require(read(dax, control) == 0 && read(dax, status) == 0 && !dax.read(non_audio, value) &&
               !dax.read(tx_a, value) && !dax.read(tx_b, value),
           "Control/status reset to zero; data registers remain write-only");
-  require(!dax.clock_subframe() && !dax.interrupt() && !dax.take_request(),
+  require(!dax.clock_subframe() && !dax.interrupt() && !dax.request(),
           "Disconnected clock events cannot manufacture data or requests");
   put(dax, {.address = control, .value = dsp56300::word_mask});
   require(read(dax, control) == all_control, "Reserved control bits always read zero");
@@ -78,7 +78,7 @@ void staging_and_metadata() {
   put(dax, {.address = tx_a, .value = second});
   put(dax, {.address = tx_a, .value = third});
   dax.connected(true);
-  require(!dax.clock_subframe() && read(dax, status) == 0 && !dax.take_request(),
+  require(!dax.clock_subframe() && read(dax, status) == 0 && !dax.request(),
           "XADR can refill A as it uploads, so a primed next word is not empty");
   put(dax, {.address = non_audio, .value = 0});
   put(dax, {.address = tx_b, .value = fourth});
@@ -88,7 +88,7 @@ void staging_and_metadata() {
           "A held B word cannot overwrite occupied B; metadata is captured at A upload");
   const auto next = frame(dax);
   require(next.samples == std::array{third, fourth} && next.non_audio == 0 && next.index == 1 &&
-              dax.take_request() && !dax.take_request(),
+              dax.request() && dax.request(),
           "The distinct XADR and channel buffers preserve both frames and real refill ownership");
   const auto repeated = frame(dax);
   require(repeated.repeated && repeated.known == 3 && repeated.samples == next.samples,
@@ -145,7 +145,7 @@ void dma_refill() {
   put(dax, {.address = tx_a, .value = second});
   dax.connected(true);
   constexpr unsigned request = 10;
-  require(!dax.clock_subframe() && dax.take_request() && dma.trigger(request),
+  require(!dax.clock_subframe() && dax.request() && dma.trigger(request),
           "A real A upload requests the next two-channel DMA line");
   constexpr std::array words{third, fourth};
   require(dma.service(
