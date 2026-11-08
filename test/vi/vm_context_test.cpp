@@ -135,11 +135,43 @@ void boot_transfer() {
   require(missing.failure && missing.failure->space == 'P' && missing.failure->address == 0,
           "A new DSP cannot execute uninitialized program RAM as zero-filled NOPs");
 }
+
+void masked_port_read() {
+  namespace isa = cpu12::isa;
+  constexpr std::uint16_t stack = 0x1fff;
+  constexpr std::uint16_t pull_q = 0x264;
+  constexpr std::uint16_t port_q = 0x260;
+  constexpr cpu12::Byte clear_stop_disable = 0x7f;
+  constexpr auto program = isa::program(
+      isa::opcode<isa::Opcode::lds_immediate>(),
+      std::array{static_cast<cpu12::Byte>(stack >> 8U), static_cast<cpu12::Byte>(stack)},
+      isa::opcode<isa::Opcode::andcc_immediate>(),
+      std::array{clear_stop_disable},
+      isa::opcode<isa::Opcode::ldab_immediate>(),
+      std::array<cpu12::Byte, 1>{1},
+      isa::opcode<isa::Opcode::stab_extended>(),
+      std::array{static_cast<cpu12::Byte>(pull_q >> 8U), static_cast<cpu12::Byte>(pull_q)},
+      isa::opcode<isa::Opcode::brset_extended>(),
+      std::array{static_cast<cpu12::Byte>(port_q >> 8U),
+                 static_cast<cpu12::Byte>(port_q),
+                 cpu12::Byte{1},
+                 cpu12::Byte{3}},
+      isa::opcode<isa::Opcode::ldaa_extended>(),
+      std::array<cpu12::Byte, 2>{0x30, 0},
+      isa::stop);
+  auto flash = image();
+  std::ranges::copy(program, flash->bytes.begin());
+  blofeld::vi::Shi shi;
+  const auto result = blofeld::vi::mcu::execute(*flash, shi, {});
+  executed(result, "Native BRSET reads only its requested GPIO bit");
+  require(result.instructions == 6, "The known bit branches around the unknown-memory access");
+}
 }
 
 int main() try {
   debug_output();
   boot_transfer();
+  masked_port_read();
   auto flash = image();
   constexpr auto words = dsp56300::isa::program(dsp56300::isa::nop, dsp56300::isa::stop);
   const std::vector<dsp56300::Word> boot(words.begin(), words.end());

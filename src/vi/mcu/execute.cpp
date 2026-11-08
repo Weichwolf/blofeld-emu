@@ -3,8 +3,8 @@
 
 #include "execution.hpp"
 #include "io/shi.hpp"
-#include "mcu/boot_port.hpp"
 #include "mcu/memory.hpp"
+#include "mcu/ports.hpp"
 #include "storage/flash_image.hpp"
 
 #include <cpu12/core.hpp>
@@ -17,11 +17,12 @@ namespace {
 constexpr std::uint16_t reset_vector = 0xfffe;
 constexpr std::uint16_t mapping_first = 0x10;
 constexpr std::uint16_t mapping_last = 0x13;
+constexpr std::uint8_t all_bits = 0xff;
 
 class Io {
 public:
   Io(Memory &memory, Shi &shi, const std::stop_token &stop)
-      : memory_(memory), port_(shi), stop_(stop) {}
+      : memory_(memory), ports_(shi), stop_(stop) {}
 
   void bind(cpu12::Core &core) noexcept { core_ = &core; }
 
@@ -34,11 +35,13 @@ private:
     return true;
   }
 
-  bool read(const std::uint16_t address, std::uint8_t &value) noexcept {
+  bool read(const std::uint16_t address,
+            std::uint8_t &value,
+            const std::uint8_t mask = all_bits) noexcept {
     if (interrupted()) { return false; }
     const auto at = memory_.locate(address);
-    if (at.space == Space::registers && (at.offset == 1 || at.offset == 3)) {
-      return port_.read(at.offset, value);
+    if (at.space == Space::registers && Ports::contains(at.offset)) {
+      return ports_.read(at.offset, value, mask);
     }
     if (at.space == Space::registers && at.offset >= mapping_first && at.offset <= mapping_last) {
       value = memory_.read_mapping(at.offset);
@@ -50,8 +53,8 @@ private:
   bool write(const cpu12::ByteWrite access) noexcept {
     if (interrupted()) { return false; }
     const auto at = memory_.locate(access.address);
-    if (at.space == Space::registers && (at.offset == 1 || at.offset == 3)) {
-      return port_.write({.offset = at.offset, .value = access.value});
+    if (at.space == Space::registers && Ports::contains(at.offset)) {
+      return ports_.write({.offset = at.offset, .value = access.value});
     }
     if (at.space == Space::registers && at.offset >= mapping_first && at.offset <= mapping_last) {
       if (memory_.write_mapping({.address = at.offset, .value = access.value})) {
@@ -63,7 +66,7 @@ private:
   }
 
   Memory &memory_;
-  BootPort port_;
+  Ports ports_;
   const std::stop_token &stop_;
   cpu12::Core *core_ = nullptr;
 };
@@ -81,6 +84,10 @@ cpu12::Io Io::callbacks() noexcept {
           .fetch =
               [](void *owner, const std::uint16_t address, std::uint8_t &value) noexcept {
                 return static_cast<Io *>(owner)->read(address, value);
+              },
+          .read_masked =
+              [](void *owner, const cpu12::MaskedByteRead access, std::uint8_t &value) noexcept {
+                return static_cast<Io *>(owner)->read(access.address, value, access.mask);
               }};
 }
 

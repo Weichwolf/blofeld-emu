@@ -16,6 +16,10 @@ void require(const bool condition, const char *message) {
   if (!condition) { throw std::runtime_error(message); }
 }
 
+bool drive(blofeld::vi::mcu::BootPort &port, const std::uint8_t value) {
+  return port.write({.direction = all_outputs, .known = all_outputs, .value = value});
+}
+
 void modes(const unsigned mode) {
   blofeld::vi::Shi shi;
   blofeld::vi::mcu::BootPort port(shi);
@@ -24,29 +28,22 @@ void modes(const unsigned mode) {
           "Configure SPI mode");
   const std::uint8_t idle = (mode & 2) != 0 ? 4 : 0;
   const auto inactive = static_cast<std::uint8_t>(idle | 3);
-  require(port.write({.offset = 1, .value = inactive}) &&
-              port.write({.offset = 3, .value = all_outputs}),
-          "Establish deselected output");
-  require(port.write({.offset = 1, .value = static_cast<std::uint8_t>(idle | 1)}), "Select a word");
+  require(drive(port, inactive), "Establish deselected output");
+  require(drive(port, static_cast<std::uint8_t>(idle | 1)), "Select a word");
   constexpr unsigned bits = 24;
   for (unsigned bit = bits; bit != 0; --bit) {
     const auto data = static_cast<std::uint8_t>(1 | (((datum >> (bit - 1)) & 1) * data_bit));
-    require(port.write({.offset = 1, .value = static_cast<std::uint8_t>(data | idle)}),
-            "Place data before capture");
-    require(port.write({.offset = 1, .value = static_cast<std::uint8_t>(data | (idle ^ 4))}),
-            "Clock leading edge");
-    require(port.write({.offset = 1, .value = static_cast<std::uint8_t>(data | idle)}),
-            "Clock trailing edge");
+    require(drive(port, static_cast<std::uint8_t>(data | idle)), "Place data before capture");
+    require(drive(port, static_cast<std::uint8_t>(data | (idle ^ 4))), "Clock leading edge");
+    require(drive(port, static_cast<std::uint8_t>(data | idle)), "Clock trailing edge");
   }
   std::uint32_t word = 0;
   require(shi.read(receive, word) && word == datum, "All four modes receive MSB-first data");
   require(!shi.read(receive, word), "Only one complete word was published");
-  require(port.write({.offset = 1, .value = inactive}), "Deselect the completed word");
-  require(port.write({.offset = 1, .value = static_cast<std::uint8_t>(idle | 1)}),
-          "Start another word");
-  require(port.write({.offset = 1, .value = static_cast<std::uint8_t>((idle ^ 4) | 1)}),
-          "Supply one partial clock");
-  require(port.write({.offset = 1, .value = inactive}) && !shi.read(receive, word),
+  require(drive(port, inactive), "Deselect the completed word");
+  require(drive(port, static_cast<std::uint8_t>(idle | 1)), "Start another word");
+  require(drive(port, static_cast<std::uint8_t>((idle ^ 4) | 1)), "Supply one partial clock");
+  require(drive(port, inactive) && !shi.read(receive, word),
           "Abort never publishes a partial word");
 }
 }

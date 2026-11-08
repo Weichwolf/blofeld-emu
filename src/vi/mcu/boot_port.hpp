@@ -12,20 +12,17 @@ namespace blofeld::vi::mcu {
 class BootPort {
 public:
   struct Write {
-    std::uint16_t offset = 0;
-    std::uint8_t value = 0;
+    std::uint8_t direction = 0, known = 0, value = 0;
   };
 
   explicit BootPort(Shi &shi) : shi_(shi) {}
 
-  [[nodiscard]] bool read(std::uint16_t offset, std::uint8_t &value) const noexcept;
   [[nodiscard]] bool write(Write access) noexcept;
 
 private:
-  [[nodiscard]] bool update(std::uint8_t previous) noexcept;
   Shi &shi_;
-  std::uint8_t latch_ = 0, direction_ = 0;
-  bool latch_known_ = false, selected_ = false;
+  std::uint8_t previous_ = 0;
+  bool selected_ = false;
   std::optional<Shi::Mode> mode_;
   unsigned bits_ = 0;
   std::uint32_t word_ = 0;
