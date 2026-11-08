@@ -60,6 +60,11 @@ external waveform models. Keep oscillator-driven RTI independent of CPU clock
 selection. Convert device deadlines to Core progress without counting idle time
 twice, and arbitrate actual pending interrupt vectors before resuming native work.
 
+DSP56371 PCTL selects an exact nominal Fosc/EXTAL ratio using its own raw factors
+and dividers. The reset clock profile uses PINIT=1. Do not infer a fitted oscillator
+frequency, physical lock or host pacing from those fields. Device deadlines use
+this ratio when converting local core progress to instrument time.
+
 SCI exchanges decoded characters with explicit start/completion times, baud and
 format, without pad sampling or serial line replay. Preserve its status/data clear
 sequences, preamble and transmit-buffer handoff, receive overrun and wakeup effects.

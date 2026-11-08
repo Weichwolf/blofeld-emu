@@ -19,6 +19,35 @@ void require(const bool condition, const char *message) {
   if (!condition) { throw std::runtime_error(message); }
 }
 
+void native_clock_register() {
+  namespace isa = dsp56300::isa;
+  constexpr dsp56300::Word control = 0x03620f;
+  constexpr dsp56300::Word expected = 0x03620d;
+  constexpr dsp56300::Word pctl_port = 0x3d;
+  constexpr dsp56300::Word x0 = 4;
+  constexpr dsp56300::Word immediate = 0x34;
+  constexpr dsp56300::Word absolute = 0x30;
+  constexpr dsp56300::Word write = 0x8000;
+  constexpr dsp56300::Word unmapped = 0x20000;
+  constexpr auto configure =
+      isa::opcode<isa::Opcode::movep_memory_high>()[0] | (immediate << 8U) | write | pctl_port;
+  constexpr auto clear = isa::opcode<isa::Opcode::bclr_port_high>()[0] | (pctl_port << 8U) | 1;
+  constexpr auto read = isa::opcode<isa::Opcode::movep_register_high>()[0] | (x0 << 8U) | pctl_port;
+  constexpr auto output = isa::opcode<isa::Opcode::move_x_effective>()[0] | (absolute << 8U);
+  constexpr dsp56300::Word ram = 0x40;
+  constexpr auto load = output | write;
+  constexpr auto zero = isa::opcode<isa::Opcode::move_immediate_x0>()[0];
+  constexpr auto program = isa::program(
+      std::array{configure, control, clear, read, output, ram, zero, load, ram, output, unmapped});
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+  require(report.failure && report.failure->operation == blofeld::vi::Access::write &&
+              report.failure->space == 'X' && report.failure->address == unmapped &&
+              report.failure->value == expected,
+          "Native MOVEP/BCLR share PCTL and native RAM stores/loads retain its actual value");
+}
+
 void consecutive_receive_registers() {
   namespace isa = dsp56300::isa;
   constexpr dsp56300::Word receive_port = 0x14;
@@ -102,6 +131,7 @@ void reset_running_core() {
 }
 
 int main() try {
+  native_clock_register();
   consecutive_receive_registers();
   reset_running_core();
 } catch (const std::exception &error) {

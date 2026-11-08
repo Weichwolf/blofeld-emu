@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dsp/execute.hpp"
 
+#include "dsp/clock.hpp"
+#include "dsp/memory.hpp"
 #include "execution.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/shi.hpp"
 
-#include <array>
-#include <cstddef>
 #include <cstdint>
 #include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
@@ -21,7 +21,6 @@ constexpr dsp56300::Word boot_first = 0xff0000;
 constexpr dsp56300::Word reset_status = 0xc00300;
 constexpr dsp56300::Word reset_mode = 0x305;
 constexpr dsp56300::Word once_data_address = 0xfffffc;
-constexpr std::size_t program_words = 0x1000;
 
 class Io final : public dsp56300::Io {
 public:
@@ -36,6 +35,7 @@ public:
     epoch_ = epoch;
     reset_interrupted_ = false;
     once_data_.reset();
+    clock_.reset(true);
   }
 
   void unbind() noexcept { core_ = nullptr; }
@@ -44,9 +44,15 @@ public:
 
   [[nodiscard]] std::optional<dsp56300::Word>
   inspect_program(const dsp56300::Word address) const noexcept override {
-    if (address < program_.size() && known_[address] != 0) { return program_[address]; }
+    dsp56300::Word value = 0;
+    if (memory_.read(dsp56300::Space::program, address, value)) { return value; }
     if (address < boot_first || address - boot_first >= boot_.size()) { return {}; }
     return boot_[address - boot_first];
+  }
+
+  std::span<const dsp56300::MemoryWindow>
+  memory_windows(const dsp56300::Space space) noexcept override {
+    return memory_.windows(space);
   }
 
   bool read(const dsp56300::Space space,
@@ -54,7 +60,8 @@ public:
             dsp56300::Word /*pc*/,
             dsp56300::Word &value) noexcept override {
     if (interrupted()) { return false; }
-    if (space == dsp56300::Space::x) { return shi_.read(address, value); }
+    if (memory_.read(space, address, value)) { return true; }
+    if (space == dsp56300::Space::x) { return read_x(address, value); }
     const auto word = space == dsp56300::Space::program ? inspect_program(address) : std::nullopt;
     if (!word) { return false; }
     value = *word;
@@ -66,14 +73,9 @@ public:
              dsp56300::Word /*pc*/,
              const dsp56300::Word value) noexcept override {
     if (interrupted()) { return false; }
-    if (space == dsp56300::Space::program && address < program_.size()) {
-      // DSP56371UM 3.1: reset mapping provides 4K words of program RAM.
-      // Core owns translation invalidation for an actual program write.
-      program_[address] = value;
-      known_[address] = 1;
-      return true;
-    }
+    if (memory_.write({.space = space, .address = address, .value = value})) { return true; }
     if (space != dsp56300::Space::x) { return false; }
+    if (address == Clock::address) { return clock_.write(value); }
     if (address != once_data_address) { return shi_.write({.address = address, .value = value}); }
     // DSP56300FM Rev.5, 7.2.4: OGDBR is a 24-bit output latch, readable
     // only through JTAG. A core write also enables the ROM-secured OnCE port.
@@ -90,7 +92,9 @@ public:
     constexpr unsigned word_bits = 24;
     if (interrupted()) { return false; }
     dsp56300::Word value = 0;
-    if (space != dsp56300::Space::x || bit >= word_bits || !shi_.read(address, value)) {
+    if (bit >= word_bits) { return false; }
+    if (!memory_.read(space, address, value) &&
+        (space != dsp56300::Space::x || !read_x(address, value))) {
       return false;
     }
     const auto mask = dsp56300::Word{1} << bit;
@@ -102,10 +106,19 @@ public:
       case dsp56300::BitAction::change: value ^= mask; break;
       default: return false;
     }
+    if (memory_.write({.space = space, .address = address, .value = value})) { return true; }
+    if (space != dsp56300::Space::x) { return false; }
+    if (address == Clock::address) { return clock_.write(value); }
     return shi_.write({.address = address, .value = value});
   }
 
 private:
+  bool read_x(const dsp56300::Word address, dsp56300::Word &value) noexcept {
+    if (address != Clock::address) { return shi_.read(address, value); }
+    value = clock_.read();
+    return true;
+  }
+
   bool interrupted() noexcept {
     if (stop_.stop_requested()) {
       core_->request_yield();
@@ -125,8 +138,8 @@ private:
   const std::stop_token &stop_;
   dsp56300::Core *core_ = nullptr;
   std::optional<dsp56300::Word> once_data_;
-  std::array<dsp56300::Word, program_words> program_{};
-  std::array<std::uint8_t, program_words> known_{};
+  Clock clock_;
+  Memory memory_;
 };
 
 Access operation(const dsp56300::FaultKind fault) {
