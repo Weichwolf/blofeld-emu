@@ -33,7 +33,7 @@ Native session audio client:
   libsndfile 1.2.2, upstream authors and contributors, LGPL-2.1-or-later.
   https://github.com/libsndfile/libsndfile
   LICENSES/libsndfile.txt retains the upstream COPYING file. Both source archives
-  are pinned in cmake/dependencies.json. The optional native build uses static
+  are pinned in cmake/dependencies.json. The native audio build uses static
   libraries with dependency sanitizers. Original notices remain in the extracted sources. A local patch
   corrects callback types; see patches/pulseaudio-callback-types.patch.
   Corresponding sources, modifications and notices must accompany redistributable

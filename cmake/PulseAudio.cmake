@@ -54,6 +54,7 @@ function(blofeld_add_audio_dependencies)
   endforeach()
   # Honor scoped libsndfile options on the first configure.
   set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+  set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
   set(BUILD_SHARED_LIBS OFF)
   set(BUILD_TESTING OFF)
   set(BUILD_PROGRAMS OFF)

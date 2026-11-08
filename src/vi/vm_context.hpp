@@ -13,6 +13,7 @@
 #include <atomic>
 #include <dsp56300/memory.hpp>
 #include <memory>
+#include <stop_token>
 #include <thread>
 #include <vector>
 
@@ -32,6 +33,13 @@ public:
 
   void pedal(const bool level) noexcept { controls_.pedal(level); }
 
+  void start();
+
+  [[nodiscard]] bool finished() const noexcept {
+    return completed_.load(std::memory_order_acquire) != 0;
+  }
+
+  [[nodiscard]] std::array<ExecutionReport, 2> wait();
   [[nodiscard]] std::array<ExecutionReport, 2> run();
 
 private:
@@ -44,6 +52,8 @@ private:
   DspReset reset_;
   std::array<ExecutionReport, 2> reports_;
   std::atomic<unsigned> completed_{0};
+  std::stop_source stop_;
+  bool started_ = false;
   std::jthread mcu_;
   std::jthread dsp_;
 };

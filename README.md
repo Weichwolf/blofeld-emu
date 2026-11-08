@@ -21,6 +21,12 @@ preserve masks, word precision, empty requests and retained-data underruns.
 ESAI_1 and DAX run from nominal VM clock deadlines, including PLL conversion.
 ESAI_1 supplies signed stereo PCM blocks to an application consumer with positions
 and explicit underrun bits. Its receive path remains incomplete.
+The application connects those blocks to a bounded host queue and a dedicated
+PulseAudio client owner. The stream uses stereo 24-bit PCM in 32-bit containers;
+actual server/sink formats and buffer grants are queried, and format/rate conversion
+is explicit. Host backpressure paces the DSP owner. Reset corks and flushes the old
+stream epoch before accepting new frames. Disconnects, endpoint changes and host
+underruns stop execution with an error.
 DAX register access and DMA writes retain the distinct XADR/channel buffers,
 non-audio metadata, block position, refill requests and observed-underrun clearing.
 Its output does not create a second host PCM stream.
@@ -50,7 +56,7 @@ assertions retire the previous DSP Core before peripheral reset and ROM restart.
 `blofeld-headless` loads local images and executes their native JIT paths;
 unimplemented device accesses stop with context. Flash program/erase and interrupts,
 watchdog reset/recovery, USB transactions, MCU MISO sampling and SHI interrupt delivery,
-the remaining device contracts, audio and host MIDI are incomplete, so it is not yet
+the remaining device contracts and host MIDI are incomplete, so it is not yet
 a playable instrument. Complete requirements are in
 [OBJECTIVE.md](OBJECTIVE.md) and [ACCEPTANCE.tsv](ACCEPTANCE.tsv).
 
@@ -68,6 +74,9 @@ Requires Linux, LLVM 19, CMake 3.25+, Ninja, Python 3 and Git. Core checkouts mu
 
 ```sh
 python3 tools/dependencies.py --fetch --component zlib
+python3 tools/dependencies.py --fetch --component pulseaudio
+python3 tools/dependencies.py --fetch --component libsndfile
+python3 tools/dependencies.py --fetch --component meson
 cmake --preset release
 cmake --build --preset release --target quality
 ```
@@ -97,6 +106,10 @@ The media image uses the checksummed `.bfnand` format with explicit known bits.
 Optional `firmware` and `display` paths are parsed but not yet connected
 to execution. Startup currently exits unsuccessfully because the instrument
 is incomplete; successful execution of a short program is not instrument readiness.
+SIGINT/SIGTERM request coordinated shutdown. Live status reports server-submitted
+frames, local queue occupancy, server buffer grants, measured latency and host/device
+underruns. The approximate producer reserve excludes blocking in the host consumer;
+it is not the offline instrument throughput or proof of physical playback.
 
 The viewer needs `python3-gi`, `python3-gi-cairo` and `gir1.2-gtk-4.0` on Debian:
 

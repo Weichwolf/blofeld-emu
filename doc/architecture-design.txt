@@ -140,7 +140,17 @@ including when a channel is enabled after transmission has started.
 ESAI TX0 slots form signed stereo blocks with explicit hardware underrun flags.
 The app consumer receives bounded borrowed spans outside native callbacks and
 owns pacing/backpressure. DAX retains its own device effects without duplicating
-the host stream. Host audio/MIDI still need their application bindings.
+the host stream. Host MIDI still needs its application binding.
+
+The app connects ordered PCM blocks to a bounded SPSC host queue. A separate
+PulseAudio I/O owner pushes available frames and dispatches server events; there
+is no application data audio callback. Query actual stream/sink format and buffer
+grants; preserve the original frame rate and report any server conversion. Prime
+the granted target before uncorking, and cork/flush on a new reset epoch. Host
+backpressure reaches the DSP only outside native callbacks. Report queue, server
+latency and underruns; endpoint changes/disconnects stop with context. The control
+thread consumes blocked termination signals and requests a shared VM stop.
+Live producer-reserve estimates exclude consumer blocking and are not offline RTF.
 
 DAX uploads complete words from XADR and its two channel buffers. Both audio
 addresses share alternating A/B ownership; metadata is captured at frame start.

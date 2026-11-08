@@ -33,32 +33,41 @@ VmContext::~VmContext() {
 }
 
 void VmContext::request_stop() noexcept {
-  mcu_.request_stop();
-  dsp_.request_stop();
+  stop_.request_stop();
 }
 
-std::array<ExecutionReport, 2> VmContext::run() {
-  if (mcu_.joinable() || dsp_.joinable() || completed_.load(std::memory_order_relaxed) != 0) {
-    throw std::logic_error("VM execution can only be started once");
-  }
-  mcu_ = std::jthread([this](const std::stop_token &stop) {
+void VmContext::start() {
+  if (started_) { throw std::logic_error("VM execution can only be started once"); }
+  started_ = true;
+  mcu_ = std::jthread([this] {
+    const auto stop = stop_.get_token();
     try {
       reports_[0] = mcu::execute(*image_, shi_, reset_, stop, &controls_);
     } catch (...) { reports_[0].exception = std::current_exception(); }
     completed_.fetch_add(1, std::memory_order_release);
     completed_.notify_one();
   });
-  dsp_ = std::jthread([this](const std::stop_token &stop) {
+  dsp_ = std::jthread([this] {
+    const auto stop = stop_.get_token();
     try {
       reports_[1] = dsp::execute(boot_, shi_, reset_, stop, media_.get(), output_);
     } catch (...) { reports_[1].exception = std::current_exception(); }
     completed_.fetch_add(1, std::memory_order_release);
     completed_.notify_one();
   });
+}
+
+std::array<ExecutionReport, 2> VmContext::wait() {
+  if (!started_) { throw std::logic_error("VM execution has not started"); }
   completed_.wait(0, std::memory_order_acquire);
   request_stop();
-  mcu_.join();
-  dsp_.join();
+  if (mcu_.joinable()) { mcu_.join(); }
+  if (dsp_.joinable()) { dsp_.join(); }
   return reports_;
+}
+
+std::array<ExecutionReport, 2> VmContext::run() {
+  start();
+  return wait();
 }
 }

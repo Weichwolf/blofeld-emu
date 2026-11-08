@@ -469,6 +469,14 @@ int main() try {
   const auto dsp = blofeld::vi::dsp::execute(boot, shi, reset, {});
   require(!mcu.failure && mcu.instructions == 3, "MCU owner performs real reset and native STOP");
   require(!dsp.failure && dsp.instructions == 2, "DSP owner executes its native ROM instructions");
+  {
+    blofeld::vi::VmContext context(image(), boot);
+    context.request_stop();
+    context.start();
+    const auto reports = context.wait();
+    require(context.finished() && reports[0].instructions == 0 && reports[1].instructions == 0,
+            "A pre-start stop is race-free and reaches both independent owners");
+  }
   for (unsigned iteration = 0; iteration < 8; ++iteration) {
     blofeld::vi::VmContext context(image(), boot);
     const auto reports = context.run();
