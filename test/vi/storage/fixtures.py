@@ -101,4 +101,15 @@ erased[50 // 8] = 1 << (50 % 8)
 payload = flash + known + erased
 image = b"BLFNVM\r\n" + struct.pack("<II", 1, len(payload)) + payload
 (root / "flash.bfnvm").write_bytes(image + struct.pack("<I", zlib.crc32(image)))
+media = bytearray(b"BLFNAND\n" + struct.pack("<IIIIII", 1, 1, 4, 1, 528, 0))
+media += struct.pack("<HBB", 0, 0, 0)
+for page in (0, 31, 32, 131071):
+    media += struct.pack("<IBBH", page, 255, 255, 0)
+    for column in range(528):
+        media += bytes((0, 0)) if page == 32 and column == 17 else bytes(((page + column) & 255, 255))
+(root / "media.bfnand").write_bytes(media + struct.pack("<I", zlib.crc32(media)))
+corrupt = bytearray(media)
+corrupt[36 + 8] = 1
+corrupt[36 + 9] = 0
+(root / "bad-media.bfnand").write_bytes(corrupt + struct.pack("<I", zlib.crc32(corrupt)))
 (root / "firmware.done").write_text("generated\n")

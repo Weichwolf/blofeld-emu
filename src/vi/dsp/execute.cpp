@@ -3,9 +3,12 @@
 
 #include "dsp/clock.hpp"
 #include "dsp/memory.hpp"
+#include "dsp/ports.hpp"
 #include "execution.hpp"
 #include "io/dsp_reset.hpp"
+#include "io/memory_controller.hpp"
 #include "io/shi.hpp"
+#include "storage/media_image.hpp"
 
 #include <cstdint>
 #include <dsp56300/core.hpp>
@@ -22,13 +25,20 @@ constexpr dsp56300::Word reset_status = 0xc00300;
 constexpr dsp56300::Word reset_mode = 0x305;
 constexpr dsp56300::Word once_data_address = 0xfffffc;
 
+struct BitAccess {
+  dsp56300::Space space;
+  dsp56300::Word address, pc, index;
+  dsp56300::BitAction action;
+};
+
 class Io final : public dsp56300::Io {
 public:
   Io(const std::span<const dsp56300::Word> boot,
      Shi &shi,
      DspReset &reset,
-     const std::stop_token &stop)
-      : boot_(boot), shi_(shi), reset_(reset), stop_(stop) {}
+     const std::stop_token &stop,
+     const MediaImage *image)
+      : boot_(boot), shi_(shi), reset_(reset), stop_(stop), controller_(image) {}
 
   void bind(dsp56300::Core &core, const std::uint64_t epoch) noexcept {
     core_ = &core;
@@ -37,9 +47,21 @@ public:
     once_data_.reset();
     clock_.reset(true);
     memory_.configure(0);
+    ports_.reset();
+    controller_.reset();
   }
 
   void unbind() noexcept { core_ = nullptr; }
+
+  bool complete_events(ExecutionReport &report) {
+    if (!controller_.pending()) { return true; }
+    if (controller_.complete()) { return true; }
+    report.failure = completion_failure_;
+    report.failure->reason = controller_.error();
+    return false;
+  }
+
+  [[nodiscard]] const char *error() const noexcept { return controller_.error(); }
 
   [[nodiscard]] bool reset_interrupted() const noexcept { return reset_interrupted_; }
 
@@ -63,6 +85,7 @@ public:
             dsp56300::Word &value) noexcept override {
     if (interrupted()) { return false; }
     if (memory_.read(space, address, value)) { return true; }
+    if (Ports::contains(space, address)) { return ports_.read(space, address, value); }
     if (space == dsp56300::Space::x) { return read_x(address, value); }
     const auto word = space == dsp56300::Space::program ? inspect_program(address) : std::nullopt;
     if (!word) { return false; }
@@ -72,10 +95,13 @@ public:
 
   bool write(const dsp56300::Space space,
              const dsp56300::Word address,
-             dsp56300::Word /*pc*/,
+             const dsp56300::Word pc,
              const dsp56300::Word value) noexcept override {
     if (interrupted()) { return false; }
     if (memory_.write({.space = space, .address = address, .value = value})) { return true; }
+    if (Ports::contains(space, address)) {
+      return write_port({.space = space, .address = address, .value = value}, pc);
+    }
     if (space != dsp56300::Space::x) { return false; }
     if (address == Clock::address) { return clock_.write(value); }
     if (address != once_data_address) { return shi_.write({.address = address, .value = value}); }
@@ -87,34 +113,80 @@ public:
 
   bool bit(const dsp56300::Space space,
            const dsp56300::Word address,
-           dsp56300::Word /*pc*/,
+           const dsp56300::Word pc,
            const dsp56300::Word bit,
            const dsp56300::BitAction action,
            bool &previous) noexcept override {
+    const BitAccess request{
+        .space = space, .address = address, .pc = pc, .index = bit, .action = action};
     constexpr unsigned word_bits = 24;
     if (interrupted()) { return false; }
+    if (request.index >= word_bits) { return false; }
+    constexpr dsp56300::Word timer1_control = 0xffff8b;
+    constexpr dsp56300::Word timer_input_bit = 12;
+    if (request.space == dsp56300::Space::x && request.address == timer1_control &&
+        request.index == timer_input_bit && request.action == dsp56300::BitAction::test) {
+      return controller_.ready(previous);
+    }
     dsp56300::Word value = 0;
-    if (bit >= word_bits) { return false; }
-    if (!memory_.read(space, address, value) &&
-        (space != dsp56300::Space::x || !read_x(address, value))) {
+    if (!memory_.read(request.space, request.address, value) &&
+        !(Ports::contains(request.space, request.address)
+              ? ports_.read(request.space, request.address, value)
+              : request.space == dsp56300::Space::x && read_x(request.address, value))) {
       return false;
     }
-    const auto mask = dsp56300::Word{1} << bit;
+    const auto mask = dsp56300::Word{1} << request.index;
     previous = (value & mask) != 0;
-    switch (action) {
+    switch (request.action) {
       case dsp56300::BitAction::test: return true;
       case dsp56300::BitAction::clear: value &= ~mask; break;
       case dsp56300::BitAction::set: value |= mask; break;
       case dsp56300::BitAction::change: value ^= mask; break;
       default: return false;
     }
-    if (memory_.write({.space = space, .address = address, .value = value})) { return true; }
-    if (space != dsp56300::Space::x) { return false; }
-    if (address == Clock::address) { return clock_.write(value); }
-    return shi_.write({.address = address, .value = value});
+    if (memory_.write({.space = request.space, .address = request.address, .value = value})) {
+      return true;
+    }
+    if (Ports::contains(request.space, request.address)) {
+      return write_port({.space = request.space, .address = request.address, .value = value},
+                        request.pc);
+    }
+    if (request.space != dsp56300::Space::x) { return false; }
+    if (request.address == Clock::address) { return clock_.write(value); }
+    return shi_.write({.address = request.address, .value = value});
   }
 
 private:
+  bool write_port(const Ports::Write access, const dsp56300::Word pc) noexcept {
+    if (!ports_.write(access) || !update_ports()) { return false; }
+    if (controller_.pending()) {
+      completion_failure_ = {.operation = Access::write,
+                             .pc = pc,
+                             .address = access.address,
+                             .value = access.value,
+                             .space = access.space == dsp56300::Space::x ? 'X' : 'Y'};
+      core_->request_yield();
+    }
+    return true;
+  }
+
+  bool update_ports() noexcept {
+    constexpr dsp56300::Word control_mask = 0xf00;
+    constexpr dsp56300::Word data_mask = 0xff;
+    const auto controls = ports_.output(Port::c);
+    const auto data = ports_.output(Port::f);
+    if ((controls.mask & controls.known & control_mask) == control_mask &&
+        !controller_.write({.controls = controls.value & control_mask,
+                            .value = static_cast<std::uint8_t>(data.value & data_mask),
+                            .known = (data.mask & data.known & data_mask) == data_mask})) {
+      return false;
+    }
+    const auto output = controller_.output();
+    ports_.input(Port::f,
+                 {.mask = data_mask, .known = output ? data_mask : 0, .value = output.value_or(0)});
+    return true;
+  }
+
   bool read_x(const dsp56300::Word address, dsp56300::Word &value) noexcept {
     if (address != Clock::address) { return shi_.read(address, value); }
     value = clock_.read();
@@ -142,6 +214,9 @@ private:
   std::optional<dsp56300::Word> once_data_;
   Clock clock_;
   Memory memory_;
+  Ports ports_;
+  MemoryController controller_;
+  Failure completion_failure_;
 };
 
 Access operation(const dsp56300::FaultKind fault) {
@@ -192,19 +267,22 @@ bool run_instance(Io &io,
       char space = 'P';
       if (fault.space == dsp56300::Space::x) { space = 'X'; }
       if (fault.space == dsp56300::Space::y) { space = 'Y'; }
-      report.failure = Failure{.operation = operation(fault.kind),
-                               .pc = fault.pc,
-                               .address = fault.address,
-                               .value = fault.value,
-                               .code = static_cast<std::uint32_t>(fault.kind),
-                               .space = space,
-                               .reason = "DSP access or instruction is not implemented"};
+      report.failure =
+          Failure{.operation = operation(fault.kind),
+                  .pc = fault.pc,
+                  .address = fault.address,
+                  .value = fault.value,
+                  .code = static_cast<std::uint32_t>(fault.kind),
+                  .space = space,
+                  .reason = io.error() != nullptr ? io.error()
+                                                  : "DSP access or instruction is not implemented"};
       break;
     }
     if (reset.pending(epoch)) {
       restart = true;
       break;
     }
+    if (!io.complete_events(report)) { break; }
     if (result.state != dsp56300::ExecutionState::running) { break; }
   }
   io.unbind();
@@ -215,11 +293,12 @@ bool run_instance(Io &io,
 ExecutionReport execute(const std::span<const dsp56300::Word> boot,
                         Shi &shi,
                         DspReset &reset,
-                        const std::stop_token &stop) {
+                        const std::stop_token &stop,
+                        const MediaImage *image) {
   if (boot.empty() || boot.size() > dsp56300::address_words - boot_first) {
     throw std::invalid_argument("DSP boot ROM has invalid bounds");
   }
-  Io io(boot, shi, reset, stop);
+  Io io(boot, shi, reset, stop, image);
   ExecutionReport report;
   std::uint64_t applied = 0;
   while (!stop.stop_requested()) {

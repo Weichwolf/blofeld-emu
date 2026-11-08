@@ -3,6 +3,7 @@
 #include "files/read.hpp"
 #include "profile.hpp"
 #include "storage/flash_image.hpp"
+#include "storage/media_image.hpp"
 #include "vm_context.hpp"
 
 #include <cstddef>
@@ -54,7 +55,9 @@ int main(const int argc, char **argv) try {
   const auto profile = blofeld::app::load_profile(selected_profile(argc, argv));
   auto image = std::make_unique<blofeld::vi::FlashImage>(blofeld::vi::FlashImage::decode(
       blofeld::host::read_file(profile.device_state, blofeld::vi::FlashImage::file_bytes)));
-  blofeld::vi::VmContext vm(std::move(image), boot_rom(profile.boot_rom));
+  auto media = std::make_unique<blofeld::vi::MediaImage>(
+      blofeld::host::read_file(profile.storage, blofeld::vi::MediaImage::max_bytes));
+  blofeld::vi::VmContext vm(std::move(image), boot_rom(profile.boot_rom), std::move(media));
   const auto reports = vm.run();
   for (std::size_t index = 0; index < reports.size(); ++index) {
     const auto &report = reports[index];

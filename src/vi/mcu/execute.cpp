@@ -99,7 +99,11 @@ public:
     // B3/B5..B7 are passive controls, with no input producer in the firmware
     // contract. Use an inactive sample while they are inputs, not a device reply.
     constexpr std::uint8_t passive_controls = 0xe8;
-    ports_.input(Port::b, {.mask = passive_controls, .known = passive_controls, .value = 0});
+    // DSP56371UM table 2-7: SS, SCK and MOSI have internal pull-ups. The
+    // application releases B1/B2/B4 after boot; this is bias, not HREQ/data.
+    constexpr std::uint8_t spi_pullups = 0x16;
+    constexpr std::uint8_t attached = passive_controls | spi_pullups;
+    ports_.input(Port::b, {.mask = attached, .known = attached, .value = spi_pullups});
     // DSP56371 RESET has an internal pull-up. U0 drives it low or releases it.
     ports_.input(Port::u, {.mask = 1, .known = 1, .value = 1});
   }

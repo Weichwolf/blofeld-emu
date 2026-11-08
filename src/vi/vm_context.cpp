@@ -5,6 +5,7 @@
 #include "execution.hpp"
 #include "mcu/execute.hpp"
 #include "storage/flash_image.hpp"
+#include "storage/media_image.hpp"
 
 #include <array>
 #include <atomic>
@@ -18,8 +19,10 @@
 #include <vector>
 
 namespace blofeld::vi {
-VmContext::VmContext(std::unique_ptr<FlashImage> image, std::vector<dsp56300::Word> boot)
-    : image_(std::move(image)), boot_(std::move(boot)) {
+VmContext::VmContext(std::unique_ptr<FlashImage> image,
+                     std::vector<dsp56300::Word> boot,
+                     std::unique_ptr<MediaImage> media)
+    : image_(std::move(image)), boot_(std::move(boot)), media_(std::move(media)) {
   if (!image_) { throw std::invalid_argument("VM requires a persistent MCU image"); }
 }
 
@@ -45,7 +48,7 @@ std::array<ExecutionReport, 2> VmContext::run() {
   });
   dsp_ = std::jthread([this](const std::stop_token &stop) {
     try {
-      reports_[1] = dsp::execute(boot_, shi_, reset_, stop);
+      reports_[1] = dsp::execute(boot_, shi_, reset_, stop, media_.get());
     } catch (...) { reports_[1].exception = std::current_exception(); }
     completed_.fetch_add(1, std::memory_order_release);
     completed_.notify_one();

@@ -43,6 +43,7 @@ Port B3/B5..B7 have no input producer in the current instrument contract. Their
 input-mode samples are inactive low; output-mode reads still use the MCU latch.
 This deterministic VM choice for passive controls is not a claim about PCB pulls.
 Active data/status inputs must come from their devices, never from this policy.
+The attached SHI SS/SCK/MOSI pull-ups supply released B1/B2/B4 input samples.
 
 A selected boot transaction whose SHI receive mode is not published yields its
 MCU owner. Outside the native callback, wait for the DSP's actual HCSR write or
@@ -89,6 +90,13 @@ frames/blocks, preserving DMA/FIFO status and sample times. Split processing at
 relevant MIDI/device events. Live consumption bounds lookahead and paces output;
 offline draining runs as fast as possible. No wall-clock substitution for musical
 time, missing frames, duplicate frames or serial-PCM bit decoding.
+
+Storage port writes decode commands, addresses and byte ownership locally. A
+complete address publishes an operation; the DSP owner resolves the actual image
+page outside its native callback before publishing ready. Read strobes retain a
+held byte and advance on release. Unknown bytes/pages fail with transaction
+context. Images retain their encoded backing and a direct page index; no cell
+physics, payload mirrors or default successful program/status replies.
 
 Keep persistent images for identity, programs and samples. Preserve genuine
 operation status, interrupted writes and recovery; remove cell physics, synthetic

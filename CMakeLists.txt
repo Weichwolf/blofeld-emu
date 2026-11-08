@@ -51,16 +51,16 @@ add_library(blofeld_app_firmware src/app/firmware.cpp)
 target_include_directories(blofeld_app_firmware PUBLIC src/app)
 target_link_libraries(blofeld_app_firmware PUBLIC
   blofeld_vi_firmware blofeld_host_files blofeld_host_archive)
-add_library(blofeld_vi_storage src/vi/storage/flash_image.cpp)
+add_library(blofeld_vi_storage src/vi/storage/flash_image.cpp src/vi/storage/media_image.cpp)
 target_include_directories(blofeld_vi_storage PUBLIC src/vi)
 target_link_libraries(blofeld_vi_storage PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB)
 add_library(blofeld_vi_mcu_memory src/vi/mcu/memory.cpp)
 target_include_directories(blofeld_vi_mcu_memory PUBLIC src/vi)
 target_link_libraries(blofeld_vi_mcu_memory PUBLIC blofeld_vi_storage cpu12::core)
 add_library(blofeld_vi_execution
-  src/vi/io/dsp_reset.cpp src/vi/io/shi.cpp src/vi/io/sci.cpp src/vi/io/usb.cpp src/vi/io/mcu_flash.cpp
+  src/vi/io/memory_controller.cpp src/vi/io/dsp_reset.cpp src/vi/io/shi.cpp src/vi/io/sci.cpp src/vi/io/usb.cpp src/vi/io/mcu_flash.cpp
   src/vi/mcu/boot_port.cpp src/vi/mcu/ports.cpp src/vi/mcu/timer.cpp src/vi/mcu/clock.cpp
-  src/vi/mcu/execute.cpp src/vi/dsp/clock.cpp src/vi/dsp/memory.cpp src/vi/dsp/execute.cpp src/vi/vm_context.cpp)
+  src/vi/mcu/execute.cpp src/vi/dsp/clock.cpp src/vi/dsp/memory.cpp src/vi/dsp/ports.cpp src/vi/dsp/execute.cpp src/vi/vm_context.cpp)
 target_include_directories(blofeld_vi_execution PUBLIC src/vi)
 target_link_libraries(blofeld_vi_execution PUBLIC
   blofeld_vi_mcu_memory dsp56300::core Threads::Threads)
@@ -113,6 +113,13 @@ if(BUILD_TESTING)
   blofeld_unit(vi-flash-image-test test/vi/storage/flash_image_test.cpp
     blofeld_vi_storage "${blofeld_unit_inputs}")
   add_dependencies(vi-flash-image-test unit-inputs)
+  blofeld_unit(vi-media-image-test test/vi/storage/media_image_test.cpp
+    "blofeld_vi_storage;blofeld_host_files" "${blofeld_unit_inputs}")
+  blofeld_unit(vi-memory-controller-test test/vi/io/memory_controller_test.cpp
+    "blofeld_vi_execution;blofeld_host_files" "${blofeld_unit_inputs}")
+  add_dependencies(vi-media-image-test unit-inputs)
+  add_dependencies(vi-memory-controller-test unit-inputs)
+  blofeld_unit(vi-dsp-ports-test test/vi/dsp/ports_test.cpp blofeld_vi_execution)
   blofeld_unit(vi-mcu-memory-test test/vi/mcu/memory_test.cpp blofeld_vi_mcu_memory)
   target_include_directories(vi-mcu-memory-test PRIVATE "${BLOFELD_CPU12_ROOT}/test/support")
   blofeld_unit(vi-vm-context-test test/vi/vm_context_test.cpp blofeld_vi_execution)
@@ -122,7 +129,9 @@ if(BUILD_TESTING)
   target_include_directories(vi-mcu-execute-test PRIVATE "${BLOFELD_CPU12_ROOT}/test/support")
   blofeld_unit(vi-dsp-memory-test test/vi/dsp/memory_test.cpp blofeld_vi_execution)
   blofeld_unit(vi-dsp-clock-test test/vi/dsp/clock_test.cpp blofeld_vi_execution)
-  blofeld_unit(vi-dsp-execute-test test/vi/dsp/execute_test.cpp blofeld_vi_execution)
+  blofeld_unit(vi-dsp-execute-test test/vi/dsp/execute_test.cpp
+    "blofeld_vi_execution;blofeld_host_files" "${blofeld_unit_inputs}")
+  add_dependencies(vi-dsp-execute-test unit-inputs)
   target_include_directories(vi-dsp-execute-test PRIVATE "${BLOFELD_DSP56300_ROOT}/test")
   blofeld_unit(vi-dsp-reset-test test/vi/io/dsp_reset_test.cpp blofeld_vi_execution)
   blofeld_unit(vi-shi-test test/vi/io/shi_test.cpp blofeld_vi_execution)

@@ -4,6 +4,7 @@
 #include "execution.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/shi.hpp"
+#include "storage/media_image.hpp"
 
 #include <dsp56300/memory.hpp>
 #include <span>
@@ -13,5 +14,6 @@ namespace blofeld::vi::dsp {
 [[nodiscard]] ExecutionReport execute(std::span<const dsp56300::Word> boot,
                                       Shi &shi,
                                       DspReset &reset,
-                                      const std::stop_token &stop);
+                                      const std::stop_token &stop,
+                                      const MediaImage *image = nullptr);
 }

@@ -13,6 +13,9 @@ endpoint-buffer windows, and independent
 MCU/DSP execution threads and DSP56371 PLL register/nominal ratio handling.
 Low/high X/Y RAM uses direct native grants with initialization tracking and
 OMR-selected program-bank sharing. Optional data-ROM views borrow local contents.
+DSP GPIO and decoded page-read transactions use the profile's validated media
+image directly. Media program/erase, ID/status and automatic page continuation
+are not yet implemented.
 The SHI receive FIFO connects MCU port writes to DSP program loading; MCU U0
 assertions retire the previous DSP Core before peripheral reset and ROM restart.
 `blofeld-headless` loads local images and executes their native JIT paths;
@@ -55,12 +58,14 @@ one field and quoted path per line; paths are relative to the profile file:
 ```text
 boot-rom "boot.bin"
 device-state "device.bfnvm"
+nand "samples.bfnand"
 ```
 
 The DSP boot input contains 192 big-endian 24-bit words. The MCU image uses
 the versioned `.bfnvm` format with explicit known-byte and erase metadata.
 Images must already exist; startup does not provision or modify files.
-Optional `firmware`, `nand` and `display` paths are parsed but not yet connected
+The media image uses the checksummed `.bfnand` format with explicit known bits.
+Optional `firmware` and `display` paths are parsed but not yet connected
 to execution. Startup currently exits unsuccessfully because the instrument
 is incomplete; successful execution of a short program is not instrument readiness.
 

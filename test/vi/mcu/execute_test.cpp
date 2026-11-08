@@ -55,8 +55,12 @@ void native_boot_word() {
                         std::array<cpu12::Byte, 2>{1, 4}));
   }
   store(3, 1);
-  constexpr auto finish =
-      isa::program(isa::opcode<isa::Opcode::ldaa_extended>(), std::array<cpu12::Byte, 2>{0x30, 0});
+  constexpr cpu12::Byte application_outputs = 0xe1;
+  store(application_outputs, 3);
+  constexpr auto finish = isa::program(isa::opcode<isa::Opcode::ldaa_direct>(),
+                                       std::array<cpu12::Byte, 1>{1},
+                                       isa::opcode<isa::Opcode::staa_extended>(),
+                                       std::array<cpu12::Byte, 2>{0x30, 0});
   append(finish);
   auto image = std::make_unique<blofeld::vi::FlashImage>();
   image->known.fill(1);
@@ -67,8 +71,10 @@ void native_boot_word() {
   blofeld::vi::DspReset reset;
   require(shi.write({.address = control, .value = fifo24}), "Configure actual SPI receive");
   const auto report = blofeld::vi::mcu::execute(*image, shi, reset, {});
-  require(report.failure && report.failure->address == marker,
-          "Native BSET/BCLR completes without requiring a reply from passive controls");
+  constexpr cpu12::Byte released_readback = 0x17;
+  require(report.failure && report.failure->address == marker &&
+              report.failure->value == released_readback,
+          "Native transfers preserve full-byte RMW; released SPI inputs read their real pull-ups");
   std::uint32_t word = 0;
   require(shi.read(receive, word) && word == datum && !shi.read(receive, word),
           "Full-byte RMW preserves data/select bits and delivers exactly one original word");
