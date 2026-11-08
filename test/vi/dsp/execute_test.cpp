@@ -494,101 +494,153 @@ void native_interrupt_priorities() {
   }
 }
 
-void native_media_read(const std::filesystem::path &root, const bool erasing) {
-  namespace isa = dsp56300::isa;
-  constexpr dsp56300::Word immediate = 0x34;
-  constexpr dsp56300::Word absolute = 0x30;
-  constexpr dsp56300::Word load = 0x8000;
-  constexpr dsp56300::Word c_data = 0xffffbd;
-  constexpr dsp56300::Word c_direction = 0xffffbe;
-  constexpr dsp56300::Word c_function = 0xffffbf;
-  constexpr dsp56300::Word f_data = 0xfffff5;
-  constexpr dsp56300::Word f_direction = 0xfffff6;
-  constexpr dsp56300::Word f_function = 0xfffff7;
-  constexpr dsp56300::Word sink = 0xc000;
-  std::vector<dsp56300::Word> program;
-  const auto put = [&](const blofeld::vi::dsp::Ports::Write access) {
+enum class MediaCase : std::uint8_t { read, erase, program };
+
+struct MediaGuest {
+  using Word = dsp56300::Word;
+  using Write = blofeld::vi::dsp::Ports::Write;
+  static constexpr Word c_data = 0xffffbd, f_data = 0xfffff5, absolute = 0x30;
+  static constexpr Word sink = 0xc000;
+  static constexpr Word f_function = 0xfffff7, f_direction = 0xfffff6;
+  static constexpr std::array<Word, 3> payload{0xa5, 0x36, 0};
+  std::vector<Word> code;
+
+  MediaGuest() {
+    constexpr std::array setup{
+        Write{.address = 0xffffbe, .value = 0xf00},
+        Write{.address = 0xffffbf, .value = 0xff},
+        Write{.space = dsp56300::Space::y, .address = 0xfffff7, .value = 0x300},
+        Write{.space = dsp56300::Space::y, .address = 0xfffff6, .value = 0x4ff}};
+    for (const auto access : setup) { put(access); }
+  }
+
+  void put(const Write access) {
+    namespace isa = dsp56300::isa;
+    constexpr Word immediate = 0x34;
+    constexpr Word load = 0x8000;
     const auto store = access.space == dsp56300::Space::x ? isa::Opcode::move_x_effective
                                                           : isa::Opcode::move_y_effective;
-    program.push_back(isa::opcode<isa::Opcode::move_x_effective>()[0] | (immediate << 8U) | load);
-    program.push_back(access.value);
-    program.push_back(static_cast<dsp56300::Word>(store) | (absolute << 8U));
-    program.push_back(access.address);
-  };
-  const auto control = [&](const dsp56300::Word value) {
-    put({.space = dsp56300::Space::x, .address = c_data, .value = value});
-  };
-  constexpr dsp56300::Word directions = 0xf00;
-  constexpr dsp56300::Word inputs = 0xff;
-  constexpr dsp56300::Word word_output = 0x4ff;
-  constexpr dsp56300::Word upper_inputs = 0x300;
-  put({.space = dsp56300::Space::x, .address = c_direction, .value = directions});
-  put({.space = dsp56300::Space::x, .address = c_function, .value = inputs});
-  put({.space = dsp56300::Space::y, .address = f_function, .value = upper_inputs});
-  put({.space = dsp56300::Space::y, .address = f_direction, .value = word_output});
-  constexpr dsp56300::Word erase_setup = 0x60;
-  put({.space = dsp56300::Space::y, .address = f_data, .value = erasing ? erase_setup : 0});
-  constexpr dsp56300::Word command_high = 0x700;
-  constexpr dsp56300::Word command_low = 0x500;
-  constexpr dsp56300::Word address_low = 0x900;
-  constexpr dsp56300::Word address_high = 0xb00;
-  control(command_high);
-  control(command_low);
-  control(command_high);
-  constexpr std::array<dsp56300::Word, 4> read_address{1, 0, 0, 0};
-  constexpr std::array<dsp56300::Word, 3> erase_address{31, 0, 0};
-  const auto addresses = erasing ? std::span<const dsp56300::Word>(erase_address)
-                                 : std::span<const dsp56300::Word>(read_address);
-  for (const auto byte : addresses) {
-    control(address_low);
-    put({.space = dsp56300::Space::y, .address = f_data, .value = byte});
-    control(address_high);
+    const std::array words{isa::opcode<isa::Opcode::move_x_effective>()[0] | (immediate << 8U) |
+                               load,
+                           access.value,
+                           static_cast<Word>(store) | (absolute << 8U),
+                           access.address};
+    code.insert(code.end(), words.begin(), words.end());
   }
-  constexpr dsp56300::Word active_read = 0x200;
-  constexpr dsp56300::Word receive_inputs = 0x3ff;
-  constexpr dsp56300::Word single_output = 0x400;
-  if (erasing) {
-    constexpr std::array<dsp56300::Word, 2> commands{0xd0, 0x70};
-    for (const auto byte : commands) {
-      control(command_high);
-      put({.space = dsp56300::Space::y, .address = f_data, .value = byte});
-      control(command_low);
-      control(command_high);
-    }
-    control(upper_inputs);
-    control(active_read); // Hold a busy status sample through the actual completion.
-    put({.space = dsp56300::Space::y, .address = f_function, .value = receive_inputs});
-    put({.space = dsp56300::Space::y, .address = f_direction, .value = single_output});
+
+  void control(const Word value) { put({.address = c_data, .value = value}); }
+
+  void command(const Word value) {
+    constexpr Word high = 0x700;
+    constexpr Word low = 0x500;
+    control(high);
+    put({.space = dsp56300::Space::y, .address = f_data, .value = value});
+    control(low);
+    control(high);
   }
-  constexpr dsp56300::Word boot = 0xff0000;
-  constexpr dsp56300::Word ready_port = 0x0b;
-  constexpr dsp56300::Word ready_bit = 12;
-  const auto wait_ready = boot + static_cast<dsp56300::Word>(program.size());
-  program.push_back(isa::opcode<isa::Opcode::jclr_port_low>()[0] | (ready_port << 8U) | ready_bit);
-  program.push_back(wait_ready);
-  if (!erasing) {
-    control(upper_inputs);
+
+  void address(const Word value) {
+    constexpr Word low = 0x900;
+    constexpr Word high = 0xb00;
+    control(low);
+    put({.space = dsp56300::Space::y, .address = f_data, .value = value});
+    control(high);
+  }
+
+  void data(const Word value) {
+    constexpr Word low = 0x100;
+    constexpr Word high = 0x300;
+    control(low);
+    put({.space = dsp56300::Space::y, .address = f_data, .value = value});
+    control(high);
+  }
+
+  void input() {
+    constexpr Word idle = 0x300;
+    constexpr Word active_read = 0x200;
+    control(idle);
     control(active_read);
+    constexpr Word receive_inputs = 0x3ff;
+    constexpr Word single_output = 0x400;
     put({.space = dsp56300::Space::y, .address = f_function, .value = receive_inputs});
     put({.space = dsp56300::Space::y, .address = f_direction, .value = single_output});
   }
-  constexpr dsp56300::Word y_space = 0x10000;
-  constexpr dsp56300::Word x0 = 4;
-  constexpr dsp56300::Word data_port = 0x35;
-  program.push_back(isa::opcode<isa::Opcode::movep_register_high>()[0] | y_space | (x0 << 8U) |
-                    data_port);
-  program.push_back(isa::opcode<isa::Opcode::movem_effective>()[0] | (absolute << 8U) | x0);
-  program.push_back(sink);
+
+  void ready() {
+    namespace isa = dsp56300::isa;
+    constexpr Word boot = 0xff0000;
+    constexpr Word ready_port = 0x0b;
+    constexpr Word ready_bit = 12;
+    const auto target = boot + static_cast<Word>(code.size());
+    code.push_back(isa::opcode<isa::Opcode::jclr_port_low>()[0] | (ready_port << 8U) | ready_bit);
+    code.push_back(target);
+  }
+
+  void observe() {
+    namespace isa = dsp56300::isa;
+    constexpr Word y_space = 0x10000;
+    constexpr Word x0 = 4;
+    constexpr Word data_port = 0x35;
+    code.push_back(isa::opcode<isa::Opcode::movep_register_high>()[0] | y_space | (x0 << 8U) |
+                   data_port);
+    code.push_back(isa::opcode<isa::Opcode::movem_effective>()[0] | (absolute << 8U) | x0);
+    code.push_back(sink);
+  }
+
+  void transaction(const MediaCase operation) {
+    const bool erasing = operation == MediaCase::erase;
+    const bool programming = operation == MediaCase::program;
+    const bool writing = erasing || programming;
+    constexpr dsp56300::Word erase_command = 0x60;
+    constexpr dsp56300::Word program_command = 0x80;
+    if (programming) {
+      command(0); // Explicitly select the first main-array half.
+      command(program_command);
+    } else {
+      command(erasing ? erase_command : 0);
+    }
+    constexpr std::array<dsp56300::Word, 4> read_address{1, 0, 0, 0};
+    constexpr std::array<dsp56300::Word, 4> program_address{0, 0, 0, 0};
+    constexpr std::array<dsp56300::Word, 3> erase_address{31, 0, 0};
+    const auto page_address =
+        programming ? std::span<const Word>(program_address) : std::span<const Word>(read_address);
+    const auto addresses = erasing ? std::span<const Word>(erase_address) : page_address;
+    for (const auto byte : addresses) { address(byte); }
+    if (programming) {
+      for (const auto byte : payload) { data(byte); }
+    }
+    if (writing) {
+      constexpr dsp56300::Word confirm_erase = 0xd0;
+      constexpr dsp56300::Word confirm_program = 0x10;
+      constexpr dsp56300::Word status = 0x70;
+      command(erasing ? confirm_erase : confirm_program);
+      command(status);
+      input(); // Hold a busy status sample through actual completion.
+    }
+    ready();
+    if (!writing) { input(); }
+    observe();
+  }
+};
+
+void native_media(const std::filesystem::path &root, const MediaCase operation) {
+  const bool erasing = operation == MediaCase::erase;
+  const bool programming = operation == MediaCase::program;
+  const bool writing = erasing || programming;
+  MediaGuest guest;
+  guest.transaction(operation);
   blofeld::vi::MediaImage image(
-      blofeld::host::read_file(root / (erasing ? "media-writable.bfnand" : "media.bfnand"),
+      blofeld::host::read_file(root / (writing ? "media-writable.bfnand" : "media.bfnand"),
                                blofeld::vi::MediaImage::max_bytes));
+  if (programming) { require(image.erase(0) == true, "Prepare a qualified erased program target"); }
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {}, &image);
+  const auto report = blofeld::vi::dsp::execute(guest.code, shi, reset, {}, &image);
   constexpr dsp56300::Word complete_status = 0xc0;
-  const auto expected = erasing ? complete_status : 1U;
+  const auto expected = writing ? complete_status : 1U;
   const bool matched = report.failure && report.failure->space == 'P' &&
-                       report.failure->address == sink && report.failure->value == expected;
+                       report.failure->address == MediaGuest::sink &&
+                       report.failure->value == expected;
   if (!matched && report.failure) {
     const auto &failure = *report.failure;
     std::cerr << "pc=" << failure.pc << " address=" << failure.address << " value=" << failure.value
@@ -598,9 +650,13 @@ void native_media_read(const std::filesystem::path &root, const bool erasing) {
   constexpr std::uint8_t erased_byte = 0xff;
   require(!erasing || (image.read({}, byte) && byte == erased_byte),
           "The native erase operation changes the real selected image");
-  require(matched,
-          "Native polling observes actual media data/status completion through Port F, including "
-          "held status refresh without another read edge");
+  if (programming) {
+    for (unsigned index = 0; index < MediaGuest::payload.size(); ++index) {
+      require(image.read({.column = index}, byte) && byte == MediaGuest::payload[index],
+              "Native data/confirm writes program every actual payload byte");
+    }
+  }
+  require(matched, "Native media operations refresh held status/data at actual completion");
 }
 
 void consecutive_receive_registers() {
@@ -689,8 +745,9 @@ void reset_running_core() {
 
 int main(const int argc, char **argv) try {
   require(argc == 3, "Supply artifact and fixture directories");
-  native_media_read(argv[2], false);
-  native_media_read(argv[2], true);
+  native_media(argv[2], MediaCase::read);
+  native_media(argv[2], MediaCase::erase);
+  native_media(argv[2], MediaCase::program);
   native_clock_register();
   native_transmit_registers();
   native_interrupt_priorities();

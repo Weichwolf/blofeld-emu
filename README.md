@@ -36,7 +36,11 @@ PLL configuration converts nominal reference periods to DSP cycles. Confirmed bl
 update the actual image at completion, respecting stored validity/protection. Status reads
 retain busy/pass/fail state; interrupted erase contents become unknown and can be recovered
 by another complete erase. Serialization refreshes the encoded image checksum on demand.
-Media program, ID and automatic page continuation remain incomplete. The application
+Page program stages bounded actual bytes, preserves existing zero bits and tracks
+independent main/spare program allowances. Area pointers follow 00h/01h/50h semantics;
+interrupted writes retain known zeros and mark possibly changed bits unknown.
+Unknown protection/history or exceeded qualified allowances stop execution.
+Identification and automatic page continuation remain incomplete. The application
 does not yet persist changed images to disk.
 The SHI receive FIFO connects MCU port writes to DSP program loading; HTX and
 IOSR retain actual full-duplex words, with phase-dependent loading and underrun handling.

@@ -115,6 +115,17 @@ for record in write_blocks:
     writable += struct.pack("<HBB", *record)
 writable += media[36:]
 (root / "media-writable.bfnand").write_bytes(writable + struct.pack("<I", zlib.crc32(writable)))
+# A page with known program history but one unobserved byte exercises knowledge propagation.
+programmable = bytearray(writable)
+page_offset = 32 + 4 * len(write_blocks)
+programmable[page_offset + 4:page_offset + 6] = bytes((0, 0))
+programmable[page_offset + 8:page_offset + 8 + 528 * 2] = bytes((255, 255)) * 528
+programmable[page_offset + 8 + 17 * 2:page_offset + 10 + 17 * 2] = bytes((0, 0))
+# An erase-protected but program-writable page checks the independent protection bits.
+protected_page = struct.pack("<IBBH", 64, 0, 0, 0) + bytes((255, 255)) * 528
+programmable[-1064:-1064] = protected_page
+struct.pack_into("<I", programmable, 16, 5)
+(root / "media-programmable.bfnand").write_bytes(programmable + struct.pack("<I", zlib.crc32(programmable)))
 corrupt = bytearray(media)
 corrupt[36 + 8] = 1
 corrupt[36 + 9] = 0

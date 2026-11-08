@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <span>
 
 namespace blofeld::vi {
 namespace {
@@ -13,22 +14,31 @@ constexpr std::uint32_t command_latch = 0x400, address_latch = 0x800;
 constexpr std::uint32_t strobes = read_strobe | write_strobe;
 constexpr std::uint8_t reset_command = 0xff, spare_command = 0x50;
 constexpr std::uint8_t erase_command = 0x60, confirm_erase = 0xd0, status_command = 0x70;
+constexpr std::uint8_t program_command = 0x80, confirm_program = 0x10;
 constexpr unsigned main_half = 256, spare_start = 512;
-// Nominal VM timings: read/reset as before, erase rounded up from 2 ms at 11.2896 MHz.
-constexpr unsigned read_ticks = 64, reset_ticks = 32, erase_ticks = 22580;
+// Nominal VM timings: erase/program rounded up from 2 ms/200 us at 11.2896 MHz.
+constexpr unsigned read_ticks = 64, reset_ticks = 32, erase_ticks = 22580, program_ticks = 2258;
 constexpr std::uint8_t writable_status = 0x80, ready_status = 0x40;
 }
 
-void MemoryController::reset() noexcept {
-  if (operation_ == Operation::erase && image_ != nullptr) {
+void MemoryController::interrupt_write() noexcept {
+  if (image_ == nullptr) { return; }
+  if (operation_ == Operation::erase) {
     image_->interrupt_erase(page_ / MediaImage::block_pages);
+  } else if (operation_ == Operation::program) {
+    image_->interrupt_program({.page = page_, .column = column_},
+                              std::span(program_).first(program_size_));
   }
+}
+
+void MemoryController::reset() noexcept {
+  interrupt_write();
   error_ = nullptr;
   phase_ = Phase::idle;
   operation_ = Operation::none;
   controls_ = strobes;
-  page_ = column_ = 0;
-  addresses_ = 0;
+  page_ = column_ = pointer_ = 0;
+  addresses_ = program_size_ = 0;
   epoch_ = 0;
   status_mode_ = failed_ = false;
   output_.reset();
@@ -42,6 +52,7 @@ bool MemoryController::fail(const char *message) noexcept {
 
 unsigned MemoryController::reference_ticks() const noexcept {
   if (operation_ == Operation::erase) { return erase_ticks; }
+  if (operation_ == Operation::program) { return program_ticks; }
   return operation_ == Operation::reset ? reset_ticks : read_ticks;
 }
 
@@ -58,9 +69,8 @@ std::optional<std::uint8_t> MemoryController::output() const noexcept {
 bool MemoryController::command(const std::uint8_t value) noexcept {
   output_.reset();
   if (value == reset_command) {
-    if (operation_ == Operation::erase && image_ != nullptr) {
-      image_->interrupt_erase(page_ / MediaImage::block_pages);
-    }
+    interrupt_write();
+    if (pointer_ == main_half) { pointer_ = 0; }
     buffer_ = {};
     status_mode_ = failed_ = false;
     ++epoch_;
@@ -76,31 +86,51 @@ bool MemoryController::command(const std::uint8_t value) noexcept {
   if (pending()) { return fail("Media command issued while an operation is busy"); }
   status_mode_ = false;
   buffer_ = {};
-  if (value == confirm_erase) {
-    if (phase_ != Phase::erase_confirm) { return fail("Media erase confirm has no complete row"); }
-    operation_ = Operation::erase;
-    failed_ = false;
-    ++epoch_;
-    return true;
+  if (value == confirm_erase) { return confirm(Operation::erase); }
+  if (value == confirm_program) { return confirm(Operation::program); }
+  if (value == program_command) {
+    column_ = pointer_;
+    phase_ = Phase::program_address;
+  } else if (value == erase_command) {
+    column_ = 0;
+    phase_ = Phase::erase_address;
+  } else {
+    if (value != 0 && value != 1 && value != spare_command) {
+      return fail("Media command is not implemented");
+    }
+    pointer_ = value == 1 ? main_half : 0;
+    if (value == spare_command) { pointer_ = spare_start; }
+    column_ = pointer_;
+    phase_ = Phase::address;
   }
-  if (value != 0 && value != 1 && value != spare_command && value != erase_command) {
-    return fail("Media command is not implemented");
-  }
-  column_ = value == 1 ? main_half : 0;
-  if (value == spare_command) { column_ = spare_start; }
   page_ = 0;
-  addresses_ = 0;
-  phase_ = value == erase_command ? Phase::erase_address : Phase::address;
+  addresses_ = program_size_ = 0;
+  return true;
+}
+
+bool MemoryController::confirm(const Operation operation) noexcept {
+  if (operation == Operation::erase && phase_ != Phase::erase_confirm) {
+    return fail("Media erase confirm has no complete row");
+  }
+  if (operation == Operation::program && (phase_ != Phase::program_data || program_size_ == 0)) {
+    return fail("Media program confirm has no complete address and data");
+  }
+  if (pointer_ == main_half) { pointer_ = 0; }
+  operation_ = operation;
+  failed_ = false;
+  ++epoch_;
   return true;
 }
 
 bool MemoryController::address(const std::uint8_t value) noexcept {
   const auto erasing = phase_ == Phase::erase_address;
-  if ((!erasing && phase_ != Phase::address) || addresses_ >= (erasing ? 3U : 4U)) {
+  const auto programming = phase_ == Phase::program_address;
+  if ((!erasing && !programming && phase_ != Phase::address) || addresses_ >= (erasing ? 3U : 4U)) {
     return fail("Unexpected media address byte");
   }
   if (!erasing && addresses_ == 0) {
-    column_ += value;
+    constexpr unsigned spare_mask = 15;
+    column_ += pointer_ == spare_start ? value & spare_mask : value;
     if (column_ >= MediaImage::page_bytes) { return fail("Media column exceeds page"); }
   } else {
     page_ |= std::uint32_t{value} << ((addresses_ - (erasing ? 0U : 1U)) * 8U);
@@ -110,7 +140,10 @@ bool MemoryController::address(const std::uint8_t value) noexcept {
     if (page_ >= MediaImage::pages) { return fail("Media row exceeds image geometry"); }
     if (erasing) {
       phase_ = Phase::erase_confirm;
+    } else if (programming) {
+      phase_ = Phase::program_data;
     } else {
+      if (pointer_ == main_half) { pointer_ = 0; }
       operation_ = Operation::read;
       ++epoch_;
     }
@@ -124,7 +157,14 @@ bool MemoryController::latch(const Write access) noexcept {
   }
   if ((access.controls & command_latch) != 0) { return command(access.value); }
   if ((access.controls & address_latch) != 0) { return address(access.value); }
-  return fail("Media program data is not implemented");
+  if (pending() || status_mode_ || phase_ != Phase::program_data) {
+    return fail("Media program data has no completed address phase");
+  }
+  if (program_size_ >= MediaImage::page_bytes - column_) {
+    return fail("Media program data exceeds page");
+  }
+  program_[program_size_++] = access.value;
+  return true;
 }
 
 bool MemoryController::read_output() noexcept {
@@ -149,7 +189,7 @@ bool MemoryController::write(const Write access) noexcept {
   if ((controls & strobes) == 0) { controls |= strobes; }
   const auto previous = controls_;
   if ((previous & write_strobe) == 0 && (controls & write_strobe) != 0) {
-    if (!access.known) { return fail("Unknown media command/address byte"); }
+    if (!access.known) { return fail("Unknown media command/address/data byte"); }
     if (!latch({.controls = controls, .value = access.value, .known = access.known})) {
       return false;
     }
@@ -173,9 +213,12 @@ bool MemoryController::complete() {
     buffer_ = image_->page(page_);
     if (buffer_.empty()) { return fail("Unknown media image page"); }
     phase_ = Phase::read;
-  } else if (operation_ == Operation::erase) {
-    const auto result = image_->erase(page_ / MediaImage::block_pages);
-    if (!result) { return fail("Unknown media block validity or erase protection"); }
+  } else if (operation_ == Operation::erase || operation_ == Operation::program) {
+    const auto result = operation_ == Operation::erase
+                            ? image_->erase(page_ / MediaImage::block_pages)
+                            : image_->program({.page = page_, .column = column_},
+                                              std::span(program_).first(program_size_));
+    if (!result) { return fail("Unqualified media protection, validity or program history/limit"); }
     failed_ = !*result;
     phase_ = Phase::idle;
   } else {

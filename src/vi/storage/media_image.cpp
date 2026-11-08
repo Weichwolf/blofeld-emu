@@ -18,7 +18,8 @@ namespace blofeld::vi {
 namespace {
 constexpr std::array<std::uint8_t, 8> magic{'B', 'L', 'F', 'N', 'A', 'N', 'D', '\n'};
 constexpr std::size_t header_bytes = 32, page_count_offset = 16;
-constexpr unsigned block_valid = 1, program_protected = 2, erase_protected = 4;
+constexpr unsigned block_valid = 1, program_protected = 2;
+constexpr unsigned main_bytes = 512, main_program_limit = 1, spare_program_limit = 2;
 constexpr std::size_t block_count_offset = 20, page_size_offset = 24, reserved_offset = 28;
 constexpr std::uint8_t all_bits = 0xff;
 constexpr auto missing = std::numeric_limits<std::uint32_t>::max();
@@ -110,7 +111,7 @@ std::span<const std::uint8_t> MediaImage::page(const std::uint32_t index) const 
   return std::span(bytes_).subspan(offsets_[index], std::size_t{page_bytes} * 2);
 }
 
-bool MediaImage::read(const Read access, std::uint8_t &value) const noexcept {
+bool MediaImage::read(const Location access, std::uint8_t &value) const noexcept {
   const auto row = page(access.page);
   if (access.column >= page_bytes || row.empty()) { return false; }
   const auto at = std::size_t{access.column} * 2;
@@ -118,14 +119,24 @@ bool MediaImage::read(const Read access, std::uint8_t &value) const noexcept {
   return row[at + 1] == all_bits;
 }
 
-std::optional<bool> MediaImage::erase(const std::uint32_t block) {
+std::optional<bool> MediaImage::permission(const std::uint32_t block,
+                                           const Protection protection) const noexcept {
   if (block >= block_offsets_.size() || block_offsets_[block] == missing) { return {}; }
+  const auto mask = std::to_underlying(protection);
   const auto metadata = block_offsets_[block];
   const auto known = bytes_[metadata + 2];
   const auto flags = bytes_[metadata + 3];
   if ((known & block_valid) != 0 && (flags & block_valid) == 0) { return false; }
-  if ((known & erase_protected) != 0 && (flags & erase_protected) != 0) { return false; }
-  if ((known & (block_valid | erase_protected)) != (block_valid | erase_protected)) { return {}; }
+  if ((known & mask) != 0 && (flags & mask) != 0) { return false; }
+  const auto required = block_valid | mask;
+  if ((known & required) != required) { return {}; }
+  return true;
+}
+
+std::optional<bool> MediaImage::erase(const std::uint32_t block) {
+  const auto allowed = permission(block, Protection::erase);
+  if (allowed != true) { return allowed; }
+  const auto metadata = block_offsets_[block];
   const auto first = block * block_pages;
   unsigned absent = 0;
   for (unsigned page = first; page < first + block_pages; ++page) {
@@ -161,16 +172,11 @@ std::optional<bool> MediaImage::erase(const std::uint32_t block) {
 }
 
 void MediaImage::interrupt_erase(const std::uint32_t block) noexcept {
-  if (bytes_.empty() || block >= block_offsets_.size()) { return; }
-  const auto metadata = block_offsets_[block];
-  if (metadata != missing) {
-    const auto known = bytes_[metadata + 2];
-    const auto flags = bytes_[metadata + 3];
-    if (((known & block_valid) != 0 && (flags & block_valid) == 0) ||
-        ((known & erase_protected) != 0 && (flags & erase_protected) != 0)) {
-      return;
-    }
+  if (bytes_.empty() || block >= block_offsets_.size() ||
+      permission(block, Protection::erase) == false) {
+    return;
   }
+  const auto metadata = block_offsets_[block];
   const auto first = block * block_pages;
   for (unsigned page = first; page < first + block_pages; ++page) {
     if (offsets_[page] == missing) { continue; }
@@ -183,6 +189,52 @@ void MediaImage::interrupt_erase(const std::uint32_t block) noexcept {
     bytes_[metadata + 2] &= static_cast<std::uint8_t>(~program_protected);
     bytes_[metadata + 3] &= static_cast<std::uint8_t>(~program_protected);
   }
+  checksum_dirty_ = true;
+}
+
+std::optional<bool> MediaImage::program(const Location target,
+                                        const std::span<const std::uint8_t> data) noexcept {
+  if (target.page >= pages || target.column >= page_bytes || data.empty() ||
+      data.size() > page_bytes - target.column) {
+    return {};
+  }
+  const auto allowed = permission(target.page / block_pages, Protection::program);
+  if (allowed != true) { return allowed; }
+  if (offsets_[target.page] == missing) { return {}; }
+  const auto at = offsets_[target.page];
+  const bool main = target.column < main_bytes;
+  const bool spare = target.column + data.size() > main_bytes;
+  if ((main && bytes_[at - 4] >= main_program_limit) ||
+      (spare && bytes_[at - 3] >= spare_program_limit)) {
+    return {};
+  }
+  for (std::size_t index = 0; index < data.size(); ++index) {
+    const auto cell = at + ((target.column + index) * 2);
+    bytes_[cell] &= data[index];
+    bytes_[cell + 1] |= static_cast<std::uint8_t>(~data[index]);
+  }
+  if (main) { ++bytes_[at - 4]; }
+  if (spare) { ++bytes_[at - 3]; }
+  checksum_dirty_ = true;
+  return true;
+}
+
+void MediaImage::interrupt_program(const Location target,
+                                   const std::span<const std::uint8_t> data) noexcept {
+  if (target.page >= pages || target.column >= page_bytes || data.empty() ||
+      data.size() > page_bytes - target.column || offsets_[target.page] == missing ||
+      permission(target.page / block_pages, Protection::program) == false) {
+    return;
+  }
+  const auto at = offsets_[target.page];
+  for (std::size_t index = 0; index < data.size(); ++index) {
+    const auto cell = at + ((target.column + index) * 2);
+    // Requested ones and already-known zeros survive. Other requested zero bits
+    // may or may not have completed; do not restore their pre-program value.
+    bytes_[cell + 1] &= static_cast<std::uint8_t>(data[index] | ~bytes_[cell]);
+    bytes_[cell] &= bytes_[cell + 1];
+  }
+  bytes_[at - 4] = bytes_[at - 3] = all_bits;
   checksum_dirty_ = true;
 }
 

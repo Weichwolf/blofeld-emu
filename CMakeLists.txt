@@ -97,6 +97,7 @@ if(BUILD_TESTING)
   set(blofeld_unit_inputs "${CMAKE_CURRENT_BINARY_DIR}/generated/unit-inputs")
   add_custom_command(OUTPUT "${blofeld_unit_inputs}/zip.done" "${blofeld_unit_inputs}/firmware.done"
     BYPRODUCTS "${blofeld_unit_inputs}/media-writable.bfnand"
+      "${blofeld_unit_inputs}/media-programmable.bfnand"
     COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/test/host/archive/fixtures.py"
       "${blofeld_unit_inputs}"
     COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/test/vi/storage/fixtures.py"
