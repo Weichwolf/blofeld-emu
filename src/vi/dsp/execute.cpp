@@ -2,6 +2,7 @@
 #include "dsp/execute.hpp"
 
 #include "execution.hpp"
+#include "io/dsp_reset.hpp"
 #include "io/shi.hpp"
 
 #include <array>
@@ -24,10 +25,22 @@ constexpr std::size_t program_words = 0x1000;
 
 class Io final : public dsp56300::Io {
 public:
-  Io(const std::span<const dsp56300::Word> boot, Shi &shi, const std::stop_token &stop)
-      : boot_(boot), shi_(shi), stop_(stop) {}
+  Io(const std::span<const dsp56300::Word> boot,
+     Shi &shi,
+     DspReset &reset,
+     const std::stop_token &stop)
+      : boot_(boot), shi_(shi), reset_(reset), stop_(stop) {}
 
-  void bind(dsp56300::Core &core) noexcept { core_ = &core; }
+  void bind(dsp56300::Core &core, const std::uint64_t epoch) noexcept {
+    core_ = &core;
+    epoch_ = epoch;
+    reset_interrupted_ = false;
+    once_data_.reset();
+  }
+
+  void unbind() noexcept { core_ = nullptr; }
+
+  [[nodiscard]] bool reset_interrupted() const noexcept { return reset_interrupted_; }
 
   [[nodiscard]] std::optional<dsp56300::Word>
   inspect_program(const dsp56300::Word address) const noexcept override {
@@ -40,10 +53,7 @@ public:
             const dsp56300::Word address,
             dsp56300::Word /*pc*/,
             dsp56300::Word &value) noexcept override {
-    if (stop_.stop_requested()) {
-      core_->request_yield();
-      return false;
-    }
+    if (interrupted()) { return false; }
     if (space == dsp56300::Space::x) { return shi_.read(address, value); }
     const auto word = space == dsp56300::Space::program ? inspect_program(address) : std::nullopt;
     if (!word) { return false; }
@@ -55,6 +65,7 @@ public:
              const dsp56300::Word address,
              dsp56300::Word /*pc*/,
              const dsp56300::Word value) noexcept override {
+    if (interrupted()) { return false; }
     if (space == dsp56300::Space::program && address < program_.size()) {
       // DSP56371UM 3.1: reset mapping provides 4K words of program RAM.
       // Core owns translation invalidation for an actual program write.
@@ -77,10 +88,7 @@ public:
            const dsp56300::BitAction action,
            bool &previous) noexcept override {
     constexpr unsigned word_bits = 24;
-    if (stop_.stop_requested()) {
-      core_->request_yield();
-      return false;
-    }
+    if (interrupted()) { return false; }
     dsp56300::Word value = 0;
     if (space != dsp56300::Space::x || bit >= word_bits || !shi_.read(address, value)) {
       return false;
@@ -98,8 +106,22 @@ public:
   }
 
 private:
+  bool interrupted() noexcept {
+    if (stop_.stop_requested()) {
+      core_->request_yield();
+      return true;
+    }
+    if (!reset_.pending(epoch_)) { return false; }
+    reset_interrupted_ = true;
+    core_->request_yield();
+    return true;
+  }
+
   std::span<const dsp56300::Word> boot_;
   Shi &shi_;
+  DspReset &reset_;
+  std::uint64_t epoch_ = 0;
+  bool reset_interrupted_ = false;
   const std::stop_token &stop_;
   dsp56300::Core *core_ = nullptr;
   std::optional<dsp56300::Word> once_data_;
@@ -123,27 +145,33 @@ Access operation(const dsp56300::FaultKind fault) {
     default: return Access::execute;
   }
 }
-}
 
-ExecutionReport
-execute(const std::span<const dsp56300::Word> boot, Shi &shi, const std::stop_token &stop) {
-  if (boot.empty() || boot.size() > dsp56300::address_words - boot_first) {
-    throw std::invalid_argument("DSP boot ROM has invalid bounds");
-  }
-  Io io(boot, shi, stop);
+bool run_instance(Io &io,
+                  DspReset &reset,
+                  const std::uint64_t epoch,
+                  const std::stop_token &stop,
+                  ExecutionReport &report) {
   dsp56300::Core core(dsp56300::Memory::external(), &io);
-  io.bind(core);
+  io.bind(core, epoch);
   core.reset();
   auto registers = core.registers();
   registers.pc = boot_first;
   registers.sr = reset_status;
   registers.omr = reset_mode;
   core.set_registers(registers);
-  ExecutionReport report;
+  bool restart = false;
   while (!stop.stop_requested()) {
+    if (reset.pending(epoch)) {
+      restart = true;
+      break;
+    }
     const auto result = core.run();
     report.instructions += result.retired;
     if (stop.stop_requested()) { break; }
+    if (io.reset_interrupted()) {
+      restart = true;
+      break;
+    }
     if (result.fault.kind != dsp56300::FaultKind::none) {
       const auto &fault = result.fault;
       char space = 'P';
@@ -158,7 +186,41 @@ execute(const std::span<const dsp56300::Word> boot, Shi &shi, const std::stop_to
                                .reason = "DSP access or instruction is not implemented"};
       break;
     }
+    if (reset.pending(epoch)) {
+      restart = true;
+      break;
+    }
     if (result.state != dsp56300::ExecutionState::running) { break; }
+  }
+  io.unbind();
+  return restart;
+}
+}
+
+ExecutionReport execute(const std::span<const dsp56300::Word> boot,
+                        Shi &shi,
+                        DspReset &reset,
+                        const std::stop_token &stop) {
+  if (boot.empty() || boot.size() > dsp56300::address_words - boot_first) {
+    throw std::invalid_argument("DSP boot ROM has invalid bounds");
+  }
+  Io io(boot, shi, reset, stop);
+  ExecutionReport report;
+  std::uint64_t applied = 0;
+  while (!stop.stop_requested()) {
+    const auto state = reset.state();
+    if (state.epoch != applied) {
+      // run_instance has destroyed the previous Core before peripherals change.
+      // Reset retains SRAM; its known bytes remain owned by this execution Io.
+      shi.reset();
+      applied = state.epoch;
+      if (!reset.acknowledge(applied)) { throw std::logic_error("Invalid DSP reset epoch"); }
+    }
+    if (state.held) {
+      if (!reset.wait_release(stop)) { break; }
+      continue;
+    }
+    if (!run_instance(io, reset, applied, stop, report)) { break; }
   }
   return report;
 }

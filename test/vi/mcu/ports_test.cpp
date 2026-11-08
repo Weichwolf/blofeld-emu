@@ -57,6 +57,25 @@ void reset_and_latches() {
   require(read(ports, port_e) == 3, "E0/E1 retain pulled input values after a port write");
 }
 
+void output_state() {
+  blofeld::vi::Shi shi;
+  Ports ports(shi);
+  constexpr std::uint16_t data_u = 0x278;
+  constexpr std::uint16_t direction_u = 0x27a;
+  const auto initial = ports.output(Port::u);
+  require(initial && initial->direction == 0 && (initial->known & 1) != 0 && initial->value == 0,
+          "Port U exposes its reset latch independently of external inputs");
+  ports.input(Port::u, {.mask = 1, .known = 1, .value = 1});
+  write(ports, {.offset = direction_u, .value = 1});
+  const auto driven = ports.output(Port::u);
+  require(driven && driven->direction == 1 && driven->value == 0,
+          "The reset driver is derived from direction and latch, never from input sampling");
+  write(ports, {.offset = data_u, .value = 1});
+  const auto high = ports.output(Port::u);
+  require(high && high->value == 1, "A new output latch is visible to its device binding");
+  require(!ports.output(static_cast<Port>(all_bits)), "An invalid port has no output state");
+}
+
 void pulls_and_inputs() {
   blofeld::vi::Shi shi;
   Ports ports(shi);
@@ -133,6 +152,7 @@ void reserved_and_masked() {
 
 int main() try {
   reset_and_latches();
+  output_state();
   pulls_and_inputs();
   controls_and_routing();
   reserved_and_masked();

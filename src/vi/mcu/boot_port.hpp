@@ -18,6 +18,7 @@ public:
   explicit BootPort(Shi &shi) : shi_(shi) {}
 
   [[nodiscard]] bool write(Write access) noexcept;
+  void reset() noexcept;
 
 private:
   Shi &shi_;

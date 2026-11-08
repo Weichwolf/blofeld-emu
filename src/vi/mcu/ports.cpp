@@ -190,4 +190,12 @@ void Ports::input(const Port port, const Input sample) {
   if (index >= ports_.size()) { throw std::out_of_range("Unknown MCU port"); }
   ports_[index].external = sample;
 }
+
+std::optional<Ports::Output> Ports::output(const Port port) const noexcept {
+  const auto index = static_cast<std::size_t>(port);
+  if (index >= ports_.size()) { return {}; }
+  const auto &value = ports_[index];
+  return Output{.direction = value.direction, .known = value.known, .value = value.latch};
+}
+
 }

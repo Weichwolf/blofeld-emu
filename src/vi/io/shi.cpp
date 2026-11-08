@@ -32,6 +32,16 @@ void Shi::publish() noexcept {
   status_.store(value, std::memory_order_release);
 }
 
+void Shi::reset() noexcept {
+  const std::lock_guard lock(mutex_);
+  head_ = count_ = 0;
+  control_ = errors_ = 0;
+  // DSP56371UM 7.4.5: CPHA resets set; all other HCKR fields reset clear.
+  clock_ = 1;
+  observed_overrun_ = false;
+  publish();
+}
+
 bool Shi::read(const std::uint32_t address, std::uint32_t &value) noexcept {
   if (address == status_address) {
     value = status_.load(std::memory_order_acquire);

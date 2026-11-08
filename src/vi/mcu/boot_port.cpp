@@ -9,6 +9,14 @@ constexpr std::uint8_t select_bit = 2, clock_bit = 4, data_bit = 0x10;
 constexpr std::uint8_t transaction_mask = select_bit | clock_bit | data_bit;
 }
 
+void BootPort::reset() noexcept {
+  previous_ = 0;
+  selected_ = false;
+  mode_.reset();
+  bits_ = 0;
+  word_ = 0;
+}
+
 bool BootPort::write(const Write access) noexcept {
   const auto previous = previous_;
   previous_ = access.value;

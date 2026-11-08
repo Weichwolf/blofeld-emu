@@ -7,6 +7,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 namespace blofeld::vi::mcu {
 enum class Port : std::uint8_t { a, b, e, t, m, j, p, q, r, s, u };
@@ -24,12 +25,19 @@ public:
     std::uint8_t mask = 0, known = 0, value = 0;
   };
 
+  struct Output {
+    std::uint8_t direction = 0, known = 0, value = 0;
+  };
+
   explicit Ports(Shi &shi);
   [[nodiscard]] static bool contains(std::uint16_t offset) noexcept;
   [[nodiscard]] bool
   read(std::uint16_t offset, std::uint8_t &value, std::uint8_t mask = all_bits) const noexcept;
   [[nodiscard]] bool write(Write access) noexcept;
   void input(Port port, Input sample);
+  [[nodiscard]] std::optional<Output> output(Port port) const noexcept;
+
+  void reset_boot_transfer() noexcept { boot_.reset(); }
 
 private:
   static constexpr std::uint8_t all_bits = 0xff;

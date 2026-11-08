@@ -10,8 +10,9 @@ image codec, direct MCU memory mapping, GPIO, Flash reset/protection/error regis
 free-running timer capture/compare, CRG/USB clock selection, periodic interrupts
 and interrupt wakeup, SCI character/register handling, USB configuration and direct
 endpoint-buffer windows, and independent
-MCU/DSP execution threads. The SHI
-receive FIFO connects MCU port writes to DSP program loading.
+MCU/DSP execution threads. The SHI receive FIFO connects MCU port writes to DSP
+program loading; MCU U0 assertions retire the previous DSP Core before peripheral
+reset and ROM restart.
 `blofeld-headless` loads local images and executes their native JIT paths;
 unimplemented device accesses stop with context. Flash program/erase and interrupts,
 watchdog reset/recovery, USB transactions, SHI transmit/interrupt delivery,

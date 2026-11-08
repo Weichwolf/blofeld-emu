@@ -73,6 +73,25 @@ void error_clear() {
           "Reserved HCKR bits read zero");
 }
 
+void peripheral_reset() {
+  blofeld::vi::Shi shi;
+  std::uint32_t value = 0;
+  require(shi.read(clock_register, value) && value == 1, "CPHA resets set");
+  require(shi.write({.address = control, .value = single24}) &&
+              shi.write({.address = clock_register, .value = 0}),
+          "Configure a non-default receive mode");
+  static_cast<void>(shi.select(true));
+  require(shi.receive(1) && shi.receive(2) && (status(shi) & overrun) != 0,
+          "Populate the FIFO and its observed error before reset");
+  shi.reset();
+  require(status(shi) == reset_status && !shi.read(receive, value) &&
+              shi.read(clock_register, value) && value == 1,
+          "Reset restores registers, empties the FIFO and removes observed errors");
+  require(shi.write({.address = control, .value = single24}) && shi.receive(3) &&
+              shi.read(receive, value) && value == 3,
+          "Reset preserves external selection but never preserves stale receive data");
+}
+
 void concurrent_fifo() {
   blofeld::vi::Shi shi;
   require(shi.write({.address = control, .value = fifo24}), "Enable shared FIFO");
@@ -100,6 +119,7 @@ void concurrent_fifo() {
 int main() try {
   fifo();
   error_clear();
+  peripheral_reset();
   concurrent_fifo();
 } catch (const std::exception &error) {
 

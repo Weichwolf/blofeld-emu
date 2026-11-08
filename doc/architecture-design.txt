@@ -33,6 +33,12 @@ Implement device transactions and completion semantics: command/data FIFOs,
 readiness, interrupts, USB endpoints, SCI bytes, storage reads/writes and resets.
 Decode firmware bit-banging locally into transactions. Do not replay electrical
 lines or resolve voltage networks. Never manufacture acknowledgements or data.
+MCU U0 controls the active-low DSP reset. A reset epoch stops the previous native
+instance before the DSP owner resets SHI and acknowledges it. The MCU releases
+reset outside its JIT callback after that acknowledgement; stop cancels either
+wait. Restart creates a fresh Core/JIT and retains SRAM. The U0 assignment is
+inferred from the firmware hold/release sequence and the documented RESET pull-up.
+
 Local ISA timing remains correct; cross-core coupling serves observable instrument
 behavior rather than hypothetical silicon phases. Qualify ordering, IRQ delivery,
 partial transactions and musical latency against firmware and independent tests.

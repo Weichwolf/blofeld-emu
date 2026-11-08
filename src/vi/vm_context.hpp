@@ -2,6 +2,7 @@
 #pragma once
 
 #include "execution.hpp"
+#include "io/dsp_reset.hpp"
 #include "io/shi.hpp"
 #include "storage/flash_image.hpp"
 
@@ -28,6 +29,7 @@ private:
   std::unique_ptr<FlashImage> image_;
   std::vector<dsp56300::Word> boot_;
   Shi shi_;
+  DspReset reset_;
   std::array<ExecutionReport, 2> reports_;
   std::atomic<unsigned> completed_{0};
   std::jthread mcu_;

@@ -2,6 +2,7 @@
 #include "mcu/execute.hpp"
 
 #include "execution.hpp"
+#include "io/dsp_reset.hpp"
 #include "io/mcu_flash.hpp"
 #include "io/sci.hpp"
 #include "io/shi.hpp"
@@ -92,12 +93,23 @@ public:
      const FlashImage &image,
      Devices &devices,
      Shi &shi,
+     DspReset &reset,
      const std::stop_token &stop)
-      : memory_(memory), flash_(image), ports_(shi), devices_(devices), stop_(stop) {}
+      : memory_(memory), flash_(image), ports_(shi), devices_(devices), reset_(reset), stop_(stop) {
+    // DSP56371 RESET has an internal pull-up. U0 drives it low or releases it.
+    ports_.input(Port::u, {.mask = 1, .known = 1, .value = 1});
+  }
 
   void bind(cpu12::Core &core) noexcept { core_ = &core; }
 
   cpu12::Io callbacks() noexcept;
+
+  bool complete_events() {
+    if (!release_reset_) { return true; }
+    if (!reset_.release(stop_)) { return false; }
+    release_reset_ = false;
+    return true;
+  }
 
 private:
   template <typename Action> bool access_devices(const Action &action) noexcept {
@@ -168,6 +180,27 @@ private:
     });
   }
 
+  bool write_port(const Ports::Write access) noexcept {
+    constexpr std::uint16_t data_u = 0x278;
+    constexpr std::uint16_t direction_u = 0x27a;
+    if (!ports_.write(access)) { return false; }
+    if (access.offset != data_u && access.offset != direction_u) { return true; }
+    const auto output = ports_.output(Port::u);
+    if (!output || ((output->direction & 1) != 0 && (output->known & 1) == 0)) { return false; }
+    const bool held = (output->direction & 1) != 0 && (output->value & 1) == 0;
+    const bool previous = reset_.state().held;
+    if (held && !previous) {
+      ports_.reset_boot_transfer();
+      if (!reset_.assert_reset()) { return false; }
+    } else if (!held && previous) {
+      release_reset_ = true;
+      core_->request_yield();
+    }
+    ports_.input(Port::u,
+                 {.mask = 1, .known = 1, .value = held ? std::uint8_t{0} : std::uint8_t{1}});
+    return true;
+  }
+
   bool write(const cpu12::ByteWrite access) noexcept {
     if (interrupted()) { return false; }
     const auto at = memory_.locate(access.address);
@@ -193,7 +226,7 @@ private:
           [&] { return devices_.timer.write({.offset = at.offset, .value = access.value}); });
     }
     if (at.space == Space::registers && Ports::contains(at.offset)) {
-      return ports_.write({.offset = at.offset, .value = access.value});
+      return write_port({.offset = at.offset, .value = access.value});
     }
     if (at.space == Space::registers && at.offset >= mapping_first && at.offset <= mapping_last) {
       if (memory_.write_mapping({.address = at.offset, .value = access.value})) {
@@ -270,6 +303,8 @@ private:
   McuFlash flash_;
   Ports ports_;
   Devices &devices_;
+  DspReset &reset_;
+  bool release_reset_ = false;
   const std::stop_token &stop_;
   cpu12::Core *core_ = nullptr;
 };
@@ -375,22 +410,22 @@ Dispatch prepare(cpu12::Core &core, Devices &devices, ExecutionReport &report) {
 
 }
 
-ExecutionReport execute(FlashImage &image, Shi &shi, const std::stop_token &stop) {
+ExecutionReport execute(FlashImage &image, Shi &shi, DspReset &reset, const std::stop_token &stop) {
   Memory memory(image);
   Devices devices;
   auto grants = regions(memory, devices.usb);
-  Io io(memory, image, devices, shi, stop);
+  Io io(memory, image, devices, shi, reset, stop);
   auto callbacks = io.callbacks();
   cpu12::Core core(cpu12::Memory::mapped(grants), &callbacks);
   io.bind(core);
   ExecutionReport report;
-  const auto reset = core.reset(reset_vector);
-  if (!reset.accepted) {
+  const auto initial = core.reset(reset_vector);
+  if (!initial.accepted) {
     report.failure = Failure{.operation = Access::reset,
-                             .pc = reset.pc,
-                             .address = reset.address,
-                             .value = reset.value,
-                             .code = static_cast<std::uint32_t>(reset.fault),
+                             .pc = initial.pc,
+                             .address = initial.address,
+                             .value = initial.value,
+                             .code = static_cast<std::uint32_t>(initial.fault),
                              .reason = "MCU reset vector access failed"};
     return report;
   }
@@ -415,6 +450,7 @@ ExecutionReport execute(FlashImage &image, Shi &shi, const std::stop_token &stop
                                              : "MCU access or instruction is not implemented"};
       break;
     }
+    if (!io.complete_events()) { break; }
     const auto memory_changed = memory.commit_mapping();
     const auto buffers_changed = devices.usb.commit_mapping();
     if (memory_changed || buffers_changed) {

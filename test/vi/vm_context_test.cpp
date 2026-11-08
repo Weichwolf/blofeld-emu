@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dsp/execute.hpp"
 #include "execution.hpp"
+#include "io/dsp_reset.hpp"
 #include "io/shi.hpp"
 #include "isa.hpp"
 #include "mcu/execute.hpp"
@@ -66,10 +67,11 @@ void debug_output() {
   constexpr auto input = output & ~write;
   constexpr auto program = isa::program(std::array{load, output}, isa::stop);
   blofeld::vi::Shi shi;
-  const auto result = blofeld::vi::dsp::execute(program, shi, {});
+  blofeld::vi::DspReset reset;
+  const auto result = blofeld::vi::dsp::execute(program, shi, reset, {});
   require(!result.failure && result.instructions == 3, "The DSP can write its OnCE output latch");
   constexpr auto reading = isa::program(std::array{input}, isa::stop);
-  const auto refused = blofeld::vi::dsp::execute(reading, shi, {});
+  const auto refused = blofeld::vi::dsp::execute(reading, shi, reset, {});
   require(refused.failure && refused.failure->operation == blofeld::vi::Access::read &&
               refused.failure->space == 'X' && refused.failure->address == once_address,
           "OnCE data is readable only through JTAG, never a fabricated DSP readback");
@@ -122,16 +124,17 @@ void boot_transfer() {
   auto flash = image();
   std::ranges::copy(program, flash->bytes.begin());
   blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
   require(shi.write({.address = control_address, .value = fifo24}),
           "Configure the real receive FIFO");
-  const auto sent = blofeld::vi::mcu::execute(*flash, shi, {});
+  const auto sent = blofeld::vi::mcu::execute(*flash, shi, reset, {});
   executed(sent, "Native MCU stores deliver complete boot words");
-  const auto loaded = blofeld::vi::dsp::execute(reader, shi, {});
+  const auto loaded = blofeld::vi::dsp::execute(reader, shi, reset, {});
   executed(loaded, "Native DSP loads the delivered code");
   require(!loaded.failure && loaded.instructions == 5,
           "Native DSP receives, writes PRAM, jumps and executes the transmitted program");
   constexpr auto jump = dsp::opcode<dsp::Opcode::jmp_absolute_short>();
-  const auto missing = blofeld::vi::dsp::execute(jump, shi, {});
+  const auto missing = blofeld::vi::dsp::execute(jump, shi, reset, {});
   require(missing.failure && missing.failure->space == 'P' && missing.failure->address == 0,
           "A new DSP cannot execute uninitialized program RAM as zero-filled NOPs");
 }
@@ -162,7 +165,8 @@ void masked_port_read() {
   auto flash = image();
   std::ranges::copy(program, flash->bytes.begin());
   blofeld::vi::Shi shi;
-  const auto result = blofeld::vi::mcu::execute(*flash, shi, {});
+  blofeld::vi::DspReset reset;
+  const auto result = blofeld::vi::mcu::execute(*flash, shi, reset, {});
   executed(result, "Native BRSET reads only its requested GPIO bit");
   require(result.instructions == 6, "The known bit branches around the unknown-memory access");
 }
@@ -218,7 +222,8 @@ void timer_wakes_mcu() {
   flash->bytes[vector - 0x8000] = static_cast<cpu12::Byte>(isr >> 8U);
   flash->bytes[vector - 0x8000 + 1] = static_cast<cpu12::Byte>(isr);
   blofeld::vi::Shi shi;
-  const auto result = blofeld::vi::mcu::execute(*flash, shi, {});
+  blofeld::vi::DspReset reset;
+  const auto result = blofeld::vi::mcu::execute(*flash, shi, reset, {});
   require(result.failure && result.failure->operation == blofeld::vi::Access::write &&
               result.failure->address == sink && result.failure->value == mark,
           "The timer wakes native WAI, the actual ISR writes RAM, and RTI resumes foreground code");
@@ -240,7 +245,8 @@ void flash_rejects_byte_write() {
   std::ranges::copy(program, flash->bytes.begin());
   const auto previous = flash->bytes.back();
   blofeld::vi::Shi shi;
-  const auto result = blofeld::vi::mcu::execute(*flash, shi, {});
+  blofeld::vi::DspReset reset;
+  const auto result = blofeld::vi::mcu::execute(*flash, shi, reset, {});
   require(result.failure && result.failure->operation == blofeld::vi::Access::write &&
               result.failure->address == sink && result.failure->value == access_error_status &&
               flash->bytes.back() == previous,
@@ -270,7 +276,8 @@ void flash_rejects_protected_word() {
   std::ranges::copy(program, flash->bytes.begin());
   const auto previous = flash->bytes[0];
   blofeld::vi::Shi shi;
-  const auto result = blofeld::vi::mcu::execute(*flash, shi, {});
+  blofeld::vi::DspReset reset;
+  const auto result = blofeld::vi::mcu::execute(*flash, shi, reset, {});
   require(result.failure && result.failure->operation == blofeld::vi::Access::write &&
               result.failure->address == sink && result.failure->value == protection_error_status &&
               flash->bytes[0] == previous,
@@ -351,7 +358,8 @@ void rti_keeps_time_after_wait() {
   flash->bytes[vector - 0x8000] = static_cast<cpu12::Byte>(isr >> 8U);
   flash->bytes[vector - 0x8000 + 1] = static_cast<cpu12::Byte>(isr);
   blofeld::vi::Shi shi;
-  const auto result = blofeld::vi::mcu::execute(*flash, shi, {});
+  blofeld::vi::DspReset reset;
+  const auto result = blofeld::vi::mcu::execute(*flash, shi, reset, {});
   require(
       result.failure && result.failure->operation == blofeld::vi::Access::write &&
           result.failure->address == sink && result.failure->value >= shortest_period &&
@@ -399,7 +407,8 @@ void sci_wakes_mcu() {
   flash->bytes[vector - 0x8000] = static_cast<cpu12::Byte>(isr >> 8U);
   flash->bytes[vector - 0x8000 + 1] = static_cast<cpu12::Byte>(isr);
   blofeld::vi::Shi shi;
-  const auto result = blofeld::vi::mcu::execute(*flash, shi, {});
+  blofeld::vi::DspReset reset;
+  const auto result = blofeld::vi::mcu::execute(*flash, shi, reset, {});
   require(
       result.failure && result.failure->operation == blofeld::vi::Access::write &&
           result.failure->address == sink && result.failure->value == mark,
@@ -433,7 +442,8 @@ void usb_banks_rebind_native_memory() {
   auto flash = image();
   std::ranges::copy(program, flash->bytes.begin());
   blofeld::vi::Shi shi;
-  const auto result = blofeld::vi::mcu::execute(*flash, shi, {});
+  blofeld::vi::DspReset reset;
+  const auto result = blofeld::vi::mcu::execute(*flash, shi, reset, {});
   require(result.failure && result.failure->operation == blofeld::vi::Access::write &&
               result.failure->address == sink && result.failure->value == mark,
           "Native RAM grants follow a USB bank switch without copying or losing the byte");
@@ -454,8 +464,9 @@ int main() try {
   constexpr auto words = dsp56300::isa::program(dsp56300::isa::nop, dsp56300::isa::stop);
   const std::vector<dsp56300::Word> boot(words.begin(), words.end());
   blofeld::vi::Shi shi;
-  const auto mcu = blofeld::vi::mcu::execute(*flash, shi, {});
-  const auto dsp = blofeld::vi::dsp::execute(boot, shi, {});
+  blofeld::vi::DspReset reset;
+  const auto mcu = blofeld::vi::mcu::execute(*flash, shi, reset, {});
+  const auto dsp = blofeld::vi::dsp::execute(boot, shi, reset, {});
   require(!mcu.failure && mcu.instructions == 3, "MCU owner performs real reset and native STOP");
   require(!dsp.failure && dsp.instructions == 2, "DSP owner executes its native ROM instructions");
   for (unsigned iteration = 0; iteration < 8; ++iteration) {

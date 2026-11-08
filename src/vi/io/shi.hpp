@@ -27,6 +27,8 @@ public:
   [[nodiscard]] bool write(Write access) noexcept;
   [[nodiscard]] std::optional<Mode> select(bool active) noexcept;
   [[nodiscard]] bool receive(std::uint32_t word) noexcept;
+  // DSP owner after its previous Core has stopped; preserves the external selection.
+  void reset() noexcept;
 
 private:
   static constexpr std::uint32_t reset_status = 0x8200;
@@ -34,7 +36,7 @@ private:
   std::mutex mutex_;
   std::array<std::uint32_t, 10> fifo_{};
   std::size_t head_ = 0, count_ = 0;
-  std::uint32_t control_ = 0, clock_ = 0, errors_ = 0;
+  std::uint32_t control_ = 0, clock_ = 1, errors_ = 0;
   bool observed_overrun_ = false, selected_ = false;
   // Reset: HIDLE and HTDE set. Polls require one acquire load, no mutex.
   std::atomic<std::uint32_t> status_{reset_status};
