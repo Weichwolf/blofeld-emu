@@ -22,9 +22,9 @@ struct DspPeripheralObserver {
   void *context = nullptr;
   void (*preparing)(void *context, unsigned pc) = nullptr;
   void (*completed)(void *context, unsigned pc, bool reschedule) = nullptr;
-  // The execution owner stops at every DMA transition. Reads use the current
-  // register snapshot; writes and faults still synchronize their exact prefix.
-  bool stable_dma_reads = false;
+  // The owner stops at every device transition. DMA and stored configuration
+  // reads use current values; writes and faults synchronize their exact prefix.
+  bool stable_register_reads = false;
 };
 
 // Converts synchronous core accesses to instrument registers and storage. This does not

@@ -3,6 +3,7 @@
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_dma_registers.hpp"
 #include "dsp/dsp_execution.hpp"
+#include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_io.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_run_clock.hpp"
@@ -229,15 +230,140 @@ void status_reads_continue_natively() {
               device.machine.cpu().progress().estimated_cycles == completed_cycles &&
               device.machine.clock().elapsed_ticks() ==
                   initial_ticks + (completed_cycles * period) &&
-              observed.reschedules == std::vector{false, false, true},
+              observed.reschedules == std::vector{true},
           "Status reads retain native execution; a genuine write still reschedules at retirement");
-  constexpr std::uint64_t first_read_cycle = 3;
-  for (std::size_t access = 0; access < 3; ++access) {
-    const auto ticks = initial_ticks + ((first_read_cycle + access) * period);
-    require(observed.calls.at(access * 2) == std::array<std::uint64_t, 3>{0, access, ticks} &&
-                observed.calls.at((access * 2) + 1) ==
-                    std::array<std::uint64_t, 3>{1, access, ticks},
-            "Every read and write observes its exact completed device-time prefix");
+  constexpr auto write_ticks = initial_ticks + (5 * period);
+  const std::vector<std::array<std::uint64_t, 3>> expected{{0, 2, write_ticks},
+                                                           {1, 2, write_ticks}};
+  require(observed.calls == expected,
+          "Stored-priority reads need no sample clock; the write still observes its exact prefix");
+}
+
+dsp56300::Word port_read(const DspSpace space, const unsigned address) {
+  constexpr unsigned offset_mask = 63;
+  constexpr unsigned low_offset_mask = 31;
+  constexpr unsigned high_bit = 32;
+  constexpr unsigned high_base = 0xffffc0;
+  const auto offset = address & offset_mask;
+  if (address >= high_base) {
+    return dsp56300::isa::opcode<dsp56300::isa::Opcode::movep_register_high>().front() |
+           (x0_register << 8U) | (space == DspSpace::y ? 0x10000U : 0U) | offset;
+  }
+  const auto encoding = space == DspSpace::y ? dsp56300::isa::Opcode::movep_register_low_extended
+                                             : dsp56300::isa::Opcode::movep_register_low;
+  return static_cast<dsp56300::Word>(encoding) | (x0_register << 8U) | (offset & low_offset_mask) |
+         ((offset & high_bit) << 1U);
+}
+
+void stored_gpio_reads() {
+  struct Register {
+    DspSpace space;
+    unsigned address;
+    DspPort port;
+    DspGpioRegister kind;
+  };
+
+  constexpr std::array registers{Register{.space = DspSpace::x,
+                                          .address = 0xffffbe,
+                                          .port = DspPort::c,
+                                          .kind = DspGpioRegister::direction},
+                                 Register{.space = DspSpace::x,
+                                          .address = 0xffffbf,
+                                          .port = DspPort::c,
+                                          .kind = DspGpioRegister::control},
+                                 Register{.space = DspSpace::x,
+                                          .address = 0xffffd6,
+                                          .port = DspPort::d,
+                                          .kind = DspGpioRegister::direction},
+                                 Register{.space = DspSpace::x,
+                                          .address = 0xffffd7,
+                                          .port = DspPort::d,
+                                          .kind = DspGpioRegister::control},
+                                 Register{.space = DspSpace::y,
+                                          .address = 0xffff9e,
+                                          .port = DspPort::e,
+                                          .kind = DspGpioRegister::direction},
+                                 Register{.space = DspSpace::y,
+                                          .address = 0xffff9f,
+                                          .port = DspPort::e,
+                                          .kind = DspGpioRegister::control},
+                                 Register{.space = DspSpace::y,
+                                          .address = 0xfffff6,
+                                          .port = DspPort::f,
+                                          .kind = DspGpioRegister::direction},
+                                 Register{.space = DspSpace::y,
+                                          .address = 0xfffff7,
+                                          .port = DspPort::f,
+                                          .kind = DspGpioRegister::control}};
+  constexpr unsigned write_direction = 1U << 15U;
+  for (const auto target : registers) {
+    const auto read = port_read(target.space, target.address);
+    // The first actual write is still a scheduling boundary, even for the same value.
+    const std::array program{read, read, read | write_direction, nop, jump};
+    Device device(program);
+    auto &port = device.machine.bus().gpio(target.port);
+    port.set_contract(DspGpioContract::logical_pins);
+    port.write({.reg = DspGpioRegister::direction, .value = 1});
+    port.write({.value = 0});
+    const auto expected_value = target.kind == DspGpioRegister::direction ? 1U : 0U;
+    constexpr auto bootstrap_end = initial_ticks + (3 * period);
+    while (device.machine.clock().elapsed_ticks() < bootstrap_end) {
+      require(device.advance(bootstrap_end).has_value(), "Finish the actual bootstrap JMP");
+    }
+    Observed observed{.device = device, .calls = {}, .reschedules = {}};
+    const auto result = device.advance(
+        initial_ticks + (1000 * period),
+        {.context = &observed, .preparing = Observed::before, .completed = Observed::after});
+    constexpr auto write_ticks = initial_ticks + (5 * period);
+    const std::vector<std::array<std::uint64_t, 3>> expected{{0, 2, write_ticks},
+                                                             {1, 2, write_ticks}};
+    require(result && result->execution && result->execution->yielded &&
+                result->execution->retired == 3 &&
+                result->execution->fault.kind == dsp56300::FaultKind::none &&
+                (device.machine.cpu().registers().x & dsp56300::word_mask) == expected_value &&
+                device.machine.clock().elapsed_ticks() == initial_ticks + (6 * period) &&
+                observed.calls == expected && observed.reschedules == std::vector{true},
+            "Every X/Y GPIO direction/control read retains its stored value without sample clocks");
+  }
+}
+
+void gpio_input_reads_keep_sampling() {
+  constexpr unsigned port_c_data = 0xffffbd;
+  constexpr unsigned pin_mask = 0xfff;
+  constexpr unsigned write_direction = 1U << 15U;
+  const auto read = port_read(DspSpace::x, port_c_data);
+  const std::array program{read, read, read_priority | write_direction, nop, jump};
+  Device device(program);
+  auto &port = device.machine.bus().gpio(DspPort::c);
+  port.write({.reg = DspGpioRegister::control, .value = pin_mask});
+  port.set_drive({.mask = pin_mask, .levels = 1});
+  constexpr auto bootstrap_end = initial_ticks + (3 * period);
+  while (device.machine.clock().elapsed_ticks() < bootstrap_end) {
+    require(device.advance(bootstrap_end).has_value(), "Finish the actual bootstrap JMP");
+  }
+  Observed observed{.device = device, .calls = {}, .reschedules = {}};
+  const auto result = device.advance(
+      initial_ticks + (1000 * period),
+      {.context = &observed,
+       .preparing =
+           [](void *context, const unsigned pc) {
+             auto &sample = *static_cast<Observed *>(context);
+             Observed::before(context, pc);
+             if (pc == 1) {
+               sample.device.machine.bus().gpio(DspPort::c).set_drive({.mask = pin_mask});
+             }
+           },
+       .completed = Observed::after});
+  require(result && result->execution && result->execution->yielded &&
+              result->execution->fault.kind == dsp56300::FaultKind::none &&
+              (device.machine.cpu().registers().x & dsp56300::word_mask) == 0 &&
+              observed.reschedules == std::vector{false, false, true},
+          "GPIO data still samples the actual external source at each completed prefix");
+  for (std::size_t pc = 0; pc < 3; ++pc) {
+    const auto at = initial_ticks + ((3U + pc) * period);
+    require(observed.calls.at(pc * 2) == std::array<std::uint64_t, 3>{0, pc, at} &&
+                observed.calls.at((pc * 2) + 1) == std::array<std::uint64_t, 3>{1, pc, at},
+            "Live GPIO reads and the following write retain independently expected device times");
   }
 }
 
@@ -312,6 +438,35 @@ void dma_snapshot_fault_prefix(const bool bit) {
               device.machine.cpu().progress().estimated_cycles == 4 &&
               device.machine.clock().elapsed_ticks() == prefix_ticks && observed.calls == expected,
           "An unknown DMA snapshot fails at its genuine completed prefix, including bit reads");
+}
+
+void stored_y_register_fault_prefix() {
+  constexpr unsigned port_f_direction = 0xfffff6;
+  const std::array program{nop, port_read(DspSpace::y, port_f_direction), nop, jump};
+  Device device(program);
+  finish_bootstrap(device);
+  Observed observed{.device = device, .calls = {}, .reschedules = {}};
+  const auto result = device.advance(
+      initial_ticks + (1000 * period),
+      {.context = &observed, .preparing = Observed::before, .completed = Observed::after});
+  constexpr auto prefix_ticks = initial_ticks + (4 * period);
+  const auto &failure = device.machine.io().failure();
+  bool unqualified = false;
+  if (failure && failure->cause) {
+    try {
+      std::rethrow_exception(failure->cause);
+    } catch (const std::exception &error) {
+      unqualified = std::string_view(error.what()).contains("Port F requires BCR");
+    }
+  }
+  const std::vector<std::array<std::uint64_t, 3>> expected{{0, 1, prefix_ticks}};
+  require(result && result->execution &&
+              result->execution->fault.kind != dsp56300::FaultKind::none && failure &&
+              failure->space == dsp56300::Space::y && failure->address == port_f_direction &&
+              failure->pc == 1 && unqualified &&
+              device.machine.cpu().progress().estimated_cycles == 4 &&
+              device.machine.clock().elapsed_ticks() == prefix_ticks && observed.calls == expected,
+          "A rejected stored Y-register read synchronizes its genuine fault prefix");
 }
 
 void dma_reads_preserve_transfers() {
@@ -412,11 +567,14 @@ int main() {
     memory_switch_boundary(true);
     real_peripheral_boundary();
     status_reads_continue_natively();
+    stored_gpio_reads();
+    gpio_input_reads_keep_sampling();
     status_reads_preserve_timer_deadlines(false);
     status_reads_preserve_timer_deadlines(true);
     dma_reads_share_bounded_time();
     dma_snapshot_fault_prefix(false);
     dma_snapshot_fault_prefix(true);
+    stored_y_register_fault_prefix();
     dma_reads_preserve_transfers();
     wait_retains_cpu_progress();
     std::cout << checks << " functional DSP execution checks passed\n";

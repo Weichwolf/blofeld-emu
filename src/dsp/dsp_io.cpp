@@ -3,6 +3,7 @@
 
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_interrupts.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp56300/memory.hpp"
 
@@ -13,9 +14,38 @@
 
 namespace blofeld {
 namespace {
-bool dma_snapshot(const DspPeripheralObserver &observer, const DspAddress target) {
-  return observer.stable_dma_reads && target.space == DspSpace::x &&
-         DspDma::handles(target.address);
+bool register_snapshot(const DspPeripheralObserver &observer, const DspAddress target) {
+  constexpr unsigned c_direction = 0xffffbe;
+  constexpr unsigned c_control = 0xffffbf;
+  constexpr unsigned d_direction = 0xffffd6;
+  constexpr unsigned d_control = 0xffffd7;
+  constexpr unsigned e_direction = 0xffff9e;
+  constexpr unsigned e_control = 0xffff9f;
+  constexpr unsigned f_direction = 0xfffff6;
+  constexpr unsigned f_control = 0xfffff7;
+  if (!observer.stable_register_reads) { return false; }
+  // GPIO direction/control and interrupt priorities change only through actual
+  // CPU writes/RESET. DMA cannot target them. GPIO data remains a live read.
+  if (target.space == DspSpace::x) {
+    if (DspDma::handles(target.address) || DspInterrupts::handles(target.address)) { return true; }
+    switch (target.address) {
+      case c_direction:
+      case c_control:
+      case d_direction:
+      case d_control: return true;
+      default: return false;
+    }
+  }
+  if (target.space == DspSpace::y) {
+    switch (target.address) {
+      case e_direction:
+      case e_control:
+      case f_direction:
+      case f_control: return true;
+      default: return false;
+    }
+  }
+  return false;
 }
 
 DspSpace board_space(const dsp56300::Space space) {
@@ -64,10 +94,12 @@ bool DspIo::fail(const Operation operation,
     auto cause = std::current_exception();
     const bool read = operation == Operation::read ||
                       (operation == Operation::bit && action == dsp56300::BitAction::test);
-    if (read && space == dsp56300::Space::x &&
-        dma_snapshot(peripheral_observer_, {.space = DspSpace::x, .address = address})) {
+    const DspAddress target{.space = space == dsp56300::Space::y ? DspSpace::y : DspSpace::x,
+                            .address = address};
+    if (read && (space == dsp56300::Space::x || space == dsp56300::Space::y) &&
+        register_snapshot(peripheral_observer_, target)) {
       try {
-        prepare_peripheral({.space = DspSpace::x, .address = address}, pc);
+        prepare_peripheral(target, pc);
       } catch (...) { cause = std::current_exception(); }
     }
     failure_ = Failure{.operation = operation,
@@ -106,7 +138,7 @@ bool DspIo::read(const dsp56300::Space space,
   if (failure_) { return false; }
   try {
     const DspAddress target{.space = board_space(space), .address = address};
-    const bool snapshot = dma_snapshot(peripheral_observer_, target);
+    const bool snapshot = register_snapshot(peripheral_observer_, target);
     if (!snapshot) { prepare_peripheral(target, pc); }
     value = bus_.read(target);
     if (!snapshot) { observe_peripheral(target, pc); }
@@ -142,7 +174,7 @@ bool DspIo::bit(const dsp56300::Space space,
   try {
     const DspAddress target{.space = board_space(space), .address = address};
     const bool snapshot =
-        action == dsp56300::BitAction::test && dma_snapshot(peripheral_observer_, target);
+        action == dsp56300::BitAction::test && register_snapshot(peripheral_observer_, target);
     if (!snapshot) { prepare_peripheral(target, pc); }
     const auto actual = bus_.access_peripheral_bit({.space = board_space(space),
                                                     .address = address,
