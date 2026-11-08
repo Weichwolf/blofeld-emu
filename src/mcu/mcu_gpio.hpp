@@ -8,6 +8,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string_view>
 
 namespace blofeld {
@@ -19,6 +20,8 @@ struct PinDrive {
   std::uint8_t levels = 0;
   std::uint8_t floating = 0;
   std::uint8_t unknown = 0; // Strong peer drivers with an unobserved level.
+
+  bool operator==(const PinDrive &) const = default;
 };
 
 struct PinFunction {
@@ -92,11 +95,13 @@ private:
   [[nodiscard]] std::uint8_t
   sample(McuPort port, std::uint8_t requested, bool consume = false) const;
   [[nodiscard]] PinSample resolve(McuPort port, std::uint8_t requested, bool consume = false) const;
+  [[nodiscard]] PinSample resolve_local(McuPort port) const;
   [[nodiscard]] unsigned pull_enable(McuPort port) const;
   [[nodiscard]] std::uint8_t data(McuPort port, std::uint8_t mask) const;
   [[nodiscard]] std::uint8_t tied_low(McuPort port) const;
   std::array<PortState, port_count> ports_{};
   std::array<GpioPadBinding, port_count> pads_{};
+  mutable std::array<std::optional<PinSample>, port_count> resolved_{};
   std::uint64_t output_revision_ = 0;
   std::uint8_t routing_ = 0;
   std::uint8_t assignment_e_ = 0;

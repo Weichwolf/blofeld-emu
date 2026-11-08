@@ -150,6 +150,69 @@ void output_publication_revision() {
           "Reset republishes released output ownership");
 }
 
+void repeated_pad_observations() {
+  blofeld::McuGpio gpio;
+  const auto expect = [&](const unsigned known, const unsigned levels) {
+    for (const auto mask : {1U, lower, upper, byte_mask, 0U}) {
+      const auto observed = gpio.observe_pads(McuPort::q, static_cast<std::uint8_t>(mask));
+      require(observed.known == (known & mask) && observed.levels == (levels & mask) &&
+                  observed.conflicts == 0,
+              "Repeated differently masked observations retain the actual full port state");
+    }
+  };
+  expect(0, 0);
+  gpio.set_drive(McuPort::q, {.floating = byte_mask});
+  gpio.write({.address = reg::perq, .value = byte_mask});
+  expect(byte_mask, byte_mask);
+  gpio.write({.address = reg::ppsq, .value = upper});
+  expect(byte_mask, lower);
+  gpio.update_drive(McuPort::q, lower, {.mask = lower, .levels = 3});
+  expect(byte_mask, 3);
+  gpio.write({.address = reg::ptq, .value = mixed});
+  gpio.write({.address = reg::ddrq, .value = upper});
+  expect(byte_mask, combined_levels);
+  gpio.set_function(McuPort::q, {.outputs = upper, .levels = peripheral_level});
+  expect(byte_mask, peripheral_level | 3);
+  gpio.set_function(McuPort::q, {.outputs = upper, .unknown = upper});
+  expect(lower, 3);
+  gpio.set_function(McuPort::q, {});
+  expect(byte_mask, combined_levels);
+  const auto copy = gpio;
+  gpio.reset();
+  expect(lower, 3);
+  require(copy.observe_pads(McuPort::q, byte_mask).levels == combined_levels,
+          "A previously observed port copy remains independent after the original resets");
+  gpio.set_drive(McuPort::q, {.floating = byte_mask});
+  gpio.write({.address = reg::modrr, .value = 3});
+  expect(byte_mask, 0);
+  gpio.write({.address = reg::modrr, .value = 0});
+  expect(0, 0);
+}
+
+void masked_contention_and_global_pulls() {
+  blofeld::McuGpio gpio;
+  gpio.write({.address = reg::ptq, .value = 0});
+  gpio.write({.address = reg::ddrq, .value = upper});
+  gpio.set_drive(McuPort::q, {.mask = byte_mask, .levels = unknown_bit | 3});
+  require(gpio.observe_pads(McuPort::q, lower).levels == 3,
+          "Opposition outside the requested bits cannot fault an unrelated input read");
+  for (unsigned attempt = 0; attempt < 2; ++attempt) {
+    rejects([&] { static_cast<void>(gpio.observe_pads(McuPort::q, unknown_bit)); }, "contention");
+  }
+  gpio.update_drive(McuPort::q, unknown_bit, {.floating = unknown_bit});
+  require(gpio.observe_pads(McuPort::q, byte_mask).levels == 3,
+          "Releasing the opposed driver immediately restores observable local zero");
+  gpio.set_drive(McuPort::b, {.floating = byte_mask});
+  require(gpio.observe_pads(McuPort::b, byte_mask).known == 0,
+          "A released port with its global pull disabled stays unknown");
+  gpio.write({.address = reg::pucr, .value = 2});
+  require(gpio.observe_pads(McuPort::b, byte_mask).levels == byte_mask,
+          "Global pull changes update a previously observed independent port");
+  gpio.write({.address = reg::pucr, .value = 0});
+  require(gpio.observe_pads(McuPort::b, byte_mask).known == 0,
+          "Disabling the global pull immediately withdraws input knowledge");
+}
+
 void board_observation() {
   blofeld::McuBus bus(flash);
   bus.begin_instruction({.pc = context_pc, .ccr = context_ccr});
@@ -196,6 +259,8 @@ int main() {
     separate_driver_and_pad();
     unknown_and_peripheral_drivers();
     output_publication_revision();
+    repeated_pad_observations();
+    masked_contention_and_global_pulls();
     board_observation();
     std::cout << "Local MCU drivers remain separate from peer levels, weak pulls and pad faults.\n";
     return 0;

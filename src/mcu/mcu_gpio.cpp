@@ -84,6 +84,7 @@ McuGpio::McuGpio() {
 
 void McuGpio::reset() {
   ++output_revision_;
+  resolved_.fill(std::nullopt);
   for (std::size_t index = 0; index < ports_.size(); ++index) {
     const auto external = ports_[index].external;
     ports_[index] = {.latch_known = static_cast<std::uint8_t>(specs[index].initial_latch_known),
@@ -106,7 +107,10 @@ void McuGpio::set_drive(const McuPort port, const PinDrive drive) {
       ((drive.mask | drive.floating | drive.unknown) & ~specs[index].valid) != 0) {
     throw Fault("Invalid MCU GPIO external drive masks");
   }
-  ports_[index].external = drive;
+  if (ports_[index].external != drive) {
+    ports_[index].external = drive;
+    resolved_[index].reset();
+  }
 }
 
 void McuGpio::attach_pad_source(const McuPort port, GpioPadReader reader, GpioPadReader consume) {
@@ -146,6 +150,7 @@ void McuGpio::set_function(const McuPort port, const PinFunction function) {
   }
   if (ports_[index].function != function) {
     ports_[index].function = function;
+    resolved_[index].reset();
     ++output_revision_;
   }
 }
@@ -231,6 +236,17 @@ McuGpio::resolve(const McuPort port, const std::uint8_t requested, const bool co
             .levels = static_cast<std::uint8_t>(result.levels),
             .conflicts = static_cast<std::uint8_t>(result.conflicts)};
   }
+  auto &cached = resolved_[index];
+  if (!cached) { cached = resolve_local(port); }
+  if ((cached->conflicts & requested) != 0) {
+    throw Fault("MCU GPIO output contention at " + hex(specs[index].base));
+  }
+  return {.known = static_cast<std::uint8_t>(cached->known & requested),
+          .levels = static_cast<std::uint8_t>(cached->levels & requested)};
+}
+
+PinSample McuGpio::resolve_local(const McuPort port) const {
+  const auto index = port_index(port);
   const auto &state = ports_[index];
   const auto tied = static_cast<unsigned>(tied_low(port));
   const auto &function = state.function;
@@ -245,17 +261,15 @@ McuGpio::resolve(const McuPort port, const std::uint8_t requested, const bool co
   unsigned value = (state.external.levels | (latch & output)) & ~tied;
   const auto conflict =
       state.external.mask & (tied | output) & (state.external.levels ^ (latch & ~tied));
-  if ((conflict & requested) != 0) {
-    throw Fault("MCU GPIO output contention at " + hex(specs[index].base));
-  }
   const auto weak =
       state.external.floating & pull_enable(port) & ~static_cast<unsigned>(direction) & ~tied;
   known |= weak;
   value |= weak & ~static_cast<unsigned>(state.pull_down);
-  known = known & ~unknown_output & ~static_cast<unsigned>(state.external.unknown) & requested &
-          specs[index].valid;
+  known =
+      known & ~unknown_output & ~static_cast<unsigned>(state.external.unknown) & specs[index].valid;
   return {.known = static_cast<std::uint8_t>(known),
-          .levels = static_cast<std::uint8_t>(value & known)};
+          .levels = static_cast<std::uint8_t>(value & known),
+          .conflicts = static_cast<std::uint8_t>(conflict & specs[index].valid)};
 }
 
 std::uint8_t
@@ -340,6 +354,7 @@ std::uint8_t McuGpio::read_masked(const MaskedByteRead access) const {
 }
 
 void McuGpio::write(const ByteWrite write) {
+  resolved_.fill(std::nullopt);
   const auto offset = write.address;
   const auto value = write.value;
   if (offset == hc12::pear) {
