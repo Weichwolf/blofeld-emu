@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_esai.hpp"
 #include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_run_clock.hpp"
@@ -122,38 +121,29 @@ bool Instrument::timing_faulted() const {
          (native_->runtime && native_->runtime->faulted());
 }
 
-McuDspRuntime::CycleInputs Instrument::runtime_inputs() {
-  return [this] {
-    return DspDmaInputs{.timing = DspDmaTiming::reference_sampled_cycles,
-                        .grant = config_.dma_grant};
-  };
-}
-
-McuDspRuntime::Observer Instrument::runtime_observer() {
-  return [this](const DspRuntimeCycle &cycle) {
-    if (cycle.phase == DspRuntimePhase::preparing) {
-      synchronize_audio_clock(cycle.completion_ticks);
-      return;
-    }
-    // DMA can also write register I/O. Publish actual changes from either core
-    // execution or DMA; ordinary native regions require only this revision read.
-    const auto revision = native_->dsp.bus().io_revision();
-    if (revision != control_.io_revision) {
-      control_.io_revision = revision;
-      observe_held_dsp_tio();
-      synchronize_audio_clock(cycle.completion_ticks);
-      if (native_->nand) { native_->nand->after_native(cycle.completion_ticks, cycle.native_pc); }
-      control_.return_boundary = cycle.completion_ticks;
-      publish_io();
-      control_.return_boundary.reset();
-    }
-    if (execution_.trace != nullptr) {
-      *execution_.trace << (cycle.phase == DspRuntimePhase::region ? "DSP-REGION" : "DSP-IO")
-                        << " start=" << cycle.start_ticks << " end=" << cycle.completion_ticks
-                        << " pc=" << hex(cycle.native_pc.value_or(0), 6)
-                        << " retired=" << (cycle.region ? cycle.region->retired : 0) << '\n';
-    }
-  };
+void Instrument::observe_dsp_cycle(const DspRuntimeCycle &cycle) {
+  if (cycle.phase == DspRuntimePhase::preparing) {
+    synchronize_audio_clock(cycle.completion_ticks);
+    return;
+  }
+  // DMA can also write register I/O. Publish actual changes from either core
+  // execution or DMA; ordinary native regions require only this revision read.
+  const auto revision = native_->dsp.bus().io_revision();
+  if (revision != control_.io_revision) {
+    control_.io_revision = revision;
+    observe_held_dsp_tio();
+    synchronize_audio_clock(cycle.completion_ticks);
+    if (native_->nand) { native_->nand->after_native(cycle.completion_ticks, cycle.native_pc); }
+    control_.return_boundary = cycle.completion_ticks;
+    publish_io();
+    control_.return_boundary.reset();
+  }
+  if (execution_.trace != nullptr) {
+    *execution_.trace << (cycle.phase == DspRuntimePhase::region ? "DSP-REGION" : "DSP-IO")
+                      << " start=" << cycle.start_ticks << " end=" << cycle.completion_ticks
+                      << " pc=" << hex(cycle.native_pc.value_or(0), 6)
+                      << " retired=" << (cycle.region ? cycle.region->retired : 0) << '\n';
+  }
 }
 
 void Instrument::observe_held_dsp_tio() const {

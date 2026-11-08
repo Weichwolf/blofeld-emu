@@ -203,8 +203,16 @@ private:
   };
   class Busy;
 
+  struct PinProjection {
+    std::optional<std::uint64_t> revision;
+    std::uint64_t epoch = 0;
+    PinDrive drive;
+  };
+
   struct Control {
     PinDrive b_external;
+    PinProjection u0_projection;
+    PinProjection loopback_projection;
     std::optional<St7565Parallel> lcd;
     std::uint64_t lcd_epoch = 0;
     SpiInputs previous;
@@ -273,8 +281,7 @@ private:
   void trace_pcm(const SerialPcmFrame &frame, std::string_view source) const;
   [[nodiscard]] DspRuntimeEvents runtime_events();
   [[nodiscard]] DspRuntimePeripheralEvents peripheral_events(Owners &owners);
-  [[nodiscard]] McuDspRuntime::CycleInputs runtime_inputs();
-  [[nodiscard]] McuDspRuntime::Observer runtime_observer();
+  void observe_dsp_cycle(const DspRuntimeCycle &cycle);
   [[nodiscard]] std::uint64_t common_hz() const;
   [[nodiscard]] std::uint64_t dsp_ticks() const;
   [[nodiscard]] std::uint64_t dsp_steps() const;
@@ -295,6 +302,8 @@ private:
       std::make_shared<const PeripheralEventIdentity>();
   std::unique_ptr<Owners> native_;
   Control control_;
+  const McuDspRuntime::CycleInputs dma_inputs_;
+  const McuDspRuntime::Observer dsp_events_;
   PcmFrameSink *pcm_output_ = nullptr;
   bool active_ = false;
 };

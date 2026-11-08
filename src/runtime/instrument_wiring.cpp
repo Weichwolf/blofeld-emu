@@ -42,15 +42,23 @@ void Instrument::check_signals() const {
 void Instrument::update_loopback() {
   if (!config_.loopback) { return; }
   const auto &route = *config_.loopback;
-  const auto input = native_->mcu.bus().observe_pads(route.source, route.source_mask);
-  PinDrive output;
-  if (input.known == route.source_mask) {
-    output.mask = route.destination_mask;
-    output.levels = (input.levels & route.source_mask) != 0 ? route.destination_mask : 0;
+  auto &projection = control_.loopback_projection;
+  const auto epoch = native_->mcu.run_clock().native_epoch();
+  const auto revision = native_->mcu.bus().gpio_observation_revision(route.source);
+  if (!revision || projection.epoch != epoch || projection.revision != revision) {
+    const auto input = native_->mcu.bus().observe_pads(route.source, route.source_mask);
+    projection.drive = {};
+    if (input.known == route.source_mask) {
+      projection.drive.mask = route.destination_mask;
+      projection.drive.levels =
+          (input.levels & route.source_mask) != 0 ? route.destination_mask : 0;
+    }
+    // Retain the pre-write token: feedback must expose any newly opposed input
+    // on the next observation. Unversioned external readers are sampled every time.
+    projection.revision = revision;
+    projection.epoch = epoch;
   }
-  // An unknown pad does not establish a high-impedance source. Preserve
-  // unknownness rather than allowing a receiver pull to invent a known level.
-  native_->mcu.bus().update_pin_drive(route.destination, route.destination_mask, output);
+  native_->mcu.bus().update_pin_drive(route.destination, route.destination_mask, projection.drive);
 }
 
 void Instrument::transition(const SpiInputs pins) {
@@ -90,8 +98,8 @@ void Instrument::on_write(const BusEvent &event) {
           observe_u0_release();
         }
       },
-      runtime_inputs(),
-      runtime_observer());
+      dma_inputs_,
+      dsp_events_);
   publish_io();
 }
 

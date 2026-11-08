@@ -835,6 +835,13 @@ if(BUILD_TESTING)
 endif()
 
 if(BUILD_TESTING)
+  add_executable(blofeld-gpio-projection-test test/runtime/gpio_projection_test.cpp)
+  target_include_directories(blofeld-gpio-projection-test PRIVATE "${BLOFELD_CPU12_ROOT}/test/support")
+  target_link_libraries(blofeld-gpio-projection-test PRIVATE blofeld_instrument)
+  add_test(NAME gpio_projections COMMAND blofeld-gpio-projection-test)
+  set_tests_properties(gpio_projections PROPERTIES TIMEOUT 10)
+  add_dependencies(quality blofeld-gpio-projection-test)
+
   add_executable(blofeld-mcu-dsp-gpio-peer-test test/mcu_dsp_gpio_peer_test.cpp)
   target_include_directories(blofeld-mcu-dsp-gpio-peer-test PRIVATE "${BLOFELD_CPU12_ROOT}/test/support")
   target_link_libraries(blofeld-mcu-dsp-gpio-peer-test PRIVATE blofeld_instrument)

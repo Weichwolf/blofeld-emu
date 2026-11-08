@@ -86,6 +86,10 @@ public:
     return gpio_.output_revision();
   }
 
+  [[nodiscard]] std::optional<std::uint64_t> gpio_observation_revision(McuPort port) const {
+    return gpio_.observation_revision(port);
+  }
+
   void attach_gpio_pad_source(McuPort port, GpioPadReader reader, GpioPadReader consume = {});
   // Observe resolved PE0/PE1 after board pad changes, including while masked.
   // Selection remains pure; the board must deliver every edge it claims to model.

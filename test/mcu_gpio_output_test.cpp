@@ -3,6 +3,7 @@
 #include "mcu/hc12_registers.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_gpio.hpp"
+#include "runtime/gpio_pads.hpp"
 
 #include <array>
 #include <cstdint>
@@ -140,14 +141,48 @@ void output_publication_revision() {
                               blofeld::ByteWrite{.address = reg::modrr, .value = 3}};
   for (const auto write : writes) {
     const auto before = gpio.output_revision();
+    const auto sampled = gpio.observation_revision(McuPort::q);
     gpio.write(write);
-    require(gpio.output_revision() != before,
+    require(gpio.output_revision() != before && gpio.observation_revision(McuPort::q) != sampled,
             "Latch, direction, drive, bias and routing writes invalidate local publication");
   }
   const auto before_reset = gpio.output_revision();
   gpio.reset();
   require(gpio.output_revision() != before_reset && gpio.outputs(McuPort::q).mask == 0,
           "Reset republishes released output ownership");
+}
+
+void observation_revisions() {
+  blofeld::McuGpio gpio;
+  const auto initial = gpio.observation_revision(McuPort::q);
+  const auto outputs = gpio.output_revision();
+  require(initial.has_value(), "Locally owned port observations have an initial revision");
+  gpio.set_drive(McuPort::q, {.floating = byte_mask});
+  const auto driven = gpio.observation_revision(McuPort::q);
+  require(driven != initial && gpio.output_revision() == outputs,
+          "An actual input change invalidates observations without republishing local outputs");
+  gpio.set_drive(McuPort::q, {.floating = byte_mask});
+  static_cast<void>(gpio.observe_pads(McuPort::q, byte_mask));
+  gpio.write({.address = reg::ptq + 1, .value = byte_mask});
+  require(gpio.observation_revision(McuPort::q) == driven,
+          "Unchanged drives, observations and ignored input writes retain their revision");
+  gpio.set_function(McuPort::q, {.outputs = lower, .levels = lower});
+  const auto peripheral = gpio.observation_revision(McuPort::q);
+  require(peripheral != driven, "Peripheral output changes invalidate sampled port values");
+  gpio.reset();
+  require(gpio.observation_revision(McuPort::q) != peripheral,
+          "A real GPIO reset invalidates previously sampled state");
+  gpio.set_drive(McuPort::q, {});
+  std::uint32_t levels = 0;
+  gpio.attach_pad_source(McuPort::q, [&levels](const std::uint32_t mask) {
+    return blofeld::GpioPadSample{.known = mask, .levels = levels & mask};
+  });
+  require(!gpio.observation_revision(McuPort::q) && gpio.observation_revision(McuPort::e),
+          "An external reader has no version token; unrelated local ports remain versioned");
+  require(gpio.observe_pads(McuPort::q, 1).levels == 0, "Sample the actual external reader");
+  levels = 1;
+  require(gpio.observe_pads(McuPort::q, 1).levels == 1 && !gpio.observation_revision(McuPort::q),
+          "External values can change without any local register or drive write");
 }
 
 void repeated_pad_observations() {
@@ -259,6 +294,7 @@ int main() {
     separate_driver_and_pad();
     unknown_and_peripheral_drivers();
     output_publication_revision();
+    observation_revisions();
     repeated_pad_observations();
     masked_contention_and_global_pulls();
     board_observation();

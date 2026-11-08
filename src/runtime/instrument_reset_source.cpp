@@ -29,25 +29,33 @@ bool Instrument::u0_release_write(const unsigned address, const unsigned size) c
 
 void Instrument::update_u0_drive() {
   if (!config_.mcu_u0_release) { return; }
-  const auto output = native_->mcu.bus().gpio_outputs(McuPort::u);
-  const auto bias = native_->mcu.bus().gpio_biases(McuPort::u);
-  const auto resolved = resolve_gpio_net(reset_mask,
-                                         {.active = output.mask & reset_mask,
-                                          .known = output.known & reset_mask,
-                                          .levels = output.levels & reset_mask,
-                                          .reduced = output.reduced_drive & reset_mask,
-                                          .pull_up = bias.up & reset_mask,
-                                          .pull_down = bias.down & reset_mask},
-                                         {.pull_up = reset_mask});
-  // Logical passive-source projection: drive the released input only. An active
-  // MCU output remains the sole strong source; unknown local latches stay unknown.
-  PinDrive input{.floating = reset_mask};
-  if ((output.mask & reset_mask) == 0) {
-    input = resolved.known == reset_mask
-                ? PinDrive{.mask = reset_mask, .levels = static_cast<std::uint8_t>(resolved.levels)}
-                : PinDrive{.unknown = reset_mask};
+  auto &projection = control_.u0_projection;
+  const auto epoch = native_->mcu.run_clock().native_epoch();
+  const auto revision = native_->mcu.bus().gpio_output_revision();
+  if (projection.epoch != epoch || projection.revision != revision) {
+    const auto output = native_->mcu.bus().gpio_outputs(McuPort::u);
+    const auto bias = native_->mcu.bus().gpio_biases(McuPort::u);
+    const auto resolved = resolve_gpio_net(reset_mask,
+                                           {.active = output.mask & reset_mask,
+                                            .known = output.known & reset_mask,
+                                            .levels = output.levels & reset_mask,
+                                            .reduced = output.reduced_drive & reset_mask,
+                                            .pull_up = bias.up & reset_mask,
+                                            .pull_down = bias.down & reset_mask},
+                                           {.pull_up = reset_mask});
+    // Logical passive-source projection: drive the released input only. An active
+    // MCU output remains the sole strong source; unknown local latches stay unknown.
+    projection.drive = {.floating = reset_mask};
+    if ((output.mask & reset_mask) == 0) {
+      projection.drive =
+          resolved.known == reset_mask
+              ? PinDrive{.mask = reset_mask, .levels = static_cast<std::uint8_t>(resolved.levels)}
+              : PinDrive{.unknown = reset_mask};
+    }
+    projection.epoch = epoch;
+    projection.revision = revision;
   }
-  native_->mcu.bus().update_pin_drive(McuPort::u, reset_mask, input);
+  native_->mcu.bus().update_pin_drive(McuPort::u, reset_mask, projection.drive);
 }
 
 void Instrument::observe_u0_release() {

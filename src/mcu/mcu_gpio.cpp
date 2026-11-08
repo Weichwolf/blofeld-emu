@@ -84,6 +84,7 @@ McuGpio::McuGpio() {
 
 void McuGpio::reset() {
   ++output_revision_;
+  ++revision_;
   resolved_.fill(std::nullopt);
   for (std::size_t index = 0; index < ports_.size(); ++index) {
     const auto external = ports_[index].external;
@@ -108,6 +109,7 @@ void McuGpio::set_drive(const McuPort port, const PinDrive drive) {
     throw Fault("Invalid MCU GPIO external drive masks");
   }
   if (ports_[index].external != drive) {
+    ++revision_;
     ports_[index].external = drive;
     resolved_[index].reset();
   }
@@ -152,7 +154,13 @@ void McuGpio::set_function(const McuPort port, const PinFunction function) {
     ports_[index].function = function;
     resolved_[index].reset();
     ++output_revision_;
+    ++revision_;
   }
+}
+
+std::optional<std::uint64_t> McuGpio::observation_revision(const McuPort port) const {
+  if (pads_[port_index(port)].required()) { return std::nullopt; }
+  return revision_;
 }
 
 std::uint8_t McuGpio::read_pad(const McuPort port, const std::uint8_t mask) const {
@@ -362,23 +370,29 @@ void McuGpio::write(const ByteWrite write) {
       throw Fault("Unimplemented MCU port E alternate function");
     }
     ++output_revision_;
+    ++revision_;
     assignment_e_ = value;
     return;
   }
   if (offset == hc12::pucr) {
     ++output_revision_;
+    ++revision_;
     pull_control_ = static_cast<std::uint8_t>(value & core_pull_mask);
     return;
   }
   if (offset == hc12::modrr) {
     ++output_revision_;
+    ++revision_;
     routing_ = static_cast<std::uint8_t>(value & routing_mask);
     return;
   }
   const auto reg = lookup(offset);
   if (!reg) { throw Fault("Unknown MCU GPIO write at " + hex(offset)); }
   const auto index = port_index(reg->port);
-  if (reg->kind != 1) { ++output_revision_; }
+  if (reg->kind != 1) {
+    ++output_revision_;
+    ++revision_;
+  }
   auto &state = ports_[index];
   const auto masked = static_cast<std::uint8_t>(value & specs[index].valid);
   switch (reg->kind) {

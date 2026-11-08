@@ -2,12 +2,14 @@
 #include "runtime/instrument.hpp"
 
 #include "common/bus.hpp"
+#include "dsp/dsp_dma.hpp"
 #include "mcu/hc12.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_machine.hpp"
 #include "runtime/instrument_context.hpp"
 #include "runtime/mcu_dsp_gpio_peer.hpp"
+#include "runtime/mcu_dsp_runtime.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -43,7 +45,12 @@ Instrument::Instrument(Config config, Execution execution)
     : config_(std::move(config)),
       execution_(std::move(execution)),
       identity_(std::make_shared<const Identity>()),
-      native_(std::make_unique<Owners>(config_, execution_)) {
+      native_(std::make_unique<Owners>(config_, execution_)),
+      dma_inputs_([this] {
+        return DspDmaInputs{.timing = DspDmaTiming::reference_sampled_cycles,
+                            .grant = config_.dma_grant};
+      }),
+      dsp_events_([this](const DspRuntimeCycle &cycle) { observe_dsp_cycle(cycle); }) {
   const auto common = common_hz();
   const auto local = native_->mcu.run_clock().timebase_hz();
   if (common < local || common % local != 0) { throw Fault("Invalid instrument timebase"); }
@@ -71,7 +78,7 @@ Instrument::Instrument(Config config, Execution execution)
 void Instrument::attach(Owners &owners) {
   owners.mcu.set_span_observer([this](const auto span) { on_span(span); });
   owners.mcu.set_reset_period_observer([this](const auto period) {
-    native_->runtime->begin_reset_period(period, runtime_inputs(), runtime_observer());
+    native_->runtime->begin_reset_period(period, dma_inputs_, dsp_events_);
     publish_io();
   });
   owners.mcu.bus().set_observer([this](const auto &event) { on_write(event); });
@@ -155,7 +162,7 @@ void Instrument::boundary() {
 
 void Instrument::on_span(const McuSpan span) {
   control_.context = span.context;
-  native_->runtime->synchronize(runtime_inputs(), runtime_observer());
+  native_->runtime->synchronize(dma_inputs_, dsp_events_);
   publish_io();
 }
 
