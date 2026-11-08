@@ -11,6 +11,11 @@ bool McuUsb::enabled() const {
   return (module_control_ & usb::enable) != 0;
 }
 
+bool McuUsb::host_connectable() const {
+  return enabled() && decoder_known_ && (module_control_ & usb::clock_enable) != 0 &&
+         (module_control_ & (usb::phy_suspend | usb::disconnect)) == 0;
+}
+
 void McuUsb::require_control_phase() const {
   if (!control_phase_known_) {
     throw Fault("Unqualified USB control response after endpoint reset; new SETUP required");

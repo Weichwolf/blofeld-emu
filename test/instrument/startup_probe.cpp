@@ -11,6 +11,7 @@
 #include "storage/flash_image.hpp"
 #include "storage/private_file.hpp"
 #include "storage/virtual_device_state.hpp"
+#include "usb_midi_stimulus.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -117,6 +118,7 @@ int probe(const char *const *argv, const Clock::time_point started) {
   const std::filesystem::path directory(argv[2]);
   const PrivateDirectory output_directory(directory); // Validate before native execution.
   Output output;
+  test::UsbMidiStimulus midi(config.dsp_clock.timebase_hz);
   runtime::Instrument board(config,
                             {.image = device->image(),
                              .rom = rom,
@@ -130,6 +132,7 @@ int probe(const char *const *argv, const Clock::time_point started) {
     board.initialize();
     while (Clock::now() < deadline) {
       board.advance();
+      midi.poll(board, output.frames() != 0);
       const auto now = Clock::now();
       if (now >= next_report) {
         report(board, output, started, config.dsp_clock.timebase_hz, "startup");
@@ -143,6 +146,7 @@ int probe(const char *const *argv, const Clock::time_point started) {
   const char *phase = "host-limit";
   if (failed) { phase = "fault"; }
   report(board, output, started, config.dsp_clock.timebase_hz, phase);
+  midi.report();
   capture_display(board, output_directory);
   if (failed) { peer_response(board); }
   // Observation is deliberately fail-closed: frames and a screen alone do not

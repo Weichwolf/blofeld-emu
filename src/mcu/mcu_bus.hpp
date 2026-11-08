@@ -95,6 +95,9 @@ public:
   // Qualified system clocks continue through WAI; unsupported CRG gates fail.
   [[nodiscard]] McuWaitClockGates wait_clock_gates() const;
   void observe_usb_decoder(UsbDecoderState state);
+
+  [[nodiscard]] bool usb_host_connectable() const { return usb_.host_connectable(); }
+
   void observe_usb_sof(std::uint16_t frame, bool crc_valid = true);
   void observe_usb_configuration(UsbConfigurationRequest request);
   UsbResponse receive_usb_setup(const std::array<std::uint8_t, 8> &data, bool crc_valid = true);
@@ -105,6 +108,8 @@ public:
   [[nodiscard]] UsbConfigurationInfo usb_host_configuration() const;
 
   [[nodiscard]] bool usb_host_suspended() const { return usb_.host_suspended(); }
+
+  [[nodiscard]] std::uint8_t usb_host_address() const { return usb_.host_address(); }
 
   [[nodiscard]] UsbHostEvidence usb_host_evidence() const { return usb_.host_evidence(); }
 

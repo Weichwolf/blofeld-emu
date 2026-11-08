@@ -29,6 +29,8 @@
 #include "storage/nand.hpp"
 #include "storage/nand_cell_model.hpp"
 #include "storage/nand_image.hpp"
+#include "usb/usb_host_link.hpp"
+#include "usb/usb_transfer.hpp"
 
 #include <array>
 #include <cstddef>
@@ -45,6 +47,7 @@
 
 namespace blofeld {
 class UsbipRuntime;
+class UsbMidiHost;
 class VirtualDeviceState;
 }
 
@@ -170,6 +173,12 @@ public:
   void initialize();
   void advance();
   [[nodiscard]] Status status() const;
+
+  [[nodiscard]] std::uint64_t common_ticks() const {
+    require_idle();
+    return ticks();
+  }
+
   // Read-only storage inspection remains available after a runtime fault.
   [[nodiscard]] McuMemoryByte inspect_mcu(std::uint16_t address) const;
   [[nodiscard]] std::optional<std::uint32_t> inspect_dsp(DspAddress address) const;
@@ -177,6 +186,7 @@ public:
   void attach_pcm_output(PcmFrameSink &sink);
   // Non-real-time input admission at an inactive native MCU operation boundary.
   void poll_usb(UsbipRuntime &runtime);
+  [[nodiscard]] std::vector<UsbTransferCompletion> poll_usb(UsbMidiHost &host);
   // Read-only host capture; unknown pixels retain their knownness.
   [[nodiscard]] std::optional<LcdImage> display_image(LcdPanel panel) const;
 
@@ -211,6 +221,8 @@ private:
     bool audio_clock_started = false;
     std::array<SerialPcmPins, 2> esai_inputs{};
     std::optional<PcmWords> pcm;
+    std::optional<UsbHostLink> usb_link;
+    const void *usb_owner = nullptr;
     bool started = false;
     bool dsp_initial_pending = false;
     bool u0_asserted = false;
@@ -218,6 +230,7 @@ private:
   };
 
   void require_idle() const;
+  [[nodiscard]] bool prepare_usb(const void *owner);
   void require_healthy() const;
   void attach(Owners &owners);
   void prepare_dsp();

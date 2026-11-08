@@ -91,6 +91,7 @@ public:
   [[nodiscard]] UsbConfigurationInfo host_configuration() const;
   [[nodiscard]] bool host_suspended() const;
   [[nodiscard]] std::uint8_t host_address() const;
+  [[nodiscard]] bool host_connectable() const;
 
   [[nodiscard]] UsbHostEvidence host_evidence() const { return host_evidence_; }
 

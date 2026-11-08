@@ -8,6 +8,8 @@
 #include "runtime/instrument.hpp"
 #include "runtime/mcu_dsp_runtime.hpp"
 #include "runtime/nand_peer.hpp"
+#include "usb/usb_midi_host.hpp"
+#include "usb/usb_transfer.hpp"
 #include "usb/usbip_runtime.hpp"
 #include "usb/usbip_tcp.hpp"
 
@@ -16,6 +18,7 @@
 #include <memory>
 #include <optional>
 #include <ostream>
+#include <vector>
 
 namespace blofeld::runtime {
 class Instrument::Busy {
@@ -91,6 +94,7 @@ void Instrument::poll_usb(UsbipRuntime &runtime) {
   const auto before_started = runtime.started();
   const auto before_published = runtime.published();
   try {
+    if (!prepare_usb(&runtime)) { return; }
     const auto events = runtime.poll(native_->mcu.bus(),
                                      {.pc = cpu.pc, .ccr = cpu.ccr},
                                      {.owner = identity_, .restore_revision = 0, .ticks = ticks()});
@@ -115,6 +119,36 @@ void Instrument::poll_usb(UsbipRuntime &runtime) {
   } catch (...) {
     mark_fault();
     runtime.retire();
+    throw;
+  }
+}
+
+bool Instrument::prepare_usb(const void *owner) {
+  if (control_.usb_owner != nullptr && control_.usb_owner != owner) {
+    throw Fault("An instrument USB link requires one exclusive host session");
+  }
+  if (!control_.usb_link) {
+    constexpr unsigned frames_per_second = 1000;
+    if (common_hz() % frames_per_second != 0) {
+      throw Fault("USB frame time is not representable");
+    }
+    control_.usb_link.emplace(common_hz() / frames_per_second);
+    control_.usb_owner = owner;
+  }
+  return control_.usb_link->poll(native_->mcu.bus(), ticks());
+}
+
+std::vector<UsbTransferCompletion> Instrument::poll_usb(UsbMidiHost &host) {
+  require_healthy();
+  if (!control_.started) { throw Fault("USB MIDI host requires an initialized instrument"); }
+  if (native_->mcu.system_reset_active()) { return {}; }
+  const Busy guard(*this);
+  try {
+    if (!prepare_usb(&host)) { return {}; }
+    const auto cpu = native_->mcu.cpu().state();
+    return host.poll(native_->mcu.bus(), {.pc = cpu.pc, .ccr = cpu.ccr}, ticks());
+  } catch (...) {
+    mark_fault();
     throw;
   }
 }
