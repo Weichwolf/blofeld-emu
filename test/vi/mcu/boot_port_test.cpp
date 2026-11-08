@@ -6,6 +6,8 @@
 #include <exception>
 #include <iostream>
 #include <stdexcept>
+#include <stop_token>
+#include <thread>
 
 namespace {
 constexpr std::uint32_t control = 0xffff91, clock_register = 0xffff90, receive = 0xffff94;
@@ -42,6 +44,39 @@ void reset_partial_word() {
           "A discarded partial word cannot contaminate the next boot transfer");
 }
 
+void delayed_receive_mode() {
+  blofeld::vi::Shi shi;
+  blofeld::vi::mcu::BootPort port(shi);
+  require(drive(port, 3) && drive(port, 1) && port.pending(),
+          "A selected transaction awaits the DSP's actual receive configuration");
+  bool completed = false;
+  std::jthread mcu([&](const std::stop_token &stop) { completed = port.complete(stop); });
+  require(shi.write({.address = control, .value = fifo24}), "The DSP enables reception itself");
+  mcu.join();
+  require(completed && !port.pending(), "Configuration wakes the blocked transaction owner");
+  constexpr unsigned bits = 24;
+  for (unsigned bit = bits; bit != 0; --bit) {
+    const auto data = static_cast<std::uint8_t>(1 | (((datum >> (bit - 1)) & 1) * data_bit));
+    require(drive(port, data) && drive(port, static_cast<std::uint8_t>(data | 4)) &&
+                drive(port, data),
+            "The original first word is captured after configuration");
+  }
+  std::uint32_t word = 0;
+  require(shi.read(receive, word) && word == datum && !shi.read(receive, word),
+          "A slower DSP host thread cannot silently drop the first word");
+}
+
+void cancel_receive_mode() {
+  blofeld::vi::Shi shi;
+  blofeld::vi::mcu::BootPort port(shi);
+  require(drive(port, 3) && drive(port, 1) && port.pending(), "Await a disabled receiver");
+  bool completed = true;
+  std::jthread mcu([&](const std::stop_token &stop) { completed = port.complete(stop); });
+  mcu.request_stop();
+  mcu.join();
+  require(!completed && port.pending(), "Shutdown cancels readiness without inventing a mode");
+}
+
 void modes(const unsigned mode) {
   blofeld::vi::Shi shi;
   blofeld::vi::mcu::BootPort port(shi);
@@ -73,6 +108,8 @@ void modes(const unsigned mode) {
 int main() try {
   for (unsigned mode = 0; mode < 4; ++mode) { modes(mode); }
   reset_partial_word();
+  delayed_receive_mode();
+  cancel_receive_mode();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

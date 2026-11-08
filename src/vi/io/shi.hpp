@@ -3,10 +3,12 @@
 
 #include <array>
 #include <atomic>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
 #include <optional>
+#include <stop_token>
 
 namespace blofeld::vi {
 // DSP56371UM 7.4: SPI receive transactions and the DSP-visible FIFO.
@@ -26,6 +28,8 @@ public:
   [[nodiscard]] bool read(std::uint32_t address, std::uint32_t &value) noexcept;
   [[nodiscard]] bool write(Write access) noexcept;
   [[nodiscard]] std::optional<Mode> select(bool active) noexcept;
+  // MCU owner, outside native callbacks: wait for the DSP-written receive mode.
+  [[nodiscard]] std::optional<Mode> wait_mode(const std::stop_token &stop);
   [[nodiscard]] bool receive(std::uint32_t word) noexcept;
   // DSP owner after its previous Core has stopped; preserves the external selection.
   void reset() noexcept;
@@ -33,7 +37,9 @@ public:
 private:
   static constexpr std::uint32_t reset_status = 0x8200;
   void publish() noexcept;
+  [[nodiscard]] std::optional<Mode> mode() const noexcept;
   std::mutex mutex_;
+  std::condition_variable_any ready_;
   std::array<std::uint32_t, 10> fifo_{};
   std::size_t head_ = 0, count_ = 0;
   std::uint32_t control_ = 0, clock_ = 1, errors_ = 0;

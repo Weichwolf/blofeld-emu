@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <mutex>
 #include <optional>
+#include <stop_token>
 
 namespace blofeld::vi {
 namespace {
@@ -40,6 +41,7 @@ void Shi::reset() noexcept {
   clock_ = 1;
   observed_overrun_ = false;
   publish();
+  ready_.notify_all();
 }
 
 bool Shi::read(const std::uint32_t address, std::uint32_t &value) noexcept {
@@ -84,6 +86,7 @@ bool Shi::write(const Write access) noexcept {
     observed_overrun_ = false;
   }
   publish();
+  ready_.notify_all();
   return true;
 }
 
@@ -91,11 +94,23 @@ std::optional<Shi::Mode> Shi::select(const bool active) noexcept {
   const std::lock_guard lock(mutex_);
   selected_ = active;
   publish();
-  if (!active || (control_ & enabled) == 0) { return {}; }
+  return mode();
+}
+
+std::optional<Shi::Mode> Shi::mode() const noexcept {
+  if (!selected_ || (control_ & enabled) == 0) { return {}; }
   // SPI samples the leading edge for CPHA=0, trailing for CPHA=1.
   const bool phase = (clock_ & 1) != 0;
   const bool polarity = (clock_ & 2) != 0;
   return Mode{.bits = width(control_), .falling = phase != polarity, .continuous = phase};
+}
+
+std::optional<Shi::Mode> Shi::wait_mode(const std::stop_token &stop) {
+  std::unique_lock lock(mutex_);
+  if (!ready_.wait(lock, stop, [&] { return mode().has_value(); }) || stop.stop_requested()) {
+    return {};
+  }
+  return mode();
 }
 
 bool Shi::receive(const std::uint32_t word) noexcept {

@@ -19,6 +19,35 @@ void require(const bool condition, const char *message) {
   if (!condition) { throw std::runtime_error(message); }
 }
 
+void consecutive_receive_registers() {
+  namespace isa = dsp56300::isa;
+  constexpr dsp56300::Word receive_port = 0x14;
+  constexpr dsp56300::Word a0 = 8;
+  constexpr dsp56300::Word r0 = 16;
+  constexpr dsp56300::Word absolute = 0x30;
+  constexpr dsp56300::Word control = 0xffff91;
+  constexpr dsp56300::Word receive = 0xffff94;
+  constexpr dsp56300::Word fifo24 = 0x29;
+  constexpr auto read_a0 =
+      isa::opcode<isa::Opcode::movep_register_low>()[0] | (a0 << 8U) | receive_port;
+  constexpr auto read_r0 =
+      isa::opcode<isa::Opcode::movep_register_low>()[0] | (r0 << 8U) | receive_port;
+  constexpr auto store =
+      isa::opcode<isa::Opcode::movep_program_low>()[0] | (absolute << 8U) | receive_port;
+  constexpr auto program = isa::program(std::array{read_a0, read_r0, store, dsp56300::Word{0}},
+                                        isa::opcode<isa::Opcode::jmp_absolute_short>());
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  require(shi.write({.address = control, .value = fifo24}) && shi.select(true).has_value(),
+          "Configure actual 24-bit boot reception");
+  require(shi.receive(1) && shi.receive(0) && shi.receive(isa::stop[0]),
+          "Queue separate length, destination and code words");
+  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+  dsp56300::Word word = 0;
+  require(!report.failure && report.instructions == 5 && !shi.read(receive, word),
+          "Each native MOVEP consumes exactly one word across A0, R0 and program destinations");
+}
+
 void reset_running_core() {
   namespace isa = dsp56300::isa;
   constexpr dsp56300::Word start = 0xff0000;
@@ -72,7 +101,10 @@ void reset_running_core() {
 }
 }
 
-int main() try { reset_running_core(); } catch (const std::exception &error) {
+int main() try {
+  consecutive_receive_registers();
+  reset_running_core();
+} catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';
   return 1;

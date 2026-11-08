@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <stop_token>
 
 namespace blofeld::vi::mcu {
 enum class Port : std::uint8_t { a, b, e, t, m, j, p, q, r, s, u };
@@ -36,6 +37,12 @@ public:
   [[nodiscard]] bool write(Write access) noexcept;
   void input(Port port, Input sample);
   [[nodiscard]] std::optional<Output> output(Port port) const noexcept;
+
+  [[nodiscard]] bool boot_pending() const noexcept { return boot_.pending(); }
+
+  [[nodiscard]] bool complete_boot_transfer(const std::stop_token &stop) {
+    return boot_.complete(stop);
+  }
 
   void reset_boot_transfer() noexcept { boot_.reset(); }
 

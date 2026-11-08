@@ -44,6 +44,11 @@ input-mode samples are inactive low; output-mode reads still use the MCU latch.
 This deterministic VM choice for passive controls is not a claim about PCB pulls.
 Active data/status inputs must come from their devices, never from this policy.
 
+A selected boot transaction whose SHI receive mode is not published yields its
+MCU owner. Outside the native callback, wait for the DSP's actual HCSR write or
+shutdown, then capture with that mode. This orders transaction ownership across
+host scheduling/JIT latency without synthesizing readiness or advancing clocks.
+
 Local ISA timing remains correct; cross-core coupling serves observable instrument
 behavior rather than hypothetical silicon phases. Qualify ordering, IRQ delivery,
 partial transactions and musical latency against firmware and independent tests.

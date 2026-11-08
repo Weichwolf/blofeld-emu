@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <stop_token>
 
 namespace blofeld::vi::mcu {
 // Port B firmware adapter: B1 selects, B2 clocks, B4 carries serial data.
@@ -19,6 +20,10 @@ public:
 
   [[nodiscard]] bool write(Write access) noexcept;
   void reset() noexcept;
+
+  [[nodiscard]] bool pending() const noexcept { return selected_ && !mode_; }
+
+  [[nodiscard]] bool complete(const std::stop_token &stop);
 
 private:
   Shi &shi_;

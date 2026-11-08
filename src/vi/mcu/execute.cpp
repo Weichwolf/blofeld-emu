@@ -109,10 +109,11 @@ public:
   cpu12::Io callbacks() noexcept;
 
   bool complete_events() {
-    if (!release_reset_) { return true; }
-    if (!reset_.release(stop_)) { return false; }
-    release_reset_ = false;
-    return true;
+    if (release_reset_) {
+      if (!reset_.release(stop_)) { return false; }
+      release_reset_ = false;
+    }
+    return ports_.complete_boot_transfer(stop_);
   }
 
 private:
@@ -188,6 +189,7 @@ private:
     constexpr std::uint16_t data_u = 0x278;
     constexpr std::uint16_t direction_u = 0x27a;
     if (!ports_.write(access)) { return false; }
+    if (ports_.boot_pending()) { core_->request_yield(); }
     if (access.offset != data_u && access.offset != direction_u) { return true; }
     const auto output = ports_.output(Port::u);
     if (!output || ((output->direction & 1) != 0 && (output->known & 1) == 0)) { return false; }

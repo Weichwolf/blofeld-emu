@@ -2,6 +2,7 @@
 #include "mcu/boot_port.hpp"
 
 #include <cstdint>
+#include <stop_token>
 
 namespace blofeld::vi::mcu {
 namespace {
@@ -15,6 +16,12 @@ void BootPort::reset() noexcept {
   mode_.reset();
   bits_ = 0;
   word_ = 0;
+}
+
+bool BootPort::complete(const std::stop_token &stop) {
+  if (!pending()) { return true; }
+  mode_ = shi_.wait_mode(stop);
+  return mode_.has_value();
 }
 
 bool BootPort::write(const Write access) noexcept {
