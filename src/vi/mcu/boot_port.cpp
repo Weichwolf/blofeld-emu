@@ -12,7 +12,7 @@ constexpr std::uint8_t transaction_mask = select_bit | clock_bit | data_bit;
 
 void BootPort::reset() noexcept {
   previous_ = 0;
-  selected_ = false;
+  selected_ = pending_word_ = false;
   mode_.reset();
   bits_ = 0;
   word_ = 0;
@@ -20,11 +20,22 @@ void BootPort::reset() noexcept {
 
 bool BootPort::complete(const std::stop_token &stop) {
   if (!pending()) { return true; }
-  mode_ = shi_.wait_mode(stop);
-  return mode_.has_value();
+  if (!mode_) {
+    mode_ = shi_.wait_mode(stop);
+    if (!mode_) { return false; }
+  }
+  if (!pending_word_) { return true; }
+  if (!shi_.submit(word_, stop).accepted) { return false; }
+  pending_word_ = false;
+  if (mode_->continuous) {
+    bits_ = 0;
+    word_ = 0;
+  }
+  return true;
 }
 
 bool BootPort::write(const Write access) noexcept {
+  if (pending_word_) { return false; }
   const auto previous = previous_;
   previous_ = access.value;
   const bool selected = (access.direction & access.known & transaction_mask) == transaction_mask &&
@@ -45,11 +56,7 @@ bool BootPort::write(const Write access) noexcept {
   word_ = (word_ << 1U) | ((access.value & data_bit) != 0 ? 1U : 0U);
   ++bits_;
   if (bits_ != mode_->bits) { return true; }
-  const auto transferred = shi_.transfer(word_);
-  if (mode_->continuous) {
-    bits_ = 0;
-    word_ = 0;
-  }
-  return transferred.accepted;
+  pending_word_ = true;
+  return true;
 }
 }

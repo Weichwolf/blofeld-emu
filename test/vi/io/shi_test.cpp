@@ -7,6 +7,7 @@
 #include <exception>
 #include <iostream>
 #include <stdexcept>
+#include <stop_token>
 #include <thread>
 
 namespace {
@@ -178,15 +179,16 @@ void phase_zero_transmit() {
 void concurrent_fifo() {
   blofeld::vi::Shi shi;
   require(shi.write({.address = control, .value = fifo24}), "Enable shared FIFO");
+  constexpr unsigned words = 64;
   std::atomic<bool> failed{false};
   std::jthread producer([&] {
     static_cast<void>(shi.select(true));
-    for (unsigned index = 0; index < 10; ++index) {
-      if (!shi.transfer(index).accepted) { failed.store(true, std::memory_order_release); }
+    for (unsigned index = 0; index < words; ++index) {
+      if (!shi.submit(index, {}).accepted) { failed.store(true, std::memory_order_release); }
     }
     static_cast<void>(shi.select(false));
   });
-  for (unsigned index = 0; index < 10; ++index) {
+  for (unsigned index = 0; index < words; ++index) {
     while ((status(shi) & receive_ready) == 0) {
       require(!failed.load(std::memory_order_acquire), "Producer accepts the bounded input");
       std::this_thread::yield();
@@ -195,7 +197,35 @@ void concurrent_fifo() {
     require(shi.read(receive, word) && word == index, "Concurrent owners preserve word ordering");
   }
   producer.join();
-  require(!failed.load(std::memory_order_acquire), "All concurrent input was accepted");
+  require(!failed.load(std::memory_order_acquire) && (status(shi) & overrun) == 0,
+          "A longer VM stream applies real capacity backpressure without losing words");
+}
+
+void cancel_submission() {
+  blofeld::vi::Shi shi;
+  require(shi.write({.address = control, .value = fifo24}), "Configure bounded submission");
+  static_cast<void>(shi.select(true));
+  constexpr unsigned capacity = 10;
+  for (unsigned index = 0; index < capacity; ++index) {
+    require(shi.transfer(index).accepted, "Fill the receive FIFO before queuing more work");
+  }
+  constexpr std::uint32_t too_wide = 0x1000000;
+  require(!shi.submit(too_wide, {}).accepted,
+          "Invalid words fail immediately even when a full FIFO cannot make progress");
+  std::atomic<bool> accepted{true};
+  std::jthread producer([&](const std::stop_token &stop) {
+    accepted.store(shi.submit(capacity, stop).accepted, std::memory_order_release);
+  });
+  producer.request_stop();
+  producer.join();
+  require(!accepted.load(std::memory_order_acquire) && (status(shi) & overrun) == 0,
+          "Stop cancels a full-FIFO submission without publishing or overwriting data");
+  std::jthread reset_producer(
+      [&] { accepted.store(shi.submit(capacity, {}).accepted, std::memory_order_release); });
+  shi.reset();
+  reset_producer.join();
+  require(!accepted.load(std::memory_order_acquire) && status(shi) == reset_status,
+          "Receiver reset wakes a pending submission without committing stale data");
 }
 
 void concurrent_transmit() {
@@ -245,6 +275,7 @@ int main() try {
   transmit_widths();
   phase_zero_transmit();
   concurrent_fifo();
+  cancel_submission();
   concurrent_transmit();
 } catch (const std::exception &error) {
 

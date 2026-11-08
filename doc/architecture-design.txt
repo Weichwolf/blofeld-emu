@@ -64,6 +64,14 @@ MCU owner. Outside the native callback, wait for the DSP's actual HCSR write or
 shutdown, then capture with that mode. This orders transaction ownership across
 host scheduling/JIT latency without synthesizing readiness or advancing clocks.
 
+The MCU adapter stages at most one completed SPI word and yields at that actual
+transaction boundary. Outside native callbacks, submission waits for real SHI
+FIFO capacity. Host scheduling and cold translation must not silently drop a VM
+transport word. No extra FIFO slots, per-bit synchronization or success replies
+are introduced. Reading HRX releases capacity; stop, reset and changed receive
+configuration cancel pending admission. Device-level immediate SPI transfers
+retain their documented overrun/status effects; transport admission is separate.
+
 SHI transfers complete words through one bounded receive FIFO and the distinct
 HTX/IOSR transmit stages. HTDE follows actual HTX ownership; CPHA=0 loads IOSR
 while deselected, CPHA=1 can load between words. Unpolled writes overwrite HTX,
@@ -111,7 +119,7 @@ relevant MIDI/device events. Live consumption bounds lookahead and paces output;
 offline draining runs as fast as possible. No wall-clock substitution for musical
 time, missing frames, duplicate frames or serial-PCM bit decoding.
 
-DMA consumes real request edges or a software DE trigger. Arbitrate pending
+DMA consumes real requests or a software DE trigger. Arbitrate pending
 channels by priority and word ownership, using native memory accesses and typed
 data-register transactions. Advance addresses/counters and signal completion only
 after the destination accepts the word. Preserve counter reloads and circular

@@ -35,7 +35,9 @@ image directly. Read/reset operations complete at their own virtual deadlines;
 PLL configuration converts nominal reference periods to DSP cycles. Media program/erase, ID/status and automatic page continuation
 are not yet implemented.
 The SHI receive FIFO connects MCU port writes to DSP program loading; HTX and
-IOSR retain actual full-duplex words, with phase-dependent loading and underrun handling. MCU U0
+IOSR retain actual full-duplex words, with phase-dependent loading and underrun handling.
+Completed bootstrap words use bounded FIFO admission outside native callbacks;
+a full queue applies VM backpressure, and stop/reset cancel pending admission. MCU U0
 assertions retire the previous DSP Core before peripheral reset and ROM restart.
 `blofeld-headless` loads local images and executes their native JIT paths;
 unimplemented device accesses stop with context. Flash program/erase and interrupts,

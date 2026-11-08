@@ -37,6 +37,9 @@ public:
   // MCU owner, outside native callbacks: wait for the DSP-written receive mode.
   [[nodiscard]] std::optional<Mode> wait_mode(const std::stop_token &stop);
   [[nodiscard]] Transfer transfer(std::uint32_t word) noexcept;
+  // VM transport backpressure, outside native callbacks. Admission waits for
+  // real FIFO space; reset/configuration changes cancel the pending transaction.
+  [[nodiscard]] Transfer submit(std::uint32_t word, const std::stop_token &stop);
   // DSP owner after its previous Core has stopped; preserves the external selection.
   void reset() noexcept;
 
@@ -44,11 +47,14 @@ private:
   static constexpr std::uint32_t reset_status = 0x8200;
   void publish() noexcept;
   void prime_transmit() noexcept;
+  [[nodiscard]] bool valid_transfer(std::uint32_t word) const noexcept;
+  [[nodiscard]] Transfer transfer_locked(std::uint32_t word) noexcept;
   [[nodiscard]] std::optional<Mode> mode() const noexcept;
   std::mutex mutex_;
   std::condition_variable_any ready_;
   std::array<std::uint32_t, 10> fifo_{};
   std::size_t head_ = 0, count_ = 0;
+  std::uint64_t generation_ = 0;
   std::uint32_t control_ = 0, clock_ = 1, errors_ = 0;
   std::optional<std::uint32_t> transmit_, shifting_;
   bool observed_overrun_ = false, observed_underrun_ = false, selected_ = false;
