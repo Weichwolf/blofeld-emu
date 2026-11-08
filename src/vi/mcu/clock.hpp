@@ -30,6 +30,8 @@ public:
   // Exact nominal periods/timestamps in 60 MHz units, independent of host time.
   [[nodiscard]] unsigned bus_period() const noexcept;
 
+  [[nodiscard]] std::uint16_t usb_module_control() const noexcept { return usb_; }
+
   [[nodiscard]] Cycle ticks() const noexcept { return ticks_; }
 
 private:

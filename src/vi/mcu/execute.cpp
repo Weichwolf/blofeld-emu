@@ -5,6 +5,7 @@
 #include "io/mcu_flash.hpp"
 #include "io/sci.hpp"
 #include "io/shi.hpp"
+#include "io/usb.hpp"
 #include "mcu/clock.hpp"
 #include "mcu/memory.hpp"
 #include "mcu/ports.hpp"
@@ -19,6 +20,7 @@
 #include <optional>
 #include <stdexcept>
 #include <stop_token>
+#include <vector>
 
 namespace blofeld::vi::mcu {
 namespace {
@@ -34,6 +36,7 @@ struct Devices {
   Timer timer;
   Clock clock;
   Sci sci;
+  Usb usb;
   Timer::Cycle idle = 0;
 
   bool advance(const cpu12::Core &core) noexcept {
@@ -44,7 +47,7 @@ struct Devices {
   }
 
   [[nodiscard]] std::optional<std::uint16_t> pending() const noexcept {
-    return std::max({timer.pending(), clock.pending(), sci.pending()});
+    return std::max({timer.pending(), clock.pending(), sci.pending(), usb.pending()});
   }
 
   [[nodiscard]] std::optional<Timer::Cycle> deadline() const noexcept {
@@ -58,7 +61,8 @@ struct Devices {
   }
 
   [[nodiscard]] bool interrupts_enabled() const noexcept {
-    return timer.interrupts_enabled() || clock.interrupts_enabled() || sci.interrupts_enabled();
+    return timer.interrupts_enabled() || clock.interrupts_enabled() || sci.interrupts_enabled() ||
+           usb.interrupts_enabled();
   }
 
   void activity(const cpu12::ExecutionState state) {
@@ -122,6 +126,13 @@ private:
     if (at.space == Space::registers && McuFlash::contains(at.offset)) {
       return flash_.read(at.offset, value);
     }
+    if (at.space == Space::registers && Usb::contains(at.offset)) {
+      std::uint16_t word = 0;
+      const auto accepted =
+          access_devices([&] { return devices_.usb.read({.offset = at.offset}, word); });
+      value = static_cast<std::uint8_t>(word);
+      return accepted;
+    }
     if (at.space == Space::registers && Sci::contains(at.offset)) {
       std::uint16_t word = 0;
       const auto accepted =
@@ -149,6 +160,14 @@ private:
     return memory_.read(address, value);
   }
 
+  bool write_usb(const Usb::Write access) noexcept {
+    return access_devices([&] {
+      if (!devices_.usb.write(access, devices_.clock.usb_module_control())) { return false; }
+      if (devices_.usb.mapping_pending()) { core_->request_yield(); }
+      return true;
+    });
+  }
+
   bool write(const cpu12::ByteWrite access) noexcept {
     if (interrupted()) { return false; }
     const auto at = memory_.locate(access.address);
@@ -157,6 +176,9 @@ private:
     }
     if (at.space == Space::registers && McuFlash::contains(at.offset)) {
       return flash_.write({.offset = at.offset, .value = access.value});
+    }
+    if (at.space == Space::registers && Usb::contains(at.offset)) {
+      return write_usb({.offset = at.offset, .value = access.value});
     }
     if (at.space == Space::registers && Sci::contains(at.offset)) {
       return access_devices(
@@ -185,6 +207,11 @@ private:
   bool read_word(const std::uint16_t address, std::uint16_t &value) noexcept {
     if (interrupted()) { return false; }
     const auto at = memory_.locate(address);
+    if (at.space == Space::registers && Usb::contains(at.offset) &&
+        Usb::contains(static_cast<std::uint16_t>(at.offset + 1))) {
+      return access_devices(
+          [&] { return devices_.usb.read({.offset = at.offset, .bytes = 2}, value); });
+    }
     if (at.space == Space::registers && Sci::contains(at.offset) &&
         Sci::contains(static_cast<std::uint16_t>(at.offset + 1))) {
       return access_devices(
@@ -210,6 +237,10 @@ private:
     const auto next = memory_.locate(static_cast<std::uint16_t>(access.address + 1));
     if (at.space == Space::flash && next.space == Space::flash && next.offset == at.offset + 1) {
       return flash_.write_array({.offset = at.offset, .value = access.value, .bytes = 2});
+    }
+    if (at.space == Space::registers && Usb::contains(at.offset) &&
+        Usb::contains(static_cast<std::uint16_t>(at.offset + 1))) {
+      return write_usb({.offset = at.offset, .value = access.value, .bytes = 2});
     }
     if (at.space == Space::registers && Sci::contains(at.offset) &&
         Sci::contains(static_cast<std::uint16_t>(at.offset + 1))) {
@@ -310,6 +341,17 @@ void advance(const cpu12::Core &core, Devices &devices) {
   }
 }
 
+std::vector<cpu12::Ram> regions(Memory &memory, Usb &usb) {
+  auto result = memory.regions();
+  constexpr std::uint16_t register_mapping = 0x11;
+  const auto base =
+      static_cast<std::uint16_t>(unsigned{memory.read_mapping(register_mapping)} << 8U);
+  for (const auto window : usb.regions(base)) {
+    if (!window.bytes.empty()) { result.push_back(window); }
+  }
+  return result;
+}
+
 enum class Dispatch : std::uint8_t { run, again, done };
 
 Dispatch prepare(cpu12::Core &core, Devices &devices, ExecutionReport &report) {
@@ -336,7 +378,7 @@ Dispatch prepare(cpu12::Core &core, Devices &devices, ExecutionReport &report) {
 ExecutionReport execute(FlashImage &image, Shi &shi, const std::stop_token &stop) {
   Memory memory(image);
   Devices devices;
-  auto grants = memory.regions();
+  auto grants = regions(memory, devices.usb);
   Io io(memory, image, devices, shi, stop);
   auto callbacks = io.callbacks();
   cpu12::Core core(cpu12::Memory::mapped(grants), &callbacks);
@@ -373,9 +415,12 @@ ExecutionReport execute(FlashImage &image, Shi &shi, const std::stop_token &stop
                                              : "MCU access or instruction is not implemented"};
       break;
     }
-    if (memory.commit_mapping()) {
-      grants = memory.regions();
-      core.set_memory(cpu12::Memory::mapped(grants));
+    const auto memory_changed = memory.commit_mapping();
+    const auto buffers_changed = devices.usb.commit_mapping();
+    if (memory_changed || buffers_changed) {
+      auto next_grants = regions(memory, devices.usb);
+      core.set_memory(cpu12::Memory::mapped(next_grants));
+      grants.swap(next_grants);
     }
     advance(core, devices);
     devices.activity(result.state);

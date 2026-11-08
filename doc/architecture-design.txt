@@ -49,6 +49,12 @@ format, without pad sampling or serial line replay. Preserve its status/data cle
 sequences, preamble and transmit-buffer handoff, receive overrun and wakeup effects.
 Bound completed output and report an undrained consumer instead of losing data.
 
+USB local endpoint windows borrow the selected RAM and byte-knowledge arrays.
+Bank changes publish new native memory grants after the complete selecting
+instruction; never copy buffer payloads or remap for unrelated register writes.
+Preserve ordered high/low word commits and firmware-written configuration quirks.
+Enumeration, SOF and transfer completions come only from actual host transactions.
+
 Audio comes from the final original DSP output buffer. Publish complete ordered
 frames/blocks, preserving DMA/FIFO status and sample times. Split processing at
 relevant MIDI/device events. Live consumption bounds lookahead and paces output;

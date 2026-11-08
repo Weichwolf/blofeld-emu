@@ -405,6 +405,39 @@ void sci_wakes_mcu() {
           result.failure->address == sink && result.failure->value == mark,
       "The SCI preamble completes, its real vector wakes WAI, and RTI resumes native execution");
 }
+
+void usb_banks_rebind_native_memory() {
+  namespace isa = cpu12::isa;
+  constexpr std::uint16_t sink = 0x3000;
+  constexpr cpu12::Byte mark = 0x5a;
+  constexpr auto program = isa::program(isa::opcode<isa::Opcode::ldd_immediate>(),
+                                        std::array<cpu12::Byte, 2>{0x40, 0},
+                                        isa::opcode<isa::Opcode::std_extended>(),
+                                        std::array<cpu12::Byte, 2>{3, 0},
+                                        isa::opcode<isa::Opcode::ldab_immediate>(),
+                                        std::array<cpu12::Byte, 1>{0x23},
+                                        isa::opcode<isa::Opcode::stab_extended>(),
+                                        std::array<cpu12::Byte, 2>{3, 0x0f},
+                                        isa::opcode<isa::Opcode::ldab_immediate>(),
+                                        std::array{mark},
+                                        isa::opcode<isa::Opcode::stab_extended>(),
+                                        std::array<cpu12::Byte, 2>{3, 0x80},
+                                        isa::opcode<isa::Opcode::ldab_immediate>(),
+                                        std::array<cpu12::Byte, 1>{0x32},
+                                        isa::opcode<isa::Opcode::stab_extended>(),
+                                        std::array<cpu12::Byte, 2>{3, 0x0f},
+                                        isa::opcode<isa::Opcode::ldab_extended>(),
+                                        std::array<cpu12::Byte, 2>{3, 0xc0},
+                                        isa::opcode<isa::Opcode::stab_extended>(),
+                                        std::array<cpu12::Byte, 2>{0x30, 0});
+  auto flash = image();
+  std::ranges::copy(program, flash->bytes.begin());
+  blofeld::vi::Shi shi;
+  const auto result = blofeld::vi::mcu::execute(*flash, shi, {});
+  require(result.failure && result.failure->operation == blofeld::vi::Access::write &&
+              result.failure->address == sink && result.failure->value == mark,
+          "Native RAM grants follow a USB bank switch without copying or losing the byte");
+}
 }
 
 int main() try {
@@ -416,6 +449,7 @@ int main() try {
   flash_rejects_protected_word();
   rti_keeps_time_after_wait();
   sci_wakes_mcu();
+  usb_banks_rebind_native_memory();
   auto flash = image();
   constexpr auto words = dsp56300::isa::program(dsp56300::isa::nop, dsp56300::isa::stop);
   const std::vector<dsp56300::Word> boot(words.begin(), words.end());
