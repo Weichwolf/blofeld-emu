@@ -3,7 +3,7 @@
 
 #include <array>
 #include <cstdint>
-#include <map>
+#include <memory>
 #include <optional>
 #include <span>
 
@@ -22,6 +22,11 @@ struct NandLocation {
   unsigned column = 0;
 };
 
+struct NandRegion {
+  unsigned first_page = 0;
+  unsigned page_count = 1;
+};
+
 struct NandProgramCount {
   unsigned main = 0;
   unsigned spare = 0;
@@ -33,7 +38,7 @@ struct NandBlock {
   std::optional<bool> erase_protected = std::nullopt;
 };
 
-// Sparse cells and reference history, not an erased factory image or a file codec.
+// Sparse image pages with shared immutable snapshots and page-local writes.
 class NandArray {
 public:
   static constexpr unsigned page_bytes = 528;
@@ -55,6 +60,7 @@ public:
   NandArray &operator=(NandArray &&other) noexcept;
   ~NandArray() = default;
   [[nodiscard]] NandImage image() const;
+  [[nodiscard]] NandImage image(NandRegion region) const;
 
   void observe_bytes(NandLocation start, std::span<const std::uint8_t> bytes);
   void observe_cell(NandLocation location, NandByte cell);
@@ -73,10 +79,13 @@ private:
   static void validate_page(unsigned page);
   static void validate_block(unsigned block);
   void clear_read_cache() noexcept;
-  std::map<unsigned, Page> contents_;
-  std::map<unsigned, NandBlock> blocks_;
-  // Map nodes survive insertion and page replacement. Whole-map replacement
-  // clears this transient observer cache; missing pages are never cached.
+  [[nodiscard]] const Page *find_page(unsigned page) const;
+  Page &writable_page(unsigned page);
+  void writable_data();
+  struct Data;
+  std::shared_ptr<Data> data_;
+  // Borrowed from the current page tree. Writes and owner replacement clear
+  // this cache; missing pages are never cached.
   mutable const Page *read_page_ = nullptr;
   mutable unsigned read_index_ = pages;
 };

@@ -2,6 +2,7 @@
 #include "storage/nand_store.hpp"
 
 #include "common/bus.hpp"
+#include "storage/image_journal.hpp"
 #include "storage/nand.hpp"
 #include "storage/nand_array.hpp"
 #include "storage/nand_file.hpp"
@@ -56,7 +57,9 @@ public:
       directory.write(path.filename(), encode_nand_image(*initial));
       model = Nand(*initial);
     } else {
-      model = Nand(decode_nand_image(directory.read(path.filename(), nand_image_max_bytes)));
+      const PrivateFile image(directory, path.filename());
+      ImageJournalPosition position;
+      model = Nand(load_image_journal(image, position));
     }
   }
 

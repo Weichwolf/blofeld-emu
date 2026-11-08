@@ -22,6 +22,7 @@ enum class PrivateFilePhase : std::uint8_t {
 using PrivateFileObserver = std::function<void(PrivateFilePhase)>;
 
 class PrivateFileLease;
+class PrivateFile;
 
 // A stable directory identity shared by reads, replacement and writer leases.
 // Namespace renames do not redirect later operations to a replacement path.
@@ -42,6 +43,40 @@ private:
   class Impl;
   std::unique_ptr<Impl> impl_;
   friend class PrivateFileLease;
+  friend class PrivateFile;
+};
+
+enum class PrivateFileAccess : std::uint8_t { read_only, read_write };
+
+struct PrivateFileRead {
+  std::uint64_t offset = 0;
+  std::span<std::uint8_t> bytes;
+};
+
+struct PrivateFileAppend {
+  std::uint64_t offset = 0;
+  std::span<const std::uint8_t> pending;
+  std::span<const std::uint8_t> commit;
+};
+
+// Stable open image descriptor. A committed prefix survives incomplete tails.
+class PrivateFile {
+public:
+  PrivateFile(const PrivateDirectory &directory,
+              const std::filesystem::path &filename,
+              PrivateFileAccess access = PrivateFileAccess::read_only);
+  ~PrivateFile();
+  PrivateFile(const PrivateFile &) = delete;
+  PrivateFile &operator=(const PrivateFile &) = delete;
+  [[nodiscard]] std::uint64_t size() const;
+  void read(PrivateFileRead range) const;
+  void append(PrivateFileAppend range, const PrivateFileObserver &observer = {});
+
+private:
+  const PrivateDirectory &directory_;
+  const std::filesystem::path filename_;
+  int descriptor_ = -1;
+  PrivateFileAccess access_;
 };
 
 class PrivateFileLease {

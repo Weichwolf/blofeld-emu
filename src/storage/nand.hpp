@@ -40,6 +40,7 @@ public:
   explicit Nand(const NandImage &image);
   Nand(const NandImage &image, NandReadContinuation continuation);
   [[nodiscard]] NandImage persistent_image() const;
+  [[nodiscard]] NandImage persistent_image(NandRegion region) const;
 
   void observe_power_ready();
   void observe_identification(NandIdentification identification);

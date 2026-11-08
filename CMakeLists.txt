@@ -60,9 +60,9 @@ add_library(blofeld_nand_write_medium src/storage/nand_cell_model.cpp src/storag
 target_include_directories(blofeld_nand_write_medium PUBLIC src)
 target_link_libraries(blofeld_nand_write_medium PUBLIC blofeld_nand_operation_clock)
 
-add_library(blofeld_nand_store src/storage/nand_file.cpp src/storage/nand_store.cpp)
+add_library(blofeld_nand_store src/storage/nand_file.cpp src/storage/nand_store.cpp src/storage/image_journal.cpp)
 target_include_directories(blofeld_nand_store PUBLIC src)
-target_link_libraries(blofeld_nand_store PUBLIC blofeld_nand PRIVATE blofeld_private_files)
+target_link_libraries(blofeld_nand_store PUBLIC blofeld_nand PRIVATE blofeld_private_files ZLIB::ZLIB)
 add_library(blofeld_nand_write_store src/storage/nand_write_store.cpp)
 target_include_directories(blofeld_nand_write_store PUBLIC src)
 target_link_libraries(blofeld_nand_write_store PUBLIC blofeld_nand_write_medium blofeld_nand_store
@@ -871,6 +871,11 @@ if(BUILD_TESTING)
   add_executable(blofeld-nand-write-store-test test/nand_write_store_test.cpp)
   target_link_libraries(blofeld-nand-write-store-test PRIVATE blofeld_nand_write_store)
   add_test(NAME nand_write_store COMMAND blofeld-nand-write-store-test)
+  add_executable(blofeld-image-journal-test test/image_journal_test.cpp)
+  target_link_libraries(blofeld-image-journal-test PRIVATE blofeld_nand_write_store)
+  add_test(NAME image_journal COMMAND blofeld-image-journal-test)
+  set_tests_properties(image_journal PROPERTIES TIMEOUT 30)
+  add_dependencies(quality blofeld-image-journal-test)
   set_tests_properties(nand_write_store PROPERTIES TIMEOUT 30)
 
   add_dependencies(quality blofeld-nand-write-store-test

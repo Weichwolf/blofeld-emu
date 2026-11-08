@@ -221,12 +221,13 @@ void test_pinned_directory_and_bounded_loader() {
   const auto oversized = directory.file("oversized.bfnand");
   std::ofstream(oversized).close();
   std::filesystem::resize_file(oversized, nand_image_max_bytes + 1);
-  persistence_reject([&] { static_cast<void>(load_nand_image(oversized)); },
-                     "type or length exceeds");
+  // Journalled images can exceed the base-image limit. Invalid headers must
+  // still fail before any allocation proportional to the sparse file size.
+  persistence_reject([&] { static_cast<void>(load_nand_image(oversized)); }, "NAND image header");
   const auto fifo = directory.file("pipe.bfnand");
   persistence_require(mkfifo(fifo.c_str(), S_IRUSR | S_IWUSR) == 0,
                       "Own FIFO fixture must be created");
-  persistence_reject([&] { static_cast<void>(load_nand_image(fifo)); }, "type or length exceeds");
+  persistence_reject([&] { static_cast<void>(load_nand_image(fifo)); }, "regular");
 }
 }
 }

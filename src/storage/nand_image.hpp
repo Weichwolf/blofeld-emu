@@ -28,6 +28,7 @@ inline constexpr std::size_t nand_image_max_bytes =
     (static_cast<std::size_t>(NandArray::pages) * nand_image_page_bytes) + sizeof(std::uint32_t);
 
 [[nodiscard]] std::vector<std::uint8_t> encode_nand_image(const NandImage &image);
+[[nodiscard]] std::size_t nand_image_base_bytes(std::span<const std::uint8_t> bytes);
 [[nodiscard]] NandImage decode_nand_image(std::span<const std::uint8_t> bytes);
 
 }

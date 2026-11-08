@@ -2,7 +2,9 @@
 #include "storage/nand_write_store.hpp"
 
 #include "common/bus.hpp"
+#include "storage/image_journal.hpp"
 #include "storage/nand.hpp"
+#include "storage/nand_array.hpp"
 #include "storage/nand_cell_model.hpp"
 #include "storage/nand_file.hpp"
 #include "storage/nand_image.hpp"
@@ -27,20 +29,32 @@ std::filesystem::path destination(const std::filesystem::path &path) {
   return parent / path.filename();
 }
 
-NandWriteMedium load_medium(const PrivateDirectory &directory,
-                            const std::filesystem::path &name,
-                            const NandImage *seed,
+PrivateFile open_image(const PrivateDirectory &directory,
+                       const std::filesystem::path &name,
+                       const NandImage *seed) {
+  if (!directory.contains(name)) {
+    if (seed == nullptr) { throw Fault("NAND store has no existing image or initial seed"); }
+    directory.write(name, encode_nand_image(*seed));
+  }
+  return {directory, name, PrivateFileAccess::read_write};
+}
+
+NandWriteMedium load_medium(const PrivateFile &file,
+                            ImageJournalPosition &position,
                             const NandReadContinuation continuation,
                             const std::uint64_t timebase,
                             NandCellProfile profile) {
-  if (directory.contains(name)) {
-    const auto image = decode_nand_image(directory.read(name, nand_image_max_bytes));
-    return {Nand(image, continuation), timebase, std::move(profile)};
+  const auto image = load_image_journal(file, position);
+  return {Nand(image, continuation), timebase, std::move(profile)};
+}
+
+NandRegion affected(const Nand &device, const NandPending operation) {
+  if (operation == NandPending::program) { return {.first_page = device.page()}; }
+  if (operation == NandPending::erase) {
+    return {.first_page = (device.page() / Nand::block_pages) * Nand::block_pages,
+            .page_count = Nand::block_pages};
   }
-  if (seed == nullptr) { throw Fault("Timed NAND store has no existing image or initial seed"); }
-  NandWriteMedium model(Nand(*seed, continuation), timebase, std::move(profile));
-  directory.write(name, encode_nand_image(*seed));
-  return model;
+  throw Fault("Persistent image mutation has no program/erase region");
 }
 
 class Updating {
@@ -59,16 +73,16 @@ private:
 
 class NandWriteStore::Impl {
 public:
-  Impl(const std::filesystem::path &file,
+  Impl(const std::filesystem::path &image_path,
        const NandImage *seed,
        const NandReadContinuation continuation,
        const std::uint64_t timebase,
        NandCellProfile profile)
-      : path(destination(file)),
+      : path(destination(image_path)),
         directory(path.parent_path()),
         lease(directory, path.filename().string() + ".lock"),
-        model(load_medium(
-            directory, path.filename(), seed, continuation, timebase, std::move(profile))),
+        file(open_image(directory, path.filename(), seed)),
+        model(load_medium(file, position, continuation, timebase, std::move(profile))),
         timebase_hz(timebase),
         read_continuation(continuation) {}
 
@@ -83,7 +97,7 @@ public:
     if (updating) { throw Fault("Reentrant timed NAND store mutation: " + path.string()); }
   }
 
-  void transact(const std::function<void(NandWriteMedium &)> &action) {
+  void transact(const NandRegion region, const std::function<void(NandWriteMedium &)> &action) {
     usable();
     const Updating guard(updating);
     auto next = model;
@@ -91,8 +105,7 @@ public:
     auto cut = next;
     cut.power_loss();
     try {
-      directory.write(
-          path.filename(), encode_nand_image(cut.device().persistent_image()), observer);
+      append_image_journal(file, position, cut.device().persistent_image(region), observer);
     } catch (...) {
       failed = true;
       throw;
@@ -104,6 +117,8 @@ public:
   std::filesystem::path path;
   PrivateDirectory directory;
   PrivateFileLease lease;
+  PrivateFile file;
+  ImageJournalPosition position;
   NandWriteMedium model;
   std::uint64_t timebase_hz;
   NandReadContinuation read_continuation;
@@ -165,7 +180,8 @@ std::optional<NandCompletionEvent> NandWriteStore::advance(const std::uint64_t a
   if (event && at >= event->ticks &&
       (event->operation == NandPending::program || event->operation == NandPending::erase)) {
     std::optional<NandCompletionEvent> result;
-    impl_->transact([&](NandWriteMedium &next) { result = next.advance(at); });
+    impl_->transact(affected(impl_->model.device(), event->operation),
+                    [&](NandWriteMedium &next) { result = next.advance(at); });
     return result;
   }
   return impl_->model.advance(at);
@@ -180,7 +196,11 @@ void NandWriteStore::command(const std::uint8_t value) {
   const bool aborts_write =
       value == reset && (pending == NandPending::program || pending == NandPending::erase);
   if (value == program || value == erase || aborts_write) {
-    impl_->transact([value](NandWriteMedium &next) { next.command(value); });
+    auto operation = pending;
+    if (value == program) { operation = NandPending::program; }
+    if (value == erase) { operation = NandPending::erase; }
+    impl_->transact(affected(impl_->model.device(), operation),
+                    [value](NandWriteMedium &next) { next.command(value); });
   } else {
     impl_->model.command(value);
   }
@@ -222,6 +242,13 @@ void NandWriteStore::observe_read_end(const NandReadEnd edge) {
 }
 
 void NandWriteStore::power_loss() {
-  impl_->transact([](NandWriteMedium &next) { next.power_loss(); });
+  impl_->usable();
+  const auto pending = impl_->model.device().pending();
+  if (pending == NandPending::program || pending == NandPending::erase) {
+    impl_->transact(affected(impl_->model.device(), pending),
+                    [](NandWriteMedium &next) { next.power_loss(); });
+  } else {
+    impl_->model.power_loss();
+  }
 }
 }

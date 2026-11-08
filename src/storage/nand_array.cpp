@@ -2,30 +2,46 @@
 #include "storage/nand_array.hpp"
 
 #include "common/bus.hpp"
+#include "storage/nand_image.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <optional>
 #include <span>
 #include <utility>
 
 namespace blofeld {
 namespace {
 constexpr unsigned byte_mask = 0xff;
+constexpr unsigned group_pages = 512;
 }
 
-NandArray::NandArray(const NandArray &other) : contents_(other.contents_), blocks_(other.blocks_) {}
+struct NandArray::Data {
+  using Group = std::array<std::shared_ptr<Page>, group_pages>;
+  using Blocks = std::array<std::optional<NandBlock>, blocks>;
+  std::array<std::shared_ptr<Group>, pages / group_pages> groups;
+  std::shared_ptr<Blocks> metadata;
+};
+
+NandArray::NandArray(const NandImage &image) {
+  image.validate();
+  for (const auto &[page, contents] : image.pages) { restore(page, contents); }
+  for (const auto &[block, metadata] : image.blocks) { observe_block(block, metadata); }
+}
+
+NandArray::NandArray(const NandArray &other) : data_(other.data_) {}
 
 NandArray &NandArray::operator=(const NandArray &other) {
   if (this != &other) {
     clear_read_cache();
-    contents_ = other.contents_;
-    blocks_ = other.blocks_;
+    data_ = other.data_;
   }
   return *this;
 }
 
-NandArray::NandArray(NandArray &&other) noexcept
-    : contents_(std::move(other.contents_)), blocks_(std::move(other.blocks_)) {
+NandArray::NandArray(NandArray &&other) noexcept : data_(std::move(other.data_)) {
   other.clear_read_cache();
 }
 
@@ -33,10 +49,78 @@ NandArray &NandArray::operator=(NandArray &&other) noexcept {
   if (this != &other) {
     clear_read_cache();
     other.clear_read_cache();
-    contents_ = std::move(other.contents_);
-    blocks_ = std::move(other.blocks_);
+    data_ = std::move(other.data_);
   }
   return *this;
+}
+
+const NandArray::Page *NandArray::find_page(const unsigned page) const {
+  if (!data_) { return nullptr; }
+  const auto &group = data_->groups.at(page / group_pages);
+  return group ? group->at(page % group_pages).get() : nullptr;
+}
+
+void NandArray::writable_data() {
+  if (!data_) {
+    data_ = std::make_shared<Data>();
+  } else if (!data_.unique()) {
+    data_ = std::make_shared<Data>(*data_);
+  }
+}
+
+NandArray::Page &NandArray::writable_page(const unsigned page) {
+  clear_read_cache();
+  writable_data();
+  auto &group = data_->groups.at(page / group_pages);
+  if (!group) {
+    group = std::make_shared<Data::Group>();
+  } else if (!group.unique()) {
+    group = std::make_shared<Data::Group>(*group);
+  }
+  auto &contents = group->at(page % group_pages);
+  if (!contents) {
+    contents = std::make_shared<Page>();
+  } else if (!contents.unique()) {
+    contents = std::make_shared<Page>(*contents);
+  }
+  return *contents;
+}
+
+NandImage NandArray::image() const {
+  NandImage result;
+  if (!data_) { return result; }
+  for (unsigned group = 0; group < data_->groups.size(); ++group) {
+    const auto &contents = data_->groups.at(group);
+    if (!contents) { continue; }
+    for (unsigned offset = 0; offset < group_pages; ++offset) {
+      if (contents->at(offset)) {
+        result.pages.emplace((group * group_pages) + offset, *contents->at(offset));
+      }
+    }
+  }
+  if (data_->metadata) {
+    for (unsigned block = 0; block < blocks; ++block) {
+      const auto &entry = data_->metadata->at(block);
+      if (entry) { result.blocks.emplace(block, *entry); }
+    }
+  }
+  result.validate();
+  return result;
+}
+
+NandImage NandArray::image(const NandRegion region) const {
+  if (region.first_page >= pages || region.page_count == 0 ||
+      region.page_count > pages - region.first_page) {
+    throw Fault("Invalid persistent image region");
+  }
+  NandImage result;
+  for (unsigned index = 0; index < region.page_count; ++index) {
+    const auto page = region.first_page + index;
+    result.pages.emplace(page, snapshot(page));
+    const auto block_index = page / block_pages;
+    result.blocks.try_emplace(block_index, block(block_index));
+  }
+  return result;
 }
 
 void NandArray::clear_read_cache() noexcept {
@@ -67,7 +151,7 @@ void NandArray::observe_bytes(const NandLocation start, const std::span<const st
                 " column=" + hex(start.column, 3));
   }
   if (bytes.empty()) { return; }
-  auto &target = contents_[start.page];
+  auto &target = writable_page(start.page);
   for (std::size_t index = 0; index < bytes.size(); ++index) {
     target.cells.at(start.column + index) = {.value = bytes[index], .known = byte_mask};
   }
@@ -79,7 +163,7 @@ void NandArray::observe_cell(const NandLocation location, const NandByte cell) {
     throw Fault("Noncanonical NAND cell observation: page=" + hex(location.page, 6) +
                 " column=" + hex(location.column, 3));
   }
-  contents_[location.page].cells.at(location.column) = cell;
+  writable_page(location.page).cells.at(location.column) = cell;
 }
 
 void NandArray::observe_block(const unsigned block, const NandBlock state) {
@@ -89,29 +173,33 @@ void NandArray::observe_block(const unsigned block, const NandBlock state) {
       (state.program_protected == true || state.erase_protected == true)) {
     throw Fault("NAND protected-block observation exceeds supported range: block=" + hex(block, 4));
   }
-  blocks_[block] = state;
+  writable_data();
+  if (!data_->metadata) {
+    data_->metadata = std::make_shared<Data::Blocks>();
+  } else if (!data_->metadata.unique()) {
+    data_->metadata = std::make_shared<Data::Blocks>(*data_->metadata);
+  }
+  data_->metadata->at(block) = state;
 }
 
 NandByte NandArray::cell(const NandLocation location) const {
   validate_location(location);
   if (read_index_ == location.page) { return read_page_->cells.at(location.column); }
-  const auto found = contents_.find(location.page);
-  if (found == contents_.end()) { return {}; }
-  read_page_ = &found->second;
+  read_page_ = find_page(location.page);
+  if (read_page_ == nullptr) { return {}; }
   read_index_ = location.page;
   return read_page_->cells.at(location.column);
 }
 
 NandArray::Page NandArray::snapshot(const unsigned page) const {
   validate_page(page);
-  const auto found = contents_.find(page);
-  return found == contents_.end() ? Page{} : found->second;
+  const auto *const contents = find_page(page);
+  return contents == nullptr ? Page{} : *contents;
 }
 
 NandBlock NandArray::block(const unsigned block) const {
   validate_block(block);
-  const auto found = blocks_.find(block);
-  return found == blocks_.end() ? NandBlock{} : found->second;
+  return data_ && data_->metadata ? data_->metadata->at(block).value_or(NandBlock{}) : NandBlock{};
 }
 
 NandByte NandArray::programmed(const NandByte before, const std::uint8_t data) {
@@ -121,12 +209,12 @@ NandByte NandArray::programmed(const NandByte before, const std::uint8_t data) {
 
 void NandArray::restore(const unsigned page, Page state) {
   validate_page(page);
-  contents_[page] = state;
+  writable_page(page) = state;
 }
 
 void NandArray::invalidate_page(const unsigned page) {
   validate_page(page);
-  contents_[page] = {};
+  writable_page(page) = {};
 }
 
 void NandArray::invalidate_block(const unsigned block) {
@@ -134,7 +222,7 @@ void NandArray::invalidate_block(const unsigned block) {
   for (unsigned index = 0; index < block_pages; ++index) {
     invalidate_page((block * block_pages) + index);
   }
-  blocks_[block] = {};
+  observe_block(block, {});
 }
 
 void NandArray::erase_block(const unsigned block) {
@@ -145,6 +233,6 @@ void NandArray::erase_block(const unsigned block) {
   for (unsigned index = 0; index < block_pages; ++index) {
     restore((block * block_pages) + index, erased);
   }
-  blocks_[block] = {.valid = true, .program_protected = false, .erase_protected = false};
+  observe_block(block, {.valid = true, .program_protected = false, .erase_protected = false});
 }
 }

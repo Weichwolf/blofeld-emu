@@ -156,11 +156,8 @@ std::vector<std::uint8_t> encode_nand_image(const NandImage &image) {
   return result;
 }
 
-NandImage decode_nand_image(const std::span<const std::uint8_t> bytes) {
-  if (bytes.size() < nand_image_header_bytes + sizeof(std::uint32_t) ||
-      bytes.size() > nand_image_max_bytes) {
-    throw Fault("Invalid NAND image file length");
-  }
+std::size_t nand_image_base_bytes(const std::span<const std::uint8_t> bytes) {
+  if (bytes.size() < nand_image_header_bytes) { throw Fault("Incomplete NAND image header"); }
   if (!std::ranges::equal(magic, bytes.first(magic.size())) ||
       little(bytes, version_offset) != version || little(bytes, geometry_offset) != geometry ||
       little(bytes, page_size_offset) != NandArray::page_bytes ||
@@ -175,9 +172,19 @@ NandImage decode_nand_image(const std::span<const std::uint8_t> bytes) {
   const auto expected = nand_image_header_bytes + sizeof(std::uint32_t) +
                         (static_cast<std::size_t>(blocks) * nand_image_block_bytes) +
                         (static_cast<std::size_t>(pages) * nand_image_page_bytes);
-  if (bytes.size() != expected) {
+  return expected;
+}
+
+NandImage decode_nand_image(const std::span<const std::uint8_t> bytes) {
+  if (bytes.size() < nand_image_header_bytes + sizeof(std::uint32_t) ||
+      bytes.size() > nand_image_max_bytes) {
+    throw Fault("Invalid NAND image file length");
+  }
+  if (bytes.size() != nand_image_base_bytes(bytes.first(nand_image_header_bytes))) {
     throw Fault("NAND image record counts do not match file length");
   }
+  const auto pages = little(bytes, page_count_offset);
+  const auto blocks = little(bytes, block_count_offset);
   const auto end = bytes.size() - sizeof(std::uint32_t);
   if (little(bytes, end) != checksum(bytes.first(end))) {
     throw Fault("NAND image checksum mismatch");
