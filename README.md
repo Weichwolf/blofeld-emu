@@ -11,7 +11,8 @@ free-running timer capture/compare, CRG/USB clock selection, periodic interrupts
 and interrupt wakeup, SCI character/register handling, USB configuration and direct
 endpoint-buffer windows, and independent
 MCU/DSP execution threads and DSP56371 PLL register/nominal ratio handling.
-Invariant low X/Y RAM uses direct native grants with initialization tracking.
+Low/high X/Y RAM uses direct native grants with initialization tracking and
+OMR-selected program-bank sharing. Optional data-ROM views borrow local contents.
 The SHI receive FIFO connects MCU port writes to DSP program loading; MCU U0
 assertions retire the previous DSP Core before peripheral reset and ROM restart.
 `blofeld-headless` loads local images and executes their native JIT paths;

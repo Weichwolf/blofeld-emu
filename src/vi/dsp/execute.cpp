@@ -36,6 +36,7 @@ public:
     reset_interrupted_ = false;
     once_data_.reset();
     clock_.reset(true);
+    memory_.configure(0);
   }
 
   void unbind() noexcept { core_ = nullptr; }
@@ -52,6 +53,7 @@ public:
 
   std::span<const dsp56300::MemoryWindow>
   memory_windows(const dsp56300::Space space) noexcept override {
+    if (core_ != nullptr) { memory_.configure(core_->registers().omr); }
     return memory_.windows(space);
   }
 

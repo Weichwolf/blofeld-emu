@@ -60,6 +60,14 @@ external waveform models. Keep oscillator-driven RTI independent of CPU clock
 selection. Convert device deadlines to Core progress without counting idle time
 twice, and arbitrate actual pending interrupt vectors before resuming native work.
 
+DSP56371 RAM banks are shared physical storage. MS/MSW changes rebind native
+windows at the Core's existing OMR boundary; no state mirror or payload copy.
+Switched physical tails map in ascending address order into program RAM. Firmware
+must obey the documented three-cycle exclusion for affected bank accesses.
+Known reserved data writes are discarded, inferred from the original overbroad
+clear. This is a VM contract, not measured silicon behavior. Missing ROM/reserved
+reads still fail; supplied immutable ROM is borrowed, and unknown I/O fails.
+
 DSP56371 PCTL selects an exact nominal Fosc/EXTAL ratio using its own raw factors
 and dividers. The reset clock profile uses PINIT=1. Do not infer a fitted oscillator
 frequency, physical lock or host pacing from those fields. Device deadlines use

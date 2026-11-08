@@ -5,11 +5,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <dsp56300/memory.hpp>
+#include <optional>
 #include <span>
 
 namespace blofeld::vi::dsp {
-// DSP56371UM 3.1: invariant low RAM, with unknown contents after power-up.
-// Switched banks, high RAM and data/program ROM remain separate contracts.
+// DSP56371UM 3.1: 88K physical RAM words, retained across bank switches/reset.
 class Memory {
 public:
   struct Write {
@@ -17,11 +17,19 @@ public:
     dsp56300::Word address = 0, value = 0;
   };
 
-  Memory();
+  // Borrowed immutable ROM contents; native grants never permit stores.
+  struct Rom {
+    std::span<dsp56300::Word> x, y;
+  };
+
+  explicit Memory(Rom rom = {});
   Memory(const Memory &) = delete;
   Memory &operator=(const Memory &) = delete;
+  void configure(dsp56300::Word omr) noexcept;
   [[nodiscard]] bool
   read(dsp56300::Space space, dsp56300::Word address, dsp56300::Word &value) const noexcept;
+  // Known reserved data writes are discarded, inferred from the original clear.
+  // They never create readable RAM. Unknown I/O and program stores still fail.
   [[nodiscard]] bool write(Write access) noexcept;
   [[nodiscard]] std::span<const dsp56300::MemoryWindow> windows(dsp56300::Space space) noexcept;
 
@@ -31,10 +39,22 @@ private:
     std::array<std::uint8_t, Size> known{};
   };
 
+  struct Cell {
+    dsp56300::Word *value = nullptr;
+    std::uint8_t *known = nullptr;
+    bool writable = false;
+  };
+
+  [[nodiscard]] std::span<const dsp56300::MemoryWindow> view(dsp56300::Space space) const noexcept;
+  [[nodiscard]] std::optional<Cell> locate(dsp56300::Space space,
+                                           dsp56300::Word address) const noexcept;
+  static constexpr std::size_t low_x_words = 0x3000, high_x_words = 0x6000, high_y_words = 0xa000;
+  Rom rom_;
   Block<0x1000> program_;
-  static constexpr std::size_t low_x_words = 0x3000;
   Block<low_x_words> x_;
   Block<0x2000> y_;
-  std::array<dsp56300::MemoryWindow, 1> x_window_, y_window_;
+  Block<high_x_words> high_x_;
+  Block<high_y_words> high_y_;
+  std::array<dsp56300::MemoryWindow, 3> program_windows_, x_windows_, y_windows_;
 };
 }
