@@ -148,6 +148,7 @@ void DspBus::reset() {
 }
 
 void DspBus::reset_peripherals() {
+  note_peripheral_access();
   note_io_change();
   interrupts_.reset();
   shi_.reset();
@@ -191,6 +192,7 @@ std::optional<bool> DspBus::access_peripheral_bit(const DspBitAccess access) {
     throw Fault("Unsupported DSP unselected peripheral bit access at " + address_text(target));
   }
   if (!handles_peripheral_bit(target)) { return std::nullopt; }
+  note_peripheral_access();
   if (access.operation != DspBitOperation::test && gpio_register(target)) { note_io_change(); }
   const auto mask = 1U << access.bit;
   if (access.space == DspSpace::x && DspDax::handles(access.address)) {
@@ -410,6 +412,13 @@ void DspBus::note_io_change() {
   }
   ++io_revision_;
   io_write_.reset();
+}
+
+void DspBus::note_peripheral_access() {
+  if (peripheral_revision_ == std::numeric_limits<std::uint64_t>::max()) {
+    throw Fault("DSP peripheral deadline revision exhausted");
+  }
+  ++peripheral_revision_;
 }
 
 void DspBus::note_program_change() {
@@ -667,6 +676,7 @@ void DspBus::acknowledge_latched_interrupt(const DspInterruptRequest request) {
 }
 
 std::uint32_t DspBus::read_peripheral(const DspAddress access) {
+  note_peripheral_access();
   if (access.space == DspSpace::x && DspDax::handles(access.address)) {
     sync_dax();
     return dax_.read(access.address);
@@ -709,6 +719,7 @@ std::uint32_t DspBus::read_peripheral(const DspAddress access) {
 }
 
 void DspBus::write_peripheral(const DspStore access) {
+  note_peripheral_access();
   if (access.space == DspSpace::x && DspDax::handles(access.address)) {
     sync_dax();
     dax_.write(access.address, access.value);

@@ -1,28 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "app/host_display_pump.hpp"
+#include "vi/host/vi_display.hpp"
 
 #include "common/bus.hpp"
 #include "display/lcd_image.hpp"
-#include "runtime/instrument.hpp"
+#include "vi/vi.hpp"
 
 #include <chrono>
 #include <filesystem>
 
-namespace blofeld::runtime {
+namespace blofeld::vi {
 namespace {
 constexpr auto frame_interval = std::chrono::milliseconds{20};
 }
 
 HostDisplayPump::HostDisplayPump(const std::filesystem::path &directory) : publisher_(directory) {}
 
-void HostDisplayPump::poll(const Instrument &board) {
+void HostDisplayPump::poll(const VirtualInstrument &board) {
   const auto now = std::chrono::steady_clock::now();
   if (now < next_) { return; }
   next_ = now + frame_interval;
   capture(board);
 }
 
-void HostDisplayPump::capture(const Instrument &board) {
+void HostDisplayPump::capture(const VirtualInstrument &board) {
   constexpr LcdPanel panel{.width = 128, .reverse_commons = true};
   const auto image = board.display_image(panel);
   if (!image) { throw Fault("Host display publication requires an attached LCD"); }

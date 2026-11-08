@@ -5,13 +5,13 @@
 #include "mcu/mcu_machine.hpp"
 #include "mcu/mcu_memory.hpp"
 #include "mcu/mcu_reset.hpp"
-#include "runtime/instrument.hpp"
 #include "runtime/mcu_dsp_runtime.hpp"
 #include "runtime/nand_peer.hpp"
 #include "usb/usb_midi_host.hpp"
 #include "usb/usb_transfer.hpp"
 #include "usb/usbip_runtime.hpp"
 #include "usb/usbip_tcp.hpp"
+#include "vi/vi.hpp"
 
 #include <cstdint>
 #include <iostream>
@@ -20,47 +20,47 @@
 #include <ostream>
 #include <vector>
 
-namespace blofeld::runtime {
-class Instrument::Busy {
+namespace blofeld::vi {
+class VirtualInstrument::Busy {
 public:
-  explicit Busy(Instrument &board) : board_(board) {
+  explicit Busy(VirtualInstrument &board) : board_(board) {
     board.require_idle();
-    board_.active_ = true;
+    board_.vm_.active = true;
   }
 
-  ~Busy() { board_.active_ = false; }
+  ~Busy() { board_.vm_.active = false; }
 
   Busy(const Busy &) = delete;
   Busy &operator=(const Busy &) = delete;
 
 private:
-  Instrument &board_;
+  VirtualInstrument &board_;
 };
 
-void Instrument::require_idle() const {
-  if (active_) { throw Fault("Instrument control requires an inactive operation boundary"); }
+void VirtualInstrument::require_idle() const {
+  if (vm_.active) { throw Fault("Instrument control requires an inactive operation boundary"); }
 }
 
-void Instrument::require_healthy() const {
+void VirtualInstrument::require_healthy() const {
   require_idle();
   if (timing_faulted()) { throw Fault("Instrument failure requires a fresh device instance"); }
 }
 
-void Instrument::initialize() {
+void VirtualInstrument::initialize() {
   require_healthy();
-  if (control_.started) { return; }
+  if (vm_.started) { return; }
   const Busy guard(*this);
   try {
     check_pcm_output();
     boundary();
-    control_.started = true;
+    vm_.started = true;
   } catch (...) {
     mark_fault();
     throw;
   }
 }
 
-void Instrument::advance() {
+void VirtualInstrument::advance() {
   require_healthy();
   initialize();
   const Busy guard(*this);
@@ -69,14 +69,14 @@ void Instrument::advance() {
     execute_until_event();
     if (execution_.trace != nullptr) {
       *execution_.trace << "MCU end=" << ticks();
-      const auto reset = native_->mcu.system_reset_state();
+      const auto reset = vm_.mcu.system_reset_state();
       if (reset && reset->phase != McuResetPhase::complete) {
         *execution_.trace << " held-reset=1 reset-edges=" << reset->edges;
       } else {
-        *execution_.trace << " pc=" << hex(native_->mcu.cpu().state().pc);
+        *execution_.trace << " pc=" << hex(vm_.mcu.cpu().state().pc);
       }
-      *execution_.trace << " instructions=" << control_.instructions
-                        << " idle=" << native_->mcu.idle_bus_cycles() << '\n';
+      *execution_.trace << " instructions=" << vm_.instructions
+                        << " idle=" << vm_.mcu.idle_bus_cycles() << '\n';
     }
     boundary();
   } catch (...) {
@@ -85,19 +85,20 @@ void Instrument::advance() {
   }
 }
 
-void Instrument::poll_usb(UsbipRuntime &runtime) {
+void VirtualInstrument::poll_usb(UsbipRuntime &runtime) {
   require_healthy();
-  if (!control_.started) { throw Fault("USB/IP input requires an initialized instrument"); }
-  if (native_->mcu.system_reset_active()) { return; }
+  if (!vm_.started) { throw Fault("USB/IP input requires an initialized instrument"); }
+  if (vm_.mcu.system_reset_active()) { return; }
   const Busy guard(*this);
-  const auto cpu = native_->mcu.cpu().state();
+  const auto cpu = vm_.mcu.cpu().state();
   const auto before_started = runtime.started();
   const auto before_published = runtime.published();
   try {
     if (!prepare_usb(&runtime)) { return; }
-    const auto events = runtime.poll(native_->mcu.bus(),
-                                     {.pc = cpu.pc, .ccr = cpu.ccr},
-                                     {.owner = identity_, .restore_revision = 0, .ticks = ticks()});
+    const auto events =
+        runtime.poll(vm_.mcu.bus(),
+                     {.pc = cpu.pc, .ccr = cpu.ccr},
+                     {.owner = vm_.identity, .restore_revision = 0, .ticks = ticks()});
     if (execution_.trace != nullptr) {
       if (!before_started && runtime.started()) {
         *execution_.trace << "USBIP-START actual=" << ticks() << '\n';
@@ -123,61 +124,61 @@ void Instrument::poll_usb(UsbipRuntime &runtime) {
   }
 }
 
-bool Instrument::prepare_usb(const void *owner) {
-  if (control_.usb_owner != nullptr && control_.usb_owner != owner) {
+bool VirtualInstrument::prepare_usb(const void *owner) {
+  if (vm_.usb_owner != nullptr && vm_.usb_owner != owner) {
     throw Fault("An instrument USB link requires one exclusive host session");
   }
-  if (!control_.usb_link) {
+  if (!vm_.usb_link) {
     constexpr unsigned frames_per_second = 1000;
     if (common_hz() % frames_per_second != 0) {
       throw Fault("USB frame time is not representable");
     }
-    control_.usb_link.emplace(common_hz() / frames_per_second);
-    control_.usb_owner = owner;
+    vm_.usb_link.emplace(common_hz() / frames_per_second);
+    vm_.usb_owner = owner;
   }
-  return control_.usb_link->poll(native_->mcu.bus(), ticks());
+  return vm_.usb_link->poll(vm_.mcu.bus(), ticks());
 }
 
-std::vector<UsbTransferCompletion> Instrument::poll_usb(UsbMidiHost &host) {
+std::vector<UsbTransferCompletion> VirtualInstrument::poll_usb(UsbMidiHost &host) {
   require_healthy();
-  if (!control_.started) { throw Fault("USB MIDI host requires an initialized instrument"); }
-  if (native_->mcu.system_reset_active()) { return {}; }
+  if (!vm_.started) { throw Fault("USB MIDI host requires an initialized instrument"); }
+  if (vm_.mcu.system_reset_active()) { return {}; }
   const Busy guard(*this);
   try {
     if (!prepare_usb(&host)) { return {}; }
-    const auto cpu = native_->mcu.cpu().state();
-    return host.poll(native_->mcu.bus(), {.pc = cpu.pc, .ccr = cpu.ccr}, ticks());
+    const auto cpu = vm_.mcu.cpu().state();
+    return host.poll(vm_.mcu.bus(), {.pc = cpu.pc, .ccr = cpu.ccr}, ticks());
   } catch (...) {
     mark_fault();
     throw;
   }
 }
 
-Status Instrument::status() const {
+Status VirtualInstrument::status() const {
   require_idle();
-  const bool known = !native_->mcu.system_reset_active();
-  return {.mcu = known ? native_->mcu.cpu().state() : CpuState{},
-          .dsp = native_->dsp.cpu().registers(),
+  const bool known = !vm_.mcu.system_reset_active();
+  return {.mcu = known ? vm_.mcu.cpu().state() : CpuState{},
+          .dsp = vm_.dsp.cpu().registers(),
           .mcu_state_known = known,
           .common_ticks = ticks(),
-          .mcu_cycles = native_->mcu.run_clock().bus_cycles(),
-          .dsp_cycles = native_->runtime->completed_cycles(),
+          .mcu_cycles = vm_.mcu.run_clock().bus_cycles(),
+          .dsp_cycles = vm_.runtime->completed_cycles(),
           .dsp_steps = dsp_steps(),
-          .instructions = control_.instructions,
-          .interrupts = control_.interrupts,
-          .waiting = known && native_->mcu.cpu().waiting(),
+          .instructions = vm_.instructions,
+          .interrupts = vm_.interrupts,
+          .waiting = known && vm_.mcu.cpu().waiting(),
           .held_reset = dsp_reset_active(),
           .faulted = timing_faulted()};
 }
 
-McuMemoryByte Instrument::inspect_mcu(const std::uint16_t address) const {
+McuMemoryByte VirtualInstrument::inspect_mcu(const std::uint16_t address) const {
   require_idle();
-  return native_->mcu.bus().inspect_memory(address);
+  return vm_.mcu.bus().inspect_memory(address);
 }
 
-std::optional<std::uint32_t> Instrument::inspect_dsp(const DspAddress address) const {
+std::optional<std::uint32_t> VirtualInstrument::inspect_dsp(const DspAddress address) const {
   require_idle();
-  return native_->dsp.bus().inspect_memory(address);
+  return vm_.dsp.bus().inspect_memory(address);
 }
 
 }

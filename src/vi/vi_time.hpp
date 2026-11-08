@@ -3,7 +3,7 @@
 
 #include <cstdint>
 
-namespace blofeld::runtime {
+namespace blofeld::vi {
 struct SquareClockConfig {
   std::uint64_t timebase_hz = 0;
   std::uint64_t frequency_hz = 0;

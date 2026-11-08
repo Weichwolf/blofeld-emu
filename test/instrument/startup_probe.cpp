@@ -6,12 +6,12 @@
 #include "dsp/dsp_bus.hpp"
 #include "firmware/firmware.hpp"
 #include "mcu/mcu_memory.hpp"
-#include "runtime/instrument.hpp"
-#include "runtime/profile.hpp"
 #include "storage/flash_image.hpp"
 #include "storage/private_file.hpp"
 #include "storage/virtual_device_state.hpp"
 #include "usb_midi_stimulus.hpp"
+#include "vi/vi.hpp"
+#include "vi/vi_profile.hpp"
 
 #include <array>
 #include <bit>
@@ -83,7 +83,7 @@ private:
   std::optional<std::uint64_t> first_tick_;
 };
 
-void report(const runtime::Instrument &board,
+void report(const vi::VirtualInstrument &board,
             const Output &output,
             const Clock::time_point started,
             const std::uint64_t timebase,
@@ -93,10 +93,12 @@ void report(const runtime::Instrument &board,
   const auto mcu_pc = state.mcu_state_known ? hex(state.mcu.pc) : std::string("unknown");
   std::cout << "phase=" << phase << " host-seconds=" << elapsed << " device-seconds="
             << static_cast<double>(state.common_ticks) / static_cast<double>(timebase)
-            << " mcu-pc=" << mcu_pc << " dsp-pc=" << hex(state.dsp.pc, 6)
-            << " mcu-instructions=" << state.instructions << " dsp-instructions=" << state.dsp_steps
-            << " interrupts=" << state.interrupts << " mcu-cycles=" << state.mcu_cycles
-            << " dsp-cycles=" << state.dsp_cycles << " dsp-held-reset=" << state.held_reset
+            << " mcu-pc=" << mcu_pc << " mcu-ccr="
+            << (state.mcu_state_known ? hex(state.mcu.ccr, 2) : std::string("unknown"))
+            << " dsp-pc=" << hex(state.dsp.pc, 6) << " mcu-instructions=" << state.instructions
+            << " dsp-instructions=" << state.dsp_steps << " interrupts=" << state.interrupts
+            << " mcu-cycles=" << state.mcu_cycles << " dsp-cycles=" << state.dsp_cycles
+            << " dsp-held-reset=" << state.held_reset
             << " mcu-held-reset=" << !state.mcu_state_known << " waiting=" << state.waiting
             << " faulted=" << state.faulted << " delivered-stereo-frames=" << output.frames()
             << " nonzero-frames=" << output.nonzero()
@@ -106,7 +108,7 @@ void report(const runtime::Instrument &board,
             << std::flush;
 }
 
-void capture_display(const runtime::Instrument &board, const PrivateDirectory &directory) {
+void capture_display(const vi::VirtualInstrument &board, const PrivateDirectory &directory) {
   const auto image = board.display_image({.width = 128, .reverse_commons = true});
   if (!image) { return; }
   const auto text = encode_lcd_text(*image);
@@ -120,7 +122,7 @@ void capture_display(const runtime::Instrument &board, const PrivateDirectory &d
   directory.write("display.pbm", encode_lcd_pbm(*image));
 }
 
-void peer_response(const runtime::Instrument &instrument) {
+void peer_response(const vi::VirtualInstrument &instrument) {
   // Firmware 1.25 staging/storage identities, never injected response data.
   constexpr unsigned staging = 0xf000;
   constexpr unsigned received = 0x19bc;
@@ -134,24 +136,24 @@ void peer_response(const runtime::Instrument &instrument) {
 }
 
 int probe(const char *const *argv, const Clock::time_point started) {
-  const auto profile = runtime::load_profile(argv[1]);
+  const auto profile = vi::load_profile(argv[1]);
   const auto firmware = Firmware::load(profile.firmware);
-  const auto config = runtime::instrument_config(profile);
+  const auto config = vi::vi_config(profile);
   if (!config.power_on || !config.pcm || !config.lcd_parallel) {
     throw Fault("Startup observation requires a power-on, PCM and display profile");
   }
-  const auto rom = runtime::load_rom(profile.boot_rom);
+  const auto rom = vi::load_rom(profile.boot_rom);
   const auto device = std::make_shared<VirtualDeviceState>(profile.device_state,
                                                            McuFlashImage::from_known(firmware.mcu));
   const std::filesystem::path directory(argv[2]);
   const PrivateDirectory output_directory(directory); // Validate before native execution.
   Output output(directory / "audio.s32le");
   test::UsbMidiStimulus midi(config.dsp_clock.timebase_hz);
-  runtime::Instrument board(config,
-                            {.image = device->image(),
-                             .rom = rom,
-                             .specification = BLOFELD_DEFAULT_SLA,
-                             .device_state = device});
+  vi::VirtualInstrument board(config,
+                              {.image = device->image(),
+                               .rom = rom,
+                               .specification = BLOFELD_DEFAULT_SLA,
+                               .device_state = device});
   board.attach_pcm_output(output);
   const auto deadline = started + host_limit;
   auto next_report = started;

@@ -6,15 +6,15 @@
 #include <chrono>
 #include <filesystem>
 
-namespace blofeld::runtime {
-class Instrument;
+namespace blofeld::vi {
+class VirtualInstrument;
 
 // Read-only host presentation. Wall-clock polling never advances board clocks.
 class HostDisplayPump {
 public:
   explicit HostDisplayPump(const std::filesystem::path &directory);
-  void poll(const Instrument &board);
-  void capture(const Instrument &board);
+  void poll(const VirtualInstrument &board);
+  void capture(const VirtualInstrument &board);
 
 private:
   LcdPublisher publisher_;

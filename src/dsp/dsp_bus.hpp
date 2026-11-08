@@ -152,6 +152,10 @@ public:
 
   [[nodiscard]] std::uint64_t io_revision() const noexcept { return io_revision_; }
 
+  // Register transactions (CPU or DMA) and reset invalidate cached device deadlines.
+  // Quiet clock progress does not change an already published absolute deadline.
+  [[nodiscard]] std::uint64_t peripheral_revision() const noexcept { return peripheral_revision_; }
+
   [[nodiscard]] const std::optional<DspStore> &io_write() const noexcept { return io_write_; }
 
   [[nodiscard]] DspGpio &gpio(DspPort port);
@@ -235,9 +239,11 @@ private:
       DspGpio(DspPort::c), DspGpio(DspPort::e), DspGpio(DspPort::f), DspGpio(DspPort::d)};
   std::uint32_t bus_control_ = 0;
   void note_io_change();
+  void note_peripheral_access();
   void note_program_change();
   DspCodeChanges changes_;
   std::uint64_t io_revision_ = 0;
+  std::uint64_t peripheral_revision_ = 0;
   std::optional<DspStore> io_write_;
   std::uint64_t program_revision_ = 0;
   unsigned memory_mode_ = 0;

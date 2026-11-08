@@ -10,8 +10,8 @@
 #include "mcu/mcu_machine.hpp"
 #include "mcu/mcu_memory.hpp"
 #include "mcu/mcu_run_clock.hpp"
-#include "runtime/instrument.hpp"
 #include "storage/flash_image.hpp"
+#include "vi/vi.hpp"
 
 #include <algorithm>
 #include <array>
@@ -26,7 +26,7 @@
 
 namespace {
 using namespace blofeld;
-namespace rt = blofeld::runtime;
+namespace rt = blofeld::vi;
 namespace isa = cpu12::isa;
 namespace reg = blofeld::hc12;
 using cpu12::Byte;
@@ -107,7 +107,7 @@ struct Fixture {
 
   McuFlashImage image;
   std::vector<std::uint32_t> rom;
-  rt::Instrument instrument;
+  rt::VirtualInstrument instrument;
 };
 
 constexpr auto polling_program() {

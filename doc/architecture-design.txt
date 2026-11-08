@@ -3,6 +3,12 @@ Blofeld firmware runtime
 The implementation target is a small native firmware VM with two ISA cores.
 Instrument behavior, original synthesis and musical time define correctness.
 
+Use vi_ names and VirtualInstrument for the reusable instrument-VM template.
+Keep execution/lifecycle, host attachment, audio, firmware I/O and storage roles
+clear. Adapting the template supplies concrete core types, profiles, register maps
+and firmware protocols for that instrument. Core calls remain direct and typed;
+reuse does not require a runtime core registry or a universal core base class.
+
   local firmware / persistent images
                    |
            stable memory mappings
@@ -116,6 +122,12 @@ Separate startup, active processing, pacing, underruns and transport latency.
 A core benchmark or a boot screen does not establish a playable instrument.
 
 Storage and reset
+
+Sample storage operates on the selected persistent image. Decode actual firmware
+command/address/data transactions into reads, programming and erases. Retain
+readiness/status, required completion events, unknown-data errors and persistent
+interrupted-operation state. Cell physics, artificial pulse-inhibit properties
+and redundant value-versus-file backend dispatch do not belong in this VM.
 
 Memory images retain identity, programs and samples across instances. Genuine
 writes and erases update the selected image; reload preserves incomplete-operation

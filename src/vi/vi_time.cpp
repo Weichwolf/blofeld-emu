@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "runtime/instrument_square_clock.hpp"
+#include "vi/vi_time.hpp"
 
 #include "common/bus.hpp"
 
@@ -8,7 +8,7 @@
 #include <numeric>
 #include <string>
 
-namespace blofeld::runtime {
+namespace blofeld::vi {
 SquareClock::SquareClock(const SquareClockConfig config)
     : config_(config), current_{.ticks = config.epoch_ticks, .level = config.initial_level} {
   if (config.frequency_hz == 0 || config.timebase_hz == 0 ||

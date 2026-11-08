@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "runtime/instrument.hpp"
+#include "vi/vi.hpp"
 
 #include <filesystem>
 
-namespace blofeld::runtime {
+namespace blofeld::vi {
 struct Profile {
   std::filesystem::path firmware;
   std::filesystem::path boot_rom;
@@ -18,5 +18,5 @@ inline constexpr std::uint64_t timebase_hz = 635040000000;
 inline constexpr std::uint32_t sample_rate = 44100;
 
 [[nodiscard]] Profile load_profile(const std::filesystem::path &path);
-[[nodiscard]] Config instrument_config(const Profile &profile);
+[[nodiscard]] Config vi_config(const Profile &profile);
 }

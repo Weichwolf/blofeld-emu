@@ -21,7 +21,6 @@
 #include "mcu/mcu_memory.hpp"
 #include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_sci.hpp"
-#include "runtime/instrument_square_clock.hpp"
 #include "runtime/mcu_dsp_gpio_peer.hpp"
 #include "runtime/mcu_dsp_runtime.hpp"
 #include "runtime/nand_peer.hpp"
@@ -31,8 +30,8 @@
 #include "storage/nand_image.hpp"
 #include "usb/usb_host_link.hpp"
 #include "usb/usb_transfer.hpp"
+#include "vi/vi_time.hpp"
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -51,7 +50,7 @@ class UsbMidiHost;
 class VirtualDeviceState;
 }
 
-namespace blofeld::runtime {
+namespace blofeld::vi {
 enum class InputKind : std::uint8_t { drive, phy_window, usb_decoder, timer_inputs };
 
 struct Input {
@@ -145,7 +144,7 @@ struct Execution {
   std::shared_ptr<VirtualDeviceState> device_state = nullptr;
 };
 
-class Instrument;
+class VirtualInstrument;
 
 struct Status {
   CpuState mcu;
@@ -163,13 +162,13 @@ struct Status {
 };
 
 // Unmodified firmware execution, device I/O and host transport integration.
-class Instrument {
+class VirtualInstrument {
 public:
-  Instrument(Config config, Execution execution);
-  Instrument(const Instrument &) = delete;
-  Instrument &operator=(const Instrument &) = delete;
-  Instrument(Instrument &&) = delete;
-  Instrument &operator=(Instrument &&) = delete;
+  VirtualInstrument(Config config, Execution execution);
+  VirtualInstrument(const VirtualInstrument &) = delete;
+  VirtualInstrument &operator=(const VirtualInstrument &) = delete;
+  VirtualInstrument(VirtualInstrument &&) = delete;
+  VirtualInstrument &operator=(VirtualInstrument &&) = delete;
   void initialize();
   void advance();
   [[nodiscard]] Status status() const;
@@ -193,14 +192,6 @@ public:
 private:
   struct Identity {};
 
-  struct Owners {
-    Owners(const Config &config, const Execution &execution);
-    McuMachine mcu;
-    DspMachine dsp;
-    std::unique_ptr<NandPeer> nand;
-    std::unique_ptr<McuDspGpioPeer> gpio_peer;
-    std::unique_ptr<McuDspRuntime> runtime;
-  };
   class Busy;
 
   struct PinProjection {
@@ -209,43 +200,67 @@ private:
     PinDrive drive;
   };
 
-  struct Control {
-    PinDrive b_external;
-    PinProjection u0_projection;
-    PinProjection loopback_projection;
-    std::optional<St7565Parallel> lcd;
-    std::uint64_t lcd_epoch = 0;
-    SpiInputs previous;
+  struct VmContext {
+    VmContext(const Config &config, const Execution &execution, VirtualInstrument &instrument);
+
+    struct AudioDeadline {
+      std::optional<std::uint64_t> ticks;
+      std::uint64_t revision = 0;
+      bool valid = false;
+    };
+
+    mutable AudioDeadline audio_deadline;
+
     ExecutionContext context;
+    std::uint64_t scale = 0;
+    std::uint64_t io_revision = 0;
     std::optional<std::uint64_t> return_boundary;
     std::optional<std::uint64_t> release_epoch;
-    std::uint64_t scale = 0;
-    std::uint64_t instructions = 0;
-    std::uint64_t interrupts = 0;
-    std::uint64_t io_revision = 0;
-    std::size_t next_event = 0;
-    std::size_t next_dsp_event = 0;
     std::optional<SquareClock> audio_clock;
-    bool audio_clock_started = false;
-    std::array<SerialPcmPins, 2> esai_inputs{};
-    std::optional<PcmWords> pcm;
-    std::optional<UsbHostLink> usb_link;
+    PinProjection u0_projection;
+    PinProjection loopback_projection;
+    PcmFrameSink *pcm_output = nullptr;
     const void *usb_owner = nullptr;
+    bool audio_clock_started = false;
     bool started = false;
     bool dsp_initial_pending = false;
     bool u0_asserted = false;
     bool faulted = false;
+    bool active = false;
+
+    PinDrive b_external;
+    SpiInputs previous;
+    std::uint64_t lcd_epoch = 0;
+    std::uint64_t instructions = 0;
+    std::uint64_t interrupts = 0;
+    std::size_t next_event = 0;
+    std::optional<St7565Parallel> lcd;
+    std::optional<PcmWords> pcm;
+    std::optional<UsbHostLink> usb_link;
+    const std::shared_ptr<const Identity> identity = std::make_shared<const Identity>();
+    const std::shared_ptr<const bool> input_identity = std::make_shared<const bool>(true);
+    const std::shared_ptr<const PeripheralEventIdentity> clock_identity =
+        std::make_shared<const PeripheralEventIdentity>();
+
+    McuMachine mcu;
+    DspMachine dsp;
+    std::unique_ptr<NandPeer> nand;
+    std::unique_ptr<McuDspGpioPeer> gpio_peer;
+    std::unique_ptr<McuDspRuntime> runtime;
+    const McuDspRuntime::CycleInputs dma_inputs;
+    const McuDspRuntime::Observer dsp_events;
   };
 
+  [[nodiscard]] std::string mcu_pc_context() const;
   void require_idle() const;
   [[nodiscard]] bool prepare_usb(const void *owner);
   void require_healthy() const;
-  void attach(Owners &owners);
+  void attach(VmContext &owners);
   void prepare_dsp();
   void prepare_lcd();
-  void attach_b_pulls(Owners &owners);
+  void attach_b_pulls(VmContext &owners);
   void set_b_drive(PinDrive drive);
-  [[nodiscard]] GpioPadSample sample_b_pulls(const Owners &owners, std::uint32_t mask) const;
+  [[nodiscard]] GpioPadSample sample_b_pulls(const VmContext &owners, std::uint32_t mask) const;
   [[nodiscard]] bool b_direction_write(unsigned address, unsigned size = 1) const;
   void observe_b_direction();
   void observe_lcd(unsigned address);
@@ -273,14 +288,14 @@ private:
   void advance_audio_clock_span(std::uint64_t at);
   void trace_audio_clock(const AudioClockRoute &route, SquareClockLevel event, bool baseline) const;
   [[nodiscard]] std::uint64_t audio_core_hz() const;
-  void observe_held_dsp_tio() const;
+  void observe_held_dsp_tio();
   void observe_pcm(std::uint64_t at, std::string_view source);
   void check_pcm_output() const;
-  void retire_pcm_output() noexcept;
+  void retire_pcm_output() const noexcept;
   void mark_fault() noexcept;
   void trace_pcm(const SerialPcmFrame &frame, std::string_view source) const;
   [[nodiscard]] DspRuntimeEvents runtime_events();
-  [[nodiscard]] DspRuntimePeripheralEvents peripheral_events(Owners &owners);
+  [[nodiscard]] DspRuntimePeripheralEvents peripheral_events(VmContext &owners);
   void observe_dsp_cycle(const DspRuntimeCycle &cycle);
   [[nodiscard]] std::uint64_t common_hz() const;
   [[nodiscard]] std::uint64_t dsp_ticks() const;
@@ -296,15 +311,6 @@ private:
   void on_write(const BusEvent &event);
   const Config config_;
   const Execution execution_;
-  std::shared_ptr<const Identity> identity_;
-  const std::shared_ptr<const bool> input_identity_ = std::make_shared<const bool>(true);
-  const std::shared_ptr<const PeripheralEventIdentity> clock_identity_ =
-      std::make_shared<const PeripheralEventIdentity>();
-  std::unique_ptr<Owners> native_;
-  Control control_;
-  const McuDspRuntime::CycleInputs dma_inputs_;
-  const McuDspRuntime::Observer dsp_events_;
-  PcmFrameSink *pcm_output_ = nullptr;
-  bool active_ = false;
+  VmContext vm_;
 };
 }

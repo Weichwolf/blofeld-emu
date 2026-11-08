@@ -2,6 +2,14 @@
 
 Native firmware VM
 
+Use the vi_ module and VirtualInstrument as a reusable template for future
+instrument projects: host attachment, lifecycle, buffers, device time and core
+control have clear roles; each target supplies its concrete firmware I/O and
+storage bindings. Keep native calls direct and avoid a universal core hierarchy.
+Sample storage uses persistent images and necessary command/status/completion
+contracts. Remove cell physics, pulse-inhibit configuration and redundant backend
+dispatch without losing actual storage, interrupted writes or recovery behavior.
+
 Build a small native firmware VM with the independent cpu12 and dsp56300 JITs.
 Consolidate execution bindings, typed I/O entry points, virtual deadlines, pending
 events and bounded USB/audio buffers in one stable VmContext per instrument.

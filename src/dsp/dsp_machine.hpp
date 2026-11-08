@@ -29,6 +29,8 @@ public:
 
   [[nodiscard]] DspBus &bus() noexcept { return bus_; }
 
+  [[nodiscard]] const DspBus &bus() const noexcept { return bus_; }
+
   [[nodiscard]] const dsp56300::Core &cpu() const noexcept { return cpu_; }
 
   [[nodiscard]] const DspRunClock &clock() const noexcept { return clock_; }

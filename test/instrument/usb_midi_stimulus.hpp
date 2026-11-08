@@ -4,8 +4,8 @@
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "mcu/mcu_memory.hpp"
-#include "runtime/instrument.hpp"
 #include "usb/usb_midi_host.hpp"
+#include "vi/vi.hpp"
 
 #include <array>
 #include <cstdint>
@@ -20,7 +20,7 @@ public:
   explicit UsbMidiStimulus(const std::uint64_t timebase)
       : host_(timebase / frames_per_second, timebase), interval_(timebase / 4U) {}
 
-  void poll(runtime::Instrument &instrument, const bool audio_started) {
+  void poll(vi::VirtualInstrument &instrument, const bool audio_started) {
     for (const auto &completion : instrument.poll_usb(host_)) {
       if (!completion.input_direction) {
         output_bytes_ += completion.transferred;
@@ -67,7 +67,7 @@ public:
   }
 
 private:
-  bool startup_queries_observed(const runtime::Instrument &instrument) {
+  bool startup_queries_observed(const vi::VirtualInstrument &instrument) {
     if (startup_observed_) { return true; }
     // Original 1.25 records each request before transmission. Global41..47
     // follow the startup DSP/wave/sound checks; Global27 is the later contrast

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "runtime/profile.hpp"
+#include "vi/vi_profile.hpp"
 
 #include "common/bus.hpp"
 #include "dsp/dsp_dma.hpp"
@@ -9,11 +9,11 @@
 #include "mcu/mcu_memory.hpp"
 #include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_run_clock.hpp"
-#include "runtime/instrument.hpp"
 #include "runtime/mcu_dsp_runtime.hpp"
 #include "storage/nand.hpp"
 #include "storage/nand_cell_model.hpp"
 #include "storage/private_file.hpp"
+#include "vi/vi.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -23,7 +23,7 @@
 #include <sstream>
 #include <string>
 
-namespace blofeld::runtime {
+namespace blofeld::vi {
 Profile load_profile(const std::filesystem::path &path) {
   constexpr unsigned maximum_bytes = 16384;
   const auto bytes = read_private_file(path, maximum_bytes);
@@ -85,7 +85,7 @@ constexpr unsigned audio_destinations = 6;
 constexpr std::uint64_t pcm_start_at = 167650560000;
 }
 
-Config instrument_config(const Profile &profile) {
+Config vi_config(const Profile &profile) {
   Config result;
   result.mcu.clock = {.oscillator_hz = mcu_oscillator_hz,
                       .switch_timing = McuRunClockSwitch::reference_cycle_boundary};

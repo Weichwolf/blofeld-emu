@@ -125,21 +125,17 @@ target_link_libraries(blofeld_core PUBLIC cpu12::core)
 list(APPEND blofeld_independent_native_args --native cpu12_core=$<TARGET_FILE:cpu12_core>)
 target_compile_definitions(blofeld_core PUBLIC BLOFELD_DEFAULT_SLA="")
 
-add_library(blofeld_instrument
-  src/runtime/mcu_dsp_gpio_peer.cpp src/runtime/instrument_gpio_peer.cpp
-  src/runtime/instrument_config.cpp src/runtime/profile.cpp
-  src/runtime/instrument_square_clock.cpp src/runtime/instrument_audio_clock.cpp
-  src/runtime/instrument.cpp src/runtime/instrument_pipeline.cpp
-  src/runtime/instrument_wiring.cpp src/runtime/instrument_returns.cpp
-  src/runtime/instrument_execution.cpp src/runtime/instrument_reset_source.cpp
-  src/runtime/instrument_lcd.cpp src/runtime/instrument_b_pulls.cpp
-  src/runtime/instrument_pcm.cpp src/runtime/instrument_audio.cpp)
-target_include_directories(blofeld_instrument PUBLIC src)
-target_link_libraries(blofeld_instrument PUBLIC blofeld_mcu_dsp_runtime
+add_library(blofeld_vi
+  src/runtime/mcu_dsp_gpio_peer.cpp
+  src/vi/vi.cpp src/vi/vi_runtime.cpp src/vi/vi_execution.cpp
+  src/vi/vi_io.cpp src/vi/vi_display.cpp src/vi/vi_profile.cpp
+  src/vi/vi_time.cpp src/vi/vi_clock.cpp src/vi/vi_audio.cpp)
+target_include_directories(blofeld_vi PUBLIC src)
+target_link_libraries(blofeld_vi PUBLIC blofeld_mcu_dsp_runtime
   blofeld_private_files blofeld_pcm_transport blofeld_usbip_tcp blofeld_nand_peer
   blofeld_nand_store blofeld_lcd_export)
-add_executable(blofeld-headless src/app/main.cpp src/app/host_display_pump.cpp)
-target_link_libraries(blofeld-headless PRIVATE blofeld_instrument
+add_executable(blofeld-headless src/app/main.cpp src/vi/host/vi_display.cpp)
+target_link_libraries(blofeld-headless PRIVATE blofeld_vi
   blofeld_audio_runtime blofeld_device_identity)
 
 if(BUILD_TESTING)
@@ -336,7 +332,7 @@ if(BUILD_TESTING)
   add_test(NAME dsp_io_map COMMAND blofeld-dsp-io-map-test)
 
   add_executable(blofeld-startup-probe EXCLUDE_FROM_ALL test/instrument/startup_probe.cpp)
-  target_link_libraries(blofeld-startup-probe PRIVATE blofeld_instrument blofeld_device_identity)
+  target_link_libraries(blofeld-startup-probe PRIVATE blofeld_vi blofeld_device_identity)
 
   add_executable(blofeld-mcu-dsp-execution-test test/runtime/mcu_dsp_execution_test.cpp)
   target_include_directories(blofeld-mcu-dsp-execution-test PRIVATE test
@@ -849,14 +845,22 @@ endif()
 if(BUILD_TESTING)
   add_executable(blofeld-gpio-projection-test test/runtime/gpio_projection_test.cpp)
   target_include_directories(blofeld-gpio-projection-test PRIVATE "${BLOFELD_CPU12_ROOT}/test/support")
-  target_link_libraries(blofeld-gpio-projection-test PRIVATE blofeld_instrument)
+  target_link_libraries(blofeld-gpio-projection-test PRIVATE blofeld_vi)
   add_test(NAME gpio_projections COMMAND blofeld-gpio-projection-test)
   set_tests_properties(gpio_projections PROPERTIES TIMEOUT 10)
   add_dependencies(quality blofeld-gpio-projection-test)
 
+  add_executable(blofeld-audio-deadline-test test/runtime/audio_deadline_test.cpp)
+  target_include_directories(blofeld-audio-deadline-test PRIVATE
+    "${BLOFELD_CPU12_ROOT}/test/support" "${BLOFELD_DSP56300_ROOT}/test")
+  target_link_libraries(blofeld-audio-deadline-test PRIVATE blofeld_vi)
+  add_test(NAME instrument_audio_deadlines COMMAND blofeld-audio-deadline-test)
+  set_tests_properties(instrument_audio_deadlines PROPERTIES TIMEOUT 10)
+  add_dependencies(quality blofeld-audio-deadline-test)
+
   add_executable(blofeld-mcu-dsp-gpio-peer-test test/mcu_dsp_gpio_peer_test.cpp)
   target_include_directories(blofeld-mcu-dsp-gpio-peer-test PRIVATE "${BLOFELD_CPU12_ROOT}/test/support")
-  target_link_libraries(blofeld-mcu-dsp-gpio-peer-test PRIVATE blofeld_instrument)
+  target_link_libraries(blofeld-mcu-dsp-gpio-peer-test PRIVATE blofeld_vi)
   add_test(NAME mcu_dsp_gpio_peer COMMAND blofeld-mcu-dsp-gpio-peer-test)
   set_tests_properties(mcu_dsp_gpio_peer PROPERTIES TIMEOUT 30)
 

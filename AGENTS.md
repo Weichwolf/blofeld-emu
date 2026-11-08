@@ -10,9 +10,12 @@
 - Use our independent cpu12 and dsp56300 cores; fix generic core defects there.
   Keep firmware I/O, core execution, transport and audio separate. Unknown accesses
   fail with address, operation, PC and context. Run as a regular user.
-- Build a native firmware VM with one stable VmContext for live memory/I/O
+- Keep vi_ as a reusable instrument-VM template with direct concrete core bindings.
+  Build one stable VmContext for live memory/I/O
   bindings, deadlines, pending events and bounded buffers. Cores own their state;
   consolidate existing runtime data rather than adding mirrors or checkpoints.
+- Reduce sample storage to persistent images and required firmware transactions,
+  status and completions; remove cell physics and redundant backend wrappers.
 - Prioritize the connected instrument. Fix and optimize the responsible core for
   generic defects or measured instrument bottlenecks; core benchmark percentages
   do not block integration. SIMD is optional and needs measured benefit.
