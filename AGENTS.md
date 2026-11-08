@@ -49,6 +49,9 @@
 - A host call need not end a native run. Return for actual rescheduling, IRQs,
   mapping/reset transitions, backpressure or faults; retain every I/O effect and
   deterministic virtual time. Profile the connected Release VM toward >=4x RTF.
+- Check measurement scope, magnitude and interpretation before drawing conclusions.
+  Distinguish startup, active throughput, sampled CPU shares, CPU/wall time and
+  matched host-ASM ratios. Change the >=4x target only with reproducible evidence.
 - Run builds, tests and benchmarks locally; do not add GitHub workflows or pipelines.
 - Use C++23, LLVM 19 and CMake/Ninja. Keep strict compiler/linker flags, warnings
   as errors, clang-format, clang-tidy with zero findings and functions <=120 lines.
