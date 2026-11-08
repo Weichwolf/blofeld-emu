@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "app/display/display_pump.hpp"
 #include "audio/audio_runtime.hpp"
 #include "common/bus.hpp"
 #include "firmware/firmware.hpp"
 #include "storage/flash_image.hpp"
 #include "storage/virtual_device_state.hpp"
 #include "usb/usbip_runtime.hpp"
-#include "vi/host/vi_display.hpp"
 #include "vi/vi.hpp"
 #include "vi/vi_profile.hpp"
 
@@ -71,7 +71,7 @@ void run(const blofeld::vi::Profile &profile) {
        .after_ticks = usb_ready_at,
        .period_ticks = vi::timebase_hz / milliseconds_per_second,
        .probe_timeout_ticks = vi::timebase_hz * 2});
-  std::optional<vi::HostDisplayPump> display;
+  std::optional<app::DisplayPump> display;
   if (!profile.display.empty()) { display.emplace(profile.display); }
   const auto started = std::chrono::steady_clock::now();
   auto next_status = started;

@@ -15,7 +15,7 @@ namespace blofeld {
 class DspMachine;
 class NandWriteStore;
 
-struct NandPeerEvents {
+struct MemoryControllerEvents {
   std::shared_ptr<const PeripheralEventIdentity> identity;
   std::function<std::optional<std::uint64_t>()> next_ticks;
   std::function<void(std::uint64_t)> observe;
@@ -23,15 +23,15 @@ struct NandPeerEvents {
 
 // Firmware GPIO transactions over persistent NAND storage. Only actual register
 // accesses and operation completions change state; no setup/hold or pad replay.
-class NandPeer {
+class MemoryController {
 public:
-  NandPeer(DspMachine &machine, Nand device, NandCellProfile profile = {});
-  NandPeer(DspMachine &machine, std::unique_ptr<NandWriteStore> store);
-  ~NandPeer();
-  NandPeer(const NandPeer &) = delete;
-  NandPeer &operator=(const NandPeer &) = delete;
+  MemoryController(DspMachine &machine, Nand device, NandCellProfile profile = {});
+  MemoryController(DspMachine &machine, std::unique_ptr<NandWriteStore> store);
+  ~MemoryController();
+  MemoryController(const MemoryController &) = delete;
+  MemoryController &operator=(const MemoryController &) = delete;
   void set_telemetry(std::ostream *output);
-  [[nodiscard]] NandPeerEvents events();
+  [[nodiscard]] MemoryControllerEvents events();
   void before_native(std::uint64_t ticks);
   void after_native(std::uint64_t ticks, std::optional<std::uint32_t> pc);
   [[nodiscard]] Nand protocol_copy() const;

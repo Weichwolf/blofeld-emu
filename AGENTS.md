@@ -19,9 +19,13 @@
 - Prioritize the connected instrument. Fix and optimize the responsible core for
   generic defects or measured instrument bottlenecks; core benchmark percentages
   do not block integration. SIMD is optional and needs measured benefit.
-- External transport is USB-MIDI <-> instrument -> audio. Use direct audio RAM
-  and USB/MIDI buffer/FIFO mappings with correct flags, lengths and IRQs. No
-  external DIN/virtual MIDI ports, UART-bit path or serial-PCM decoding for output.
+- Keep instrument-specific execution and I/O under src/vi/; display state belongs
+  in vi/display/. Host backends know no instrument registers; vi/ knows no host
+  API handles. app/ composes both sides and owns the UI and display publication.
+- Support classic MIDI ports and USB-MIDI bidirectionally. Share bounded host
+  MIDI routing; deliver bytes to original SCI registers or USB endpoint FIFOs
+  with correct readiness, lengths, IRQs and musical timestamps. Use direct audio
+  RAM, without UART-bit signaling or serial-PCM decoding in the host path.
 - Query audio/MIDI capabilities separately and read actual grants; keep bounded
   queues, visible overload/disconnect errors and unchanged virtual clocks. Audio
   callbacks must not allocate, throw, lock or access files. Hardware flashing needs

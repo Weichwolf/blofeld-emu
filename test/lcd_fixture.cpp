@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "lcd_fixture.hpp"
 
-#include "display/st7565.hpp"
-#include "display/st7565_parallel.hpp"
 #include "mcu/hc12_registers.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_gpio.hpp"
+#include "vi/display/st7565.hpp"
+#include "vi/display/st7565_parallel.hpp"
 
 #include <array>
 #include <cstdint>

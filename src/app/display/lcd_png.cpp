@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "app/display/lcd_export.hpp"
 #include "common/bus.hpp"
-#include "display/lcd_image.hpp"
+#include "vi/display/lcd_image.hpp"
 
 #include <array>
 #include <cstddef>

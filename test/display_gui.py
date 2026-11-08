@@ -11,9 +11,9 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "src/app"))
 
-from gui.frame import FILE_BYTES, HEADER, Frame, read_frame
+from ui.frame import FILE_BYTES, HEADER, Frame, read_frame
 
 
 def require(condition, message):
@@ -66,7 +66,7 @@ def parser(directory):
 
 
 def gtk_test(directory, expected):
-    from gui.display import DisplayWindow
+    from ui.display import DisplayWindow
     from gi.repository import Gio, GLib, Gtk
 
     context = GLib.MainContext.default()

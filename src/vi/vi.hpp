@@ -5,8 +5,6 @@
 #include "audio/pcm_words.hpp"
 #include "audio/serial_pcm.hpp"
 #include "common/bus.hpp"
-#include "display/lcd_image.hpp"
-#include "display/st7565_parallel.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_esai.hpp"
@@ -23,13 +21,15 @@
 #include "mcu/mcu_sci.hpp"
 #include "runtime/mcu_dsp_gpio_peer.hpp"
 #include "runtime/mcu_dsp_runtime.hpp"
-#include "runtime/nand_peer.hpp"
 #include "storage/flash_image.hpp"
 #include "storage/nand.hpp"
 #include "storage/nand_cell_model.hpp"
 #include "storage/nand_image.hpp"
 #include "usb/usb_host_link.hpp"
 #include "usb/usb_transfer.hpp"
+#include "vi/display/lcd_image.hpp"
+#include "vi/display/st7565_parallel.hpp"
+#include "vi/io/memory_controller.hpp"
 #include "vi/vi_time.hpp"
 
 #include <cstddef>
@@ -244,7 +244,7 @@ private:
 
     McuMachine mcu;
     DspMachine dsp;
-    std::unique_ptr<NandPeer> nand;
+    std::unique_ptr<MemoryController> memory_controller;
     std::unique_ptr<McuDspGpioPeer> gpio_peer;
     std::unique_ptr<McuDspRuntime> runtime;
     const McuDspRuntime::CycleInputs dma_inputs;

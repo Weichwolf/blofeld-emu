@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
-#include "display/st7565.hpp"
 #include "firmware/firmware.hpp"
 #include "lcd_fixture.hpp"
 #include "mcu/hc12.hpp"
@@ -9,6 +8,7 @@
 #include "mcu/mcu_gpio.hpp"
 #include "parallel_update_fixture.hpp"
 #include "storage/flash_image.hpp"
+#include "vi/display/st7565.hpp"
 
 #include <algorithm>
 #include <array>

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "app/display/lcd_export.hpp"
 #include "audio/pcm_sink.hpp"
 #include "audio/serial_pcm.hpp"
 #include "common/bus.hpp"
-#include "display/lcd_image.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "firmware/firmware.hpp"
 #include "mcu/mcu_memory.hpp"
@@ -10,6 +10,7 @@
 #include "storage/private_file.hpp"
 #include "storage/virtual_device_state.hpp"
 #include "usb_midi_stimulus.hpp"
+#include "vi/display/lcd_image.hpp"
 #include "vi/vi.hpp"
 #include "vi/vi_profile.hpp"
 

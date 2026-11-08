@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "display/st7565.hpp"
-#include "display/st7565_parallel.hpp"
+#include "vi/display/st7565.hpp"
+#include "vi/display/st7565_parallel.hpp"
 
 #include <cstdint>
 

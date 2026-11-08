@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "display/lcd_export.hpp"
+#include "app/display/lcd_export.hpp"
 
-#include "display/lcd_image.hpp"
 #include "storage/private_file.hpp"
+#include "vi/display/lcd_image.hpp"
 
 #include <cstdint>
 #include <filesystem>

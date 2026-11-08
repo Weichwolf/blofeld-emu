@@ -6,8 +6,8 @@
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_shi.hpp"
 #include "runtime/mcu_dsp_runtime.hpp"
-#include "runtime/nand_peer.hpp"
 #include "storage/nand_write_store.hpp"
+#include "vi/io/memory_controller.hpp"
 #include "vi/vi.hpp"
 
 #include <cstdint>
@@ -51,8 +51,8 @@ void VirtualInstrument::prepare_dsp() {
                                                   common_hz(),
                                                   config_.nand->cell_profile);
     store->observe_wp(config_.nand->write_protect_n);
-    vm_.nand = std::make_unique<NandPeer>(vm_.dsp, std::move(store));
-    vm_.nand->set_telemetry(execution_.trace);
+    vm_.memory_controller = std::make_unique<MemoryController>(vm_.dsp, std::move(store));
+    vm_.memory_controller->set_telemetry(execution_.trace);
   }
 }
 
@@ -63,8 +63,9 @@ void VirtualInstrument::connect_runtime() {
 }
 
 DspRuntimePeripheralEvents VirtualInstrument::peripheral_events(VmContext &owners) {
-  if (!owners.nand && !transmitter_clock_events()) { return {}; }
-  const auto events = owners.nand ? owners.nand->events() : NandPeerEvents{};
+  if (!owners.memory_controller && !transmitter_clock_events()) { return {}; }
+  const auto events =
+      owners.memory_controller ? owners.memory_controller->events() : MemoryControllerEvents{};
   if (transmitter_clock_events()) {
     return {.identity = vm_.clock_identity,
             .next_ticks = [this, events]() -> std::optional<std::uint64_t> {
@@ -133,7 +134,9 @@ void VirtualInstrument::observe_dsp_cycle(const DspRuntimeCycle &cycle) {
     vm_.io_revision = revision;
     observe_held_dsp_tio();
     synchronize_audio_clock(cycle.completion_ticks);
-    if (vm_.nand) { vm_.nand->after_native(cycle.completion_ticks, cycle.native_pc); }
+    if (vm_.memory_controller) {
+      vm_.memory_controller->after_native(cycle.completion_ticks, cycle.native_pc);
+    }
     vm_.return_boundary = cycle.completion_ticks;
     publish_io();
     vm_.return_boundary.reset();

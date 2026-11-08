@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "display/lcd_image.hpp"
-#include "display/st7565.hpp"
+#include "app/display/lcd_export.hpp"
 #include "lcd_image_fixture.hpp"
+#include "vi/display/lcd_image.hpp"
+#include "vi/display/st7565.hpp"
 
 #include <algorithm>
 #include <array>

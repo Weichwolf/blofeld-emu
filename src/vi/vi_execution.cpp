@@ -6,11 +6,11 @@
 #include "mcu/mcu_memory.hpp"
 #include "mcu/mcu_reset.hpp"
 #include "runtime/mcu_dsp_runtime.hpp"
-#include "runtime/nand_peer.hpp"
 #include "usb/usb_midi_host.hpp"
 #include "usb/usb_transfer.hpp"
 #include "usb/usbip_runtime.hpp"
 #include "usb/usbip_tcp.hpp"
+#include "vi/io/memory_controller.hpp"
 #include "vi/vi.hpp"
 
 #include <cstdint>

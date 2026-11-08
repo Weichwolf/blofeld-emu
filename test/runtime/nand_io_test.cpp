@@ -5,8 +5,8 @@
 #include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "runtime/nand_peer.hpp"
 #include "storage/nand.hpp"
+#include "vi/io/memory_controller.hpp"
 
 #include <array>
 #include <cstdint>
@@ -58,8 +58,8 @@ struct Device {
   DspMachine dsp{{.extal_hz = oscillator_hz,
                   .timebase_hz = common_hz,
                   .switch_timing = DspClockSwitch::functional_region_boundary}};
-  NandPeer nand{dsp, image()};
-  NandPeerEvents events = nand.events();
+  MemoryController nand{dsp, image()};
+  MemoryControllerEvents events = nand.events();
   std::uint64_t now = 0;
 
   void write(const DspPort port, const DspGpioRegister reg, const unsigned value) {
@@ -170,7 +170,7 @@ void lifetimes() {
   DspMachine dsp({.extal_hz = oscillator_hz,
                   .timebase_hz = common_hz,
                   .switch_timing = DspClockSwitch::functional_region_boundary});
-  auto peer = std::make_unique<NandPeer>(dsp, image());
+  auto peer = std::make_unique<MemoryController>(dsp, image());
   const auto events = peer->events();
   peer.reset();
   rejects([&] { static_cast<void>(events.next_ticks()); });

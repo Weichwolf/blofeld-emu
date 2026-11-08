@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "app/display/lcd_export.hpp"
 #include "common/bus.hpp"
-#include "display/lcd_image.hpp"
 #include "firmware/firmware.hpp"
 #include "lcd_fixture.hpp"
 #include "mcu/hc12.hpp"
@@ -11,6 +11,7 @@
 #include "storage/flash_image.hpp"
 #include "storage/private_file.hpp"
 #include "storage/virtual_device_state.hpp"
+#include "vi/display/lcd_image.hpp"
 
 #include <cstdint>
 #include <exception>

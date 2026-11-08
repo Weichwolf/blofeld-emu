@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "runtime/nand_peer.hpp"
+#include "vi/io/memory_controller.hpp"
 
 #include "common/bus.hpp"
 #include "common/telemetry.hpp"
@@ -8,7 +8,6 @@
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_peripheral_calendar.hpp"
 #include "runtime/gpio_pads.hpp"
-#include "runtime/nand_bus_decode.hpp"
 #include "runtime/nand_peer_medium.hpp"
 #include "storage/nand.hpp"
 #include "storage/nand_cell_model.hpp"
@@ -29,9 +28,46 @@ constexpr unsigned reserved_status_bits = 0x3e;
 constexpr unsigned held_status_controls = 0x600;
 constexpr unsigned data_mask = 0xff, controls_mask = 0xf00;
 constexpr unsigned re_n = 0x100, we_n = 0x200, cle = 0x400, ale = 0x800;
+
+// Decode firmware register transactions while the shared byte port changes owner.
+class TransactionDecoder {
+public:
+  unsigned observe(const unsigned controls, const bool host_outputs) {
+    constexpr unsigned strobes = re_n | we_n;
+    if ((controls & ~controls_mask) != 0) { throw Fault("Invalid NAND bus control mask"); }
+    const auto current = controls & strobes;
+    const auto previous = previous_.value_or(strobes) & strobes;
+    const bool active = current != 0 && current != strobes;
+    if (host_outputs || host_owned_) {
+      if (!host_owned_ && previous == re_n) {
+        throw Fault("NAND functional bus operation=decode at=X:0xffffbd previous=" +
+                    hex(previous_.value_or(strobes), 3) + " controls=" + hex(controls, 3) +
+                    ": host ownership interrupts an unfinished NAND write");
+      }
+      host_owned_ = host_outputs || current != strobes;
+      previous_ = controls;
+      return host_owned_ ? strobes : controls;
+    }
+    if ((current == 0 && previous == re_n) || (previous == 0 && active)) {
+      throw Fault("NAND functional bus operation=decode at=X:0xffffbd previous=" +
+                  hex(previous_.value_or(strobes), 3) + " controls=" + hex(controls, 3) +
+                  ": neutral phase requires a completed write and inactive transfer entry");
+    }
+    previous_ = controls;
+    return current == 0 ? controls | strobes : controls;
+  }
+
+  [[nodiscard]] bool neutral() const {
+    return host_owned_ || (previous_ && (*previous_ & (re_n | we_n)) == 0);
+  }
+
+private:
+  std::optional<unsigned> previous_;
+  bool host_owned_ = false;
+};
 }
 
-struct NandPeer::Impl {
+struct MemoryController::Impl {
   Impl(DspMachine &owner, NandPeerMedium storage)
       : machine(owner),
         medium(std::move(storage)),
@@ -157,7 +193,7 @@ struct NandPeer::Impl {
   DspMachine &machine;
   NandPeerMedium medium;
   const std::uint64_t power_at;
-  NandBusDecode decoder{NandBusContract::functional_transactions};
+  TransactionDecoder decoder;
   std::shared_ptr<const PeripheralEventIdentity> identity =
       std::make_shared<const PeripheralEventIdentity>();
   std::optional<unsigned> previous;
@@ -169,23 +205,23 @@ struct NandPeer::Impl {
   bool failed = false;
 };
 
-NandPeer::NandPeer(DspMachine &machine, Nand device, NandCellProfile profile)
+MemoryController::MemoryController(DspMachine &machine, Nand device, NandCellProfile profile)
     : impl_(std::make_unique<Impl>(machine,
                                    NandPeerMedium(NandWriteMedium(std::move(device),
                                                                   machine.clock().timebase_hz(),
                                                                   std::move(profile))))) {}
 
-NandPeer::NandPeer(DspMachine &machine, std::unique_ptr<NandWriteStore> store)
+MemoryController::MemoryController(DspMachine &machine, std::unique_ptr<NandWriteStore> store)
     : impl_(std::make_unique<Impl>(
           machine, NandPeerMedium(std::move(store), machine.clock().timebase_hz()))) {}
 
-NandPeer::~NandPeer() = default;
+MemoryController::~MemoryController() = default;
 
-void NandPeer::set_telemetry(std::ostream *output) {
+void MemoryController::set_telemetry(std::ostream *output) {
   impl_->telemetry = Telemetry(output);
 }
 
-NandPeerEvents NandPeer::events() {
+MemoryControllerEvents MemoryController::events() {
   const std::weak_ptr lease(impl_->lifetime);
   return {.identity = impl_->identity,
           .next_ticks =
@@ -203,11 +239,12 @@ NandPeerEvents NandPeer::events() {
               }};
 }
 
-void NandPeer::before_native(const std::uint64_t ticks) {
+void MemoryController::before_native(const std::uint64_t ticks) {
   impl_->advance(ticks, false);
 }
 
-void NandPeer::after_native(const std::uint64_t ticks, const std::optional<std::uint32_t> pc) {
+void MemoryController::after_native(const std::uint64_t ticks,
+                                    const std::optional<std::uint32_t> pc) {
   if (pc) { impl_->pc = *pc; }
   try {
     impl_->advance(ticks, false);
@@ -218,16 +255,16 @@ void NandPeer::after_native(const std::uint64_t ticks, const std::optional<std::
   }
 }
 
-Nand NandPeer::protocol_copy() const {
+Nand MemoryController::protocol_copy() const {
   impl_->healthy();
   return impl_->medium.device();
 }
 
-bool NandPeer::faulted() const {
+bool MemoryController::faulted() const {
   return impl_->failed || impl_->medium.faulted();
 }
 
-bool NandPeer::durable() const {
+bool MemoryController::durable() const {
   return impl_->medium.durable();
 }
 }

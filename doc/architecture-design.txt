@@ -9,6 +9,32 @@ clear. Adapting the template supplies concrete core types, profiles, register ma
 and firmware protocols for that instrument. Core calls remain direct and typed;
 reuse does not require a runtime core registry or a universal core base class.
 
+Source ownership
+
+  src/app/          standalone composition, CLI, UI and display publication
+  src/vi/           VirtualInstrument, VmContext, lifecycle and scheduling
+    io/             memory controller and firmware-facing I/O adapters
+    display/        firmware LCD registers, display RAM and image state
+    mcu/            MCU memory, registers and concrete core binding
+    dsp/            DSP memory, peripherals and completed audio buffers
+    storage/        firmware, sample and persistent device-image semantics
+  src/host/         reusable host transport and consumer facilities
+    audio/          bounded PCM queues, device output and WAV
+    midi/           MIDI events, ports, routing and file input
+    usb/            host USB protocol and transport
+    alsa/           Linux MIDI backend
+
+This is the target layout. Host backends do not know Blofeld registers or core
+types, and vi/ does not know host API handles, windows or ALSA. app/ supplies the
+concrete adapters between them. Shared boundary values contain data, timestamps,
+bounded buffers and explicit status; they do not introduce a dispatch hierarchy.
+Only create a backend directory when it has an implementation. Firmware-facing
+USB adapters belong to vi/io/, while generic USB protocol/socket code belongs
+to host/usb/. The independent ISA/JIT projects remain external dependencies.
+The UI and display publication consume display state; neither participates in
+firmware execution. vi/display/ owns the instrument's display controller and
+image state, with no dependency on the presentation toolkit or filesystem sink.
+
   local firmware / persistent images
                    |
            stable memory mappings
@@ -23,6 +49,7 @@ reuse does not require a runtime core registry or a universal core base class.
         |    data, IRQ, reset  |
         |                     +--- completed PCM words ---> audio consumer
         +--- USB endpoints <------ USB-MIDI host transport
+        +--- SCI byte registers <-- classic MIDI host ports
         +--- LCD RAM ------------> independent display consumer
         +--- persistent writes --> selected memory images
 
@@ -110,7 +137,10 @@ Audio and transport
 
 Read completed original DSP output words directly, retaining DMA positions,
 flags, frame order and sample timing. USB uses original control requests,
-endpoint FIFOs and interrupts. Host MIDI never passes through an external UART.
+endpoint FIFOs and interrupts. Classic MIDI uses original SCI byte registers,
+readiness, receive/overrun status and interrupts, without a per-bit wire engine.
+Reusable host MIDI ports retain timestamps, SysEx and bidirectional traffic;
+explicit routing selects the firmware entry path without duplicating messages.
 The live audio consumer paces output through bounded queues. Callbacks cannot
 allocate, lock, throw or access files. Host APIs and capability grants remain
 outside the cores and firmware I/O handlers.

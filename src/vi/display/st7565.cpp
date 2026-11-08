@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "display/st7565.hpp"
+#include "vi/display/st7565.hpp"
 
 #include "common/bus.hpp"
 

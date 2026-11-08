@@ -2,7 +2,7 @@
 #pragma once
 
 #include "common/bus.hpp"
-#include "display/st7565.hpp"
+#include "vi/display/st7565.hpp"
 
 #include <cstdint>
 #include <string_view>

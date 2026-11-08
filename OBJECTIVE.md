@@ -30,8 +30,11 @@ User-facing execution
 `blofeld-headless` without arguments opens the default local instrument profile,
 starts MIDI and real-time audio, and remains playable until shutdown. A host
 controller, keyboard or DAW uses the instrument through its normal MIDI
-connection. The original firmware receives USB-MIDI endpoint/FIFO traffic;
-external DIN ports and electrical UART/USB simulation are outside this scope.
+connection. Support classic MIDI ports and USB-MIDI bidirectionally. Deliver
+classic MIDI bytes through the original SCI register/status/interrupt contract
+and USB-MIDI through the original endpoint/FIFO contract. Route explicitly so
+one incoming message is not delivered twice. Electrical UART/USB simulation is
+outside this scope.
 
 `blofeld-headless --midi-file song.mid --wav-out song.wav` renders a Standard
 MIDI File offline at maximum throughput. Preserve tempo changes, track ordering,
@@ -189,11 +192,12 @@ checks and contextual unsupported-access failures are not optional telemetry.
 
 The current supplied acceptance scope includes Desktop and Keyboard. Keep profile
 coverage explicit; the Desktop SL path remains the immediate integration target.
-External instrument flow is USB-MIDI <-> blofeld-emu -> audio. Do not implement
-external DIN-MIDI ports or a separate virtual MIDI-port transport. Preserve MIDI
-messages, SysEx, sample transfers and original USB descriptors/endpoint behavior
-through the firmware's USB interface. Internal UART/timer/register initialization
-must still behave correctly when the unchanged firmware accesses it.
+External instrument flow is classic MIDI or USB-MIDI <-> blofeld-emu -> audio.
+Provide reusable host MIDI ports and routing for future instruments without USB.
+Preserve messages, SysEx, timestamps and outgoing traffic on both firmware paths,
+including SCI status/interrupts and original USB descriptors/endpoint behavior.
+Sample transfers retain their actual firmware transport contracts. Internal
+UART/timer/register initialization must still behave correctly.
 
 Use direct borrowed memory for audio payloads and direct memory/FIFO mappings
 for USB-MIDI. Read the final original-firmware audio ring, not a pre-master mix.

@@ -67,10 +67,9 @@ add_library(blofeld_nand_write_store src/storage/nand_write_store.cpp)
 target_include_directories(blofeld_nand_write_store PUBLIC src)
 target_link_libraries(blofeld_nand_write_store PUBLIC blofeld_nand_write_medium blofeld_nand_store
   PRIVATE blofeld_private_files)
-add_library(blofeld_nand_peer src/runtime/nand_peer.cpp src/runtime/nand_peer_medium.cpp
-  src/runtime/nand_bus_decode.cpp)
-target_include_directories(blofeld_nand_peer PUBLIC src)
-target_link_libraries(blofeld_nand_peer PUBLIC blofeld_dsp_machine blofeld_nand_write_medium blofeld_nand_write_store blofeld_dsp_peripheral_calendar)
+add_library(blofeld_memory_controller src/vi/io/memory_controller.cpp src/runtime/nand_peer_medium.cpp)
+target_include_directories(blofeld_memory_controller PUBLIC src)
+target_link_libraries(blofeld_memory_controller PUBLIC blofeld_dsp_machine blofeld_nand_write_medium blofeld_nand_write_store blofeld_dsp_peripheral_calendar)
 
 add_library(blofeld_mcu src/mcu/mcu_bus.cpp src/mcu/mcu_bus_clone.cpp src/mcu/mcu_bus_usb.cpp src/mcu/mcu_code_cache.cpp src/mcu/mcu_memory.cpp src/mcu/mcu_gpio.cpp
   src/mcu/mcu_flash_config.cpp src/mcu/mcu_flash.cpp src/mcu/mcu_flash_clock.cpp
@@ -94,10 +93,11 @@ target_link_libraries(blofeld_usbip PUBLIC blofeld_usb_host)
 add_library(blofeld_usbip_tcp src/usb/usbip_tcp.cpp src/usb/usbip_tcp_io.cpp src/usb/usbip_runtime.cpp)
 target_include_directories(blofeld_usbip_tcp PUBLIC src)
 target_link_libraries(blofeld_usbip_tcp PUBLIC blofeld_usbip)
-add_library(blofeld_display src/display/st7565.cpp src/display/st7565_parallel.cpp)
+add_library(blofeld_display src/vi/display/st7565.cpp src/vi/display/st7565_parallel.cpp
+  src/vi/display/lcd_image.cpp)
 target_include_directories(blofeld_display PUBLIC src)
 target_link_libraries(blofeld_display PUBLIC blofeld_firmware)
-add_library(blofeld_lcd_export src/display/lcd_image.cpp src/display/lcd_png.cpp src/display/lcd_export.cpp)
+add_library(blofeld_lcd_export src/app/display/lcd_encoding.cpp src/app/display/lcd_png.cpp src/app/display/lcd_export.cpp)
 target_include_directories(blofeld_lcd_export PUBLIC src)
 target_link_libraries(blofeld_lcd_export PUBLIC blofeld_display blofeld_private_files PRIVATE ZLIB::ZLIB)
 include(cmake/Cpu12.cmake)
@@ -132,11 +132,11 @@ add_library(blofeld_vi
   src/vi/vi_time.cpp src/vi/vi_clock.cpp src/vi/vi_audio.cpp)
 target_include_directories(blofeld_vi PUBLIC src)
 target_link_libraries(blofeld_vi PUBLIC blofeld_mcu_dsp_runtime
-  blofeld_private_files blofeld_pcm_transport blofeld_usbip_tcp blofeld_nand_peer
-  blofeld_nand_store blofeld_lcd_export)
-add_executable(blofeld-headless src/app/main.cpp src/vi/host/vi_display.cpp)
+  blofeld_private_files blofeld_pcm_transport blofeld_usbip_tcp blofeld_memory_controller
+  blofeld_nand_store blofeld_display)
+add_executable(blofeld-headless src/app/main.cpp src/app/display/display_pump.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_vi
-  blofeld_audio_runtime blofeld_device_identity)
+  blofeld_audio_runtime blofeld_device_identity blofeld_lcd_export)
 
 if(BUILD_TESTING)
   add_test(NAME instrument_cli COMMAND ${Python3_EXECUTABLE}
@@ -147,7 +147,7 @@ endif()
 
 if(BUILD_TESTING)
   add_executable(blofeld-nand-io-test test/runtime/nand_io_test.cpp)
-  target_link_libraries(blofeld-nand-io-test PRIVATE blofeld_nand_peer)
+  target_link_libraries(blofeld-nand-io-test PRIVATE blofeld_memory_controller)
   add_test(NAME nand_io COMMAND blofeld-nand-io-test)
 endif()
 
@@ -332,7 +332,7 @@ if(BUILD_TESTING)
   add_test(NAME dsp_io_map COMMAND blofeld-dsp-io-map-test)
 
   add_executable(blofeld-startup-probe EXCLUDE_FROM_ALL test/instrument/startup_probe.cpp)
-  target_link_libraries(blofeld-startup-probe PRIVATE blofeld_vi blofeld_device_identity)
+  target_link_libraries(blofeld-startup-probe PRIVATE blofeld_vi blofeld_device_identity blofeld_lcd_export)
 
   add_executable(blofeld-mcu-dsp-execution-test test/runtime/mcu_dsp_execution_test.cpp)
   target_include_directories(blofeld-mcu-dsp-execution-test PRIVATE test
@@ -758,8 +758,8 @@ endif()
 
 install(TARGETS blofeld-headless RUNTIME DESTINATION bin)
 install(PROGRAMS tools/blofeld-display DESTINATION bin COMPONENT Display)
-install(FILES src/gui/__init__.py src/gui/frame.py src/gui/watch.py src/gui/display.py
-  DESTINATION share/blofeld-emu/gui COMPONENT Display)
+install(FILES src/app/ui/__init__.py src/app/ui/frame.py src/app/ui/watch.py src/app/ui/display.py
+  DESTINATION share/blofeld-emu/ui COMPONENT Display)
 install(FILES packaging/org.blofeld_emu.Display.desktop
   DESTINATION share/applications COMPONENT Display)
 install(FILES LICENSE DESTINATION share/doc/blofeld-emu COMPONENT Display)
