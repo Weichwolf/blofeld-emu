@@ -6,8 +6,10 @@ Blofeld firmware VM project using the independent
 
 The current source contains the LCD register/data contract, image capture,
 atomic PBM/text publication, GTK viewer, 1.25 update-container loader, MCU
-image codec and direct MCU memory mapping. There is currently no playable
-instrument executable. Complete instrument requirements are in
+image codec, direct MCU memory mapping and independent MCU/DSP execution
+threads. `blofeld-headless` loads local images and executes their native JIT
+paths; unimplemented device accesses stop with context. Audio, MIDI and device
+channels are not connected, so it is not yet a playable instrument. Complete requirements are in
 [OBJECTIVE.md](OBJECTIVE.md) and [ACCEPTANCE.tsv](ACCEPTANCE.tsv).
 
 - `src/vi/`: instrument behavior and firmware device contracts.
@@ -31,6 +33,26 @@ cmake --build --preset release --target quality
 `strict` enables ASan/UBSan; `thread` selects separate TSan. Compiler warnings,
 linker hardening, clang-tidy and clang-format are enforced. Ccache is used when
 available. Core correctness suites run in their own projects.
+
+```sh
+build/release/blofeld-headless --profile /path/to/instrument.profile
+```
+
+With no arguments it reads `$XDG_CONFIG_HOME/blofeld-emu/default.profile`,
+falling back to `$HOME/.config/blofeld-emu/default.profile`. Profiles contain
+one field and quoted path per line; paths are relative to the profile file:
+
+```text
+boot-rom "boot.bin"
+device-state "device.bfnvm"
+```
+
+The DSP boot input contains 192 big-endian 24-bit words. The MCU image uses
+the versioned `.bfnvm` format with explicit known-byte and erase metadata.
+Images must already exist; startup does not provision or modify files.
+Optional `firmware`, `nand` and `display` paths are parsed but not yet connected
+to execution. Startup currently exits unsuccessfully because the instrument
+is incomplete; successful execution of a short program is not instrument readiness.
 
 The viewer needs `python3-gi`, `python3-gi-cairo` and `gir1.2-gtk-4.0` on Debian:
 

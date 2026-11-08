@@ -57,6 +57,20 @@ target_link_libraries(blofeld_vi_storage PUBLIC blofeld_quality PRIVATE ZLIB::ZL
 add_library(blofeld_vi_mcu_memory src/vi/mcu/memory.cpp)
 target_include_directories(blofeld_vi_mcu_memory PUBLIC src/vi)
 target_link_libraries(blofeld_vi_mcu_memory PUBLIC blofeld_vi_storage cpu12::core)
+add_library(blofeld_vi_execution
+  src/vi/mcu/execute.cpp src/vi/dsp/execute.cpp src/vi/vm_context.cpp)
+target_include_directories(blofeld_vi_execution PUBLIC src/vi)
+target_link_libraries(blofeld_vi_execution PUBLIC
+  blofeld_vi_mcu_memory dsp56300::core Threads::Threads)
+add_library(blofeld_app_profile src/app/profile.cpp)
+add_library(blofeld_host_process src/host/process/configuration.cpp)
+target_include_directories(blofeld_host_process PUBLIC src/host)
+target_link_libraries(blofeld_host_process PUBLIC blofeld_quality)
+target_include_directories(blofeld_app_profile PUBLIC src/app)
+target_link_libraries(blofeld_app_profile PUBLIC blofeld_host_files blofeld_host_process)
+add_executable(blofeld-headless src/app/main.cpp)
+target_include_directories(blofeld-headless PRIVATE src/app)
+target_link_libraries(blofeld-headless PRIVATE blofeld_vi_execution blofeld_app_profile)
 
 file(GLOB_RECURSE BLOFELD_FORMAT_SOURCES CONFIGURE_DEPENDS
   "src/*.hpp" "src/*.cpp" "test/*.hpp" "test/*.cpp")
@@ -99,16 +113,21 @@ if(BUILD_TESTING)
   add_dependencies(vi-flash-image-test unit-inputs)
   blofeld_unit(vi-mcu-memory-test test/vi/mcu/memory_test.cpp blofeld_vi_mcu_memory)
   target_include_directories(vi-mcu-memory-test PRIVATE "${BLOFELD_CPU12_ROOT}/test/support")
+  blofeld_unit(vi-vm-context-test test/vi/vm_context_test.cpp blofeld_vi_execution)
+  target_include_directories(vi-vm-context-test PRIVATE
+    "${BLOFELD_CPU12_ROOT}/test/support" "${BLOFELD_DSP56300_ROOT}/test")
+  blofeld_unit(app-profile-test test/app/profile_test.cpp blofeld_app_profile)
   add_test(NAME app-ui-frame-test COMMAND "${Python3_EXECUTABLE}" -B
     "${CMAKE_CURRENT_SOURCE_DIR}/test/app/ui/frame_test.py" "${CMAKE_CURRENT_BINARY_DIR}/Testing")
   set_tests_properties(app-ui-frame-test PROPERTIES TIMEOUT 10)
   get_property(blofeld_unit_targets GLOBAL PROPERTY BLOFELD_UNIT_TARGETS)
   add_custom_target(quality
     COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-    DEPENDS format-check ${blofeld_unit_targets}
+    DEPENDS format-check blofeld-headless ${blofeld_unit_targets}
     USES_TERMINAL)
 endif()
 
+install(TARGETS blofeld-headless RUNTIME DESTINATION bin)
 install(PROGRAMS tools/blofeld-display DESTINATION bin COMPONENT Display)
 install(FILES src/app/ui/__init__.py src/app/ui/frame.py src/app/ui/watch.py src/app/ui/display.py
   DESTINATION share/blofeld-emu/ui COMPONENT Display)

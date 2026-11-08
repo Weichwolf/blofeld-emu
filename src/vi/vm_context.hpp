@@ -1,0 +1,34 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#pragma once
+
+#include "execution.hpp"
+#include "storage/flash_image.hpp"
+
+#include <array>
+#include <atomic>
+#include <dsp56300/memory.hpp>
+#include <memory>
+#include <thread>
+#include <vector>
+
+namespace blofeld::vi {
+// Owns stable input memory and independent execution owners. Device channels and
+// audio consumers extend this context; no host API handles or global stepper.
+class VmContext {
+public:
+  VmContext(std::unique_ptr<FlashImage> image, std::vector<dsp56300::Word> boot);
+  ~VmContext();
+  VmContext(const VmContext &) = delete;
+  VmContext &operator=(const VmContext &) = delete;
+  void request_stop() noexcept;
+  [[nodiscard]] std::array<ExecutionReport, 2> run();
+
+private:
+  std::unique_ptr<FlashImage> image_;
+  std::vector<dsp56300::Word> boot_;
+  std::array<ExecutionReport, 2> reports_;
+  std::atomic<unsigned> completed_{0};
+  std::jthread mcu_;
+  std::jthread dsp_;
+};
+}
