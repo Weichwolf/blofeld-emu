@@ -1,180 +1,69 @@
-Blofeld firmware runtime
+Blofeld instrument VM — target architecture
 
-The implementation target is a small native firmware VM with two ISA cores.
-Instrument behavior, original synthesis and musical time define correctness.
+This is the agreed target. Source under reconstruction is not evidence that the
+complete instrument or its performance has been achieved.
 
-Use vi_ names and VirtualInstrument for the reusable instrument-VM template.
-Keep execution/lifecycle, host attachment, audio, firmware I/O and storage roles
-clear. Adapting the template supplies concrete core types, profiles, register maps
-and firmware protocols for that instrument. Core calls remain direct and typed;
-reuse does not require a runtime core registry or a universal core base class.
+  app: profile, lifecycle, display UI, live or offline consumer
+                           |
+                       VmContext
+                +----------+----------+
+                |                     |
+           MCU owner              DSP owner
+           cpu12 JIT             dsp56300 JIT
+           local registers       P/X/Y memory
+           USB/SCI/LCD           synthesis, sample storage
+                |                     |
+                +-- bounded timed ----+
+                    device channels   |
+                                      +-- complete PCM blocks --> host audio/WAV
 
-Source ownership
+Each core runs independently in long native sessions, on its own execution
+thread. Audioframes and bounded queues govern progress and backpressure.
+Synchronize for real command/data ownership, readiness/IRQ transitions, audio,
+reset or faults; local MCU memory/register accesses do not advance the DSP.
+There is no global per-instruction/per-clock coordinator.
 
-  src/app/          standalone composition, CLI, UI and display publication
-  src/vi/           VirtualInstrument, VmContext, lifecycle and scheduling
-    io/             memory controller and firmware-facing I/O adapters
-    display/        firmware LCD registers, display RAM and image state
-    mcu/            MCU memory, registers and concrete core binding
-    dsp/            DSP memory, peripherals and completed audio buffers
-    storage/        firmware, sample and persistent device-image semantics
-  src/host/         reusable host transport and consumer facilities
-    audio/          bounded PCM queues, device output and WAV
-    midi/           MIDI events, ports, routing and file input
-    usb/            host USB protocol and transport
-    alsa/           Linux MIDI backend
+VmContext owns concrete bindings, stable memory, channel lifetimes and shutdown.
+Each worker exclusively mutates its core and local device state. Transfer actual
+firmware-produced words/messages through bounded channels with explicit ordering,
+timestamps and ownership. Other threads do not inspect mutable core state.
+Keep native calls typed and direct; no common runtime core hierarchy or mirrors.
 
-This is the target layout. Host backends do not know Blofeld registers or core
-types, and vi/ does not know host API handles, windows or ALSA. app/ supplies the
-concrete adapters between them. Shared boundary values contain data, timestamps,
-bounded buffers and explicit status; they do not introduce a dispatch hierarchy.
-Only create a backend directory when it has an implementation. Firmware-facing
-USB adapters belong to vi/io/, while generic USB protocol/socket code belongs
-to host/usb/. The independent ISA/JIT projects remain external dependencies.
-The UI and display publication consume display state; neither participates in
-firmware execution. vi/display/ owns the instrument's display controller and
-image state, with no dependency on the presentation toolkit or filesystem sink.
+Implement device transactions and completion semantics: command/data FIFOs,
+readiness, interrupts, USB endpoints, SCI bytes, storage reads/writes and resets.
+Decode firmware bit-banging locally into transactions. Do not replay electrical
+lines or resolve voltage networks. Never manufacture acknowledgements or data.
+Local ISA timing remains correct; cross-core coupling serves observable instrument
+behavior rather than hypothetical silicon phases. Qualify ordering, IRQ delivery,
+partial transactions and musical latency against firmware and independent tests.
 
-  local firmware / persistent images
-                   |
-           stable memory mappings
-                   |
-        +----------+----------+
-        |                     |
-    cpu12::Core          dsp56300::Core
-    native MCU code      native DSP code
-    direct RAM/flash     direct P/X/Y RAM
-        |                     |
-        +--- shared I/O ------+
-        |    data, IRQ, reset  |
-        |                     +--- completed PCM words ---> audio consumer
-        +--- USB endpoints <------ USB-MIDI host transport
-        +--- SCI byte registers <-- classic MIDI host ports
-        +--- LCD RAM ------------> independent display consumer
-        +--- persistent writes --> selected memory images
+Audio comes from the final original DSP output buffer. Publish complete ordered
+frames/blocks, preserving DMA/FIFO status and sample times. Split processing at
+relevant MIDI/device events. Live consumption bounds lookahead and paces output;
+offline draining runs as fast as possible. No wall-clock substitution for musical
+time, missing frames, duplicate frames or serial-PCM bit decoding.
 
-Execution
+Keep persistent images for identity, programs and samples. Preserve genuine
+operation status, interrupted writes and recovery; remove cell physics, synthetic
+pulse profiles and redundant backend wrappers. Reset/update coordinates worker
+stop, channel retirement, image publication and fresh core/code ownership.
 
-Initialize memory, persistent storage and register state, construct both cores,
-then execute native code at maximum throughput. A shared device timeline orders
-actual I/O effects, interrupt deadlines and audio transfers. Preserve elapsed
-musical time regardless of host processing speed. Core execution returns for
-pending events, a changed execution horizon, backpressure, shutdown or a fault.
-Ordinary guest arithmetic and memory do not invoke the instrument layer.
+Source ownership:
+  src/vi/       VM lifecycle and instrument-specific behavior
+    mcu/, dsp/  concrete cores, local registers and memory
+    io/         transaction channels and memory controller
+    storage/    persistent device images
+    display/    firmware LCD state
+  src/host/     reusable audio, MIDI, USB and OS backends
+  src/app/      composition, CLI, UI and display publication
+Host knows no instrument registers; vi/ knows no host API handles.
+app/ connects data/buffer contracts without reverse dependencies.
+test/ mirrors src/ with simple unit tests; integration uses the normal emulator.
 
-VmContext and native calls
+Use optimized Release and profile the complete instrument. Require >=4x offline
+throughput, design for 10x; see OBJECTIVE.md for measurement and full acceptance.
+Threads, a short synthetic kernel or lower callback counts are not success proofs.
 
-One stable VmContext belongs to each instrument. It consolidates existing live
-execution data instead of adding another layer around it. Cores own their complete
-ISA/register/JIT state; the context holds direct bindings, not register mirrors,
-checkpoints or copies of that state. Each core retains its private native context.
-The instrument context does not introduce a common virtual base class for cores.
-
-  VmContext
-    hot:   core/memory bindings and mapping generations
-           typed I/O entry points and device state references
-           next virtual deadline and pending event flags
-           USB endpoint and PCM buffer pointers, positions and ownership
-    cold:  configuration, image/file owners and optional diagnostics
-
-Keep frequently accessed fields compact and cache-local, with fixed offsets and
-stable lifetimes. Allocate and validate bindings outside native execution. Reset,
-overlay replacement and firmware reload explicitly retire and rebind affected
-resources before execution resumes; stale pointers must never remain usable.
-
-A host call is an ordinary typed native call. Emit direct RAM accesses and calls
-to already selected effect handlers, with a small, fixed ABI and no argument boxing
-or general dispatcher lookup. A completed I/O access normally returns directly
-to generated code. It does not inherently return to the outer execution loop.
-Retain every register/FIFO effect and its actual virtual timestamp, including
-repeated identical writes; amortize administration rather than deleting effects.
-Keep allocation, logging, formatting and exceptional error handling on cold paths.
-
-Native code checks pending work and virtual deadlines at region entries, loop
-backedges and necessary effect boundaries. Account guest cycles in aggregates
-while preserving exact observable prefixes. Admit a whole region when its cost
-fits; use precise native execution near a deadline. An I/O handler that creates
-an earlier event, changes a mapping or requires peer synchronization requests a
-return. Acknowledgements and stored-register accesses may continue when their
-effects leave the current horizon valid. Interrupt admission still occurs at
-legal architectural boundaries; unknown effects remain explicit failures.
-
-Host wakeups and device time have separate contracts. Host event flags/epochs may
-request service, but wall-clock polling must not replace deterministic virtual
-timer, MIDI or audio deadlines. Buffer pressure controls host pacing. It never
-changes guest clock rates, event order or sample counts.
-
-Linux execution uses stable memory mappings and native code with W^X protection.
-Guard pages are suitable for rare invalid accesses, not routine MMIO dispatch.
-Use bounded producer/consumer buffers for host I/O, with parking/wakeup outside
-the arithmetic and audio callback paths. Begin with a single execution owner for
-both cores and the shared timeline; parallel core execution requires a measured
-benefit and preserved causality. Use perf and native JIT symbols to locate costs;
-telemetry is optional and disabled in the normal performance path.
-
-Initialized MCU RAM overlays bind as read-only program grants to the JIT while
-remaining architecturally writable through their consumer. The first write retires
-that image and returns from native execution; remaining loader writes use ordinary
-RAM. Entry into a complete replacement publishes a new binding identity. Generated
-code stays immutable, and overlay loading executes the original firmware routines.
-Each distinct image is frozen once; loading identical bytes reuses that image and
-its native entries. Overlay publications retain the identity of unchanged ROM/data.
-
-The runtime does not replay physical address/data lines, electrical bus slots,
-voltage networks, NAND setup/hold windows or external MIDI serial bits. Firmware
-bit-banged register accesses still require decoding into their actual commands
-and data. Those effects are implemented at register transactions and operation
-completions, without continuously resampling connections between accesses.
-MCU/DSP communication keeps actual data, readiness and interrupts; replies are
-produced by the original firmware. Requested report/bulk blocks retain sixteen
-actual DSP register writes in a bounded buffer until the MCU consumes them.
-Observation never dequeues data; repeated byte values remain distinct writes.
-Reset discards partial transfers. Underrun, overflow and incomplete blocks fail
-explicitly instead of manufacturing a reply or relying on GPIO sampling phase.
-Unknown accesses fail with PC and address.
-
-Audio and transport
-
-Read completed original DSP output words directly, retaining DMA positions,
-flags, frame order and sample timing. USB uses original control requests,
-endpoint FIFOs and interrupts. Classic MIDI uses original SCI byte registers,
-readiness, receive/overrun status and interrupts, without a per-bit wire engine.
-Reusable host MIDI ports retain timestamps, SysEx and bidirectional traffic;
-explicit routing selects the firmware entry path without duplicating messages.
-The live audio consumer paces output through bounded queues. Callbacks cannot
-allocate, lock, throw or access files. Host APIs and capability grants remain
-outside the cores and firmware I/O handlers.
-
-Offline rendering uses the same firmware path and timeline, draining audio as
-fast as possible while preserving SMF event times and release/effect tails.
-Measure throughput as valid delivered stereo frames / (44100 * host seconds).
-Separate startup, active processing, pacing, underruns and transport latency.
-A core benchmark or a boot screen does not establish a playable instrument.
-
-Storage and reset
-
-Sample storage operates on the selected persistent image. Decode actual firmware
-command/address/data transactions into reads, programming and erases. Retain
-readiness/status, required completion events, unknown-data errors and persistent
-interrupted-operation state. Cell physics, artificial pulse-inhibit properties
-and redundant value-versus-file backend dispatch do not belong in this VM.
-
-Memory images retain identity, programs and samples across instances. Genuine
-writes and erases update the selected image; reload preserves incomplete-operation
-state after interruption. Firmware updates recreate affected core/memory owners
-and JIT translations. No firmware patch, skipped routine, fabricated success
-response or replacement synthesis path is permitted.
-
-Keep telemetry runtime-selectable and disabled by default. Formatting, file I/O
-and status observation stay outside native arithmetic and the audio callback.
-
-Primary design references
-
-Wasmtime VMContext, native ABIs, trampolines and linear memory:
-https://docs.wasmtime.dev/contributing-architecture.html
-Wasmtime deterministic fuel versus lightweight epoch interruption:
-https://docs.wasmtime.dev/examples-interrupting-wasm.html
-V8 typed calls from optimized code and fast-call restrictions:
-https://chromium.googlesource.com/v8/v8/+/refs/heads/main/include/v8-fast-api-calls.h
-HotSpot pending-work polling and thread-local handshakes:
-https://github.com/openjdk/jdk/blob/master/src/hotspot/share/runtime/safepointMechanism.inline.hpp
+Architecture reference: Gearmulator's independent core execution and coupling
+through audioframes, buffers and device communication. Reference only; copy no code.
+https://github.com/dsp56300/gearmulator

@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <optional>
 
-namespace blofeld {
+namespace blofeld::vi {
 
 struct LcdByte {
   std::uint8_t value = 0;
@@ -33,8 +33,7 @@ struct St7565State {
   bool read_modify_write = false;
 };
 
-// Transaction reference: callers supply completed, qualified bus cycles.
-// No board wiring, busy latency, analog drive or pad timing is inferred.
+// Register/data contract for completed LCD transactions. Owned by the MCU thread.
 class St7565 {
 public:
   static constexpr unsigned columns = 132;

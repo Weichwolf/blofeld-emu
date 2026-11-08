@@ -1,84 +1,44 @@
 # blofeld-emu
 
-- Execute unmodified original 1.25 firmware from reset to a complete standalone
-  instrument. The supplied acceptance scope includes Desktop and Keyboard; keep
-  profile work explicit. Preserve original DSP audio, MIDI/USB, display, storage,
-  active SL samples and update/recovery behavior. See OBJECTIVE.md.
-- Correctness concerns instrument behavior. Reconstruct missing contracts without
-  physical disassembly; preserve firmware quirks. No firmware patches, skipped
-  routines, invented success responses or replacement host synthesizer.
-- Use our independent cpu12 and dsp56300 cores; fix generic core defects there.
-  Keep firmware I/O, core execution, transport and audio separate. Unknown accesses
-  fail with address, operation, PC and context. Run as a regular user.
-- Keep vi_ as a reusable instrument-VM template with direct concrete core bindings.
-  Build one stable VmContext for live memory/I/O
-  bindings, deadlines, pending events and bounded buffers. Cores own their state;
-  consolidate existing runtime data rather than adding mirrors or checkpoints.
-- Reduce sample storage to persistent images and required firmware transactions,
-  status and completions; remove cell physics and redundant backend wrappers.
-- Prioritize the connected instrument. Fix and optimize the responsible core for
-  generic defects or measured instrument bottlenecks; core benchmark percentages
-  do not block integration. SIMD is optional and needs measured benefit.
-- Keep instrument-specific execution and I/O under src/vi/; display state belongs
-  in vi/display/. Host backends know no instrument registers; vi/ knows no host
-  API handles. app/ composes both sides and owns the UI and display publication.
-- Support classic MIDI ports and USB-MIDI bidirectionally. Share bounded host
-  MIDI routing; deliver bytes to original SCI registers or USB endpoint FIFOs
-  with correct readiness, lengths, IRQs and musical timestamps. Use direct audio
-  RAM, without UART-bit signaling or serial-PCM decoding in the host path.
-- Query audio/MIDI capabilities separately and read actual grants; keep bounded
-  queues, visible overload/disconnect errors and unchanged virtual clocks. Audio
-  callbacks must not allocate, throw, lock or access files. Hardware flashing needs
-  established recovery.
-- Keep the canonical checkout on main. Publish only to configured upstream/main.
-  All issue communication belongs in private Weichwolf/blofeld-src; no emulator
-  issues or routine status spam. Gearmulator is read-only reference; copy no code.
-  Preserve GPL dependency notices; do not import GPL-2.0-only octa-capture code.
-
-- The instrument CLI defaults to live MIDI/audio with the default local profile.
-  MIDI-file plus WAV selects unpaced offline rendering with unchanged musical
-  event timing. Profiles select firmware, memory images and persistent identity.
-  No instruction-budget, wiring or chip-clock parameters in blofeld-headless.
+- Build the complete instrument in OBJECTIVE.md with our cpu12/dsp56300 JITs.
+  Execute original firmware; preserve its quirks. No firmware patches, skipped
+  routines, invented replies or host synthesis. Unknown accesses fail with
+  address, operation, PC and context.
+- Each core has its own execution owner and runs natively at maximum throughput.
+  Couple through audioframes, bounded buffers and actual device transactions.
+  Never synchronize the DSP merely because an MCU instruction or local I/O ran.
+- Use direct memory and functional register/FIFO/IRQ contracts. Remove global
+  clock stepping, electrical wiring models and redundant simulation layers.
+- VmContext binds concrete cores, memory and channels; cores own their state.
+  vi/ owns instrument behavior, host/ reusable transport, app/ composition/UI.
+- test/ mirrors src/ and contains simple unit tests. The normal emulator is the
+  integration test; do not recreate a parallel firmware-test runtime.
+- Preserve musical time, message ordering, backpressure, reset and recovery.
+  Query actual audio/MIDI grants. Audio callbacks never allocate, lock, throw
+  or access files; hardware flashing requires established recovery.
+- Target >=4x sustained offline instrument throughput; design for 10x. Measure
+  valid original stereo frames, startup separately; microbenchmarks are no proof.
 
 ## Working rules
 
-- Speak German with the user; write code, comments, documentation and commits in English.
-- Prefer simple native execution, direct memory and large bounded runs. Keep device
-  effects and event boundaries explicit; avoid per-clock work and unnecessary copies.
-  Telemetry is runtime-selectable and off by default; keep its work out of hot paths.
-- A host call need not end a native run. Return for actual rescheduling, IRQs,
-  mapping/reset transitions, backpressure or faults; retain every I/O effect and
-  deterministic virtual time. Profile the connected Release VM toward >=4x RTF.
-- Check measurement scope, magnitude and interpretation before drawing conclusions.
-  Distinguish startup, active throughput, sampled CPU shares, CPU/wall time and
-  matched host-ASM ratios. Change the >=4x target only with reproducible evidence.
-- Run builds, tests and benchmarks locally; do not add GitHub workflows or pipelines.
-- Use C++23, LLVM 19 and CMake/Ninja. Keep strict compiler/linker flags, warnings
-  as errors, clang-format, clang-tidy with zero findings and functions <=120 lines.
-  Never weaken checks or hide findings with suppressions or diagnostic baselines.
-- Release is the performance build. Preserve ASan/UBSan for project code and native
-  dependencies, and separate TSan for concurrent code; preserve dependency notices.
-- Run affected cpu12/dsp56300 correctness tests for core changes, including
-  independent instruction/state expectations and appropriate sanitizer coverage.
-  Core tests are not subject to the instrument's real-time milestone restriction.
-  Avoid duplicate or full-suite runs after small changes; report gaps and scope.
-- Until the instrument reaches real time, suspend long Blofeld firmware runs.
-  Startup probes stop after 10 host seconds and fail unless playable. Audio
-  acceptance requires MIDI-triggered sound and at least ten seconds of output
-  at >=44100 stereo frames per host second; fail immediately on runtime faults.
-  Never extend or automatically repeat a failed probe without a concrete fix. Keep compilation,
-  formatting and static analysis active.
-- README describes current supported behavior, setup and use. Keep progress,
-  measurements and coordination in commit messages, not README.
-- Keep doc/ for one target architecture and important primary references only.
-  Requirements belong in OBJECTIVE.md and test/; build metadata belongs in cmake/.
-  No activity diaries or historical result manifests. Issue communication belongs
-  in private Weichwolf/blofeld-src, with concrete consolidated problems only.
+- Speak German with the user; code, comments, documentation and commits are English.
+- C++23, LLVM 19, CMake/Ninja; strict warnings/linking, clang-format, zero-finding
+  clang-tidy, functions <=120 lines. Never suppress or weaken checks.
+- Use Release for performance. Test affected core semantics independently and with
+  ASan/UBSan, including native dependencies; use separate TSan for concurrent code.
+  Keep checks focused; no GitHub workflows.
+- Blofeld firmware probes stop within 10 host seconds and fail unless playable.
+  Until real time, no long firmware runs or unchanged failed-probe repetitions.
+- Telemetry is runtime-selectable and off by default; no hot-path statistics.
+- README describes implemented use; OBJECTIVE defines acceptance; doc/ contains
+  one target architecture and primary references. No diaries or result archives.
 - Keep firmware, samples, manuals, disassemblies and private analysis untracked.
-  Preserve source URLs, sizes and hashes in reference manifests; never publish assets.
-  Local reference inputs live under ignored build/local/; run artifacts belong
-  under ignored build/. Preserve inputs when cleaning generated files.
-- Original code is GPL-3.0-only; add matching SPDX identifiers to new source.
-- Commit reviewed, verified increments; push only to the configured project remote
-  on main. Never publish backup branches or use --all/--mirror. Coordinate core
-  revisions with consumer dependency pins; preserve unrelated work.
+  Reference inputs: ignored build/local/; artifacts: build/. Preserve inputs and
+  source/size/hash manifests. Original source is GPL-3.0-only with SPDX notices.
+- Keep canonical main current. Commit reviewed increments; push only configured
+  upstream/main (blofeld-emu) or origin/main (cores). No backup branches or
+  --all/--mirror; preserve unrelated work and coordinate consumer dependency pins.
+- Issues belong only in private Weichwolf/blofeld-src; no routine status spam.
+  Gearmulator is read-only reference: copy no code. Preserve dependency notices;
+  do not import GPL-2.0-only octa-capture code. Run as a regular user.
+- Validate ARM64 on macOS and x86-64 on Linux; communicate revisions in commits.

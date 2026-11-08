@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "vi/display/st7565.hpp"
+#include "display/st7565.hpp"
 
 #include <cstdint>
 #include <vector>
 
-namespace blofeld {
-// Explicit 64-COM panel wiring; no physical Blofeld mapping is inferred.
+namespace blofeld::vi {
+// Visible segment range and orientation; supplied by the instrument binding.
 struct LcdPanel {
   unsigned width = 0;
   unsigned first_segment = 0;
@@ -33,7 +33,7 @@ private:
   friend LcdImage capture_lcd(const St7565 &controller, LcdPanel panel);
 };
 
-// Caller supplies a stable, inactive board boundary. This function copies the
-// controller and inspects RAM only; it never performs a native display read.
+// Capture on the controller owner. The returned image is independent and may
+// be handed to the app thread; inspection does not perform firmware reads.
 [[nodiscard]] LcdImage capture_lcd(const St7565 &controller, LcdPanel panel);
 }

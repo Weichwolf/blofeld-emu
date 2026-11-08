@@ -1,7 +1,7 @@
 {
   "independent_dsp56300": {
     "source": "https://github.com/Weichwolf/dsp56300",
-    "revision": "bcbb69c7a7ac0089d44e7f7ed97c3fa1909589d8",
+    "revision": "ec25ce0f8c96aae13948439a5e88d2e520ef2dc6",
     "license": "GPL-3.0-only"
   },
   "zlib": {
@@ -15,7 +15,7 @@
   "dsp56300_assembly_tool": {
     "source": "https://github.com/xemu-project/dsp56300",
     "version": "1.0.0",
-    "usage": "Optional offline assembler for own instruction expectations in original_dsp_download; not an emulator runtime dependency. Version1.0.0 expands forced-short BRA instructions and is not qualified for the documented SPI ROM prefix; use the separate pinned NXP reference tool.",
+    "usage": "Optional offline DSP assembler; not a runtime dependency.",
     "artifact": "https://github.com/xemu-project/dsp56300/releases/download/v1.0.0/dsp56300-1.0.0-x86_64-unknown-linux-gnu.tar.gz",
     "sha256": "e16ef45da9572815d43ab89d030029b898e71226a265468a22591e0171df4b60",
     "license": "MIT"
@@ -47,7 +47,7 @@
   },
   "independent_cpu12": {
     "source": "https://github.com/Weichwolf/cpu12",
-    "revision": "6399efb42d602361b83a23517c5fa7178b87cda8",
+    "revision": "717346aed2a2c431e8a0d5eb14ca23ab6bb939d8",
     "license": "GPL-3.0-only"
   }
 }

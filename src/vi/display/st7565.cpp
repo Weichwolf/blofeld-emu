@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "vi/display/st7565.hpp"
-
-#include "common/bus.hpp"
+#include "display/st7565.hpp"
 
 #include <cstddef>
 #include <cstdint>
+#include <stdexcept>
+#include <string>
 
-namespace blofeld {
+namespace blofeld::vi {
 namespace {
 constexpr unsigned nibble = 15;
 constexpr unsigned byte_mask = 255;
@@ -33,12 +33,15 @@ constexpr unsigned initial_volume = 32;
 }
 
 void St7565::require_reset() const {
-  if (!reset_observed_) { throw Fault("ST7565 access before an observed hardware reset"); }
+  if (!reset_observed_) {
+    throw std::runtime_error("ST7565 access before an observed hardware reset");
+  }
 }
 
 std::size_t St7565::address(const unsigned page, const unsigned column) {
   if (page >= pages || column >= columns) {
-    throw Fault("Unqualified ST7565 RAM address page=" + hex(page) + " column=" + hex(column));
+    throw std::runtime_error("Invalid ST7565 RAM address page=" + std::to_string(page) +
+                             " column=" + std::to_string(column));
   }
   return (static_cast<std::size_t>(page) * columns) + column;
 }
@@ -84,7 +87,7 @@ St7565State St7565::state() const {
 void St7565::write_data(const std::uint8_t value) {
   require_reset();
   if (parameter_ != Parameter::none) {
-    throw Fault("Unqualified ST7565 data write during a two-byte command");
+    throw std::runtime_error("Unqualified ST7565 data write during a two-byte command");
   }
   const auto index = address(state_.page, state_.column);
   const auto mask = static_cast<std::uint8_t>(state_.page == icon_page ? 1 : byte_mask);
@@ -99,7 +102,7 @@ void St7565::write_data(const std::uint8_t value) {
 LcdByte St7565::read_output() const {
   require_reset();
   if (parameter_ != Parameter::none) {
-    throw Fault("Unqualified ST7565 data read during a two-byte command");
+    throw std::runtime_error("Unqualified ST7565 data read during a two-byte command");
   }
   static_cast<void>(address(state_.page, state_.column));
   return holder_;
@@ -118,7 +121,9 @@ void St7565::set_address(const std::uint8_t value) {
     state_.start_line = static_cast<std::uint8_t>(value & start_line_mask);
   } else if ((value & page_command) == page_command) {
     const auto page = static_cast<unsigned>(value & nibble);
-    if (page >= pages) { throw Fault("Unqualified ST7565 page command " + hex(value, 2)); }
+    if (page >= pages) {
+      throw std::runtime_error("Invalid ST7565 page command " + std::to_string(value));
+    }
     state_.page = static_cast<std::uint8_t>(page);
     dummy_ = true;
   } else {
@@ -137,11 +142,13 @@ void St7565::set_parameter(const std::uint8_t value) {
       break;
     case Parameter::indicator: state_.static_mode = static_cast<std::uint8_t>(value & 3U); break;
     case Parameter::booster:
-      if ((value & 3U) == 2) { throw Fault("Unqualified ST7565 booster ratio " + hex(value, 2)); }
+      if ((value & 3U) == 2) {
+        throw std::runtime_error("Invalid ST7565 booster ratio " + std::to_string(value));
+      }
       state_.booster = static_cast<std::uint8_t>(value & 3U);
       break;
-    case Parameter::none: throw Fault("ST7565 parameter without a command");
-    default: throw Fault("Unknown ST7565 parameter mode");
+    case Parameter::none: throw std::runtime_error("ST7565 parameter without a command");
+    default: throw std::runtime_error("Unknown ST7565 parameter mode");
   }
   parameter_ = Parameter::none;
 }
@@ -169,7 +176,7 @@ void St7565::set_mode(const std::uint8_t value) {
   } else if ((value & ~7U) == resistor_command) {
     state_.resistor = static_cast<std::uint8_t>(value & 7U);
   } else {
-    throw Fault("Unsupported ST7565 command " + hex(value, 2));
+    throw std::runtime_error("Unsupported ST7565 command " + std::to_string(value));
   }
 }
 
@@ -196,7 +203,9 @@ void St7565::command(const std::uint8_t value) {
       saved_column_ = state_.column;
       return;
     case end_command:
-      if (!state_.read_modify_write) { throw Fault("Unqualified ST7565 END without RMW"); }
+      if (!state_.read_modify_write) {
+        throw std::runtime_error("Unqualified ST7565 END without RMW");
+      }
       state_.column = saved_column_;
       state_.read_modify_write = false;
       dummy_ = true;

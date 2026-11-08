@@ -1,20 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "vi/display/lcd_image.hpp"
+#include "display/lcd_image.hpp"
 
-#include "common/bus.hpp"
-#include "vi/display/st7565.hpp"
+#include "display/st7565.hpp"
 
 #include <cstddef>
+#include <stdexcept>
 
-namespace blofeld {
+namespace blofeld::vi {
 namespace {
 void validate(const LcdPanel panel) {
   if (panel.width == 0 || panel.width > St7565::columns || panel.first_segment >= St7565::columns) {
-    throw Fault("Invalid LCD panel width or segment origin");
+    throw std::runtime_error("Invalid LCD panel width or segment origin");
   }
   const auto available =
       panel.reverse_segments ? panel.first_segment + 1 : St7565::columns - panel.first_segment;
-  if (panel.width > available) { throw Fault("LCD panel exceeds its declared segment range"); }
+  if (panel.width > available) {
+    throw std::runtime_error("LCD panel exceeds its declared segment range");
+  }
 }
 
 struct Position {
@@ -44,7 +46,9 @@ LcdImage::LcdImage(const unsigned width)
     : width_(width), pixels_(static_cast<std::size_t>(width) * height, LcdPixel::unknown) {}
 
 LcdPixel LcdImage::pixel(const unsigned x, const unsigned y) const {
-  if (x >= width_ || y >= height) { throw Fault("LCD image pixel is outside the captured frame"); }
+  if (x >= width_ || y >= height) {
+    throw std::runtime_error("LCD image pixel is outside the captured frame");
+  }
   return pixels_.at((static_cast<std::size_t>(y) * width_) + x);
 }
 

@@ -1,325 +1,72 @@
 # Objective
 
-Native firmware VM
+A complete standalone Blofeld instrument executing unchanged original 1.25
+firmware from reset, using our independent cpu12 and dsp56300 JITs. Desktop SL
+is the immediate integration target; acceptance covers Desktop and Keyboard.
+Correctness is instrument behavior: sound, musical time and documented functions.
+Electrical wiring, bus phases and cycle-by-cycle lockstep are not objectives.
+See [target architecture](doc/architecture-design.txt).
 
-Use the vi_ module and VirtualInstrument as a reusable template for future
-instrument projects: host attachment, lifecycle, buffers, device time and core
-control have clear roles; each target supplies its concrete firmware I/O and
-storage bindings. Keep native calls direct and avoid a universal core hierarchy.
-Sample storage uses persistent images and necessary command/status/completion
-contracts. Remove cell physics, pulse-inhibit configuration and redundant backend
-dispatch without losing actual storage, interrupted writes or recovery behavior.
+## Acceptance
 
-Build a small native firmware VM with the independent cpu12 and dsp56300 JITs.
-Consolidate execution bindings, typed I/O entry points, virtual deadlines, pending
-events and bounded USB/audio buffers in one stable VmContext per instrument.
-The cores own their complete ISA/register/JIT state; retain direct references
-rather than mirrors, checkpoints or an additional universal core abstraction.
-Ordinary host calls return to native code when their effects preserve the current
-event horizon. Return to the scheduler for pending interrupts, changed deadlines
-or mappings, reset, backpressure, shutdown and faults. Preserve exact observable
-guest-cycle prefixes; host wall-clock epochs cannot replace device time.
-Use native ABI, memory-locality and targeted polling principles from established
-VMs, as specified in doc/architecture-design.txt. Measure the connected instrument
-with the Release profiler. The complete acceptance scope below and the minimum
-4x sustained offline throughput target remain unchanged; context refactoring or
-a fast isolated core benchmark cannot substitute for those results.
+- Original DSP synthesis, all oscillators/wavetables, filters, effects, voices,
+  modulation, multitimbrality, controls, MIDI/SysEx and display functions.
+- Bidirectional classic MIDI and an actual host-visible USB-MIDI device using
+  original descriptors, endpoints, status and IRQ behavior. No duplicate routing
+  or USB Audio. Qualify ordinary MIDI tools, DAW/controller routing and original
+  Spectre under Wine, including sample transfers, cancellation and failures.
+- Persistent unit identity, programs and selectable memory/sample images.
+  Build a local vanilla image from verified device inputs and Waldorf's standard
+  library; original firmware must recognize active SL and play actual samples.
+  Establish required ROM/wavetables from accesses; keep missing inputs explicit.
+- Original boot, reset, valid/damaged firmware updates and recovery, including
+  interrupted transfers and power loss during every erase/program phase, flash
+  protection and security state. Support user firmware through those paths.
+  Reload creates/rebinds core translations; no update logic belongs in the cores.
+- Headless standalone live MIDI/audio with no arguments and a default local
+  profile. Profiles select firmware, persistent images and identity. SMF plus
+  WAV selects streamed offline rendering at maximum speed, preserving tempo,
+  ordering, SysEx, musical timestamps and release/effect tails. No user-facing
+  instruction-budget, wiring or chip-clock options; no separate control CLI.
+- Use the session's normal audio output and actual capability/latency grants.
+  Bounded queues report overload, underruns and disconnects. Audio callbacks
+  never allocate, lock, throw or access files.
+- Independent GTK display from original LCD state. Atomically publish PBM/text
+  under $XDG_RUNTIME_DIR/blofeld-emu/ and save PNG screenshots; follow directory
+  recreation. Unknown display contents remain explicit.
+- Simple unit tests mirror src/. The normal emulator provides reset-to-instrument,
+  long-run/load, trace and memory-inspection acceptance runs. Cover every documented
+  function on both profiles in ACCEPTANCE.tsv, with fixed scope,
+  tolerances and independent references; incomplete scope never counts as passed.
 
-User-facing execution
+No firmware patches, skipped routines, invented success replies or substitute
+host synthesizer. Preserve firmware quirks and distinguish evidence from
+hypotheses. Reconstruct missing contracts independently; physical disassembly
+or hardware access is not a prerequisite. Emulator success does not prove
+physical flashing safety; hardware programming needs established recovery.
+Manufacturer assets remain local, with source URLs, sizes and hashes recorded.
 
-`blofeld-headless` without arguments opens the default local instrument profile,
-starts MIDI and real-time audio, and remains playable until shutdown. A host
-controller, keyboard or DAW uses the instrument through its normal MIDI
-connection. Support classic MIDI ports and USB-MIDI bidirectionally. Deliver
-classic MIDI bytes through the original SCI register/status/interrupt contract
-and USB-MIDI through the original endpoint/FIFO contract. Route explicitly so
-one incoming message is not delivered twice. Electrical UART/USB simulation is
-outside this scope.
+## Performance and operation
 
-`blofeld-headless --midi-file song.mid --wav-out song.wav` renders a Standard
-MIDI File offline at maximum throughput. Preserve tempo changes, track ordering,
-SysEx and musical event times against the same audio/device timeline. Faster
-host execution must not compress musical intervals. Stop by the musical render
-range and its release/effect tail, never by an instruction count. Stream WAV
-output rather than imposing an in-memory capture-frame ceiling. Live and WAV
-are distinct consumers; host audio consumption paces live time, while file
-output drains as fast as execution permits. The cores always use their fastest
-native execution path. Device deadlines and queue backpressure are required
-synchronization, not user-selectable instruction budgets or chip-clock tuning.
+Require >=4x sustainable offline throughput under representative high polyphony,
+effects and sample use on this host; design for 10x. Keep instrument behavior,
+guest time, complete audio and bounded live latency. Change the >=4x target only
+with quantitative reproducible feasibility evidence.
 
-Render completion reports delivered audio duration, monotonic host duration,
-valid stereo frames per second and real-time factor, startup/warm-up separately,
-plus underruns, queue overload and MIDI delivery lateness. Live mode refreshes
-one terminal status line at a bounded human-readable rate, including throughput
-reserve, queue fill, actual audio latency and transport errors. Do not infer
-unknown latency or CPU costs from nominal settings; use actual grants and
-measurements. Non-terminal output must remain readable without terminal escapes.
-Collect outside native hot paths, without per-instruction telemetry. Distinguish
-paced live output RTF from measured active-processing headroom; wall time spent
-waiting for audio consumption does not measure compute reserve.
+RTF = valid delivered stereo frames / (44100 * monotonic host seconds).
+4x is 176400 frames/s; 10x is 441000. Count each actual frame once. Report startup,
+warm-up, output rate/conversion, active processing, pacing, underruns and MIDI/audio
+latency separately. Live status is bounded-rate readable text; offline completion
+reports actual totals. Isolated JIT speed and sampled CPU shares are not instrument
+throughput. The cores' >=70% matched host-ASM target does not gate integration.
 
-Named local profiles select firmware, persistent memory/sample images and unit
-identity. There is one default profile; selecting another needs only --profile.
-Profiles retain assets locally and do not publish manufacturer inputs. Do not
-expose wiring, pipeline, clock-grant or instruction-budget parameters in the
-instrument CLI. Keep diagnostics runtime-selectable and disabled by default.
+Milestones remain 1x/99%, 10x/99.9% and 100x/99.99% playable-instrument coverage;
+these do not replace complete acceptance or the >=4x sustained requirement.
+Until real time, original-firmware startup probes have a hard ten-host-second
+limit and fail unless playable; no automatic extension or unchanged repetition.
+Then qualify MIDI-triggered original sound and at least ten seconds of audio at
+>=44100 stereo frames per host second. Stop immediately on runtime faults.
 
-Complete acceptance objective
-
-Build a complete Blofeld Desktop and Keyboard instrument emulator with active SL sample
-capability, initially headless and standalone. Unmodified original 1.25 firmware is the known-working
-compatibility reference: tests verify and correct our emulator, not the
-manufacturer's firmware. Emulate the MCU, DSP, ROM/RAM/
-flash/NAND, clocks, interrupts, buses and required peripherals so that actual
-reset, loading and initialization lead to normal instrument operation with
-original DSP audio, bidirectional MIDI and complete persistent device state.
-Correctness means equivalent behavior as an instrument, including sound, MIDI/
-SysEx, voice management, musical timing, controls, display, persistence and update/
-recovery. Identical electrical wiring, internal bus phases and silicon pipeline
-timing are not acceptance requirements. Functional models of chip-internal boot,
-peripheral state machines and coarser scheduling are allowed when their tested
-contracts preserve those observable results. Execute the original Blofeld firmware
-and DSP synthesis; firmware patches, skipped firmware routines, fabricated
-instrument results and a host synthesizer do not satisfy this objective.
-Prefer the simplest functional model that preserves instrument behavior. Refine
-internal timing or wiring only when needed for firmware execution or observable
-instrument effects; physical implementation detail alone does not justify it.
-Reconstruct missing hardware properties independently from primary documentation,
-actual firmware accesses, available PCB photographs and reproducible offline
-experiments. Physical disassembly and measurement are unavailable and must not
-be prerequisites. Investigate explicit hypotheses without a preset experiment
-limit; retain their evidence, contradictions and visible unresolved accesses.
-Missing hardware information is a research task, not a reason to abandon the
-complete instrument objective.
-The working original firmware may contain bugs, accidental accesses and tolerated
-initialization sequences. Preserve their device-visible behavior. An executed
-access constrains the model; it does not prove intent, implemented storage or
-any particular undocumented feature. Documentation conflicts are research inputs,
-not a reason to patch firmware or freeze one chip/decoder hypothesis. Compare
-explicit alternatives across connected startup, operation and update paths;
-advancing past one refusal alone does not establish correct instrument behavior.
-Executing user-supplied firmware through the modeled boot/update paths is an
-acceptance requirement. Developing a new instrument firmware remains separate
-future work. Emulator results must identify supported behavior and unresolved
-assumptions for compatibility assessment; simulation alone does not prove that
-an image is safe on physical hardware. Component fixtures support full-device
-acceptance and cannot replace it.
-
-Future use case: faster-than-real-time offline rendering for automated native
-Blofeld program design, including accurate acoustic-instrument approximation.
-Run repeatable MIDI performances through original DSP synthesis, compare tone,
-transients, decay and velocity response, then refine candidate programs through
-normal instrument interfaces. Reuse deterministic starting states and export
-programs usable by the physical instrument. Preserve emulated musical time;
-rendering throughput is a host-performance property to measure after functional
-instrument audio works. This later workflow does not replace initial instrument
-acceptance or require development of alternative manufacturer firmware.
-
-Current priority: complete the connected Blofeld instrument with the independent
-CPU12 and DSP56300 cores. Continue original-firmware boot, display, MIDI/USB,
-original DSP audio and persistent-storage integration. Fix generic core defects
-in their own libraries and optimize the responsible core when a measured
-instrument workload exposes a throughput or latency bottleneck.
-
-The >=70% matched host-ASM target remains an optimization reference, not a
-prerequisite for emulator work or dependency-pin adoption. Preserve comparable
-inputs, relevant ISA semantics and independent results; report each shortfall.
-Choose scalar or SIMD execution by measured benefit; SIMD is optional. Core
-benchmarks remain diagnostic tools and cannot replace connected-instrument
-correctness, throughput and latency measurements. Keep code small and strict
-checks active, with focused correctness/sanitizer validation for core changes.
-
-Complete the regular standalone/GUI path with the independent native cores,
-removing foreign-core and transitional integration. Construct each core with
-memory/peripherals and run to bounded event limits. Use direct storage and bounded
-register/FIFO state for MCU/DSP communication; preserve peripheral side effects,
-original DSP audio, MIDI and guest clocks without per-cycle replay. Core defects
-belong in the independent libraries; application workarounds do not replace them.
-Core benchmarks alone do not establish connected-instrument performance.
-
-The complete instrument must sustain >=4x offline real-time throughput on this
-host under representative high load; 10x is the stretch target. Preserve guest
-time, every required audio frame and bounded live latency. Full Desktop/Keyboard
-functionality, unmodified firmware and the acceptance scope remain required.
-After the old backend is removed, replace transitional OwnDsp/own_dsp names in
-classes, files, build targets, configuration and documentation with normal DSP
-names. No permanent parallel implementation or backend-selection option is part
-of the final device.
-
-Performance and playable-instrument milestones
-
-Milestone 1: whole-device real-time factor >= 1 and playable-instrument score >= 99%.
-Milestone 2: whole-device real-time factor >= 10 and playable-instrument score >= 99.9%.
-Milestone 3: whole-device real-time factor >= 100 and playable-instrument score >= 99.99%.
-These scores concern the playable instrument: original DSP sound, MIDI/USB-MIDI,
-voice behavior, musical timing, effects, controls/display, persistence and the
-other documented instrument functions on the Desktop instrument. They do not measure
-internal wiring fidelity, instruction-test pass rates or electrical similarity.
-Each milestone requires an actually playable instrument; a boot screen or a
-large set of passing component tests cannot substitute for that requirement.
-Use a versioned instrument acceptance catalogue and published tolerances, fixed
-weights/denominator and independent references. Keep untested instrument scope
-visible; do not inflate the score by duplicating low-level cases or removing
-failing features. These are intermediate milestones, not a waiver of complete
-instrument acceptance. Internal wiring/timing detail is investigated only when
-needed to preserve firmware execution and observable instrument behavior.
-
-Measure real-time factor as emulated common-timebase seconds divided by
-monotonic host seconds over a declared complete-device workload. Preserve guest
-clock rates, MIDI timestamps and every required audio frame. Report warm-up,
-host/build configuration, output mode, overload and the measured interval.
-Faster offline processing does not run a physical audio device at 100x its rate.
-
-Use delivered original-firmware PCM as the primary instrument throughput measure.
-At the 44,100 Hz stereo output reference, RTF = complete valid stereo frames /
-(44,100 * monotonic host seconds): 1x is 44,100 frames/s and 4x is 176,400 frames/s.
-A stereo frame counts once; do not count channels separately or count repeated,
-missing or fabricated frames. Measure offline without playback pacing. Report
-startup, warm-up, processing time, output format/rate, frame counts, underruns
-and live MIDI/audio latency separately. Preserve the original device clocks;
-report any explicit output-rate conversion and include its processing cost.
-The instrument-function acceptance requirements remain unchanged.
-
-Use the fastest validated optimized Release build for visual/audio bring-up,
-long firmware experiments and performance measurements. ASan/UBSan and separate
-TSan builds are for targeted tests and occasional broader regressions; do not
-use an instrumented long run as the default development or throughput path.
-Telemetry is a runtime choice, disabled by default. Prefer startup dispatch to
-specialized policies/concepts so disabled telemetry adds no condition, capture,
-formatting or allocation to instruction/audio hot paths. Sanitizers remain
-separate compile-time build configurations. Required emulation, correctness
-checks and contextual unsupported-access failures are not optional telemetry.
-
-The current supplied acceptance scope includes Desktop and Keyboard. Keep profile
-coverage explicit; the Desktop SL path remains the immediate integration target.
-External instrument flow is classic MIDI or USB-MIDI <-> blofeld-emu -> audio.
-Provide reusable host MIDI ports and routing for future instruments without USB.
-Preserve messages, SysEx, timestamps and outgoing traffic on both firmware paths,
-including SCI status/interrupts and original USB descriptors/endpoint behavior.
-Sample transfers retain their actual firmware transport contracts. Internal
-UART/timer/register initialization must still behave correctly.
-
-Use direct borrowed memory for audio payloads and direct memory/FIFO mappings
-for USB-MIDI. Read the final original-firmware audio ring, not a pre-master mix.
-Preserve device-visible DMA positions, readiness, lengths, interrupts and bounded
-queue ownership. Host audio does not pass through a simulated serial wire and
-PCM bit decoder; host MIDI does not pass through UART bit signaling. Keep USB
-at control/endpoint transaction and buffer semantics, without electrical or bit
-line simulation. Preserve observable instrument timing and explicit failures.
-SL-capable factory storage and original sample behavior must be reconstructed;
-no firmware patch or host-provided license-success response substitutes for it.
-The independent CPU12/HC12 native JIT core is developed in the public cpu12
-repository; board peripherals and original manufacturer programs stay here.
-
-Acceptance requirements (current coverage catalogue: test/function-acceptance.tsv):
-Instrument-visible results and musical timing, including USB, storage, update
-and recovery behavior, are the accuracy criteria. Internal abstractions must
-preserve those effects. Validate implementation contracts and every documented
-instrument function; internal timing/decoder hypotheses are not extra acceptance
-gates merely because they differ from a possible physical implementation.
-
-
-1. Keep verified official firmware, manuals and the official standard sample
-   library as local references. Track download URLs, sizes and hashes, without
-   publishing proprietary assets. Establish required wavetables, internal ROM
-   and external flash contents from actual firmware accesses; identify missing
-   data explicitly rather than supplying guessed values.
-2. Implement correct CPU/DSP execution, functional memory/peripherals for the Desktop SL instrument. Separate cores, firmware I/O, host transport and time-critical audio.
-   Unknown/unsupported accesses fail with address, operation, PC and context;
-   observed behavior, hypotheses and hardware-proven facts remain distinct.
-   Reconstruct the behavior needed by the firmware from its accesses and available
-   evidence. Keep simplifications and their instrument-level qualification explicit;
-   obtaining a schematic is not a prerequisite for this work.
-3. Provide reproducible tests for CPU/DSP instructions, flags/addressing/state,
-   memory maps, interrupts, timers, interprocessor communication, cold start,
-   reset, MIDI, voice management, audio and persistent storage. Independent
-   expectations and recovered firmware behavior supplement round-trip checks.
-4. Execute complete original update and recovery loaders. Test valid/damaged
-   updates, interrupted transmission, power loss and restart during every erase
-   and programming phase, checking the bootloader, reset vectors, flash
-   protection and security bits. Component milestones do not prove whole-update
-   recovery or physical-device flash safety.
-5. Maintain automatic deterministic regressions with preserved regression inputs,
-   long-run and real-time load tests. Maintain ASan/UBSan builds
-   for project/native dependencies and separate TSan once concurrency exists;
-   run targeted sanitizer tests and occasional broader regressions. Use optimized
-   Release for visual/audio/long runs. Retain strict LLVM 19/C++23, warning,
-   format and zero-finding analysis gates in every build configuration.
-6. Provide reproducible execution traces and memory snapshots suitable for
-   diagnosing failures and replaying firmware behavior. Document coverage,
-   deviations, unresolved inputs and remaining uncertainty requirement by
-   requirement; a passing subset does not complete the objective.
-7. Establish expected behavior through independent ISA/peripheral models,
-   primary specifications and constraints from the unchanged known-working
-   firmware. Test hypotheses against connected reset-to-instrument execution
-   and every documented function on both profiles. Physical comparisons
-   are additional evidence if available, not an acceptance prerequisite. Do not
-   claim measured hardware equivalence or physical flash safety from simulation.
-   Physical programming would still require a separately established recovery
-   procedure; no experimental flashing or malformed hardware traffic is allowed.
-8. Expose the emulator as an actual host-visible USB-MIDI device, with original
-   firmware descriptors/control behavior and bidirectional endpoint traffic.
-   A standalone virtual ALSA port is not a substitute. Qualify host USB/MIDI
-   enumeration and original Spectre under Wine, including SysEx/sample transfer,
-   cancellation and errors through the emulator. Permit ordinary host MIDI
-   routing, including PipeWire, from a connected keyboard to the virtual device.
-   Qualify complete control/playback with standard Debian MIDI tools, including
-   notes, controllers, program changes, SysEx and observable replies; no custom
-   emulator CLI may substitute for external MIDI and original audio execution.
-   Keep host transport separate
-   from the board model and original firmware; never fabricate enumeration or
-   transfer success to bypass unsupported peripheral/firmware behavior.
-
-9. Provide a standalone normal runtime for one fixed Blofeld Desktop with active
-   SL sample capability. There are no model-selection modes or profile switches. A separate end-user CLI
-   is
-   not part of the product; do not add a blofeld-cli companion. The running
-   emulator communicates through MIDI and/or its actual host-visible USB-MIDI
-   device, with the behavior of that fixed instrument. Send original DSP audio to
-   the session's normal audio host
-   and default output, as an ordinary audio application (for example PipeWire).
-   Host audio transport is separate from emulated hardware; exclusive direct
-   ALSA hardware access is not a requirement. Do not add a USB Audio function:
-   the original Blofeld USB connection transports MIDI, not live audio.
-   Existing reference/inspection/sample commands remain optional developer
-   tools; their availability does not establish a working normal runtime.
-   See README.md for the current runtime interface.
-10. Make the actual modeled LCD contents available for screenshots and live
-    display in an independent GUI. Use a packed 1-bit live PBM image and text
-    raster, with PNG for saved screenshots. Publish complete captures under
-    $XDG_RUNTIME_DIR/blofeld-emu/ using atomic replacement and directory change
-    notifications, so ordinary tools can read them without a blofeld-cli.
-    Provide a small native GTK viewer that waits for available frames and
-    follows updates and runtime-directory recreation automatically.
-    Captures derive from the original firmware's LCD state, including changes
-    caused by MIDI; unknown pixels, display modes and unqualified panel mapping
-    remain explicit. Live GUI refresh does not establish
-    hardware display timing or realtime audio/board equivalence.
-
-Functional acceptance includes every documented Blofeld function on both
-profiles, exercised through unmodified firmware with observable MIDI, audio,
-display and persistent-state results. Track feature coverage against the manual
-in test/function-acceptance.tsv;
-isolated helper execution does not establish a complete instrument function.
-
-Completion requires evidence for the whole Desktop and Keyboard emulator, original
-MIDI/audio, full update/recovery behavior, reproducible failure/performance tests
-and every documented function on both profiles. Physical access is not
-a prerequisite for completion. The current component/reference fixtures remain
-partial; the requirement catalogue records open scope without treating it as
-successful boot, real-time operation or device equivalence.
-
-Current execution budget
-
-Core tests in cpu12 and dsp56300 remain required before the real-time milestone.
-Run affected correctness and sanitizer checks for core changes. Until real-time
-instrument operation is established, suspend long original-firmware runs; short
-optimized startup/throughput probes may establish that milestone. Stop startup at
-10 host seconds and fail unless playable. Then require USB-MIDI-triggered sound
-and at least ten seconds of valid original stereo output with throughput >=44100
-frames per host second. Evaluate startup, signal content and sustained throughput
-separately; silence or a boot screen cannot pass the instrument test. Stop immediately
-on runtime faults; never extend or automatically repeat a failed probe without a
-concrete fix. Use the Release profiler to distinguish native JIT/core work from
-synchronization and host I/O costs. Strict compilation, formatting and static
-analysis remain active.
+Future application: rapid original-synthesis rendering for automatic native
+program design, including acoustic instruments. Preserve musical time and export
+programs usable on hardware; this follows complete instrument acceptance.
