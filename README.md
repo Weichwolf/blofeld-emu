@@ -5,9 +5,9 @@ Blofeld firmware VM project using the independent
 [dsp56300](https://github.com/Weichwolf/dsp56300) JIT cores.
 
 The current source contains the LCD register/data contract, image capture,
-atomic PBM/text publication, GTK viewer and a validated 1.25 update-container
-loader. There is currently no playable instrument executable. Complete
-instrument requirements are in
+atomic PBM/text publication, GTK viewer, 1.25 update-container loader, MCU
+image codec and direct MCU memory mapping. There is currently no playable
+instrument executable. Complete instrument requirements are in
 [OBJECTIVE.md](OBJECTIVE.md) and [ACCEPTANCE.tsv](ACCEPTANCE.tsv).
 
 - `src/vi/`: instrument behavior and firmware device contracts.

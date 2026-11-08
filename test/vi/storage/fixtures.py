@@ -5,6 +5,7 @@ from pathlib import Path
 import struct
 import sys
 import zipfile
+import zlib
 
 
 def words(values):
@@ -90,4 +91,14 @@ damaged[6] ^= 1
 packets[1] = bytes(damaged)
 (root / "bad-packet.mid").write_bytes(midi(packets))
 (root / "bad-app.mid").write_bytes(midi(update(invalid_app=True)))
+flash = bytearray(32768)
+flash[0], flash[100], flash[101], flash[-1] = 0xa5, 0xff, 0xff, 0x7a
+known = bytearray(4096)
+for index in (0, 100, 101, 32767):
+    known[index // 8] |= 1 << (index % 8)
+erased = bytearray(2048)
+erased[50 // 8] = 1 << (50 % 8)
+payload = flash + known + erased
+image = b"BLFNVM\r\n" + struct.pack("<II", 1, len(payload)) + payload
+(root / "flash.bfnvm").write_bytes(image + struct.pack("<I", zlib.crc32(image)))
 (root / "firmware.done").write_text("generated\n")

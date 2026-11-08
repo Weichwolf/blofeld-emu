@@ -51,6 +51,12 @@ add_library(blofeld_app_firmware src/app/firmware.cpp)
 target_include_directories(blofeld_app_firmware PUBLIC src/app)
 target_link_libraries(blofeld_app_firmware PUBLIC
   blofeld_vi_firmware blofeld_host_files blofeld_host_archive)
+add_library(blofeld_vi_storage src/vi/storage/flash_image.cpp)
+target_include_directories(blofeld_vi_storage PUBLIC src/vi)
+target_link_libraries(blofeld_vi_storage PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB)
+add_library(blofeld_vi_mcu_memory src/vi/mcu/memory.cpp)
+target_include_directories(blofeld_vi_mcu_memory PUBLIC src/vi)
+target_link_libraries(blofeld_vi_mcu_memory PUBLIC blofeld_vi_storage cpu12::core)
 
 file(GLOB_RECURSE BLOFELD_FORMAT_SOURCES CONFIGURE_DEPENDS
   "src/*.hpp" "src/*.cpp" "test/*.hpp" "test/*.cpp")
@@ -88,6 +94,11 @@ if(BUILD_TESTING)
   add_dependencies(host-zip-test unit-inputs)
   add_dependencies(vi-firmware-test unit-inputs)
   add_dependencies(app-firmware-test unit-inputs)
+  blofeld_unit(vi-flash-image-test test/vi/storage/flash_image_test.cpp
+    blofeld_vi_storage "${blofeld_unit_inputs}")
+  add_dependencies(vi-flash-image-test unit-inputs)
+  blofeld_unit(vi-mcu-memory-test test/vi/mcu/memory_test.cpp blofeld_vi_mcu_memory)
+  target_include_directories(vi-mcu-memory-test PRIVATE "${BLOFELD_CPU12_ROOT}/test/support")
   add_test(NAME app-ui-frame-test COMMAND "${Python3_EXECUTABLE}" -B
     "${CMAKE_CURRENT_SOURCE_DIR}/test/app/ui/frame_test.py" "${CMAKE_CURRENT_BINARY_DIR}/Testing")
   set_tests_properties(app-ui-frame-test PROPERTIES TIMEOUT 10)
