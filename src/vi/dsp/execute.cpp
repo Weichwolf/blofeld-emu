@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
+#include <limits>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -61,6 +62,9 @@ public:
     program_changed_ = false;
     waiting_ = false;
     idle_ = 0;
+    media_epoch_ = 0;
+    media_deadline_.reset();
+    media_error_ = nullptr;
     once_data_.reset();
     clock_.reset(true);
     interrupts_.reset();
@@ -78,10 +82,13 @@ public:
   void unbind() noexcept { core_ = nullptr; }
 
   bool complete_events(ExecutionReport &report) {
-    if (controller_.pending() && !controller_.complete()) {
-      report.failure = completion_failure_;
-      report.failure->reason = controller_.error();
-      return false;
+    if (media_deadline_ && device_cycles() >= *media_deadline_) {
+      if (!controller_.complete()) {
+        report.failure = completion_failure_;
+        report.failure->reason = controller_.error();
+        return false;
+      }
+      media_deadline_.reset();
     }
     if (!synchronize_timers()) {
       report.failure = Failure{.pc = core_->registers().pc,
@@ -119,13 +126,14 @@ public:
   [[nodiscard]] std::uint64_t program_revision() const noexcept override { return revision_; }
 
   [[nodiscard]] const char *error() const noexcept {
+    if (media_error_ != nullptr) { return media_error_; }
     if (timers_.error() != nullptr) { return timers_.error(); }
     return esai_1_.error() != nullptr ? esai_1_.error() : controller_.error();
   }
 
   [[nodiscard]] dsp56300::RunResult run() {
     if (waiting_ && !interrupts_.select(interrupt_sources(), core_->registers().sr)) {
-      if (const auto next = timers_.deadline()) {
+      if (const auto next = deadline()) {
         idle_ = *next - core_->progress().estimated_cycles;
         if (!synchronize_timers()) { throw std::runtime_error(timers_.error()); }
       }
@@ -142,12 +150,12 @@ public:
       // architectural interrupt shadow before another normal instruction.
       return completed(core_->step());
     }
-    const auto next = timers_.deadline();
+    const auto next = deadline();
     return completed(next ? core_->run_until(*next - idle_) : core_->run());
   }
 
   [[nodiscard]] bool waiting_event() const noexcept {
-    return waiting_ && (timers_.deadline() || interrupts_.select(interrupt_sources(), 0));
+    return waiting_ && (deadline() || interrupts_.select(interrupt_sources(), 0));
   }
 
   [[nodiscard]] bool reset_interrupted() const noexcept { return reset_interrupted_; }
@@ -273,6 +281,30 @@ public:
   }
 
 private:
+  [[nodiscard]] std::uint64_t device_cycles() const noexcept {
+    return core_->progress().estimated_cycles + idle_;
+  }
+
+  [[nodiscard]] std::optional<std::uint64_t> deadline() const noexcept {
+    const auto timer = timers_.deadline();
+    if (!media_deadline_ || (timer && *timer < *media_deadline_)) { return timer; }
+    return media_deadline_;
+  }
+
+  bool schedule_media() noexcept {
+    const auto ratio = clock_.ratio();
+    const auto ticks = std::uint64_t{controller_.reference_ticks()} * ratio.numerator;
+    const auto delay = (ticks + ratio.denominator - 1) / ratio.denominator;
+    const auto now = device_cycles();
+    if (delay > std::numeric_limits<std::uint64_t>::max() - now) {
+      media_error_ = "Media completion deadline is not representable";
+      return false;
+    }
+    media_epoch_ = controller_.epoch();
+    media_deadline_ = now + delay;
+    return true;
+  }
+
   [[nodiscard]] std::array<dsp56300::Word, 8> interrupt_sources() const noexcept {
     std::array<dsp56300::Word, 8> sources{};
     const auto pending = dma_.interrupts();
@@ -308,7 +340,7 @@ private:
   }
 
   bool synchronize_timers(const bool in_callback = false) noexcept {
-    if (!timers_.advance(core_->progress().estimated_cycles + idle_)) { return false; }
+    if (!timers_.advance(device_cycles())) { return false; }
     bool ready = false;
     if (controller_.ready(ready) && !timers_.input(1, ready)) { return false; }
     if (in_callback && (timers_.requests() != 0 || timers_.interrupt())) { core_->request_yield(); }
@@ -370,8 +402,8 @@ private:
 
   bool write_port(const Ports::Write access, const dsp56300::Word pc) noexcept {
     if (!ports_.write(access) || !update_ports()) { return false; }
-    if (controller_.pending()) {
-      if (!synchronize_timers(true)) { return false; }
+    if (controller_.pending() && controller_.epoch() != media_epoch_) {
+      if (!synchronize_timers(true) || !schedule_media()) { return false; }
       completion_failure_ = {.operation = Access::write,
                              .pc = pc,
                              .address = access.address,
@@ -432,6 +464,9 @@ private:
   bool program_changed_ = false;
   bool waiting_ = false;
   std::uint64_t idle_ = 0;
+  std::uint64_t media_epoch_ = 0;
+  std::optional<std::uint64_t> media_deadline_;
+  const char *media_error_ = nullptr;
   std::uint64_t revision_ = 0;
   dsp56300::Word dma_pc_ = 0;
   const std::stop_token &stop_;

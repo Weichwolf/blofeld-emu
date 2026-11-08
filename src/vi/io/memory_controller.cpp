@@ -19,6 +19,7 @@ void MemoryController::reset() noexcept {
   controls_ = strobes;
   page_ = column_ = 0;
   addresses_ = 0;
+  epoch_ = 0;
   pending_ = reset_pending_ = false;
   ready_ = true;
   output_.reset();
@@ -40,11 +41,13 @@ bool MemoryController::latch(const Write access) noexcept {
     output_.reset();
     buffer_ = {};
     if (value == reset_command) {
+      ++epoch_;
       phase_ = Phase::idle;
       pending_ = reset_pending_ = true;
       ready_ = false;
       return true;
     }
+    if (pending_) { return fail("Media command issued while an operation is busy"); }
     if (value != 0 && value != 1 && value != spare_command) {
       return fail("Media command is not implemented");
     }
@@ -70,6 +73,7 @@ bool MemoryController::latch(const Write access) noexcept {
   if (addresses_ == 4) {
     if (page_ >= MediaImage::pages) { return fail("Media row exceeds image geometry"); }
     pending_ = true;
+    ++epoch_;
     ready_ = false;
   }
   return true;

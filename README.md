@@ -29,7 +29,8 @@ The MCU samples a VM-owned pedal input; firmware retains its polarity/change han
 Low/high X/Y RAM uses direct native grants with initialization tracking and
 OMR-selected program-bank sharing. Optional data-ROM views borrow local contents.
 DSP GPIO and decoded page-read transactions use the profile's validated media
-image directly. Media program/erase, ID/status and automatic page continuation
+image directly. Read/reset operations complete at their own virtual deadlines;
+PLL configuration converts nominal reference periods to DSP cycles. Media program/erase, ID/status and automatic page continuation
 are not yet implemented.
 The SHI receive FIFO connects MCU port writes to DSP program loading; HTX and
 IOSR retain actual full-duplex words, with phase-dependent loading and underrun handling. MCU U0

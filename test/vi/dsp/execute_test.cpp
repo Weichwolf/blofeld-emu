@@ -467,6 +467,12 @@ void native_media_read(const std::filesystem::path &root) {
     put({.space = dsp56300::Space::y, .address = f_data, .value = 0});
     control(address_high);
   }
+  constexpr dsp56300::Word boot = 0xff0000;
+  constexpr dsp56300::Word ready_port = 0x0b;
+  constexpr dsp56300::Word ready_bit = 12;
+  const auto wait_ready = boot + static_cast<dsp56300::Word>(program.size());
+  program.push_back(isa::opcode<isa::Opcode::jclr_port_low>()[0] | (ready_port << 8U) | ready_bit);
+  program.push_back(wait_ready);
   control(upper_inputs);
   constexpr dsp56300::Word active_read = 0x200;
   constexpr dsp56300::Word receive_inputs = 0x3ff;
@@ -494,7 +500,8 @@ void native_media_read(const std::filesystem::path &root) {
               << " code=" << failure.code << " reason=" << failure.reason << '\n';
   }
   require(matched,
-          "Native firmware register transactions read an actual image byte through Port F");
+          "Native polling waits for real asynchronous completion before reading the image through "
+          "Port F");
 }
 
 void consecutive_receive_registers() {

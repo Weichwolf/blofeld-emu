@@ -25,6 +25,12 @@ public:
 
   [[nodiscard]] bool pending() const noexcept { return pending_; }
 
+  [[nodiscard]] std::uint64_t epoch() const noexcept { return epoch_; }
+
+  // Nominal VM operation durations in DSP reference-clock periods, independent
+  // of host work and PLL multiplication. These are not fitted chip timings.
+  [[nodiscard]] unsigned reference_ticks() const noexcept { return reset_pending_ ? 32 : 64; }
+
   [[nodiscard]] bool complete() noexcept;
   [[nodiscard]] bool ready(bool &value) const noexcept;
 
@@ -41,6 +47,7 @@ private:
   Phase phase_ = Phase::idle;
   std::uint32_t controls_ = 0, page_ = 0, column_ = 0;
   unsigned addresses_ = 0;
+  std::uint64_t epoch_ = 0;
   bool pending_ = false, ready_ = true, reset_pending_ = false;
   std::optional<std::uint8_t> output_;
   std::span<const std::uint8_t> buffer_;

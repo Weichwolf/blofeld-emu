@@ -20,6 +20,7 @@ void require(const bool condition, const char *message) {
 constexpr unsigned address_bits = 24;
 constexpr std::uint32_t last_block_page = 31, unknown_column = 17;
 constexpr std::uint8_t spare = 0x50;
+constexpr std::uint8_t reset_command = 0xff;
 constexpr std::uint32_t idle = 0x300, command = 0x400, address = 0x800, read_active = 0x200;
 
 void pulse(MemoryController &controller, const MemoryController::Write access) {
@@ -100,6 +101,25 @@ void errors(MemoryController &controller) {
               controller.error() != nullptr && !controller.ready(ready),
           "Missing image pages cannot complete or publish readiness");
 }
+
+void cancel_and_reset(MemoryController &controller) {
+  controller.reset();
+  pulse(controller, {.controls = command});
+  for (const auto value : std::array<std::uint8_t, 4>{0, 0, 0, 0}) {
+    pulse(controller, {.controls = address, .value = value});
+  }
+  const auto read_epoch = controller.epoch();
+  require(controller.pending() && controller.reference_ticks() == 64,
+          "A complete read address publishes one nominal timed operation");
+  pulse(controller, {.controls = command, .value = reset_command});
+  bool ready = true;
+  require(controller.pending() && controller.epoch() == read_epoch + 1 &&
+              controller.reference_ticks() == 32 && controller.ready(ready) && !ready &&
+              !controller.output(),
+          "A real RESET supersedes the old completion epoch and keeps readiness low");
+  require(controller.complete() && controller.ready(ready) && ready && !controller.output(),
+          "Reset completion cannot expose a page retained from the canceled read");
+}
 }
 
 int main(const int argc, char **argv) try {
@@ -108,6 +128,7 @@ int main(const int argc, char **argv) try {
       std::filesystem::path(argv[2]) / "media.bfnand", blofeld::vi::MediaImage::max_bytes));
   MemoryController controller(&image);
   reads(controller);
+  cancel_and_reset(controller);
   errors(controller);
   const MemoryController missing;
   bool ready = false;

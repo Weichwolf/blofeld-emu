@@ -150,6 +150,13 @@ held byte and advance on release. Unknown bytes/pages fail with transaction
 context. Images retain their encoded backing and a direct page index; no cell
 physics, payload mirrors or default successful program/status replies.
 
+Read/reset completion has a separate virtual deadline. Nominal VM durations are
+64/32 DSP reference periods converted through the programmed PLL ratio at issue;
+these are explicit VM timing choices, not recovered device measurements. R/B stays
+low until the real image operation completes, allowing firmware to arm capture.
+RESET replaces the operation epoch and its deadline; an old read cannot publish
+readiness or payload after cancellation. Polling and IRQ clients share this event.
+
 Keep persistent images for identity, programs and samples. Preserve genuine
 operation status, interrupted writes and recovery; remove cell physics, synthetic
 pulse profiles and redundant backend wrappers. Reset/update coordinates worker
