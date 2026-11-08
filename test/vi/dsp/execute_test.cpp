@@ -234,6 +234,42 @@ void native_dma_dax_write() {
           "Native writes bind DAX and Port D, then software DMA transfers an actual XADR word");
 }
 
+void native_timer_events() {
+  namespace isa = dsp56300::isa;
+  using dsp56300::Word;
+  constexpr Word immediate = 0x34;
+  constexpr Word absolute = 0x30;
+  constexpr Word write = 0x8000;
+  constexpr Word x0 = 4;
+  constexpr Word marker = 0xc000;
+  constexpr Word control_port = 15;
+  constexpr Word load_port = 14;
+  constexpr Word compare_port = 13;
+  constexpr Word expected = 0x200001;
+  constexpr auto configure =
+      isa::opcode<isa::Opcode::movep_memory_low>()[0] | (immediate << 8U) | write;
+  constexpr auto read =
+      isa::opcode<isa::Opcode::movep_register_low>()[0] | (x0 << 8U) | control_port;
+  constexpr auto sink = isa::opcode<isa::Opcode::movem_effective>()[0] | (absolute << 8U) | x0;
+  constexpr std::array configuration{configure | load_port,
+                                     Word{0},
+                                     configure | compare_port,
+                                     Word{3},
+                                     configure | control_port,
+                                     Word{1}};
+  std::vector<Word> program(configuration.begin(), configuration.end());
+  program.insert(program.end(), 32, isa::nop[0]);
+  program.push_back(read);
+  program.push_back(sink);
+  program.push_back(marker);
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+  require(report.failure && report.failure->space == 'P' && report.failure->address == marker &&
+              report.failure->value == expected,
+          "Native execution reaches a real timer compare deadline and reads its sticky TCF");
+}
+
 void native_transmit_registers() {
   namespace isa = dsp56300::isa;
   constexpr dsp56300::Word immediate = 0x34;
@@ -474,6 +510,7 @@ int main(const int argc, char **argv) try {
   native_dma_program_write();
   native_dma_esai_write();
   native_dma_dax_write();
+  native_timer_events();
   consecutive_receive_registers();
   reset_running_core();
 } catch (const std::exception &error) {

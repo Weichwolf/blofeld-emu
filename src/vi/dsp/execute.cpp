@@ -8,6 +8,7 @@
 #include "dsp/interrupts.hpp"
 #include "dsp/memory.hpp"
 #include "dsp/ports.hpp"
+#include "dsp/timers.hpp"
 #include "execution.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/memory_controller.hpp"
@@ -33,6 +34,9 @@ constexpr dsp56300::Word dax_status_address = 0xffffd4;
 constexpr dsp56300::Word reserved_x_address = 0xffff80;
 constexpr unsigned esai1_transmit_request = 22;
 constexpr unsigned dax_request = 10;
+constexpr unsigned timer_request_first = 18;
+constexpr dsp56300::Word timer0_control = 0xffff8f;
+constexpr dsp56300::Word timer0_compare_vector = 0x54;
 
 struct BitAccess {
   dsp56300::Space space;
@@ -60,9 +64,12 @@ public:
     dma_.reset();
     esai_1_.reset();
     dax_.reset();
+    timers_.reset();
     memory_.configure(0);
     ports_.reset();
     controller_.reset();
+    bool ready = false;
+    if (controller_.ready(ready)) { static_cast<void>(timers_.input(1, ready)); }
   }
 
   void unbind() noexcept { core_ = nullptr; }
@@ -73,8 +80,21 @@ public:
       report.failure->reason = controller_.error();
       return false;
     }
+    if (!synchronize_timers()) {
+      report.failure = Failure{.pc = core_->registers().pc,
+                               .address = timer0_control,
+                               .space = 'X',
+                               .reason = timers_.error()};
+      return false;
+    }
     if (esai_1_.take_request()) { static_cast<void>(dma_.trigger(esai1_transmit_request)); }
     if (dax_.take_request()) { static_cast<void>(dma_.trigger(dax_request)); }
+    const auto requests = timers_.take_requests();
+    for (unsigned index = 0; index < 3; ++index) {
+      if ((requests & (1U << index)) != 0) {
+        static_cast<void>(dma_.trigger(timer_request_first + index));
+      }
+    }
     if (!dma_.service(
             dma_pc_,
             [this](const Dma::Address access, dsp56300::Word &value) {
@@ -99,6 +119,16 @@ public:
                                .reason = "DAX interrupt delivery is not bound"};
       return false;
     }
+    if (const auto vector = timers_.interrupt()) {
+      report.failure =
+          Failure{.operation = Access::execute,
+                  .pc = core_->registers().pc,
+                  .address = timer0_control - (((*vector - timer0_compare_vector) / 4) * 4),
+                  .code = *vector,
+                  .space = 'X',
+                  .reason = "DSP timer interrupt delivery is not bound"};
+      return false;
+    }
     if (dma_.interrupts() == 0) { return true; }
     report.failure = Failure{.operation = Access::execute,
                              .pc = dma_pc_,
@@ -110,7 +140,13 @@ public:
   [[nodiscard]] std::uint64_t program_revision() const noexcept override { return revision_; }
 
   [[nodiscard]] const char *error() const noexcept {
+    if (timers_.error() != nullptr) { return timers_.error(); }
     return esai_1_.error() != nullptr ? esai_1_.error() : controller_.error();
+  }
+
+  [[nodiscard]] dsp56300::RunResult run() {
+    const auto next = timers_.deadline();
+    return next ? core_->run_until(*next) : core_->run();
   }
 
   [[nodiscard]] bool reset_interrupted() const noexcept { return reset_interrupted_; }
@@ -162,6 +198,7 @@ public:
     // DSP56371UM table 3-7 reserves X:$FFFF80. The original audio
     // initializer writes it; discard the write without creating a readable latch.
     if (address == reserved_x_address) { return true; }
+    if (Timers::contains(address)) { return write_timer({.address = address, .value = value}); }
     if (Dax::contains(address)) { return dax_.write({.address = address, .value = value}); }
     if (Dma::contains(address)) { return write_dma({.address = address, .value = value}, pc); }
     if (Interrupts::contains(address)) {
@@ -186,12 +223,6 @@ public:
     constexpr unsigned word_bits = 24;
     if (interrupted()) { return false; }
     if (request.index >= word_bits) { return false; }
-    constexpr dsp56300::Word timer1_control = 0xffff8b;
-    constexpr dsp56300::Word timer_input_bit = 12;
-    if (request.space == dsp56300::Space::x && request.address == timer1_control &&
-        request.index == timer_input_bit && request.action == dsp56300::BitAction::test) {
-      return controller_.ready(previous);
-    }
     dsp56300::Word value = 0;
     if (!memory_.read(request.space, request.address, value)) {
       bool accepted = false;
@@ -224,6 +255,9 @@ public:
       return esai_1_.write({.address = request.address, .value = value});
     }
     if (request.space != dsp56300::Space::x) { return false; }
+    if (Timers::contains(request.address)) {
+      return write_timer({.address = request.address, .value = value});
+    }
     if (Dax::contains(request.address)) {
       return dax_.write({.address = request.address, .value = value});
     }
@@ -238,6 +272,23 @@ public:
   }
 
 private:
+  bool synchronize_timers(const bool in_callback = false) noexcept {
+    if (!timers_.advance(core_->progress().estimated_cycles)) { return false; }
+    bool ready = false;
+    if (controller_.ready(ready) && !timers_.input(1, ready)) { return false; }
+    if (in_callback && (timers_.requests() != 0 || timers_.interrupt())) { core_->request_yield(); }
+    return true;
+  }
+
+  bool write_timer(const Timers::Write access) noexcept {
+    if (!synchronize_timers(true)) { return false; }
+    const auto next = timers_.deadline();
+    const auto interrupt = timers_.interrupt();
+    if (!timers_.write(access)) { return false; }
+    if (next != timers_.deadline() || interrupt != timers_.interrupt()) { core_->request_yield(); }
+    return true;
+  }
+
   bool write_dma(const Dma::Write access, const dsp56300::Word pc) noexcept {
     if (!dma_.write(access)) { return false; }
     if (dma_.pending() || dma_.interrupts() != 0) {
@@ -285,6 +336,7 @@ private:
   bool write_port(const Ports::Write access, const dsp56300::Word pc) noexcept {
     if (!ports_.write(access) || !update_ports()) { return false; }
     if (controller_.pending()) {
+      if (!synchronize_timers(true)) { return false; }
       completion_failure_ = {.operation = Access::write,
                              .pc = pc,
                              .address = access.address,
@@ -315,6 +367,9 @@ private:
   }
 
   bool read_x(const dsp56300::Word address, dsp56300::Word &value) noexcept {
+    if (Timers::contains(address)) {
+      return synchronize_timers(true) && timers_.read(address, value);
+    }
     if (Dax::contains(address)) { return dax_.read(address, value); }
     if (Dma::contains(address)) { return dma_.read(address, value); }
     if (Interrupts::contains(address)) { return interrupts_.read(address, value); }
@@ -350,6 +405,7 @@ private:
   Dma dma_;
   Esai esai_1_;
   Dax dax_;
+  Timers timers_;
   Memory memory_;
   Ports ports_;
   MemoryController controller_;
@@ -392,7 +448,7 @@ bool run_instance(Io &io,
       restart = true;
       break;
     }
-    const auto result = core.run();
+    const auto result = io.run();
     report.instructions += result.retired;
     if (stop.stop_requested()) { break; }
     if (io.reset_interrupted()) {

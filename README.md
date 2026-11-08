@@ -19,6 +19,9 @@ Its instrument clock source, receive path and DMA interrupt admission remain inc
 DAX register access and DMA writes retain the distinct XADR/channel buffers,
 non-audio metadata, block position, refill requests and observed-underrun clearing.
 Its subframe clock source and interrupt delivery are not yet connected to execution.
+DSP timer registers, CLK/2 and shared prescaling implement GPIO timer, event-counter
+and capture modes with deadlines, W1C flags and compare DMA requests. Timer IRQ
+admission and the other timer modes remain incomplete.
 The MCU samples a VM-owned pedal input; firmware retains its polarity/change handling.
 Low/high X/Y RAM uses direct native grants with initialization tracking and
 OMR-selected program-bank sharing. Optional data-ROM views borrow local contents.
