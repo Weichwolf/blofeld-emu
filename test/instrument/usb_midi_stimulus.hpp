@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "common/bus.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "mcu/mcu_memory.hpp"
 #include "runtime/instrument.hpp"
 #include "usb/usb_midi_host.hpp"
 
@@ -26,7 +29,7 @@ public:
         input_bytes_ += completion.transferred;
       }
     }
-    if (!host_.ready() || !audio_started) { return; }
+    if (!host_.ready() || !audio_started || !startup_queries_observed(instrument)) { return; }
     if (!prepared_) {
       // Select A001 through ordinary bank/program messages and set audible
       // channel controls. Neither program data nor guest state is injected.
@@ -48,6 +51,8 @@ public:
                                                pitch,
                                                static_cast<std::uint8_t>(gate_ ? 0 : velocity)};
       const auto sequence = host_.send_packets(packet);
+      std::cout << "usb-midi-note=" << (gate_ ? "off" : "on") << " sequence=" << sequence
+                << " tick=" << ticks << '\n';
       if (!first_note_) { first_note_ = sequence; }
       gate_ = !gate_;
       last_event_ = ticks;
@@ -56,11 +61,37 @@ public:
 
   void report() const {
     std::cout << "usb-midi-configured=" << host_.ready() << " note-on-acked=" << note_acknowledged_
+              << " startup-queries-observed=" << startup_observed_
               << " usb-midi-out-bytes=" << output_bytes_ << " usb-midi-in-bytes=" << input_bytes_
               << '\n';
   }
 
 private:
+  bool startup_queries_observed(const runtime::Instrument &instrument) {
+    if (startup_observed_) { return true; }
+    // Original 1.25 records each request before transmission. Global41..47
+    // follow the startup DSP/wave/sound checks; Global27 is the later contrast
+    // query. Observe that progress before MIDI can change the shared mailbox.
+    constexpr unsigned kind_address = 0x19cc;
+    constexpr unsigned parameter_address = 0x19ce;
+    constexpr unsigned first_shape = 0x41;
+    constexpr unsigned last_shape = 0x47;
+    constexpr unsigned contrast = 0x27;
+    const auto kind = instrument.inspect_mcu(kind_address).value;
+    const auto high = instrument.inspect_mcu(parameter_address).value;
+    const auto low = instrument.inspect_mcu(parameter_address + 1).value;
+    if (kind != 2 || high != 0 || !low ||
+        ((*low < first_shape || *low > last_shape) && *low != contrast)) {
+      return false;
+    }
+    startup_observed_ = true;
+    constexpr unsigned report_marker = 0x76c;
+    const auto marker = instrument.inspect_dsp({.space = DspSpace::x, .address = report_marker});
+    std::cout << "startup-query-observed=" << hex(*low, 2) << " tick=" << instrument.common_ticks()
+              << " dsp-report-marker=" << (marker ? hex(*marker, 6) : "unknown") << '\n';
+    return true;
+  }
+
   static constexpr unsigned frames_per_second = 1000;
   UsbMidiHost host_;
   std::uint64_t interval_;
@@ -69,6 +100,7 @@ private:
   std::uint64_t output_bytes_ = 0;
   std::uint64_t input_bytes_ = 0;
   bool prepared_ = false;
+  bool startup_observed_ = false;
   bool gate_ = false;
   bool note_acknowledged_ = false;
 };

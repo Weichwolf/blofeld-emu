@@ -13,12 +13,16 @@
 #include "storage/virtual_device_state.hpp"
 #include "usb_midi_stimulus.hpp"
 
+#include <array>
+#include <bit>
 #include <chrono>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -32,9 +36,20 @@ constexpr double reference_rate = 44100;
 
 class Output final : public PcmFrameSink {
 public:
+  explicit Output(const std::filesystem::path &path) {
+    capture_.exceptions(std::ios::badbit | std::ios::failbit);
+    capture_.open(path, std::ios::binary | std::ios::out | std::ios::noreplace);
+  }
+
   void accept(const SerialPcmFrame &frame) override {
     check();
     if (frame.channels != 2) { throw Fault("Startup observation requires actual stereo PCM"); }
+    // Owner-thread diagnostic capture; this sink is never an audio callback.
+    static_assert(std::endian::native == std::endian::little);
+    const std::array stereo{frame.samples[0], frame.samples[1]};
+    const auto bytes = std::bit_cast<std::array<char, sizeof(stereo)>>(stereo);
+    capture_.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    if (!first_tick_) { first_tick_ = frame.first_tick; }
     ++frames_;
     nonzero_ += frame.samples[0] != 0 || frame.samples[1] != 0 ? 1U : 0U;
   }
@@ -49,10 +64,23 @@ public:
 
   [[nodiscard]] std::uint64_t nonzero() const { return nonzero_; }
 
+  void finish() {
+    capture_.close();
+    std::cout << "audio-capture=audio.s32le channels=2 valid-bits=24 first-tick=";
+    if (first_tick_) {
+      std::cout << *first_tick_;
+    } else {
+      std::cout << "none";
+    }
+    std::cout << '\n';
+  }
+
 private:
   std::uint64_t frames_ = 0;
   std::uint64_t nonzero_ = 0;
   bool invalid_ = false;
+  std::ofstream capture_;
+  std::optional<std::uint64_t> first_tick_;
 };
 
 void report(const runtime::Instrument &board,
@@ -117,7 +145,7 @@ int probe(const char *const *argv, const Clock::time_point started) {
                                                            McuFlashImage::from_known(firmware.mcu));
   const std::filesystem::path directory(argv[2]);
   const PrivateDirectory output_directory(directory); // Validate before native execution.
-  Output output;
+  Output output(directory / "audio.s32le");
   test::UsbMidiStimulus midi(config.dsp_clock.timebase_hz);
   runtime::Instrument board(config,
                             {.image = device->image(),
@@ -147,6 +175,7 @@ int probe(const char *const *argv, const Clock::time_point started) {
   if (failed) { phase = "fault"; }
   report(board, output, started, config.dsp_clock.timebase_hz, phase);
   midi.report();
+  output.finish();
   capture_display(board, output_directory);
   if (failed) { peer_response(board); }
   // Observation is deliberately fail-closed: frames and a screen alone do not
