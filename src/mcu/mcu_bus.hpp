@@ -17,6 +17,7 @@
 
 #include <array>
 #include <bitset>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -169,10 +170,27 @@ private:
   void sync_peripheral_pins();
   void check_timer_outputs() const;
   void invalidate_code(MemoryRead access);
+  void configure_ram_program(std::optional<McuProgramWindow> program);
+  void qualify_ram_program(std::uint16_t pc);
+  void retire_ram_program();
+
+  // RAM-image publications do not change the underlying ROM/data binding.
+  [[nodiscard]] std::uint64_t native_memory_identity() const {
+    return code_revision_ - ram_program_revisions_;
+  }
+
+  [[nodiscard]] std::vector<McuMemoryWindow>
+  program_windows(std::vector<McuMemoryWindow> windows) const;
   void stage_flash(MemoryWrite access);
   std::uint64_t revision_ = 0;
   std::uint64_t code_revision_ = 0;
   mutable std::bitset<65536> decoded_bytes_;
+  std::optional<McuProgramWindow> ram_program_;
+  bool ram_program_active_ = false;
+  std::uint64_t ram_program_revisions_ = 0;
+  std::size_t ram_program_image_ = 0;
+  // Immutable after publication; retained as long as this bus and its native entries.
+  std::vector<std::shared_ptr<std::vector<std::uint8_t>>> ram_program_images_;
   McuMemory memory_;
   McuFlash flash_;
   McuGpio gpio_;

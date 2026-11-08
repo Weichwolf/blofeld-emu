@@ -68,6 +68,7 @@ struct McuMachine::State {
         RunState run_state)
       : bus(std::move(bus_state)), run(run_state), cpu(*bus, specification) {
     bus->configure_flash_timing(run.contract ? run.contract->flash_timing : FlashTimingInputs{});
+    bus->configure_ram_program(run.contract ? run.contract->ram_program : std::nullopt);
     if (run.clock) { cycle_origin = run.clock->bus_cycles() - run.idle_cycles; }
     refresh_memory();
     cpu.set_clock_observer([this](const auto cycles, const auto context, const bool boundary) {
@@ -77,6 +78,7 @@ struct McuMachine::State {
   }
 
   void refresh_memory() {
+    bus->qualify_ram_program(cpu.state().pc);
     const auto revision = bus->code_revision();
     if (memory_revision == revision) { return; }
     const auto windows = bus->memory_windows();
@@ -87,7 +89,7 @@ struct McuMachine::State {
                         .bytes = window.bytes,
                         .known = window.known,
                         .writable = window.writable,
-                        .identity = revision});
+                        .identity = bus->native_memory_identity()});
     }
     cpu.bind_memory(grants.empty() ? cpu12::Memory::external() : cpu12::Memory::mapped(grants));
     memory_revision = revision;

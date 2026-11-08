@@ -349,6 +349,12 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-mcu-native-execution-test PRIVATE blofeld_core)
   add_test(NAME mcu_native_execution COMMAND blofeld-mcu-native-execution-test)
 
+  add_executable(blofeld-mcu-ram-program-test test/mcu_ram_program_test.cpp)
+  target_include_directories(blofeld-mcu-ram-program-test PRIVATE "${BLOFELD_CPU12_ROOT}/test/support")
+  target_link_libraries(blofeld-mcu-ram-program-test PRIVATE blofeld_core)
+  add_test(NAME mcu_ram_program COMMAND blofeld-mcu-ram-program-test)
+  set_tests_properties(mcu_ram_program PROPERTIES TIMEOUT 10)
+
   add_executable(blofeld-mcu-power-on-test test/mcu_power_on_test.cpp)
   target_link_libraries(blofeld-mcu-power-on-test PRIVATE blofeld_core)
   add_test(NAME mcu_power_on COMMAND blofeld-mcu-power-on-test)
@@ -766,7 +772,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check blofeld-startup-probe
+  DEPENDS format-check blofeld-startup-probe blofeld-mcu-ram-program-test
   USES_TERMINAL)
 
 endif()

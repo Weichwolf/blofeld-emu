@@ -4,6 +4,7 @@
 #include "mcu/hc12.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_flash_timing_state.hpp"
+#include "mcu/mcu_memory.hpp"
 #include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_run_clock.hpp"
 #include "mcu/mcu_sci.hpp"
@@ -24,6 +25,7 @@ struct McuRunContract {
   McuRunClockInputs clock;
   McuRunMemory memory_timing = McuRunMemory::unqualified;
   FlashTimingInputs flash_timing = {};
+  std::optional<McuProgramWindow> ram_program = std::nullopt;
   bool operator==(const McuRunContract &) const = default;
 };
 

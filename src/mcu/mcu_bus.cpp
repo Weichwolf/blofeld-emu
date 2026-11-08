@@ -117,6 +117,7 @@ void McuBus::reset_modules() {
   reset_asserted_ = false;
   memory_.reset();
   decoded_bytes_.reset();
+  ram_program_active_ = false;
   ++code_revision_;
   ++revision_;
   flash_.reset();
@@ -368,6 +369,7 @@ void McuBus::check_execute(const InstructionFetch fetch) const {
 
 void McuBus::retire_instruction() {
   if (memory_.retire_instruction()) {
+    retire_ram_program();
     ++revision_;
     ++code_revision_;
   }

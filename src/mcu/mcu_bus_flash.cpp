@@ -26,7 +26,7 @@ std::vector<McuMemoryWindow> McuBus::memory_windows() {
   if (!readable) {
     std::erase_if(windows, [](const auto &window) { return !window.writable; });
   }
-  return windows;
+  return program_windows(std::move(windows));
 }
 
 McuFlashImage McuBus::power_off_flash_image() const {

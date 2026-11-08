@@ -40,6 +40,13 @@ struct McuMemoryWindow {
   bool writable = true;
 };
 
+// A consumer-owned RAM program image, replaced through ordinary architectural writes.
+struct McuProgramWindow {
+  std::uint16_t first = 0;
+  unsigned size = 0;
+  bool operator==(const McuProgramWindow &) const = default;
+};
+
 // Normal single-chip MC9S12UF32 mapping. Power-on RAM is unknown until written.
 class McuMemory {
 public:

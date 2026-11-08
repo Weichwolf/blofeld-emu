@@ -29,6 +29,14 @@ musical time regardless of host processing speed. Core execution returns only
 for required events, I/O, backpressure, shutdown or a contextual failure.
 Ordinary guest arithmetic and memory do not invoke the instrument layer.
 
+Initialized MCU RAM overlays bind as read-only program grants to the JIT while
+remaining architecturally writable through their consumer. The first write retires
+that image and returns from native execution; remaining loader writes use ordinary
+RAM. Entry into a complete replacement publishes a new binding identity. Generated
+code stays immutable, and overlay loading executes the original firmware routines.
+Each distinct image is frozen once; loading identical bytes reuses that image and
+its native entries. Overlay publications retain the identity of unchanged ROM/data.
+
 The runtime does not replay physical address/data lines, electrical bus slots,
 voltage networks, NAND setup/hold windows or external MIDI serial bits. Firmware
 bit-banged register accesses still require decoding into their actual commands

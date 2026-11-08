@@ -6,6 +6,7 @@
 #include "dsp/dsp_run_clock.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_machine.hpp"
+#include "mcu/mcu_memory.hpp"
 #include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_run_clock.hpp"
 #include "runtime/instrument.hpp"
@@ -89,6 +90,9 @@ Config instrument_config(const Profile &profile) {
   result.mcu.clock = {.oscillator_hz = mcu_oscillator_hz,
                       .switch_timing = McuRunClockSwitch::reference_cycle_boundary};
   result.mcu.memory_timing = McuRunMemory::internal_flash_reads;
+  // Firmware 1.25 replaces this complete UI overlay through its ordinary receiver.
+  constexpr McuProgramWindow secondary_overlay{.first = 0x1600, .size = 528};
+  result.mcu.ram_program = secondary_overlay;
   result.dsp_clock = {.extal_hz = audio_oscillator_hz,
                       .timebase_hz = timebase_hz,
                       .switch_timing = DspClockSwitch::functional_region_boundary};
