@@ -83,6 +83,40 @@ void native_memory_switch() {
           "Guest OMR remaps retained X RAM into executable P without copying or a new Core");
 }
 
+void native_interrupt_priorities() {
+  namespace isa = dsp56300::isa;
+  constexpr dsp56300::Word immediate = 0x34;
+  constexpr dsp56300::Word absolute = 0x30;
+  constexpr dsp56300::Word write = 0x8000;
+  constexpr dsp56300::Word peripheral_port = 0x3e;
+  constexpr dsp56300::Word core_port = 0x3f;
+  constexpr dsp56300::Word x0 = 4;
+  constexpr dsp56300::Word sink = 0xc000;
+  constexpr dsp56300::Word peripheral_expected = 0x030fce;
+  constexpr dsp56300::Word core_expected = 0xfffffe;
+  constexpr auto configure =
+      isa::opcode<isa::Opcode::movep_memory_high>()[0] | (immediate << 8U) | write;
+  constexpr auto clear = isa::opcode<isa::Opcode::bclr_port_high>()[0];
+  constexpr auto read = isa::opcode<isa::Opcode::movep_register_high>()[0] | (x0 << 8U);
+  constexpr auto output = isa::opcode<isa::Opcode::movem_effective>()[0] | (absolute << 8U) | x0;
+  for (const auto port : {peripheral_port, core_port}) {
+    const std::array program{
+        configure | port, dsp56300::word_mask, clear | (port << 8U), read | port, output, sink};
+    blofeld::vi::Shi shi;
+    blofeld::vi::DspReset reset;
+    const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+    const auto expected = port == core_port ? core_expected : peripheral_expected;
+    require(report.failure && report.failure->space == 'P' && report.failure->address == sink &&
+                report.failure->value == expected,
+            "Native priority writes, bit updates and reads retain only implemented fields");
+    const std::array reset_program{read | port, output, sink};
+    const auto after_reset = blofeld::vi::dsp::execute(reset_program, shi, reset, {});
+    require(after_reset.failure && after_reset.failure->address == sink &&
+                after_reset.failure->value == 0,
+            "A new reset instance starts with every programmable priority disabled");
+  }
+}
+
 void native_media_read(const std::filesystem::path &root) {
   namespace isa = dsp56300::isa;
   constexpr dsp56300::Word immediate = 0x34;
@@ -247,6 +281,7 @@ int main(const int argc, char **argv) try {
   require(argc == 3, "Supply artifact and fixture directories");
   native_media_read(argv[2]);
   native_clock_register();
+  native_interrupt_priorities();
   native_memory_switch();
   consecutive_receive_registers();
   reset_running_core();

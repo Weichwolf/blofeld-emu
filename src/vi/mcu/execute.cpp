@@ -3,6 +3,7 @@
 
 #include "display/port.hpp"
 #include "execution.hpp"
+#include "io/controls.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/mcu_flash.hpp"
 #include "io/sci.hpp"
@@ -95,8 +96,15 @@ public:
      Devices &devices,
      Shi &shi,
      DspReset &reset,
-     const std::stop_token &stop)
-      : memory_(memory), flash_(image), ports_(shi), devices_(devices), reset_(reset), stop_(stop) {
+     const std::stop_token &stop,
+     const Controls *controls)
+      : memory_(memory),
+        flash_(image),
+        ports_(shi),
+        devices_(devices),
+        reset_(reset),
+        stop_(stop),
+        controls_(controls) {
     // B3/B5..B7 are passive controls, with no input producer in the firmware
     // contract. Use an inactive sample while they are inputs, not a device reply.
     constexpr std::uint8_t passive_controls = 0xe8;
@@ -178,6 +186,16 @@ private:
     }
     if (at.space == Space::registers && Ports::contains(at.offset)) {
       if (at.offset == 0 && display_.reading()) { return display_.read(value, mask); }
+      constexpr std::uint16_t port_m = 0x248;
+      constexpr std::uint16_t input_m = 0x249;
+      if (at.offset == port_m || at.offset == input_m) {
+        constexpr std::uint8_t pedal_bit = 8;
+        ports_.input(
+            Port::m,
+            {.mask = pedal_bit,
+             .known = pedal_bit,
+             .value = controls_ != nullptr && controls_->pedal() ? pedal_bit : std::uint8_t{0}});
+      }
       return ports_.read(at.offset, value, mask);
     }
     if (at.space == Space::registers && at.offset >= mapping_first && at.offset <= mapping_last) {
@@ -323,6 +341,7 @@ private:
   DspReset &reset_;
   bool release_reset_ = false;
   const std::stop_token &stop_;
+  const Controls *controls_;
   cpu12::Core *core_ = nullptr;
 };
 
@@ -427,11 +446,15 @@ Dispatch prepare(cpu12::Core &core, Devices &devices, ExecutionReport &report) {
 
 }
 
-ExecutionReport execute(FlashImage &image, Shi &shi, DspReset &reset, const std::stop_token &stop) {
+ExecutionReport execute(FlashImage &image,
+                        Shi &shi,
+                        DspReset &reset,
+                        const std::stop_token &stop,
+                        const Controls *controls) {
   Memory memory(image);
   Devices devices;
   auto grants = regions(memory, devices.usb);
-  Io io(memory, image, devices, shi, reset, stop);
+  Io io(memory, image, devices, shi, reset, stop, controls);
   auto callbacks = io.callbacks();
   cpu12::Core core(cpu12::Memory::mapped(grants), &callbacks);
   io.bind(core);

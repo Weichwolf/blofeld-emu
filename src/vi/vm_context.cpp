@@ -41,7 +41,7 @@ std::array<ExecutionReport, 2> VmContext::run() {
   }
   mcu_ = std::jthread([this](const std::stop_token &stop) {
     try {
-      reports_[0] = mcu::execute(*image_, shi_, reset_, stop);
+      reports_[0] = mcu::execute(*image_, shi_, reset_, stop, &controls_);
     } catch (...) { reports_[0].exception = std::current_exception(); }
     completed_.fetch_add(1, std::memory_order_release);
     completed_.notify_one();

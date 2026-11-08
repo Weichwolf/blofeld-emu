@@ -2,6 +2,7 @@
 #include "dsp/execute.hpp"
 
 #include "dsp/clock.hpp"
+#include "dsp/interrupts.hpp"
 #include "dsp/memory.hpp"
 #include "dsp/ports.hpp"
 #include "execution.hpp"
@@ -46,6 +47,7 @@ public:
     reset_interrupted_ = false;
     once_data_.reset();
     clock_.reset(true);
+    interrupts_.reset();
     memory_.configure(0);
     ports_.reset();
     controller_.reset();
@@ -103,6 +105,9 @@ public:
       return write_port({.space = space, .address = address, .value = value}, pc);
     }
     if (space != dsp56300::Space::x) { return false; }
+    if (Interrupts::contains(address)) {
+      return interrupts_.write({.address = address, .value = value});
+    }
     if (address == Clock::address) { return clock_.write(value); }
     if (address != once_data_address) { return shi_.write({.address = address, .value = value}); }
     // DSP56300FM Rev.5, 7.2.4: OGDBR is a 24-bit output latch, readable
@@ -152,6 +157,9 @@ public:
                         request.pc);
     }
     if (request.space != dsp56300::Space::x) { return false; }
+    if (Interrupts::contains(request.address)) {
+      return interrupts_.write({.address = request.address, .value = value});
+    }
     if (request.address == Clock::address) { return clock_.write(value); }
     return shi_.write({.address = request.address, .value = value});
   }
@@ -188,6 +196,7 @@ private:
   }
 
   bool read_x(const dsp56300::Word address, dsp56300::Word &value) noexcept {
+    if (Interrupts::contains(address)) { return interrupts_.read(address, value); }
     if (address != Clock::address) { return shi_.read(address, value); }
     value = clock_.read();
     return true;
@@ -213,6 +222,7 @@ private:
   dsp56300::Core *core_ = nullptr;
   std::optional<dsp56300::Word> once_data_;
   Clock clock_;
+  Interrupts interrupts_;
   Memory memory_;
   Ports ports_;
   MemoryController controller_;

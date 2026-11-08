@@ -45,6 +45,13 @@ This deterministic VM choice for passive controls is not a claim about PCB pulls
 Active data/status inputs must come from their devices, never from this policy.
 The attached SHI SS/SCK/MOSI pull-ups supply released B1/B2/B4 input samples.
 
+PM3 samples an external pedal level, initially inactive in the VM. The MCU sends
+its raw 0/8 change event; the DSP's class-3 handler normalizes sustain and applies
+GDATA60 pedal polarity. This software contract follows both firmware paths;
+it assumes no PCB pull or physical contact type. The host must not duplicate
+the pedal event as MIDI. Controls are sampled by the MCU owner, never by mutating
+its live Core or GPIO registers from another thread.
+
 Display A/B/E writes decode complete controller transactions. The E4 latch
 delimits accesses even after firmware releases DDRE: this is a functional VM
 binding, not a recovered physical enable route. B7/B6 select, B5 selects reading

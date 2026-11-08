@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "execution.hpp"
+#include "io/controls.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/shi.hpp"
 #include "isa.hpp"
@@ -168,12 +169,43 @@ void native_display_status() {
   require(report.failure && report.failure->address == marker && report.failure->value == 0x40,
           "Native MCU stores and reads observe the LCD's actual command-derived status");
 }
+
+void native_pedal_input() {
+  namespace isa = cpu12::isa;
+  constexpr cpu12::Byte other_outputs = 0x37;
+  constexpr auto program = isa::program(isa::opcode<isa::Opcode::ldab_immediate>(),
+                                        std::array{other_outputs},
+                                        isa::opcode<isa::Opcode::stab_extended>(),
+                                        std::array<cpu12::Byte, 2>{2, 0x4a},
+                                        isa::opcode<isa::Opcode::ldab_extended>(),
+                                        std::array<cpu12::Byte, 2>{2, 0x48},
+                                        isa::opcode<isa::Opcode::stab_extended>(),
+                                        std::array<cpu12::Byte, 2>{0x30, 0});
+  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  image->known.fill(1);
+  std::ranges::copy(program, image->bytes.begin());
+  image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
+  image->bytes.back() = 0;
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  blofeld::vi::Controls controls;
+  require(!controls.pedal(), "The virtual pedal starts inactive");
+  for (const bool level : {false, true}) {
+    controls.pedal(level);
+    const auto report = blofeld::vi::mcu::execute(*image, shi, reset, {}, &controls);
+    constexpr cpu12::Address marker = 0x3000;
+    require(report.failure && report.failure->address == marker &&
+                report.failure->value == (level ? 8U : 0U),
+            "Native MCU reads sample the external pedal while retaining raw 0/8 levels");
+  }
+}
 }
 
 int main() try {
   native_boot_word();
   firmware_controls_reset();
   native_display_status();
+  native_pedal_input();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

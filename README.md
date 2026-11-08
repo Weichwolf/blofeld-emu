@@ -11,6 +11,8 @@ free-running timer capture/compare, CRG/USB clock selection, periodic interrupts
 and interrupt wakeup, SCI character/register handling, USB configuration and direct
 endpoint-buffer windows, and independent
 MCU/DSP execution threads and DSP56371 PLL register/nominal ratio handling.
+DSP interrupt-priority registers retain configuration; device interrupt delivery remains incomplete.
+The MCU samples a VM-owned pedal input; firmware retains its polarity/change handling.
 Low/high X/Y RAM uses direct native grants with initialization tracking and
 OMR-selected program-bank sharing. Optional data-ROM views borrow local contents.
 DSP GPIO and decoded page-read transactions use the profile's validated media

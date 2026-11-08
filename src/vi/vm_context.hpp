@@ -2,6 +2,7 @@
 #pragma once
 
 #include "execution.hpp"
+#include "io/controls.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/shi.hpp"
 #include "storage/flash_image.hpp"
@@ -26,12 +27,16 @@ public:
   VmContext(const VmContext &) = delete;
   VmContext &operator=(const VmContext &) = delete;
   void request_stop() noexcept;
+
+  void pedal(const bool level) noexcept { controls_.pedal(level); }
+
   [[nodiscard]] std::array<ExecutionReport, 2> run();
 
 private:
   std::unique_ptr<FlashImage> image_;
   std::vector<dsp56300::Word> boot_;
   std::unique_ptr<MediaImage> media_;
+  Controls controls_;
   Shi shi_;
   DspReset reset_;
   std::array<ExecutionReport, 2> reports_;
