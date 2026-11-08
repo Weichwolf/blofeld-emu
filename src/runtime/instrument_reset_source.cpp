@@ -31,8 +31,8 @@ void Instrument::update_u0_drive() {
   if (!config_.mcu_u0_release) { return; }
   auto &projection = control_.u0_projection;
   const auto epoch = native_->mcu.run_clock().native_epoch();
-  const auto revision = native_->mcu.bus().gpio_output_revision();
-  if (projection.epoch != epoch || projection.revision != revision) {
+  const auto revision = native_->mcu.bus().gpio_observation_revision(McuPort::u);
+  if (!revision || projection.epoch != epoch || projection.revision != revision) {
     const auto output = native_->mcu.bus().gpio_outputs(McuPort::u);
     const auto bias = native_->mcu.bus().gpio_biases(McuPort::u);
     const auto resolved = resolve_gpio_net(reset_mask,

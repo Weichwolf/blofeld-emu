@@ -84,9 +84,8 @@ McuGpio::McuGpio() {
 
 void McuGpio::reset() {
   ++output_revision_;
-  ++revision_;
-  resolved_.fill(std::nullopt);
   for (std::size_t index = 0; index < ports_.size(); ++index) {
+    invalidate(static_cast<McuPort>(index));
     const auto external = ports_[index].external;
     ports_[index] = {.latch_known = static_cast<std::uint8_t>(specs[index].initial_latch_known),
                      .pull_enable = static_cast<std::uint8_t>(specs[index].initial_pull),
@@ -109,9 +108,8 @@ void McuGpio::set_drive(const McuPort port, const PinDrive drive) {
     throw Fault("Invalid MCU GPIO external drive masks");
   }
   if (ports_[index].external != drive) {
-    ++revision_;
     ports_[index].external = drive;
-    resolved_[index].reset();
+    invalidate(port);
   }
 }
 
@@ -152,15 +150,21 @@ void McuGpio::set_function(const McuPort port, const PinFunction function) {
   }
   if (ports_[index].function != function) {
     ports_[index].function = function;
-    resolved_[index].reset();
+    invalidate(port);
     ++output_revision_;
-    ++revision_;
   }
 }
 
 std::optional<std::uint64_t> McuGpio::observation_revision(const McuPort port) const {
-  if (pads_[port_index(port)].required()) { return std::nullopt; }
-  return revision_;
+  const auto index = port_index(port);
+  if (pads_[index].required()) { return std::nullopt; }
+  return revisions_[index];
+}
+
+void McuGpio::invalidate(const McuPort port) {
+  const auto index = port_index(port);
+  ++revisions_[index];
+  resolved_[index].reset();
 }
 
 std::uint8_t McuGpio::read_pad(const McuPort port, const std::uint8_t mask) const {
@@ -362,7 +366,6 @@ std::uint8_t McuGpio::read_masked(const MaskedByteRead access) const {
 }
 
 void McuGpio::write(const ByteWrite write) {
-  resolved_.fill(std::nullopt);
   const auto offset = write.address;
   const auto value = write.value;
   if (offset == hc12::pear) {
@@ -370,19 +373,21 @@ void McuGpio::write(const ByteWrite write) {
       throw Fault("Unimplemented MCU port E alternate function");
     }
     ++output_revision_;
-    ++revision_;
+    invalidate(McuPort::e);
     assignment_e_ = value;
     return;
   }
   if (offset == hc12::pucr) {
     ++output_revision_;
-    ++revision_;
+    for (const auto port : std::array{McuPort::a, McuPort::b, McuPort::e}) { invalidate(port); }
     pull_control_ = static_cast<std::uint8_t>(value & core_pull_mask);
     return;
   }
   if (offset == hc12::modrr) {
     ++output_revision_;
-    ++revision_;
+    for (std::size_t index = 0; index < ports_.size(); ++index) {
+      invalidate(static_cast<McuPort>(index));
+    }
     routing_ = static_cast<std::uint8_t>(value & routing_mask);
     return;
   }
@@ -391,7 +396,7 @@ void McuGpio::write(const ByteWrite write) {
   const auto index = port_index(reg->port);
   if (reg->kind != 1) {
     ++output_revision_;
-    ++revision_;
+    invalidate(reg->port);
   }
   auto &state = ports_[index];
   const auto masked = static_cast<std::uint8_t>(value & specs[index].valid);

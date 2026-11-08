@@ -73,6 +73,7 @@ public:
   // Changes to local output ownership, latches or biases; peer inputs are excluded.
   [[nodiscard]] std::uint64_t output_revision() const noexcept { return output_revision_; }
 
+  // Port-scoped state token; global controls may invalidate multiple ports.
   // No token is offered for an externally sampled owner binding.
   [[nodiscard]] std::optional<std::uint64_t> observation_revision(McuPort port) const;
 
@@ -102,11 +103,12 @@ private:
   [[nodiscard]] unsigned pull_enable(McuPort port) const;
   [[nodiscard]] std::uint8_t data(McuPort port, std::uint8_t mask) const;
   [[nodiscard]] std::uint8_t tied_low(McuPort port) const;
+  void invalidate(McuPort port);
   std::array<PortState, port_count> ports_{};
   std::array<GpioPadBinding, port_count> pads_{};
   mutable std::array<std::optional<PinSample>, port_count> resolved_{};
   std::uint64_t output_revision_ = 0;
-  std::uint64_t revision_ = 0;
+  std::array<std::uint64_t, port_count> revisions_{};
   std::uint8_t routing_ = 0;
   std::uint8_t assignment_e_ = 0;
   std::uint8_t pull_control_ = 0;

@@ -145,6 +145,38 @@ void input_changes_and_destination_replacement() {
           "Replacing the destination drive cannot suppress subsequent source projection");
 }
 
+void unrelated_port_writes() {
+  constexpr auto prefix = isa::program(isa::opcode<Opcode::ldaa_immediate>(),
+                                       std::array<Byte, 1>{other_u_outputs},
+                                       isa::opcode<Opcode::staa_extended>(),
+                                       address(direction_u));
+  constexpr auto program = isa::program(prefix,
+                                        isa::opcode<Opcode::ldaa_extended>(),
+                                        address(reg::porte),
+                                        isa::opcode<Opcode::staa_extended>(),
+                                        address(source_value),
+                                        isa::opcode<Opcode::ldaa_extended>(),
+                                        address(reg::ptu),
+                                        isa::opcode<Opcode::staa_extended>(),
+                                        address(reset_value),
+                                        isa::opcode<Opcode::staa_extended>(),
+                                        address(reg::porta),
+                                        isa::opcode<Opcode::staa_extended>(),
+                                        address(reg::portb),
+                                        isa::opcode<Opcode::jmp_extended>(),
+                                        address(entry + prefix.size()));
+  auto config = configuration();
+  config.events = {
+      {.ticks = 2 * millisecond, .port = McuPort::e, .drive = {.mask = byte_mask, .levels = 2}}};
+  Fixture fixture(program, config);
+  fixture.until(millisecond);
+  require(fixture.read(source_value) == 14 && fixture.read(reset_value) == 1,
+          "Unrelated A/B writes preserve the real loopback and reset input observations");
+  fixture.until(3 * millisecond);
+  require(fixture.read(source_value) == 2 && fixture.read(reset_value) == 1,
+          "Interleaved A/B writes cannot conceal a changed E source from native reads");
+}
+
 void u0_output_release() {
   constexpr auto prefix = isa::program(isa::opcode<Opcode::ldaa_immediate>(),
                                        std::array<Byte, 1>{1},
@@ -209,6 +241,7 @@ void feedback_preserves_contention() {
 int main() {
   try {
     input_changes_and_destination_replacement();
+    unrelated_port_writes();
     u0_output_release();
     feedback_preserves_contention();
     std::cout

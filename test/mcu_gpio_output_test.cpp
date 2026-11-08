@@ -6,9 +6,11 @@
 #include "runtime/gpio_pads.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -141,9 +143,11 @@ void output_publication_revision() {
                               blofeld::ByteWrite{.address = reg::modrr, .value = 3}};
   for (const auto write : writes) {
     const auto before = gpio.output_revision();
-    const auto sampled = gpio.observation_revision(McuPort::q);
+    const auto port =
+        write.address == reg::pear || write.address == reg::pucr ? McuPort::e : McuPort::q;
+    const auto sampled = gpio.observation_revision(port);
     gpio.write(write);
-    require(gpio.output_revision() != before && gpio.observation_revision(McuPort::q) != sampled,
+    require(gpio.output_revision() != before && gpio.observation_revision(port) != sampled,
             "Latch, direction, drive, bias and routing writes invalidate local publication");
   }
   const auto before_reset = gpio.output_revision();
@@ -224,6 +228,67 @@ void repeated_pad_observations() {
   expect(0, 0);
 }
 
+void port_observation_isolation() {
+  blofeld::McuGpio gpio;
+  constexpr std::array ports{McuPort::a, McuPort::b, McuPort::e, McuPort::q, McuPort::u};
+  constexpr std::array data{reg::porta, reg::portb, reg::porte, reg::ptq, reg::ptu};
+  constexpr std::array<unsigned, 5> direction{
+      reg::ddra, reg::ddrb, reg::ddre, reg::ddrq, reg::ptu + 2};
+  constexpr std::uint8_t mask = 4;
+  for (const auto port : ports) { gpio.set_drive(port, {.floating = mask}); }
+  for (std::size_t target = 0; target < ports.size(); ++target) {
+    std::array<std::optional<std::uint64_t>, ports.size()> tokens;
+    std::array<blofeld::PinSample, ports.size()> samples;
+    for (std::size_t index = 0; index < ports.size(); ++index) {
+      tokens[index] = gpio.observation_revision(ports[index]);
+      samples[index] = gpio.observe_pads(ports[index], mask);
+    }
+    gpio.write({.address = static_cast<std::uint16_t>(data[target]), .value = mask});
+    gpio.write({.address = static_cast<std::uint16_t>(direction[target]), .value = mask});
+    for (std::size_t index = 0; index < ports.size(); ++index) {
+      const auto observed = gpio.observe_pads(ports[index], mask);
+      require((gpio.observation_revision(ports[index]) != tokens[index]) == (index == target),
+              "A port write invalidates only observers that depend on the affected port");
+      require(observed.known == (index == target ? mask : samples[index].known) &&
+                  observed.levels == (index == target ? mask : samples[index].levels),
+              "Native register writes change their actual port value without disturbing others");
+    }
+  }
+  const auto e = gpio.observation_revision(McuPort::e);
+  gpio.set_drive(McuPort::q, {.floating = lower});
+  gpio.set_function(McuPort::q, {.inputs = lower});
+  require(gpio.observation_revision(McuPort::e) == e,
+          "Peer and peripheral changes on Q leave unrelated E observations valid");
+}
+
+void global_pull_revisions() {
+  blofeld::McuGpio gpio;
+  constexpr std::array ports{McuPort::a, McuPort::b, McuPort::e, McuPort::q, McuPort::u};
+  constexpr std::uint8_t mask = 4;
+  std::array<std::optional<std::uint64_t>, ports.size()> tokens;
+  for (std::size_t index = 0; index < ports.size(); ++index) {
+    gpio.set_drive(ports[index], {.floating = mask});
+    tokens[index] = gpio.observation_revision(ports[index]);
+    const auto sample = gpio.observe_pads(ports[index], mask);
+    require(sample.known == (ports[index] == McuPort::e ? mask : 0),
+            "Only E has a reset pull on the selected bit");
+  }
+  gpio.write({.address = reg::pucr, .value = 3});
+  for (std::size_t index = 0; index < ports.size(); ++index) {
+    const bool affected = index < 3;
+    const auto sample = gpio.observe_pads(ports[index], mask);
+    require((gpio.observation_revision(ports[index]) != tokens[index]) == affected,
+            "The core pull register invalidates A, B and E while retaining Q and U tokens");
+    require(sample.known == (index < 2 ? mask : 0) && sample.levels == sample.known,
+            "Enabling A/B and disabling E pulls updates all previously observed values");
+  }
+  const auto u = gpio.observation_revision(McuPort::u);
+  const auto e = gpio.observation_revision(McuPort::e);
+  gpio.write({.address = reg::pear, .value = 0});
+  require(gpio.observation_revision(McuPort::u) == u && gpio.observation_revision(McuPort::e) != e,
+          "Port E assignment never invalidates the unrelated U reset input");
+}
+
 void masked_contention_and_global_pulls() {
   blofeld::McuGpio gpio;
   gpio.write({.address = reg::ptq, .value = 0});
@@ -296,6 +361,8 @@ int main() {
     output_publication_revision();
     observation_revisions();
     repeated_pad_observations();
+    port_observation_isolation();
+    global_pull_revisions();
     masked_contention_and_global_pulls();
     board_observation();
     std::cout << "Local MCU drivers remain separate from peer levels, weak pulls and pad faults.\n";
