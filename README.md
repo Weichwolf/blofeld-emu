@@ -16,6 +16,9 @@ DMA registers, A–E counters and address modes handle requested transfers and s
 ESAI_1 transmit registers bind DMA writes to actual words; explicit slot events
 preserve masks, word precision, empty requests and retained-data underruns.
 Its instrument clock source, receive path and DMA interrupt admission remain incomplete.
+DAX register access and DMA writes retain the distinct XADR/channel buffers,
+non-audio metadata, block position, refill requests and observed-underrun clearing.
+Its subframe clock source and interrupt delivery are not yet connected to execution.
 The MCU samples a VM-owned pedal input; firmware retains its polarity/change handling.
 Low/high X/Y RAM uses direct native grants with initialization tracking and
 OMR-selected program-bank sharing. Optional data-ROM views borrow local contents.

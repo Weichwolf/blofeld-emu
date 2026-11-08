@@ -193,6 +193,47 @@ void native_dma_esai_write() {
           "Native software DMA completes only after the connected ESAI TX register accepts data");
 }
 
+void native_dma_dax_write() {
+  namespace isa = dsp56300::isa;
+  using dsp56300::Word;
+  constexpr Word immediate = 0x34;
+  constexpr Word absolute = 0x30;
+  constexpr Word load = 0x8000;
+  constexpr Word x0 = 4;
+  constexpr Word marker = 0xc000;
+  constexpr Word done_port = 0x34;
+  constexpr Word all_done = 0x3f;
+  constexpr auto literal =
+      isa::opcode<isa::Opcode::move_x_effective>()[0] | (immediate << 8U) | load;
+  constexpr auto store = isa::opcode<isa::Opcode::move_x_effective>()[0] | (absolute << 8U);
+  using Write = blofeld::vi::dsp::Ports::Write;
+  constexpr std::array configuration{Write{.address = 0xffffd1, .value = 0x9400},
+                                     Write{.address = 0xffffd2, .value = 0x123456},
+                                     Write{.address = 0xffffd3, .value = 0xfedcba},
+                                     Write{.address = 0xffffd0, .value = 8},
+                                     Write{.address = 0xffffd7, .value = 3},
+                                     Write{.address = 0xffffd6, .value = 3},
+                                     Write{.address = 0x40, .value = 0x345678},
+                                     Write{.address = 0xffffef, .value = 0x40},
+                                     Write{.address = 0xffffee, .value = 0xffffd2},
+                                     Write{.address = 0xffffed, .value = 0},
+                                     Write{.address = 0xffffec, .value = 0x980240}};
+  std::vector<Word> program;
+  for (const auto access : configuration) {
+    const std::array words{literal, access.value, store, access.address};
+    program.insert(program.end(), words.begin(), words.end());
+  }
+  program.push_back(isa::opcode<isa::Opcode::movep_register_high>()[0] | (x0 << 8U) | done_port);
+  program.push_back(isa::opcode<isa::Opcode::movem_effective>()[0] | (absolute << 8U) | x0);
+  program.push_back(marker);
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+  require(report.failure && report.failure->space == 'P' && report.failure->address == marker &&
+              report.failure->value == all_done,
+          "Native writes bind DAX and Port D, then software DMA transfers an actual XADR word");
+}
+
 void native_transmit_registers() {
   namespace isa = dsp56300::isa;
   constexpr dsp56300::Word immediate = 0x34;
@@ -432,6 +473,7 @@ int main(const int argc, char **argv) try {
   native_memory_switch();
   native_dma_program_write();
   native_dma_esai_write();
+  native_dma_dax_write();
   consecutive_receive_registers();
   reset_running_core();
 } catch (const std::exception &error) {

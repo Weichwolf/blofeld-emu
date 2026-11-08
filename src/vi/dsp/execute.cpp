@@ -2,6 +2,7 @@
 #include "dsp/execute.hpp"
 
 #include "dsp/clock.hpp"
+#include "dsp/dax.hpp"
 #include "dsp/dma.hpp"
 #include "dsp/esai.hpp"
 #include "dsp/interrupts.hpp"
@@ -28,8 +29,10 @@ constexpr dsp56300::Word reset_status = 0xc00300;
 constexpr dsp56300::Word reset_mode = 0x305;
 constexpr dsp56300::Word once_data_address = 0xfffffc;
 constexpr dsp56300::Word dma_status_address = 0xfffff4;
+constexpr dsp56300::Word dax_status_address = 0xffffd4;
 constexpr dsp56300::Word reserved_x_address = 0xffff80;
 constexpr unsigned esai1_transmit_request = 22;
+constexpr unsigned dax_request = 10;
 
 struct BitAccess {
   dsp56300::Space space;
@@ -56,6 +59,7 @@ public:
     interrupts_.reset();
     dma_.reset();
     esai_1_.reset();
+    dax_.reset();
     memory_.configure(0);
     ports_.reset();
     controller_.reset();
@@ -70,6 +74,7 @@ public:
       return false;
     }
     if (esai_1_.take_request()) { static_cast<void>(dma_.trigger(esai1_transmit_request)); }
+    if (dax_.take_request()) { static_cast<void>(dma_.trigger(dax_request)); }
     if (!dma_.service(
             dma_pc_,
             [this](const Dma::Address access, dsp56300::Word &value) {
@@ -84,6 +89,15 @@ public:
     if (program_changed_) {
       revision_ ^= 1U;
       program_changed_ = false;
+    }
+    if (const auto vector = dax_.interrupt()) {
+      report.failure = Failure{.operation = Access::execute,
+                               .pc = core_->registers().pc,
+                               .address = dax_status_address,
+                               .code = *vector,
+                               .space = 'X',
+                               .reason = "DAX interrupt delivery is not bound"};
+      return false;
     }
     if (dma_.interrupts() == 0) { return true; }
     report.failure = Failure{.operation = Access::execute,
@@ -148,6 +162,7 @@ public:
     // DSP56371UM table 3-7 reserves X:$FFFF80. The original audio
     // initializer writes it; discard the write without creating a readable latch.
     if (address == reserved_x_address) { return true; }
+    if (Dax::contains(address)) { return dax_.write({.address = address, .value = value}); }
     if (Dma::contains(address)) { return write_dma({.address = address, .value = value}, pc); }
     if (Interrupts::contains(address)) {
       return interrupts_.write({.address = address, .value = value});
@@ -209,6 +224,9 @@ public:
       return esai_1_.write({.address = request.address, .value = value});
     }
     if (request.space != dsp56300::Space::x) { return false; }
+    if (Dax::contains(request.address)) {
+      return dax_.write({.address = request.address, .value = value});
+    }
     if (Dma::contains(request.address)) {
       return write_dma({.address = request.address, .value = value}, request.pc);
     }
@@ -251,6 +269,9 @@ private:
       if (access.space == dsp56300::Space::y && Esai::data_register(access.address)) {
         return esai_1_.connected() && esai_1_.write({.address = access.address, .value = value});
       }
+      if (access.space == dsp56300::Space::x && Dax::data_register(access.address)) {
+        return dax_.connected() && dax_.write({.address = access.address, .value = value});
+      }
       return access.space == dsp56300::Space::x && access.address == shi_transmit &&
              shi_.write({.address = access.address, .value = value});
     }
@@ -276,6 +297,7 @@ private:
 
   bool update_ports() noexcept {
     esai_1_.connected(ports_.peripheral(Port::e) != 0);
+    dax_.connected(ports_.peripheral(Port::d) != 0);
     constexpr dsp56300::Word control_mask = 0xf00;
     constexpr dsp56300::Word data_mask = 0xff;
     const auto controls = ports_.output(Port::c);
@@ -293,6 +315,7 @@ private:
   }
 
   bool read_x(const dsp56300::Word address, dsp56300::Word &value) noexcept {
+    if (Dax::contains(address)) { return dax_.read(address, value); }
     if (Dma::contains(address)) { return dma_.read(address, value); }
     if (Interrupts::contains(address)) { return interrupts_.read(address, value); }
     if (address != Clock::address) { return shi_.read(address, value); }
@@ -326,6 +349,7 @@ private:
   Interrupts interrupts_;
   Dma dma_;
   Esai esai_1_;
+  Dax dax_;
   Memory memory_;
   Ports ports_;
   MemoryController controller_;
