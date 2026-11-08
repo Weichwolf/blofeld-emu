@@ -5,8 +5,9 @@ Blofeld firmware VM project using the independent
 [dsp56300](https://github.com/Weichwolf/dsp56300) JIT cores.
 
 The current source contains the LCD register/data contract, image capture,
-atomic PBM/text publication and GTK display viewer. There is currently no
-playable instrument executable. Complete instrument requirements are in
+atomic PBM/text publication, GTK viewer and a validated 1.25 update-container
+loader. There is currently no playable instrument executable. Complete
+instrument requirements are in
 [OBJECTIVE.md](OBJECTIVE.md) and [ACCEPTANCE.tsv](ACCEPTANCE.tsv).
 
 - `src/vi/`: instrument behavior and firmware device contracts.
@@ -22,6 +23,7 @@ Requires Linux, LLVM 19, CMake 3.25+, Ninja, Python 3 and Git. Core checkouts mu
 `BLOFELD_CPU12_ROOT` and `BLOFELD_DSP56300_ROOT`.
 
 ```sh
+python3 tools/dependencies.py --fetch --component zlib
 cmake --preset release
 cmake --build --preset release --target quality
 ```

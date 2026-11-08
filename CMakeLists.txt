@@ -28,17 +28,29 @@ set(CPU12_BUILD_TESTING OFF)
 set(DSP56300_BUILD_TESTING OFF)
 include(cmake/Cpu12.cmake)
 include(cmake/Dsp56300.cmake)
+include(cmake/Zlib.cmake)
 set(CMAKE_CXX_CLANG_TIDY "${BLOFELD_CLANG_TIDY};--warnings-as-errors=*")
 
 add_library(blofeld_vi_display src/vi/display/st7565.cpp src/vi/display/lcd_image.cpp)
 target_include_directories(blofeld_vi_display PUBLIC src/vi)
 target_link_libraries(blofeld_vi_display PUBLIC blofeld_quality)
-add_library(blofeld_host_files src/host/files/directory.cpp)
+add_library(blofeld_host_files src/host/files/directory.cpp src/host/files/read.cpp)
 target_include_directories(blofeld_host_files PUBLIC src/host)
 target_link_libraries(blofeld_host_files PUBLIC blofeld_quality)
 add_library(blofeld_app_display src/app/display/publication.cpp)
 target_include_directories(blofeld_app_display PUBLIC src/app)
 target_link_libraries(blofeld_app_display PUBLIC blofeld_vi_display blofeld_host_files)
+
+add_library(blofeld_host_archive src/host/archive/zip.cpp)
+target_include_directories(blofeld_host_archive PUBLIC src/host)
+target_link_libraries(blofeld_host_archive PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB)
+add_library(blofeld_vi_firmware src/vi/storage/firmware.cpp src/vi/storage/update_midi.cpp)
+target_include_directories(blofeld_vi_firmware PUBLIC src/vi)
+target_link_libraries(blofeld_vi_firmware PUBLIC blofeld_quality)
+add_library(blofeld_app_firmware src/app/firmware.cpp)
+target_include_directories(blofeld_app_firmware PUBLIC src/app)
+target_link_libraries(blofeld_app_firmware PUBLIC
+  blofeld_vi_firmware blofeld_host_files blofeld_host_archive)
 
 file(GLOB_RECURSE BLOFELD_FORMAT_SOURCES CONFIGURE_DEPENDS
   "src/*.hpp" "src/*.cpp" "test/*.hpp" "test/*.cpp")
@@ -49,7 +61,7 @@ if(BUILD_TESTING)
   function(blofeld_unit name source library)
     add_executable(${name} ${source})
     target_link_libraries(${name} PRIVATE ${library})
-    add_test(NAME ${name} COMMAND ${name} "${CMAKE_CURRENT_BINARY_DIR}/Testing/${name}")
+    add_test(NAME ${name} COMMAND ${name} "${CMAKE_CURRENT_BINARY_DIR}/Testing/${name}" ${ARGN})
     set_tests_properties(${name} PROPERTIES TIMEOUT 10)
     set_property(GLOBAL APPEND PROPERTY BLOFELD_UNIT_TARGETS ${name})
   endfunction()
@@ -57,6 +69,25 @@ if(BUILD_TESTING)
   blofeld_unit(vi-lcd-image-test test/vi/display/lcd_image_test.cpp blofeld_vi_display)
   blofeld_unit(host-directory-test test/host/files/directory_test.cpp blofeld_host_files)
   blofeld_unit(app-display-test test/app/display/publication_test.cpp blofeld_app_display)
+  blofeld_unit(host-read-test test/host/files/read_test.cpp blofeld_host_files)
+  set(blofeld_unit_inputs "${CMAKE_CURRENT_BINARY_DIR}/generated/unit-inputs")
+  add_custom_command(OUTPUT "${blofeld_unit_inputs}/zip.done" "${blofeld_unit_inputs}/firmware.done"
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/test/host/archive/fixtures.py"
+      "${blofeld_unit_inputs}"
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/test/vi/storage/fixtures.py"
+      "${blofeld_unit_inputs}"
+    DEPENDS test/host/archive/fixtures.py test/vi/storage/fixtures.py VERBATIM)
+  add_custom_target(unit-inputs
+    DEPENDS "${blofeld_unit_inputs}/zip.done" "${blofeld_unit_inputs}/firmware.done")
+  blofeld_unit(host-zip-test test/host/archive/zip_test.cpp
+    "blofeld_host_archive;blofeld_host_files" "${blofeld_unit_inputs}")
+  blofeld_unit(vi-firmware-test test/vi/storage/firmware_test.cpp
+    blofeld_vi_firmware "${blofeld_unit_inputs}")
+  blofeld_unit(app-firmware-test test/app/firmware_test.cpp
+    blofeld_app_firmware "${blofeld_unit_inputs}")
+  add_dependencies(host-zip-test unit-inputs)
+  add_dependencies(vi-firmware-test unit-inputs)
+  add_dependencies(app-firmware-test unit-inputs)
   add_test(NAME app-ui-frame-test COMMAND "${Python3_EXECUTABLE}" -B
     "${CMAKE_CURRENT_SOURCE_DIR}/test/app/ui/frame_test.py" "${CMAKE_CURRENT_BINARY_DIR}/Testing")
   set_tests_properties(app-ui-frame-test PROPERTIES TIMEOUT 10)
