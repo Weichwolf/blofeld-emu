@@ -152,7 +152,7 @@ std::optional<std::uint64_t> PeerPort::dsp_interrupt(const bool edge) const noex
 }
 
 std::optional<std::uint64_t> PeerPort::mcu_interrupt() const noexcept {
-  return to_mcu_.pending(true);
+  return to_mcu_.pending(false);
 }
 
 bool PeerPort::acknowledge_dsp(const std::uint64_t observed) noexcept {

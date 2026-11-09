@@ -52,14 +52,15 @@ void requests() {
   require(peer.acknowledge_dsp(2) && !peer.dsp_interrupt(true) && peer.dsp_interrupt(false) == 2,
           "An accepted edge does not release the actual level");
   require(peer.dsp_ready(true) && peer.mcu_interrupt() == 1 && peer.dsp_ready(false) &&
-              peer.mcu_interrupt() == 1,
-          "A completed DSP-ready pulse remains available to its MCU owner");
+              !peer.mcu_interrupt(),
+          "Level-sensitive XIRQ does not retain an ended pulse behind the MCU mask");
   peer.reset_dsp();
   require(!peer.mcu_interrupt() && !peer.dsp_interrupt(true) && peer.dsp_interrupt(false) == 2,
           "Reset cancels stale edge requests without changing the MCU's input level");
   require(peer.dsp_ready(true) && peer.mcu_interrupt() == 2 && peer.acknowledge_mcu(1) &&
-              peer.mcu_interrupt() == 2 && peer.acknowledge_mcu(2) && !peer.mcu_interrupt(),
-          "The next DSP epoch retains monotonic, individually accepted notifications");
+              peer.mcu_interrupt() == 2 && peer.acknowledge_mcu(2) && peer.mcu_interrupt() == 2 &&
+              peer.dsp_ready(false) && !peer.mcu_interrupt(),
+          "Native interrupt acceptance cannot clear an asserted XIRQ source; release clears it");
 }
 
 void concurrent_exchange() {
@@ -138,7 +139,7 @@ void fixed_reply() {
             "A complete MCU block read receives the exact original DSP write sequence");
   }
   require(peer.read_dsp_data(byte_mask) == PeerPort::Sample{} && peer.error() == nullptr &&
-              peer.dsp_interrupt(true) == 1 && peer.mcu_interrupt() == 1,
+              peer.dsp_interrupt(true) == 1 && !peer.mcu_interrupt(),
           "The block ends at its fixed length without manufacturing data or interrupt acceptance");
 }
 

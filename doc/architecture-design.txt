@@ -57,8 +57,10 @@ The attached SHI SS/SCK/MOSI pull-ups supply released B1/B2/B4 input samples.
 The runtime peer interface shares the actual low-byte MCU Port Q and DSP Port C
 register views, including direction and unknown bits. Raw reads retain the current
 value. Active-low MCU J0 posts DSP IRQA using its configured edge/level mode;
-DSP E9 posts MCU XIRQ. Only accepted native interrupt entry acknowledges an edge,
-and an older acknowledgement cannot discard a newer request. DSP reset releases
+DSP E9 asserts MCU XIRQ, which is level-sensitive (9S12UF32DGV1 section 2.4.24).
+An ended E9 pulse is not retained behind the MCU X mask. Only accepted native
+interrupt entry acknowledges an IRQA edge, and an older acknowledgement cannot
+discard a newer request. Admission does not clear an asserted level. DSP reset releases
 its own outputs and cancels stale requests without resetting generation counters.
 The firmware package probe selects the 100-pin route when E3 follows driven E2;
 the VM supplies that profile input because runtime Port Q requires this route.
