@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <mutex>
@@ -24,7 +25,9 @@ public:
 private:
   mutable std::mutex mutex_;
   std::condition_variable_any changed_;
-  std::uint64_t mcu_ = 0, dsp_ = 0, origin_ = 0;
+  std::atomic<std::uint64_t> mcu_{0};
+  std::atomic<bool> waiting_{false};
+  std::uint64_t dsp_ = 0, origin_ = 0;
   bool pending_ = false, granted_ = false, held_ = false;
 };
 }

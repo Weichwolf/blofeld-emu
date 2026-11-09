@@ -75,11 +75,47 @@ void reset_and_cancellation() {
   require(!time.enter_mcu(reset_time, stop.get_token()),
           "Cancellation never grants a shared access or advances the source");
 }
+
+void publication_wakeups() {
+  ExecutionTime time;
+  constexpr std::uint64_t count = 512;
+  constexpr std::uint64_t spacing = 100;
+  std::atomic<std::uint64_t> acknowledged{0};
+  bool ordered = true;
+  std::jthread dsp([&](const std::stop_token &stop) {
+    std::uint64_t now = 0;
+    for (std::uint64_t expected = 1; expected <= count; ++expected) {
+      const auto next = time.dsp_limit(now, stop);
+      if (!next) {
+        ordered = false;
+        return;
+      }
+      ordered = ordered && *next == expected * spacing;
+      now = *next;
+      acknowledged.store(expected, std::memory_order_release);
+      acknowledged.notify_one();
+    }
+  });
+  for (std::uint64_t value = 1; value <= count; ++value) {
+    require(time.publish_mcu(value * spacing) && time.publish_mcu(value * spacing),
+            "A new frontier and its repeated publication retain actual device time");
+    auto observed = acknowledged.load(std::memory_order_acquire);
+    while (observed < value) {
+      acknowledged.wait(observed, std::memory_order_acquire);
+      observed = acknowledged.load(std::memory_order_acquire);
+    }
+  }
+  dsp.join();
+  require(ordered && acknowledged.load() == count,
+          "Publication racing wait registration cannot lose a wakeup or reorder a grant");
+  require(!time.publish_mcu(0), "Rejected backwards progress retains the final frontier");
+}
 }
 
 int main() try {
   ordered_transactions();
   reset_and_cancellation();
+  publication_wakeups();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';
