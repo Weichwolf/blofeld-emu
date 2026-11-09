@@ -10,6 +10,7 @@
 #include <exception>
 #include <filesystem>
 #include <iostream>
+#include <semaphore>
 #include <span>
 #include <stdexcept>
 #include <stop_token>
@@ -64,6 +65,56 @@ void successful(const std::filesystem::path &root) {
   require(wav.size() == bytes && std::ranges::equal(std::span(wav).subspan(header_bytes), payload),
           "Original PCM reaches the WAV without gain, host synthesis or float conversion");
   rejects<std::logic_error>([&] { consumer.finish(); }, "Do not finalize the same render twice");
+}
+
+void selected_window(const std::filesystem::path &root) {
+  const auto path = root / "window.wav";
+  WavConsumer consumer(path, rate, true);
+  const auto output = consumer.output();
+  require(!consumer.has_pcm() && !consumer.complete(), "No readiness before actual original PCM");
+  require(output.write(output.owner, initial, {}) && consumer.frames() == 0 && consumer.has_pcm(),
+          "Validate startup PCM without writing it into the musical file");
+  rejects<std::logic_error>([&] { consumer.begin_at(1); }, "Reject a retroactive musical origin");
+  constexpr std::uint64_t begin = 3000;
+  constexpr std::uint64_t end = 5000;
+  consumer.begin_at(begin);
+  rejects<std::logic_error>([&] { consumer.begin_at(begin); }, "Select musical origin only once");
+  rejects<std::logic_error>([&] { consumer.end_at(begin); }, "Completion must follow the origin");
+  consumer.end_at(end);
+  auto block = initial;
+  block.first_frame = 2;
+  constexpr std::array<std::uint64_t, 2> next{4081, 5442};
+  block.ticks = next;
+  require(output.write(output.owner, block, {}) && consumer.frames() == 1 && consumer.complete(),
+          "Select only original frames inside the half-open musical interval");
+  block.first_frame = 4;
+  constexpr std::array<std::uint64_t, 2> after{6802, 8163};
+  block.ticks = after;
+  require(output.write(output.owner, block, {}) && consumer.frames() == 1,
+          "Shutdown work never duplicates or appends post-boundary frames");
+  output.close(output.owner);
+  consumer.finish();
+  const auto data = blofeld::host::read_file(path, header_bytes + 6);
+  constexpr std::array<std::uint8_t, 6> expected{0xff, 0xff, 0xff, 1, 0, 0};
+  require(data.size() == header_bytes + 6 &&
+              std::ranges::equal(std::span(data).subspan(header_bytes), expected),
+          "Boundary clipping keeps the exact selected stereo samples");
+}
+
+void incomplete_window(const std::filesystem::path &root) {
+  const auto path = root / "incomplete-window.wav";
+  {
+    WavConsumer consumer(path, rate, true);
+    const auto output = consumer.output();
+    consumer.begin_at(1);
+    constexpr std::uint64_t end = 5000;
+    consumer.end_at(end);
+    require(output.write(output.owner, initial, {}), "Accept valid unfinished musical frames");
+    output.close(output.owner);
+    rejects<std::logic_error>([&] { consumer.finish(); },
+                              "Never publish a truncated render window");
+  }
+  require(!std::filesystem::exists(path), "Incomplete musical output remains unpublished");
 }
 
 void quantized_timing(const std::filesystem::path &root) {
@@ -165,6 +216,45 @@ void lifecycle(const std::filesystem::path &root) {
           "Empty and cancelled renders do not publish output");
 }
 
+void window_handoff(const std::filesystem::path &root) {
+  WavConsumer consumer(root / "window-handoff.wav", rate, true);
+  const auto output = consumer.output();
+  std::binary_semaphore ready{0};
+  std::binary_semaphore admitted{0};
+  std::exception_ptr failure;
+  std::jthread producer([&](const std::stop_token &stop) {
+    const std::stop_callback cancelled(stop, [&] { admitted.release(); });
+    try {
+      require(output.write(output.owner, initial, {}), "Original owner submits startup PCM");
+      ready.release();
+      admitted.acquire();
+      if (stop.stop_requested()) { return; }
+      auto next = initial;
+      next.first_frame = frames.size();
+      constexpr std::array<std::uint64_t, 2> ticks{4081, 5442};
+      next.ticks = ticks;
+      require(output.write(output.owner, next, {}),
+              "Original owner observes admitted render window");
+      output.close(output.owner);
+    } catch (...) {
+      failure = std::current_exception();
+      ready.release();
+    }
+  });
+  ready.acquire();
+  require(consumer.has_pcm(), "Control observes actual PCM without inspecting owner state");
+  constexpr std::uint64_t begin = 3000;
+  constexpr std::uint64_t end = 5000;
+  consumer.begin_at(begin);
+  consumer.end_at(end);
+  admitted.release();
+  producer.join();
+  if (failure) { std::rethrow_exception(failure); }
+  require(consumer.complete() && consumer.frames() == 1,
+          "One original frame crosses the owner handoff");
+  consumer.finish();
+}
+
 void owner_handoff(const std::filesystem::path &root) {
   WavConsumer consumer(root / "handoff.wav", rate);
   const auto output = consumer.output();
@@ -196,9 +286,12 @@ int main(const int argc, char **argv) try {
   const auto root = std::filesystem::path(argv[1]) / std::to_string(::getpid());
   require(std::filesystem::create_directories(root), "Create owned unit directory");
   successful(root);
+  selected_window(root);
+  incomplete_window(root);
   quantized_timing(root);
   invalid_blocks(root);
   lifecycle(root);
+  window_handoff(root);
   owner_handoff(root);
   std::filesystem::remove_all(root);
 } catch (const std::exception &error) {

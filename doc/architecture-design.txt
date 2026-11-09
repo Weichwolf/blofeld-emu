@@ -374,9 +374,17 @@ rounding up to the first tick at or after the event. Keep all meta payloads,
 including routing and SMPTE-offset labels, separate from transmittable bytes.
 Chunk extensions are retained and alien chunks skipped by length. Truncated or
 changed sources cannot finish cleanly. Primary format reference: midi-references.json.
-Application binding still must establish readiness and the musical origin,
-bound lookahead, honor input admission, route track metadata and validate render
-completion/release tails before WAV finalization.
+Offline application binding probes universal identity through actual DIN input
+and consumes the original reply alongside valid PCM. Startup grants bounded MIDI
+windows without advancing guest clocks; their committed frontier selects the
+musical origin. The file producer preserves the exclusive EOF barrier until the
+WAV end point (serialized file end plus selected tail) is published. Only then is
+input released. The PCM owner validates the entire original timeline, discards
+startup frames, clips the selected half-open interval and requests VM stop at its
+end. Join both execution owners and the input producer before checking faults,
+completion and finalizing WAV. Cancellation or incomplete output never publishes.
+Host audio devices are absent from offline composition. Live routing/audio-aligned
+mapping, general metadata routing and full instrument acceptance remain separate.
 
 DAX uploads complete words from XADR and its two channel buffers. Both audio
 addresses share alternating A/B ownership; metadata is captured at frame start.
