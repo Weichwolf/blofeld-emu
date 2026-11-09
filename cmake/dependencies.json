@@ -29,7 +29,10 @@
     "bytes": 1566556,
     "sha256": "053794d6671a3e397d849e478a80b82a63cb9d8ca296bd35b73317bb5ceb87b5",
     "license": "LGPL-2.1-or-later (client); see upstream LICENSE for individual file notices",
-    "patch": "patches/pulseaudio-callback-types.patch"
+    "patches": [
+      "patches/pulseaudio-callback-types.patch",
+      "patches/pulseaudio-timing-index.patch"
+    ]
   },
   "libsndfile": {
     "version": "1.2.2",

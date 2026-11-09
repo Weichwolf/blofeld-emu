@@ -35,11 +35,17 @@ function(blofeld_add_audio_dependencies)
   blofeld_stage_audio_archive(meson meson_stage)
   set(pulse_source "${pulse_stage}/pulseaudio-17.0")
   set(sndfile_source "${sndfile_stage}/libsndfile-1.2.2")
-  set(callback_patch "${CMAKE_CURRENT_SOURCE_DIR}/patches/pulseaudio-callback-types.patch")
-  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${callback_patch}")
-  execute_process(COMMAND "${BLOFELD_PATCH}" --batch --silent --fuzz=0 -p1
-    --directory "${pulse_source}" --input "${callback_patch}"
-    COMMAND_ERROR_IS_FATAL ANY)
+  file(READ "${CMAKE_CURRENT_SOURCE_DIR}/cmake/dependencies.json" manifest)
+  string(JSON patch_count LENGTH "${manifest}" pulseaudio patches)
+  math(EXPR last_patch "${patch_count} - 1")
+  foreach(index RANGE ${last_patch})
+    string(JSON relative GET "${manifest}" pulseaudio patches ${index})
+    set(dependency_patch "${CMAKE_CURRENT_SOURCE_DIR}/${relative}")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${dependency_patch}")
+    execute_process(COMMAND "${BLOFELD_PATCH}" --batch --silent --fuzz=0 -p1
+      --directory "${pulse_source}" --input "${dependency_patch}"
+      COMMAND_ERROR_IS_FATAL ANY)
+  endforeach()
   foreach(notice "${pulse_source}/LICENSE|PulseAudio.txt"
                  "${pulse_source}/LGPL|LGPL-2.1.txt"
                  "${sndfile_source}/COPYING|libsndfile.txt")
