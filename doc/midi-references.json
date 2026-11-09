@@ -1,0 +1,19 @@
+{
+  "standard_midi_files": {
+    "title": "Standard MIDI Files 1.0, RP001",
+    "publisher": "MIDI Manufacturers Association",
+    "revision": "February 1996",
+    "source": "https://midi.org/standard-midi-files",
+    "download": "https://drive.google.com/uc?export=download&id=1t4jcCCKoi5HMi7YJ6skvZfKcefLhhOgU",
+    "file": "RP-001_Standard_MIDI_Files_1.0.pdf",
+    "bytes": 84070,
+    "sha256": "fdb65bd58cd92981273468954b46fe7e915b1f8b5697f55eaec0d475895762b8",
+    "printed_pages": "2-10, 14",
+    "contracts": [
+      "Chunk boundaries, extensions, formats and independent patterns",
+      "Metrical and SMPTE division, default tempo and format-1 tempo map",
+      "Running status cancellation, timed SysEx packets and raw escapes",
+      "Non-transmittable meta events, extensible payloads and end-of-track time"
+    ]
+  }
+}

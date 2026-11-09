@@ -247,6 +247,19 @@ unpublished. Finalization follows owner shutdown and successful render validatio
 This output component alone does not establish SMF scheduling, instrument
 readiness or sustained throughput.
 
+The host SMF reader merges simultaneous tracks by pulse and source-track order,
+with one buffered cursor per track and bounded payload chunks. Format 2 requires
+an explicit independent-pattern selection. Relative file time retains whole
+microseconds and a fractional numerator/divisor across tempo changes; time-code
+division uses its own fixed rate. Convert to a target clock only at admission,
+rounding up to the first tick at or after the event. Keep all meta payloads,
+including routing and SMPTE-offset labels, separate from transmittable bytes.
+Chunk extensions are retained and alien chunks skipped by length. Truncated or
+changed sources cannot finish cleanly. Primary format reference: midi-references.json.
+Application binding still must establish readiness and the musical origin,
+bound lookahead, honor input admission, route track metadata and validate render
+completion/release tails before WAV finalization.
+
 DAX uploads complete words from XADR and its two channel buffers. Both audio
 addresses share alternating A/B ownership; metadata is captured at frame start.
 Refill requests and block/underrun interrupts follow actual buffer transactions.
