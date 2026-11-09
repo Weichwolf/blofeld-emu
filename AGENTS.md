@@ -47,6 +47,9 @@
   reference checkouts unchanged and preserve existing dependency notices.
   Do not import GPL-2.0-only octa-capture code. Run as a regular user.
 - Each developer validates their native host: ARM64 on macOS, x86-64 on Linux.
+  Both use the same firmware, complete bootstrap, programs, samples, settings
+  and image contracts. Shared presets come from ../blofeld-src/tools/blofeld_image.py;
+  platform differences belong only to host bindings and native JIT backends.
   Coordinate cross-platform optimizations in private blofeld-src
   [issue #23](https://github.com/Weichwolf/blofeld-src/issues/23).
   Communicate dependency revisions in commits.
