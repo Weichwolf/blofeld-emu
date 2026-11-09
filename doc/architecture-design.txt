@@ -54,6 +54,23 @@ firmware-produced words/messages through bounded channels with explicit ordering
 timestamps and ownership. Other threads do not inspect mutable core state.
 Keep native calls typed and direct; no common runtime core hierarchy or mirrors.
 
+Apply Wasmtime's specialized VMContext and stable-memory principles to these
+native execution owners. Keep context/base pointers and guest values in host
+registers across native successors; resolve fixed typed I/O bindings before
+execution. Hoist proved RAM bounds and initialization checks over valid regions,
+with precise cold exits for faults, protected stores and mapping changes.
+Removing knowledge tracking requires proof that every exposed word is initialized.
+Guard-page mappings are a candidate only with correct partial-page knowledge,
+host page sizes, precise traps and sanitizer support. They do not implement MMIO.
+Check pending work cheaply at real boundaries; fold architectural accounting over
+safe native blocks and publish exact observable prefixes. Wasmtime's wall-time
+epochs inform cancellation design; deterministic device time remains independent.
+Compare generated x86-64/ARM64 code and connected profiles before selecting a
+fast path. Reference identities are in runtime-references.json; primary guidance:
+https://docs.wasmtime.dev/contributing-architecture.html
+https://docs.wasmtime.dev/api/wasmtime/struct.Config.html
+https://docs.wasmtime.dev/examples-fast-execution.html
+
 Implement device transactions and completion semantics: command/data FIFOs,
 readiness, interrupts, USB endpoints, SCI bytes, storage reads/writes and resets.
 Decode firmware bit-banging locally into transactions. Do not replay electrical

@@ -74,6 +74,14 @@ effects and sample use on this host; design for 10x. Keep instrument behavior,
 guest time, complete audio and bounded live latency. Change the >=4x target only
 with quantitative reproducible feasibility evidence.
 
+The combined load includes Multi mode with sixteen simultaneously active parts
+and up to twenty-five total voices, with distinct programs, oscillators, filters,
+modulation, original effects and authentic SL sample playback together. Include
+programs that attain twenty-five allocated voices and heavier sound combinations;
+record actual voice allocation, release and stealing, preserving the firmware's
+resource-dependent limits. Measure fixed instrument cost and added voice/part,
+effect and sample costs separately before extrapolating capacity.
+
 Live operation must deliver every audio buffer on time without host-induced gaps,
 lost or repeated frames, including first use of firmware paths and JIT translation.
 Average throughput or offline reserve cannot compensate for a missed live deadline.

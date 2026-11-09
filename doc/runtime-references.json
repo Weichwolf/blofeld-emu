@@ -1,0 +1,27 @@
+{
+  "scope": "Primary runtime architecture references; designs to adapt and measure, not runtime dependencies or instrument qualification. Local HTML snapshots are untracked.",
+  "retrieved_utc": "2026-11-09T13:15:39.245874+00:00",
+  "references": [
+    {
+      "name": "architecture",
+      "url": "https://docs.wasmtime.dev/contributing-architecture.html",
+      "resolved_url": "https://docs.wasmtime.dev/contributing-architecture.html",
+      "bytes": 55441,
+      "sha256": "675fdc06f472a40a574b356346550b9f01d89a7c468f99b41700c7eeaf68c784"
+    },
+    {
+      "name": "configuration",
+      "url": "https://docs.wasmtime.dev/api/wasmtime/struct.Config.html",
+      "resolved_url": "https://docs.wasmtime.dev/api/wasmtime/struct.Config.html",
+      "bytes": 215861,
+      "sha256": "e15938cf39d08f335bdc9082aed1c1672d6de910839236b8a8b8eba64004150d"
+    },
+    {
+      "name": "fast-execution",
+      "url": "https://docs.wasmtime.dev/examples-fast-execution.html",
+      "resolved_url": "https://docs.wasmtime.dev/examples-fast-execution.html",
+      "bytes": 28074,
+      "sha256": "7869d3341622ef2cee85401ca92f24b853f63a1f5514bd436321eb929629a69c"
+    }
+  ]
+}
