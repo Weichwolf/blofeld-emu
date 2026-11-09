@@ -1,9 +1,9 @@
 # Objective
 
-A complete standalone Blofeld Desktop SL instrument executing unchanged original
-1.25 firmware from reset, using our independent cpu12 and dsp56300 JITs, on
-macOS ARM64 and Linux x86-64. An external MIDI keyboard supplies live notes;
-emulating the Blofeld Keyboard model and its keybed controller is outside scope.
+A complete standalone Blofeld instrument executing unchanged original 1.25
+firmware from reset, using our independent cpu12 and dsp56300 JITs, on macOS ARM64
+and Linux x86-64. Desktop SL is the immediate integration target; the supplied
+acceptance scope includes Desktop and Keyboard. Keep profile work explicit.
 Correctness is instrument behavior: sound, musical time and documented functions.
 Electrical wiring, bus phases and cycle-by-cycle lockstep are not objectives.
 See [target architecture](doc/architecture-design.txt).
@@ -37,7 +37,7 @@ See [target architecture](doc/architecture-design.txt).
   recreation. Unknown display contents remain explicit.
 - Simple unit tests mirror src/. The normal emulator provides reset-to-instrument,
   long-run/load, trace and memory-inspection acceptance runs. Cover every documented
-  Desktop SL function on both host platforms in ACCEPTANCE.tsv, with fixed scope,
+  function of both profiles on both host platforms in ACCEPTANCE.tsv, with fixed scope,
   tolerances and independent references; incomplete scope never counts as passed.
 
 No firmware patches, skipped routines, invented success replies or substitute
@@ -51,7 +51,9 @@ Manufacturer assets remain local, with source URLs, sizes and hashes recorded.
 
 ACCEPTANCE.tsv is the project-owned inventory of required instrument functions,
 host operation and qualification gates, not an executable test or a manufacturer
-certification. Profile D means Desktop with active SL. The macos_arm64 and
+certification. Profile D means Desktop with active SL; K means Keyboard. The
+current catalogue covers Desktop SL; Keyboard-specific coverage remains required
+before complete-instrument acceptance. The macos_arm64 and
 linux_x86_64 columns record separate emulator results; the Linux developer owns
 Linux validation. Grouped rows pass only when their complete stated scope passes
 with identified inputs, independent references and fixed tolerances. Unit tests
