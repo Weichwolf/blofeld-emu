@@ -3,6 +3,7 @@
 
 #include "execution.hpp"
 #include "io/dsp_reset.hpp"
+#include "io/execution_time.hpp"
 #include "io/pcm_output.hpp"
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
@@ -19,5 +20,6 @@ namespace blofeld::vi::dsp {
                                       const std::stop_token &stop,
                                       MediaImage *image = nullptr,
                                       PcmOutput output = {},
-                                      PeerPort *peer = nullptr);
+                                      PeerPort *peer = nullptr,
+                                      ExecutionTime *time = nullptr);
 }

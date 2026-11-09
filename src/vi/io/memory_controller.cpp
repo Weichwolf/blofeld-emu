@@ -172,7 +172,13 @@ bool MemoryController::read_output() noexcept {
     output_ = status();
     return true;
   }
-  if (pending() || phase_ != Phase::read) { return fail("Media read is not ready"); }
+  if (pending() || phase_ != Phase::read) {
+    // A shared-port strobe without readable data has an undefined output. The
+    // actual data-register read must reject that unknown value; this control
+    // write neither consumes a byte nor manufactures a device acknowledgement.
+    output_.reset();
+    return true;
+  }
   const auto offset = column_ * 2;
   constexpr std::uint8_t all_bits = 0xff;
   if (buffer_.empty() || buffer_[offset + 1] != all_bits) {

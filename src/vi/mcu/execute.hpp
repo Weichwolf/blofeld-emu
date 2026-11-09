@@ -5,6 +5,7 @@
 #include "execution.hpp"
 #include "io/controls.hpp"
 #include "io/dsp_reset.hpp"
+#include "io/execution_time.hpp"
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
 #include "storage/flash_image.hpp"
@@ -18,5 +19,6 @@ namespace blofeld::vi::mcu {
                                       const std::stop_token &stop,
                                       const Controls *controls = nullptr,
                                       DisplayState *display = nullptr,
-                                      PeerPort *peer = nullptr);
+                                      PeerPort *peer = nullptr,
+                                      ExecutionTime *time = nullptr);
 }

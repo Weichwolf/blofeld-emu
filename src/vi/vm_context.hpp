@@ -6,6 +6,7 @@
 #include "execution.hpp"
 #include "io/controls.hpp"
 #include "io/dsp_reset.hpp"
+#include "io/execution_time.hpp"
 #include "io/pcm_output.hpp"
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
@@ -59,6 +60,7 @@ private:
   PcmOutput output_;
   Shi shi_;
   PeerPort peer_;
+  ExecutionTime time_;
   DspReset reset_;
   std::array<ExecutionReport, 2> reports_;
   std::atomic<unsigned> completed_{0};

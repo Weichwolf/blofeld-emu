@@ -85,6 +85,26 @@ void reads(MemoryController &controller) {
   require(read(controller) == expected_first, "An explicit new address crosses a block boundary");
 }
 
+void inactive_read_strobes(MemoryController &controller) {
+  controller.reset();
+  const auto epoch = controller.epoch();
+  require(controller.write({.controls = read_active}) && !controller.output() &&
+              controller.error() == nullptr && controller.epoch() == epoch &&
+              controller.write({.controls = idle}),
+          "An idle shared-port read strobe leaves data unknown and consumes no page byte");
+  pulse(controller, {.controls = command});
+  for (const auto value : std::array<std::uint8_t, 4>{0, 0, 0, 0}) {
+    pulse(controller, {.controls = address, .value = value});
+  }
+  const auto requested = controller.epoch();
+  require(controller.pending() && controller.write({.controls = read_active}) &&
+              !controller.output() && controller.error() == nullptr &&
+              controller.epoch() == requested && controller.write({.controls = idle}),
+          "A premature read strobe cannot complete or acknowledge the pending operation");
+  require(controller.complete() && read(controller) == 0,
+          "Actual completion and a fresh strobe still return the original first byte");
+}
+
 void errors(MemoryController &controller) {
   controller.reset();
   begin(controller, {.page = 32, .column = unknown_column});
@@ -378,6 +398,7 @@ int main(const int argc, char **argv) try {
       std::filesystem::path(argv[2]) / "media.bfnand", blofeld::vi::MediaImage::max_bytes));
   MemoryController controller(&image);
   reads(controller);
+  inactive_read_strobes(controller);
   cancel_and_reset(controller);
   errors(controller);
   invalid_confirm(controller);

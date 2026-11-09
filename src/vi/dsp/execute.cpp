@@ -12,6 +12,7 @@
 #include "dsp/timers.hpp"
 #include "execution.hpp"
 #include "io/dsp_reset.hpp"
+#include "io/execution_time.hpp"
 #include "io/memory_controller.hpp"
 #include "io/pcm_output.hpp"
 #include "io/peer_port.hpp"
@@ -59,14 +60,16 @@ public:
      const std::stop_token &stop,
      MediaImage *image,
      const PcmOutput output,
-     PeerPort *peer)
+     PeerPort *peer,
+     ExecutionTime *time)
       : boot_(boot),
         shi_(shi),
         reset_(reset),
         stop_(stop),
         audio_(esai_1_, dax_, output, stop),
         controller_(image),
-        peer_(peer) {}
+        peer_(peer),
+        time_(time) {}
 
   void bind(dsp56300::Core &core, const std::uint64_t epoch) noexcept {
     core_ = &core;
@@ -80,6 +83,8 @@ public:
     media_error_ = nullptr;
     once_data_.reset();
     clock_.reset(true);
+    origin_ = time_ != nullptr ? time_->dsp_origin() : 0;
+    peer_deadline_.reset();
     interrupts_.reset();
     dma_.reset();
     esai_1_.reset();
@@ -170,6 +175,11 @@ public:
   }
 
   [[nodiscard]] dsp56300::RunResult run() {
+    if (!synchronize_peer()) {
+      dsp56300::RunResult stopped;
+      stopped.yielded = true;
+      return stopped;
+    }
     if (waiting_ && !interrupts_.select(interrupt_sources(), core_->registers().sr)) {
       if (const auto next = deadline()) {
         idle_ = *next - core_->progress().estimated_cycles;
@@ -360,8 +370,23 @@ private:
   }
 
   bool write_clock(const dsp56300::Word value) noexcept {
-    if (!clock_.write(value)) { return false; }
+    if (!clock_.advance(device_cycles()) || !clock_.write(value)) { return false; }
     audio_changed();
+    return true;
+  }
+
+  bool synchronize_peer() {
+    if (!clock_.advance(device_cycles())) {
+      throw std::overflow_error("DSP instrument time is not representable or monotonic");
+    }
+    if (time_ == nullptr) { return true; }
+    if (clock_.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_) {
+      throw std::overflow_error("DSP reset origin exceeds instrument time");
+    }
+    const auto limit = time_->dsp_limit(origin_ + clock_.ticks(), stop_);
+    if (!limit) { return false; }
+    peer_deadline_ = clock_.deadline(*limit - origin_);
+    if (!peer_deadline_) { throw std::overflow_error("DSP peer deadline is not representable"); }
     return true;
   }
 
@@ -379,6 +404,7 @@ private:
     for (const auto next : {media_deadline_, audio_.deadline()}) {
       if (next && (!result || *next < *result)) { result = next; }
     }
+    if (peer_deadline_ && (!result || *peer_deadline_ < *result)) { result = peer_deadline_; }
     return result;
   }
 
@@ -611,6 +637,9 @@ private:
   Ports ports_;
   MemoryController controller_;
   PeerPort *peer_;
+  ExecutionTime *time_;
+  std::uint64_t origin_ = 0;
+  std::optional<std::uint64_t> peer_deadline_;
   Failure completion_failure_;
 };
 
@@ -695,11 +724,12 @@ ExecutionReport execute(const std::span<const dsp56300::Word> boot,
                         const std::stop_token &stop,
                         MediaImage *image,
                         const PcmOutput output,
-                        PeerPort *peer) {
+                        PeerPort *peer,
+                        ExecutionTime *time) {
   if (boot.empty() || boot.size() > dsp56300::address_words - boot_first) {
     throw std::invalid_argument("DSP boot ROM has invalid bounds");
   }
-  Io io(boot, shi, reset, stop, image, output, peer);
+  Io io(boot, shi, reset, stop, image, output, peer, time);
   ExecutionReport report;
   std::uint64_t applied = 0;
   while (!stop.stop_requested()) {

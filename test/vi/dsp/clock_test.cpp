@@ -6,6 +6,7 @@
 #include <dsp56300/memory.hpp>
 #include <exception>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 
 namespace {
@@ -79,12 +80,55 @@ void all_dividers() {
     }
   }
 }
+
+void instrument_time() {
+  constexpr std::array<dsp56300::Word, 4> modes{0, 0x04601d, 0x02a012, 0x700};
+  constexpr std::uint64_t instrument_hz = 60000000;
+  constexpr std::uint64_t oscillator_hz = 11289600;
+  constexpr std::uint64_t last_cycle = 300;
+  constexpr std::uint64_t future_ticks = 1000;
+  for (const auto mode : modes) {
+    Clock clock;
+    require(clock.write(mode), "Select a nominal reference, PLL or low-power clock");
+    const auto ratio = clock.ratio();
+    const auto top = instrument_hz * ratio.denominator;
+    const auto bottom = oscillator_hz * ratio.numerator;
+    for (std::uint64_t cycles = 0; cycles <= last_cycle; ++cycles) {
+      require(clock.advance(cycles) && clock.ticks() == (cycles * top) / bottom,
+              "Repeated small advances retain the independently calculated fractional phase");
+      const auto target = clock.ticks() + future_ticks;
+      const auto expected = ((target * bottom) + top - 1) / top;
+      require(clock.deadline(target) == expected,
+              "An instrument timestamp selects the first complete base-cycle boundary");
+    }
+    require(!clock.advance(0), "A core clock cannot move backwards");
+  }
+}
+
+void instrument_clock_changes() {
+  Clock clock;
+  constexpr dsp56300::Word full_output = 0x02a012;
+  require(clock.advance(1) && clock.ticks() == 0 && clock.write(full_output) && clock.advance(2) &&
+              clock.ticks() == 1 && clock.deadline(2) == 6,
+          "A PLL change preserves the elapsed fractional reference time");
+  const auto previous = clock.ticks();
+  const auto maximum = std::numeric_limits<std::uint64_t>::max();
+  require(!clock.deadline(maximum) && clock.ticks() == previous,
+          "An unrepresentable native deadline fails without changing time");
+  constexpr dsp56300::Word low_power = 0x700;
+  require(clock.write(low_power) && !clock.advance(maximum) && clock.ticks() == previous,
+          "Elapsed-time overflow cannot partially commit a new clock state");
+  clock.reset(true);
+  require(clock.ticks() == 0 && clock.advance(0), "Reset creates a fresh local clock epoch");
+}
 }
 
 int main() try {
   reset_and_reserved();
   nominal_factors();
   all_dividers();
+  instrument_time();
+  instrument_clock_changes();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

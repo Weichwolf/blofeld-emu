@@ -23,6 +23,15 @@ Synchronize for real command/data ownership, readiness/IRQ transitions, audio,
 reset or faults; local MCU memory/register accesses do not advance the DSP.
 There is no global per-instruction/per-clock coordinator.
 
+ExecutionTime publishes completed MCU progress in nominal 60 MHz units. DSP native
+execution uses that frontier as a conservative grant; local MCU progress does not
+wait. Actual shared-port accesses and completed SPI words rendezvous before their
+effects commit, keeping short producer phases observable without adding read/pop
+effects. DSP time follows the programmed PLL with retained fractional phase;
+reset release establishes a fresh local epoch at the MCU's instrument timestamp.
+Stop and reset cancel grant waits. This temporal contract does not itself prove
+complete startup, instrument behavior or real-time performance.
+
 VmContext owns concrete bindings, stable memory, channel lifetimes and shutdown.
 Each worker exclusively mutates its core and local device state. Transfer actual
 firmware-produced words/messages through bounded channels with explicit ordering,
@@ -196,6 +205,8 @@ page outside its native callback before publishing ready. Read strobes retain a
 held byte and advance on release. Unknown bytes/pages fail with transaction
 context. Images retain their encoded backing and a direct page index; no cell
 physics, payload mirrors or default successful program/status replies.
+An idle or premature read strobe leaves the output unknown without consuming data;
+an actual data-register read must reject that unknown input.
 
 Read/reset completion has a separate virtual deadline. Nominal VM durations are
 64/32 DSP reference periods converted through the programmed PLL ratio at issue;

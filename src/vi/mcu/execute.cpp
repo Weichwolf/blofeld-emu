@@ -6,6 +6,7 @@
 #include "execution.hpp"
 #include "io/controls.hpp"
 #include "io/dsp_reset.hpp"
+#include "io/execution_time.hpp"
 #include "io/mcu_flash.hpp"
 #include "io/peer_port.hpp"
 #include "io/sci.hpp"
@@ -45,6 +46,7 @@ constexpr auto no_deadline = std::numeric_limits<Timer::Cycle>::max() / 2;
 
 struct Devices {
   PeerPort *peer = nullptr;
+  ExecutionTime *time = nullptr;
   Timer timer;
   Clock clock;
   Sci sci;
@@ -140,11 +142,17 @@ public:
 
   bool complete_events() {
     capture_display();
+    if (!devices_.advance(*core_) ||
+        (devices_.time != nullptr && !devices_.time->publish_mcu(devices_.clock.ticks()))) {
+      return false;
+    }
     if (release_reset_) {
+      if (devices_.time != nullptr) { devices_.time->release_dsp(devices_.clock.ticks()); }
       if (!reset_.release(stop_)) { return false; }
       release_reset_ = false;
     }
-    return ports_.complete_boot_transfer(stop_);
+    if (!ports_.boot_pending()) { return true; }
+    return shared_access([&] { return ports_.complete_boot_transfer(stop_); });
   }
 
   [[nodiscard]] const char *error() const noexcept {
@@ -152,6 +160,34 @@ public:
   }
 
 private:
+  template <typename Action> bool shared_access(const Action &action) noexcept {
+    auto *time = devices_.time;
+    if (time == nullptr) { return action(); }
+    if (!devices_.advance(*core_) || !time->enter_mcu(devices_.clock.ticks(), stop_)) {
+      return false;
+    }
+    const bool accepted = action();
+    time->leave_mcu();
+    return accepted;
+  }
+
+  [[nodiscard]] static bool shared_port(const std::uint16_t offset) noexcept {
+    constexpr std::uint16_t data_u = 0x278;
+    constexpr std::uint16_t direction_u = 0x27a;
+    return offset == peer_q_data || offset == peer_q_input || offset == peer_q_direction ||
+           offset == peer_j_data || offset == peer_j_direction || offset == data_u ||
+           offset == direction_u;
+  }
+
+  bool
+  read_port(const std::uint16_t offset, std::uint8_t &value, const std::uint8_t mask) noexcept {
+    const auto action = [&] {
+      sample_inputs(offset);
+      return ports_.read(offset, value, mask);
+    };
+    return shared_port(offset) ? shared_access(action) : action();
+  }
+
   template <typename Action> bool access_devices(const Action &action) noexcept {
     const auto pending = devices_.pending();
     const auto deadline = devices_.deadline();
@@ -205,8 +241,7 @@ private:
     }
     if (at.space == Space::registers && Ports::contains(at.offset)) {
       if (at.offset == 0 && display_.reading()) { return display_.read(value, mask); }
-      sample_inputs(at.offset);
-      return ports_.read(at.offset, value, mask);
+      return read_port(at.offset, value, mask);
     }
     if (at.space == Space::registers && at.offset >= mapping_first && at.offset <= mapping_last) {
       value = memory_.read_mapping(at.offset);
@@ -288,6 +323,7 @@ private:
     if (held && !previous) {
       ports_.reset_boot_transfer();
       if (!reset_.assert_reset()) { return false; }
+      if (devices_.time != nullptr) { devices_.time->hold_dsp(); }
     } else if (!held && previous) {
       release_reset_ = true;
       core_->request_yield();
@@ -322,7 +358,8 @@ private:
           [&] { return devices_.timer.write({.offset = at.offset, .value = access.value}); });
     }
     if (at.space == Space::registers && Ports::contains(at.offset)) {
-      return write_port({.offset = at.offset, .value = access.value});
+      const auto action = [&] { return write_port({.offset = at.offset, .value = access.value}); };
+      return shared_port(at.offset) ? shared_access(action) : action();
     }
     if (at.space == Space::registers && at.offset >= mapping_first && at.offset <= mapping_last) {
       if (memory_.write_mapping({.address = at.offset, .value = access.value})) {
@@ -477,7 +514,8 @@ bool interrupt(cpu12::Core &core, const Devices &devices, ExecutionReport &repor
 }
 
 void advance(const cpu12::Core &core, Devices &devices) {
-  if (!devices.advance(core)) {
+  if (!devices.advance(core) ||
+      (devices.time != nullptr && !devices.time->publish_mcu(devices.clock.ticks()))) {
     if (devices.sci.error() != nullptr) { throw std::runtime_error(devices.sci.error()); }
     throw std::overflow_error("MCU device time is not representable or monotonic");
   }
@@ -523,10 +561,12 @@ ExecutionReport execute(FlashImage &image,
                         const std::stop_token &stop,
                         const Controls *controls,
                         DisplayState *display,
-                        PeerPort *peer) {
+                        PeerPort *peer,
+                        ExecutionTime *time) {
   Memory memory(image);
   Devices devices;
   devices.peer = peer;
+  devices.time = time;
   auto grants = regions(memory, devices.usb);
   Io io(memory, image, devices, shi, reset, stop, controls, display, peer);
   auto callbacks = io.callbacks();
