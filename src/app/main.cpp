@@ -102,10 +102,6 @@ int main(const int argc, char **argv) try {
   const auto options = blofeld::app::options(
       std::span<const char *const>(argv + 1, static_cast<std::size_t>(argc - 1)));
   const auto profile = blofeld::app::load_profile(options.profile);
-  const auto display_path = blofeld::host::runtime_home() / "blofeld-emu";
-  std::filesystem::create_directories(display_path);
-  blofeld::app::DisplayPublication display(display_path);
-  std::cerr << "Display: " << display_path << '\n';
   auto image = std::make_unique<blofeld::vi::FlashImage>(blofeld::vi::FlashImage::decode(
       blofeld::host::read_file(profile.device_state, blofeld::vi::FlashImage::file_bytes)));
   auto media = std::make_unique<blofeld::vi::MediaImage>(
@@ -119,8 +115,12 @@ int main(const int argc, char **argv) try {
                               std::move(media),
                               render.output(),
                               blofeld::vi::MidiPort::InputMode::stream);
-    return render.run(vm, signals, display, launched);
+    return render.run(vm, signals, launched);
   }
+  const auto display_path = blofeld::host::runtime_home() / "blofeld-emu";
+  std::filesystem::create_directories(display_path);
+  blofeld::app::DisplayPublication display(display_path);
+  std::cerr << "Display: " << display_path << '\n';
   blofeld::host::audio::Playback audio(sample_rate, "blofeld-emu");
   const auto &grant = audio.grants();
   std::cerr << "Audio: s24-in-32 stereo " << grant.rate << "Hz -> " << grant.sink_format << ' '

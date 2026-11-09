@@ -2,7 +2,6 @@
 #pragma once
 
 #include "audio/wav_consumer.hpp"
-#include "display/publication.hpp"
 #include "execution.hpp"
 #include "io/pcm_output.hpp"
 #include "midi/file.hpp"
@@ -23,12 +22,11 @@ public:
   [[nodiscard]] vi::PcmOutput output() noexcept;
   int run(vi::VmContext &vm,
           const host::Signals &signals,
-          DisplayPublication &display,
           std::chrono::steady_clock::time_point launched);
 
 private:
-  [[nodiscard]] std::optional<std::uint64_t>
-  startup(vi::VmContext &vm, const host::Signals &signals, DisplayPublication &display);
+  [[nodiscard]] std::optional<std::uint64_t> startup(vi::VmContext &vm,
+                                                     const host::Signals &signals);
   void feed(vi::MidiPort &port, std::uint64_t origin, const std::stop_token &stop);
   void startup_statistics() const;
   void statistics() const;

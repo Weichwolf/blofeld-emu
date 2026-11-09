@@ -18,6 +18,8 @@
   or access files; hardware flashing requires established recovery.
 - Emulator and display viewer share the standard user runtime display directory.
   Do not add profile or viewer display-path overrides.
+  Bind the viewer and publish LCD snapshots only in live mode. Offline MIDI-to-WAV
+  has no viewer binding and reports rendering statistics in the terminal.
 - Target >=4x sustained offline instrument throughput; design for 10x. Measure
   valid original stereo frames, startup separately; microbenchmarks are no proof.
 
