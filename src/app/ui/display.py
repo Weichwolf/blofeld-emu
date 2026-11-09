@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 import signal
 import sys
-import time
 
 import cairo
 import gi
@@ -14,7 +13,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gio, GLib, Gtk, Pango
 
-from .frame import HEIGHT, WIDTH, read_frame, runtime_directory
+from .frame import HEIGHT, WIDTH, runtime_directory
 from .watch import DisplayWatch
 
 
@@ -37,13 +36,6 @@ def paint(context, width, height, frame):
     context.restore()
 
 
-def save_png(frame, path):
-    scale = 4
-    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, WIDTH * scale, HEIGHT * scale)
-    paint(cairo.Context(surface), WIDTH * scale, HEIGHT * scale, frame)
-    surface.write_to_png(str(path))
-
-
 class DisplayWindow:
     def __init__(self, application, runtime):
         self.frame = None
@@ -52,11 +44,16 @@ class DisplayWindow:
         self.window.set_default_size(552, 324)
         self.window.set_size_request(296, 196)
         header = Gtk.HeaderBar()
+        header.add_css_class("blofeld-titlebar")
+        style = Gtk.CssProvider()
+        style.load_from_string("""
+            headerbar.blofeld-titlebar { min-height: 28px; padding: 0 6px; }
+            headerbar.blofeld-titlebar windowhandle { min-height: 28px; }
+            headerbar.blofeld-titlebar button { min-height: 20px; min-width: 20px; padding: 2px; }
+        """)
+        Gtk.StyleContext.add_provider_for_display(
+            self.window.get_display(), style, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.window.set_titlebar(header)
-        self.save_button = Gtk.Button(icon_name="document-save-symbolic",
-                                      tooltip_text="Save LCD as PNG", sensitive=False)
-        self.save_button.connect("clicked", self._save)
-        header.pack_start(self.save_button)
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         for side in ("top", "bottom", "start", "end"):
             getattr(box, f"set_margin_{side}")(12)
@@ -78,24 +75,11 @@ class DisplayWindow:
             self.frame = frame
             self.area.queue_draw()
         self.status.set_text(message)
-        self.save_button.set_sensitive(frame is not None)
+        self.status.set_visible(bool(message))
 
     def _draw(self, _area, context, width, height):
         paint(context, width, height, self.frame)
         self.draws += 1
-
-    def _save(self, _button):
-        if self.frame is None:
-            return
-        directory = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_PICTURES)
-        path = (Path(directory) if directory else Path.home() / "Pictures")
-        path /= f"blofeld-display-{time.time_ns()}.png"
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            save_png(self.frame, path)
-            self.status.set_text(f"Screenshot saved: {path}")
-        except (OSError, cairo.Error) as error:
-            self.status.set_text(f"Screenshot failed: {error}")
 
     def _close(self, _window):
         self.watch.close()
@@ -104,8 +88,7 @@ class DisplayWindow:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--screenshot", type=Path, help="Save the current LCD as PNG and exit")
-    arguments = parser.parse_args()
+    parser.parse_args()
     if os.getuid() == 0:
         parser.exit(1, "Run the display viewer as a regular user.\n")
     try:
@@ -114,12 +97,6 @@ def main():
             raise ValueError("The runtime directory must be absolute")
     except ValueError as error:
         parser.exit(1, f"{error}\n")
-    if arguments.screenshot is not None:
-        try:
-            save_png(read_frame(runtime / "blofeld-emu/display.pbm"), arguments.screenshot)
-        except (OSError, ValueError, cairo.Error) as error:
-            parser.exit(1, f"Screenshot failed: {error}\n")
-        return 0
     application = Gtk.Application(application_id="org.blofeld_emu.Display",
                                   flags=Gio.ApplicationFlags.NON_UNIQUE)
     windows = []

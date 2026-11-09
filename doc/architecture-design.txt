@@ -166,9 +166,15 @@ holder, RAM reads advance once per completed transaction, and unknown RAM fails.
 Peripheral reset is supplied by VM lifecycle; no PCB reset net is assumed.
 The MCU owner captures requested LCD snapshots outside native execution. A bounded
 latest-state mailbox transfers the complete controller, including unknown cells,
-to the app. Rendering and atomic PBM/text publication run on the control thread;
+to the app. Rendering and atomic PBM publication run on the control thread;
 they never access the live controller or execute inside audio callbacks. Map the
 firmware's columns 0..127 and page-7/bit-7 logical top row to the visible panel.
+Only live composition owns this publisher. Its display.live FIFO keeps one
+write descriptor open without transmitting data. The viewer opens a nonblocking
+reader once per second: EAGAIN means a publisher exists; EOF means it exited,
+including an abrupt kill. No heartbeat writes, image timestamp guesses or guest
+transactions are needed. A new publisher revokes old PBM/text artifacts before
+opening a new presence session. Unknown snapshots revoke PBM publication.
 
 A selected boot transaction whose SHI receive mode is not published yields its
 MCU owner. Outside the native callback, wait for the DSP's actual HCSR write or

@@ -8,7 +8,6 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <iterator>
 #include <stdexcept>
 #include <string>
 #include <unistd.h>
@@ -33,7 +32,8 @@ int main(const int argc, char **argv) try {
   constexpr unsigned display_on = 0xaf;
   lcd.command(display_on);
   const auto unknown = capture_lcd(lcd, panel);
-  require(blofeld::app::encode_text(unknown).front() == '?', "Text preserves unknown pixels");
+  require(unknown.pixel(0, 0) == blofeld::vi::LcdPixel::unknown,
+          "Uninitialized LCD pixels remain unknown");
   bool rejected = false;
   try {
     static_cast<void>(blofeld::app::encode_pbm(unknown));
@@ -47,19 +47,25 @@ int main(const int argc, char **argv) try {
   const auto root = std::filesystem::path(argv[1]) / std::to_string(::getpid());
   require(std::filesystem::create_directories(root), "Create owned publication directory");
   {
+    std::ofstream stale(root / "display.txt");
+    stale << "old diagnostic output";
+    std::ofstream bitmap_file(root / "display.pbm");
+    bitmap_file << "old bitmap";
+  }
+  {
     blofeld::app::DisplayPublication publication(root);
+    require(!std::filesystem::exists(root / "display.txt") &&
+                !std::filesystem::exists(root / "display.pbm") &&
+                std::filesystem::is_fifo(root / "display.live"),
+            "A new live session revokes old images/text before publishing its presence");
     require(publication.publish(blank) && !publication.publish(blank), "Unchanged frame skips I/O");
     require(publication.publish(full), "Changed frame is published");
-    std::ifstream text(root / "display.txt");
-    const std::string data{std::istreambuf_iterator<char>(text), std::istreambuf_iterator<char>()};
-    require(data.front() == '#' && data.back() == '\n', "Complete text publication");
     require(publication.publish(unknown) && !publication.publish(unknown) &&
                 !std::filesystem::exists(root / "display.pbm"),
-            "Unknown LCD contents remove a stale bitmap and remain a coalesced text frame");
-    std::ifstream uncertain(root / "display.txt");
-    require(uncertain.get() == '?', "Unknown display cells remain explicit");
+            "Unknown LCD contents revoke a stale bitmap and remain coalesced");
     require(publication.publish(full) && std::filesystem::exists(root / "display.pbm"),
             "A subsequent known frame restores the actual bitmap");
+    require(!std::filesystem::exists(root / "display.txt"), "No automatic text copy is written");
   }
   std::filesystem::remove_all(root);
 } catch (const std::exception &error) {

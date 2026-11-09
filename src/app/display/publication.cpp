@@ -2,6 +2,7 @@
 #include "display/publication.hpp"
 
 #include "display/lcd_image.hpp"
+#include "files/directory.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -11,6 +12,23 @@
 #include <vector>
 
 namespace blofeld::app {
+namespace {
+host::Presence start_display(const host::Directory &directory) {
+  directory.remove("display.pbm");
+  directory.remove("display.txt");
+  return directory.presence("display.live");
+}
+
+bool known(const vi::LcdImage &image) {
+  for (unsigned y = 0; y < vi::LcdImage::height; ++y) {
+    for (unsigned x = 0; x < image.width(); ++x) {
+      if (image.pixel(x, y) == vi::LcdPixel::unknown) { return false; }
+    }
+  }
+  return true;
+}
+}
+
 std::vector<std::uint8_t> encode_pbm(const vi::LcdImage &image) {
   const auto header = "P4\n" + std::to_string(image.width()) + " 64\n";
   std::vector<std::uint8_t> bytes(header.begin(), header.end());
@@ -34,37 +52,17 @@ std::vector<std::uint8_t> encode_pbm(const vi::LcdImage &image) {
   return bytes;
 }
 
-std::string encode_text(const vi::LcdImage &image) {
-  std::string text;
-  text.reserve(static_cast<std::size_t>(image.width() + 1) * vi::LcdImage::height);
-  for (unsigned y = 0; y < vi::LcdImage::height; ++y) {
-    for (unsigned x = 0; x < image.width(); ++x) {
-      switch (image.pixel(x, y)) {
-        case vi::LcdPixel::off: text.push_back(' '); break;
-        case vi::LcdPixel::on: text.push_back('#'); break;
-        case vi::LcdPixel::unknown: text.push_back('?'); break;
-        default: throw std::runtime_error("Invalid LCD pixel");
-      }
-    }
-    text.push_back('\n');
-  }
-  return text;
-}
-
 DisplayPublication::DisplayPublication(const std::filesystem::path &directory)
-    : directory_(directory) {}
+    : directory_(directory), presence_(start_display(directory_)) {}
 
 bool DisplayPublication::publish(const vi::LcdImage &image) {
   if (previous_ == image) { return false; }
   previous_.reset();
-  const auto text = encode_text(image);
-  if (text.contains('?')) {
+  if (!known(image)) {
     directory_.remove("display.pbm");
   } else {
     directory_.replace("display.pbm", encode_pbm(image));
   }
-  directory_.replace("display.txt",
-                     {reinterpret_cast<const std::uint8_t *>(text.data()), text.size()});
   previous_ = image;
   return true;
 }

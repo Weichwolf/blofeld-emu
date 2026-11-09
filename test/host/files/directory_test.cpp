@@ -2,6 +2,7 @@
 #include "files/directory.hpp"
 
 #include <array>
+#include <cerrno>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
@@ -13,6 +14,11 @@
 #include <system_error>
 #include <unistd.h>
 #include <vector>
+#if defined(__APPLE__)
+#include <sys/fcntl.h>
+#else
+#include <fcntl.h>
+#endif
 
 namespace {
 void require(const bool condition, const char *message) {
@@ -23,6 +29,33 @@ std::vector<std::uint8_t> read(const std::filesystem::path &file) {
   std::ifstream stream(file, std::ios::binary);
   return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
 }
+
+void presence(const blofeld::host::Directory &directory, const std::filesystem::path &root) {
+  int reader = -1;
+  char byte = 0;
+  {
+    const auto writer = directory.presence("alive");
+    reader = ::open((root / "alive").c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW);
+    require(reader >= 0 && ::read(reader, &byte, 1) == -1 && errno == EAGAIN,
+            "A live presence writer leaves an empty, nonblocking channel");
+  }
+  require(::read(reader, &byte, 1) == 0, "Destroying the writer exposes EOF without publishing");
+  {
+    const auto writer = directory.presence("alive");
+    require(::read(reader, &byte, 1) == 0,
+            "Restart leaves old readers attached to the closed session");
+    const auto current = ::open((root / "alive").c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    require(current >= 0 && ::read(current, &byte, 1) == -1 && errno == EAGAIN,
+            "New readers observe the restarted session");
+    ::close(current);
+  }
+  ::close(reader);
+  bool rejected = false;
+  try {
+    static_cast<void>(directory.presence("../outside"));
+  } catch (const std::invalid_argument &) { rejected = true; }
+  require(rejected, "Presence cannot leave its publication directory");
+}
 }
 
 int main(const int argc, char **argv) try {
@@ -31,6 +64,7 @@ int main(const int argc, char **argv) try {
   require(std::filesystem::create_directories(root), "Create an owned test directory");
   {
     const blofeld::host::Directory directory(root);
+    presence(directory, root);
     constexpr std::array<std::uint8_t, 3> first{1, 2, 3};
     directory.replace("frame", first);
     require(read(root / "frame") == std::vector<std::uint8_t>{1, 2, 3}, "Complete initial file");

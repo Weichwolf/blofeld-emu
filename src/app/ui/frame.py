@@ -39,6 +39,24 @@ def read_frame(path):
     return Frame(data[len(HEADER):])
 
 
+def publisher_present(path):
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        return False
+    try:
+        if not stat.S_ISFIFO(os.fstat(descriptor).st_mode):
+            raise ValueError("Invalid display presence channel")
+        try:
+            if os.read(descriptor, 1):
+                raise ValueError("Unexpected display presence data")
+            return False
+        except BlockingIOError:
+            return True
+    finally:
+        os.close(descriptor)
+
+
 def runtime_directory():
     configured = os.environ.get("XDG_RUNTIME_DIR")
     if configured:

@@ -4,6 +4,7 @@
 import os
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -11,10 +12,41 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "src/app"))
 
-from ui.frame import HEADER, PAYLOAD_BYTES, Frame, read_frame, runtime_directory
+from ui.frame import HEADER, PAYLOAD_BYTES, Frame, publisher_present, read_frame, runtime_directory
 
 
 class FrameTest(unittest.TestCase):
+    def test_presence(self):
+        with tempfile.TemporaryDirectory(dir=sys.argv[1]) as temporary:
+            path = Path(temporary) / "display.live"
+            self.assertFalse(publisher_present(path))
+            path.write_bytes(b"stale")
+            with self.assertRaises(ValueError):
+                publisher_present(path)
+            path.unlink()
+            os.mkfifo(path, 0o600)
+            self.assertFalse(publisher_present(path))
+            script = ("import os,signal,sys; "
+                      "r=os.open(sys.argv[1],os.O_RDONLY|os.O_NONBLOCK); "
+                      "w=os.open(sys.argv[1],os.O_WRONLY|os.O_NONBLOCK); "
+                      "os.close(r); print('ready',flush=True); signal.pause()")
+            with subprocess.Popen([sys.executable, "-c", script, str(path)],
+                                  stdout=subprocess.PIPE, text=True) as producer:
+                try:
+                    self.assertEqual(producer.stdout.readline(), "ready\n")
+                    before = path.stat().st_mtime_ns
+                    for _ in range(10):
+                        self.assertTrue(publisher_present(path))
+                    self.assertEqual(path.stat().st_mtime_ns, before)
+                finally:
+                    producer.kill()
+                    producer.wait(timeout=1)
+            self.assertFalse(publisher_present(path))
+            path.unlink()
+            path.symlink_to("missing")
+            with self.assertRaises(OSError):
+                publisher_present(path)
+
     def test_runtime_directory(self):
         with patch.dict(os.environ, {"XDG_RUNTIME_DIR": "/selected/runtime"}):
             self.assertEqual(runtime_directory(), Path("/selected/runtime"))

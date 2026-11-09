@@ -5,18 +5,24 @@ from pathlib import Path
 
 from gi.repository import Gio, GLib
 
-from .frame import read_frame
+from .frame import publisher_present, read_frame
 
 
 class DisplayWatch:
     def __init__(self, runtime, changed):
         self.directory = Path(runtime).absolute() / "blofeld-emu"
         self.path = self.directory / "display.pbm"
+        self.presence = self.directory / "display.live"
         self.changed = changed
         self.monitors = {}
         self.pending = 0
         self.closed = False
         self.refresh()
+        self.poll = GLib.timeout_add(1000, self._poll)
+
+    def _poll(self):
+        self.schedule()
+        return GLib.SOURCE_CONTINUE
 
     def _watch(self):
         nearest = self.directory
@@ -44,7 +50,7 @@ class DisplayWatch:
             if entry is None or entry.get_path() is None:
                 continue
             path = Path(entry.get_path())
-            if path == self.path or self.directory.is_relative_to(path):
+            if path in (self.path, self.presence) or self.directory.is_relative_to(path):
                 self.schedule()
                 return
 
@@ -56,12 +62,19 @@ class DisplayWatch:
         self.pending = 0
         if self.closed:
             return GLib.SOURCE_REMOVE
+        running = False
         try:
             self._watch()
-            frame = read_frame(self.path)
-            message = "Display available"
+            running = publisher_present(self.presence)
+            if running:
+                frame = read_frame(self.path)
+                message = ""
+            else:
+                frame, message = None, "Emulator off"
         except FileNotFoundError:
-            frame, message = None, "Waiting for Blofeld display…"
+            frame = None
+            message = ("Waiting for original LCD…" if running else
+                       "Emulator off")
         except (OSError, ValueError, GLib.Error) as error:
             frame, message = None, f"Display unavailable: {error}"
         self.changed(frame, message)
@@ -69,6 +82,9 @@ class DisplayWatch:
 
     def close(self):
         self.closed = True
+        if self.poll:
+            GLib.source_remove(self.poll)
+            self.poll = 0
         if self.pending:
             GLib.source_remove(self.pending)
             self.pending = 0
