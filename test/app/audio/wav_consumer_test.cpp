@@ -100,7 +100,12 @@ void lifecycle(const std::filesystem::path &root) {
   {
     WavConsumer consumer(root / "cancelled.wav", rate);
     const auto output = consumer.output();
+    // libc++ mutates the source on request_stop(); libstdc++ accepts a const source.
+#if defined(_LIBCPP_VERSION)
     std::stop_source stop;
+#else
+    const std::stop_source stop;
+#endif
     stop.request_stop();
     require(!output.write(output.owner, initial, stop.get_token()) && consumer.frames() == 0,
             "Cancellation consumes and counts no frames");
