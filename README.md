@@ -88,6 +88,13 @@ a playable instrument. Complete requirements are in
 See the [target architecture](doc/architecture-design.txt) for independent core
 execution, bounded channels and audio-driven consumption.
 
+Generate deterministic MIDI workload inputs with
+`python3 tools/midi_bench_inputs.py --output build/local/bench-midi`.
+The four cases cover single notes, chords/pedal, sixteen channels and
+controllers/program changes/SysEx/tempo. Their manifest records hashes and required
+instrument setup; generation executes no firmware. Render comparisons require
+matching firmware, programs and images, with actual voice/FX/sample use verified.
+
 Hosts are Linux x86-64 and macOS ARM64, with LLVM 19, CMake 3.25+, Ninja,
 Python 3.11+ and Git. Core checkouts must match
 [cmake/dependencies.json](cmake/dependencies.json); select paths with
