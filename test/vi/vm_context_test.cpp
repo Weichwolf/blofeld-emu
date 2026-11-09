@@ -3,6 +3,7 @@
 #include "dsp/execute.hpp"
 #include "execution.hpp"
 #include "io/dsp_reset.hpp"
+#include "io/midi_port.hpp"
 #include "io/shi.hpp"
 #include "isa.hpp"
 #include "mcu/execute.hpp"
@@ -12,6 +13,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cpu12/memory.hpp>
 #include <cstdint>
 #include <dsp56300/memory.hpp>
@@ -20,6 +22,7 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -470,6 +473,18 @@ int main() try {
   const auto dsp = blofeld::vi::dsp::execute(boot, shi, reset, {});
   require(!mcu.failure && mcu.instructions == 3, "MCU owner performs real reset and native STOP");
   require(!dsp.failure && dsp.instructions == 2, "DSP owner executes its native ROM instructions");
+  {
+    blofeld::vi::VmContext context(image(), boot, {}, {}, blofeld::vi::MidiPort::InputMode::stream);
+    context.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    require(!context.finished() && context.midi().time() == 0,
+            "Neither owner runs beyond an unpublished streaming input origin");
+    context.request_stop();
+    const auto reports = context.wait();
+    require(!reports[0].exception && !reports[1].exception && !reports[0].failure &&
+                !reports[1].failure && reports[0].instructions == 0 && reports[1].instructions == 0,
+            "Shared stop wakes both owners while streaming input is unavailable");
+  }
   {
     blofeld::vi::VmContext context(image(), boot);
     require(!context.take_display(), "No display snapshot precedes device initialization");

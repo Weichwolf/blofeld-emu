@@ -31,7 +31,8 @@ public:
   VmContext(std::unique_ptr<FlashImage> image,
             std::vector<dsp56300::Word> boot,
             std::unique_ptr<MediaImage> media = {},
-            PcmOutput output = {});
+            PcmOutput output = {},
+            MidiPort::InputMode input = MidiPort::InputMode::live);
   ~VmContext();
   VmContext(const VmContext &) = delete;
   VmContext &operator=(const VmContext &) = delete;
