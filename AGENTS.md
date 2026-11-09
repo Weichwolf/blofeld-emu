@@ -44,4 +44,7 @@
   protocols and algorithms; write our implementation independently. Keep
   reference checkouts unchanged and preserve existing dependency notices.
   Do not import GPL-2.0-only octa-capture code. Run as a regular user.
-- Validate ARM64 on macOS and x86-64 on Linux; communicate revisions in commits.
+- Validate ARM64 on macOS locally; the Linux developer validates x86-64.
+  Coordinate optimizations with that developer in private blofeld-src
+  [issue #23](https://github.com/Weichwolf/blofeld-src/issues/23).
+  Communicate dependency revisions in commits.
