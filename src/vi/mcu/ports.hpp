@@ -24,6 +24,8 @@ public:
 
   struct Input {
     std::uint8_t mask = 0, known = 0, value = 0;
+    // Attached device bias applies only to otherwise unknown, undriven inputs.
+    std::uint8_t fallback_low = 0;
   };
 
   struct Output {

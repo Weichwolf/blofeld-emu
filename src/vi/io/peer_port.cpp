@@ -11,6 +11,7 @@ namespace blofeld::vi {
 namespace {
 static_assert(std::atomic<std::uint32_t>::is_always_lock_free);
 static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
+constexpr std::uint64_t admitting = 1, notified = 2, admission_flags = 3, next_admission = 4;
 
 std::uint32_t encode(const PeerPort::Sample value) noexcept {
   return (std::uint32_t{value.mask} << 16U) | (std::uint32_t{value.known} << 8U) | value.value;
@@ -126,6 +127,21 @@ bool PeerPort::Request::acknowledge(const std::uint64_t observed) noexcept {
   return true;
 }
 
+bool PeerPort::mcu_interrupt_ready(const bool ready) noexcept {
+  const auto before = mcu_admission_.load(std::memory_order_acquire);
+  if (((before & admitting) != 0) == ready) { return true; }
+  const auto generation = before & ~admission_flags;
+  if (generation > std::numeric_limits<std::uint64_t>::max() - next_admission) {
+    return fail("MCU peer interrupt admission generation is exhausted");
+  }
+  // A mask transition revokes pending transport notifications. DSP publication
+  // uses CAS on this exact window, so an old eligibility observation cannot
+  // survive a mask/unmask cycle (including an ABA change of the ready bit).
+  mcu_admission_.store(generation + next_admission + (ready ? admitting : 0),
+                       std::memory_order_release);
+  return true;
+}
+
 bool PeerPort::mcu_strobe(const bool active) noexcept {
   if (active && !to_dsp_.active.load(std::memory_order_relaxed) &&
       reply_.announced.exchange(false, std::memory_order_acq_rel) && !start_reply()) {
@@ -135,7 +151,9 @@ bool PeerPort::mcu_strobe(const bool active) noexcept {
 }
 
 bool PeerPort::dsp_ready(const bool active) noexcept {
-  if (active && !to_mcu_.active.load(std::memory_order_relaxed)) {
+  const bool posted = active && !to_mcu_.active.load(std::memory_order_relaxed);
+  auto admission = posted ? mcu_admission_.load(std::memory_order_acquire) : 0;
+  if (posted) {
     constexpr std::uint8_t byte_mask = 0xff;
     constexpr std::uint8_t command_mask = 0x3f;
     constexpr std::uint8_t report = 0x0d;
@@ -147,7 +165,14 @@ bool PeerPort::dsp_ready(const bool active) noexcept {
       reply_.announced.store(true, std::memory_order_release);
     }
   }
-  return to_mcu_.update(active);
+  if (!to_mcu_.update(active)) { return false; }
+  if (posted && (admission & admitting) != 0) {
+    // A real producer event, not a fabricated MCU acknowledgement. Native
+    // interrupt acceptance still owns the posted/accepted request generations.
+    static_cast<void>(mcu_admission_.compare_exchange_strong(
+        admission, admission | notified, std::memory_order_acq_rel, std::memory_order_acquire));
+  }
+  return true;
 }
 
 std::optional<std::uint64_t> PeerPort::dsp_interrupt(const bool edge) const noexcept {
@@ -156,6 +181,9 @@ std::optional<std::uint64_t> PeerPort::dsp_interrupt(const bool edge) const noex
 
 std::optional<std::uint64_t> PeerPort::mcu_interrupt() const noexcept {
   if (const auto level = to_mcu_.pending(false)) { return level; }
+  if ((mcu_admission_.load(std::memory_order_acquire) & admission_flags) == admission_flags) {
+    if (const auto notification = to_mcu_.pending(true)) { return notification; }
+  }
   if (reply_.announced.load(std::memory_order_acquire)) {
     return to_mcu_.posted.load(std::memory_order_acquire);
   }
@@ -180,6 +208,7 @@ void PeerPort::reset_dsp() noexcept {
     error_.store(nullptr, std::memory_order_release);
   }
   dsp_data({});
+  mcu_admission_.fetch_and(~notified, std::memory_order_acq_rel);
   to_mcu_.active.store(false, std::memory_order_release);
   static_cast<void>(to_mcu_.acknowledge(to_mcu_.posted.load(std::memory_order_acquire)));
   static_cast<void>(to_dsp_.acknowledge(to_dsp_.posted.load(std::memory_order_acquire)));

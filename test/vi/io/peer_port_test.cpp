@@ -64,6 +64,59 @@ void requests() {
           "Native interrupt acceptance cannot clear an asserted XIRQ source; release clears it");
 }
 
+void eligible_notifications() {
+  PeerPort peer;
+  require(peer.mcu_interrupt_ready(true), "Publish the MCU's actual native interrupt eligibility");
+  require(peer.dsp_ready(true) && peer.dsp_ready(false) && peer.mcu_interrupt() == 1,
+          "An eligible producer notification survives a complete host execution batch");
+  require(peer.acknowledge_mcu(1) && !peer.mcu_interrupt(),
+          "Only actual interrupt acceptance retires the observed eligible generation");
+  require(peer.dsp_ready(true) && peer.dsp_ready(false) && peer.dsp_ready(true) &&
+              peer.dsp_ready(false) && peer.acknowledge_mcu(2) && peer.mcu_interrupt() == 3,
+          "Acknowledging an older notification cannot lose a newer producer event");
+  require(peer.mcu_interrupt_ready(false) && !peer.mcu_interrupt() &&
+              peer.mcu_interrupt_ready(true) && !peer.mcu_interrupt(),
+          "A mask transition revokes transport notifications without reviving them on unmask");
+  require(peer.mcu_interrupt_ready(false) && peer.dsp_ready(true) && peer.dsp_ready(false) &&
+              !peer.mcu_interrupt() && peer.mcu_interrupt_ready(true) && !peer.mcu_interrupt(),
+          "A pulse wholly inside a masked window is never queued for later execution");
+  require(peer.dsp_ready(true) && peer.dsp_ready(false) && peer.mcu_interrupt() == 5,
+          "A fresh eligible window receives only a new actual producer event");
+  peer.reset_dsp();
+  require(!peer.mcu_interrupt() && peer.dsp_ready(true) && peer.dsp_ready(false) &&
+              peer.mcu_interrupt() == 6,
+          "DSP reset revokes old events while preserving the running MCU's admission window");
+}
+
+void concurrent_admission() {
+  PeerPort peer;
+  std::atomic<bool> done{false};
+  constexpr unsigned pulses = 10000;
+  bool posted = true;
+  std::jthread producer([&] {
+    for (unsigned index = 0; index < pulses; ++index) {
+      posted = peer.dsp_ready(true) && peer.dsp_ready(false) && posted;
+    }
+    done.store(true, std::memory_order_release);
+  });
+  bool accepted = true;
+  do {
+    accepted = peer.mcu_interrupt_ready(true) && accepted;
+    if (const auto request = peer.mcu_interrupt()) {
+      accepted = peer.acknowledge_mcu(*request) && accepted;
+    }
+    accepted = peer.mcu_interrupt_ready(false) && accepted;
+  } while (!done.load(std::memory_order_acquire));
+  producer.join();
+  require(posted && accepted && !peer.mcu_interrupt(),
+          "Concurrent eligibility changes leave no ended notification behind the mask");
+  require(peer.mcu_interrupt_ready(true) && !peer.mcu_interrupt(),
+          "An old DSP eligibility observation cannot cross a mask/unmask generation");
+  require(peer.dsp_ready(true) && peer.dsp_ready(false) && peer.mcu_interrupt() == pulses + 1 &&
+              peer.acknowledge_mcu(pulses + 1) && !peer.mcu_interrupt(),
+          "The final quiescent unmasked producer event is delivered and retired exactly once");
+}
+
 void concurrent_exchange() {
   PeerPort peer;
   const auto payload = [](const std::uint8_t value) {
@@ -247,6 +300,8 @@ void concurrent_reply() {
 int main() try {
   data_views();
   requests();
+  eligible_notifications();
+  concurrent_admission();
   concurrent_exchange();
   report_notifications();
   withdrawn_reports();

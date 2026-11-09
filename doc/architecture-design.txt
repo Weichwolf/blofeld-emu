@@ -115,7 +115,22 @@ The runtime peer interface shares the actual low-byte MCU Port Q and DSP Port C
 register views, including direction and unknown bits. Raw reads retain the current
 value. Active-low MCU J0 posts DSP IRQA using its configured edge/level mode;
 DSP E9 asserts MCU XIRQ, which is level-sensitive (9S12UF32DGV1 section 2.4.24).
-An ended ordinary E9 pulse is not retained behind the MCU X mask. Only accepted native
+An ended ordinary E9 pulse is not retained behind the MCU X mask. The MCU
+owner publishes interrupt eligibility at native mask/return boundaries. An actual
+producer notification made in an eligible window remains pending until accepted,
+so a complete DSP batch cannot erase it merely because the host MCU thread did
+not run between assertion and release. A mask transition revokes this transport
+notification; a generation-checked publication cannot cross a mask/unmask cycle.
+Raw GPIO reads still expose the current level and data. DSP56371UM Table2-8
+specifies internal pull-downs on PortC, including reset-disconnected pins.
+The attached peer supplies this released-input bias to MCU PortQ only where no
+local output, configured pull or external data determines the value. It cannot
+make an active unknown driver or unknown output latch known. The original MCU
+XIRQ handler disables its own PortQ pulls before sampling this released bus;
+the idle value is not a response payload or acknowledgement. This is a functional
+mailbox notification contract, not a fabricated hardware edge latch or an
+acknowledgement of firmware work. No instruction-level synchronization is added.
+Only accepted native
 interrupt entry acknowledges an IRQA edge, and an older acknowledgement cannot
 discard a newer request. Admission does not clear an asserted level. DSP reset releases
 its own outputs and cancels stale requests without resetting generation counters.

@@ -31,7 +31,11 @@ public:
   }
 
   // J0 -> configured IRQA; E9 -> XIRQ. Announced report commands stay pending
-  // until the actual MCU strobe or DSP withdrawal; ordinary pulses stay level-only.
+  // until the actual MCU strobe or DSP withdrawal. An eligible ordinary notification
+  // survives host batching only within the same MCU interrupt-admission window.
+  // MCU owner publishes admission at native mask/return boundaries. Masked pulses
+  // are never retained for a later unmask; this is transport, not a pin latch.
+  [[nodiscard]] bool mcu_interrupt_ready(bool ready) noexcept;
   [[nodiscard]] bool mcu_strobe(bool active) noexcept;
   [[nodiscard]] bool dsp_ready(bool active) noexcept;
   [[nodiscard]] std::optional<std::uint64_t> dsp_interrupt(bool edge) const noexcept;
@@ -62,6 +66,7 @@ private:
 
   std::atomic<std::uint32_t> mcu_{0}, dsp_{0};
   Request to_dsp_, to_mcu_;
+  std::atomic<std::uint64_t> mcu_admission_{0};
   Reply reply_;
   std::atomic<const char *> error_{nullptr};
 };
