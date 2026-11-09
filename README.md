@@ -5,7 +5,7 @@ Blofeld firmware VM project using the independent
 [dsp56300](https://github.com/Weichwolf/dsp56300) JIT cores.
 
 The current source contains the LCD register/data contract and MCU port binding, image capture,
-atomic PBM/text publication, GTK viewer, 1.25 update-container loader, MCU
+atomic PBM publication, GTK viewer, 1.25 update-container loader, MCU
 image codec, direct MCU memory mapping, GPIO, Flash reset/protection/error registers,
 free-running timer capture/compare, CRG/USB clock selection, periodic interrupts
 and interrupt wakeup, SCI character/register handling, USB configuration and direct
@@ -199,8 +199,11 @@ The media image uses the checksummed `.bfnand` format with explicit known bits.
 The emulator and viewer share `$XDG_RUNTIME_DIR/blofeld-emu`, without display-path
 overrides. The default runtime root is `/run/user/UID` on Linux and the Darwin
 user temporary directory on macOS. The MCU owner supplies controller snapshots;
-the app publishes atomic `display.pbm` and `display.txt` files. Unknown pixels remain
-explicit in text and remove the bitmap until a known frame is available.
+the app publishes atomic `display.pbm` frames only when pixels change. Unknown
+pixels revoke the bitmap until a known frame is available. A live-only
+`display.live` pipe stays open for the publisher lifetime. The viewer checks it
+once per second and clears stale images when the emulator exits or crashes;
+this requires no heartbeat writes or firmware/audio work.
 The optional `firmware` path is parsed but not yet connected to execution. Startup
 currently exits unsuccessfully because the instrument is incomplete; successful execution of a short program is not instrument readiness.
 SIGINT/SIGTERM request coordinated shutdown. Live status reports server-submitted
@@ -219,9 +222,10 @@ python3.14 tools/blofeld-display
 
 The installed launcher uses the Python interpreter selected by CMake.
 It watches `$XDG_RUNTIME_DIR/blofeld-emu/display.pbm`, follows directory
-recreation. Its header button saves a PNG to the user's Pictures directory.
-For an explicit path without a window, use `tools/blofeld-display --screenshot FILE.png`. PBM and text publication
-consume independent LCD images outside core execution and audio callbacks.
+recreation. A valid live image hides the status line; publisher absence, missing
+LCD state and errors remain visible.
+PBM publication consumes independent LCD images outside core execution and audio
+callbacks. No automatic text copy is written.
 
 Firmware, samples, manuals and populated images remain local and are not
 redistributed. [Reference manifests](doc/README.txt) retain their identities.

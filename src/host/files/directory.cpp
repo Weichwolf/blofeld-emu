@@ -22,11 +22,14 @@
 #include <sys/syscall.h>
 #include <sys/types.h>
 #endif
+#include <sys/stat.h>
 #include <system_error>
 #include <unistd.h>
 
 namespace blofeld::host {
 namespace {
+constexpr auto owner_permissions = 0600;
+
 [[noreturn]] void fail(const std::string_view operation, const std::string_view path = {}) {
   const auto error = errno;
   throw std::system_error(
@@ -69,6 +72,28 @@ Directory::~Directory() {
   ::close(descriptor_);
 }
 
+Presence::~Presence() {
+  ::close(descriptor_);
+}
+
+Presence Directory::presence(const std::string_view name) const {
+  const auto filename = entry_name(name);
+  remove(filename);
+  if (::mkfifoat(descriptor_, filename.c_str(), owner_permissions) != 0) {
+    fail("Create presence", filename);
+  }
+  constexpr auto flags = O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW;
+  const auto reader = ::openat(descriptor_, filename.c_str(), O_RDONLY | flags);
+  if (reader < 0) { fail("Open presence reader", filename); }
+  const auto writer = ::openat(descriptor_, filename.c_str(), O_WRONLY | flags);
+  const auto error = errno;
+  ::close(reader);
+  if (writer < 0) {
+    throw std::system_error(error, std::generic_category(), "Open presence writer " + filename);
+  }
+  return Presence(writer);
+}
+
 void Directory::replace(const std::string_view name,
                         const std::span<const std::uint8_t> bytes) const {
   const auto filename = entry_name(name);
@@ -76,8 +101,10 @@ void Directory::replace(const std::string_view name,
   if (::unlinkat(descriptor_, staging.c_str(), 0) != 0 && errno != ENOENT) {
     fail("Remove stale publication", staging);
   }
-  const auto output = ::openat(
-      descriptor_, staging.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
+  const auto output = ::openat(descriptor_,
+                               staging.c_str(),
+                               O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW,
+                               owner_permissions);
   if (output < 0) { fail("Create publication", staging); }
   try {
     write_all(output, bytes);

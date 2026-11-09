@@ -7,6 +7,19 @@
 #include <string_view>
 
 namespace blofeld::host {
+class Presence {
+public:
+  ~Presence();
+  Presence(const Presence &) = delete;
+  Presence &operator=(const Presence &) = delete;
+
+private:
+  explicit Presence(int descriptor) : descriptor_(descriptor) {}
+
+  int descriptor_;
+  friend class Directory;
+};
+
 // Single-writer directory for atomic publication. The open identity survives
 // path renames. No instrument types, serialization or device timing belong here.
 class Directory {
@@ -20,6 +33,7 @@ public:
   // operation makes no durability guarantee across power loss.
   void replace(std::string_view name, std::span<const std::uint8_t> bytes) const;
   void remove(std::string_view name) const;
+  [[nodiscard]] Presence presence(std::string_view name) const;
 
 private:
   int descriptor_ = -1;
