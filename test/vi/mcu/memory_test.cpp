@@ -11,9 +11,13 @@
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <span>
 #include <stdexcept>
 
 namespace {
+constexpr cpu12::Address overlay_first = 0x1600;
+constexpr std::size_t overlay_bytes = 0x210;
+
 void require(const bool condition, const char *message) {
   if (!condition) { throw std::runtime_error(message); }
 }
@@ -133,12 +137,200 @@ void unknown_memory() {
               result.pc == program_address && result.retired == 0,
           "Uninitialized native load fails with its actual PC and address");
 }
+
+cpu12::Ram grant(blofeld::vi::mcu::Memory &memory, const cpu12::Address address) {
+  for (const auto view : memory.regions()) {
+    if (address >= view.first && std::size_t{address} - view.first < view.bytes.size()) {
+      return view;
+    }
+  }
+  throw std::runtime_error("Expected an actual borrowed memory grant");
+}
+
+void program_bindings() {
+  blofeld::vi::FlashImage image;
+  blofeld::vi::mcu::Memory memory(image);
+  constexpr auto original = cpu12::isa::nop[0];
+  constexpr cpu12::Byte replacement = 0x5a;
+  require(!memory.bind_program(overlay_first), "Unknown RAM cannot become immutable program");
+  for (std::size_t index = 0; index < overlay_bytes - 1; ++index) {
+    require(memory.write(
+                {.address = static_cast<cpu12::Address>(overlay_first + index), .value = original}),
+            "Initialize independently authored program bytes");
+  }
+  require(!memory.bind_program(overlay_first), "One unknown tail byte prevents executable binding");
+  require(memory.write({.address = overlay_first + overlay_bytes - 1, .value = original}) &&
+              memory.bind_program(overlay_first),
+          "Only a complete actual payload receives an immutable binding");
+  const auto first = grant(memory, overlay_first);
+  require(!first.writable && first.known.empty() && first.identity != 0 &&
+              first.bytes.size() == overlay_bytes && first.first == overlay_first,
+          "The exact code extent has initialized read-only native grants");
+  require(grant(memory, overlay_first - 1).writable &&
+              grant(memory, overlay_first + overlay_bytes).writable &&
+              !memory.bind_program(overlay_first),
+          "Adjacent data remains writable and the active binding is reused");
+  require(memory.write({.address = overlay_first, .value = original}) &&
+              !memory.program_changed() && !memory.commit_mapping(),
+          "An unchanged real write preserves the same executable identity");
+  require(memory.write({.address = overlay_first, .value = replacement}) &&
+              memory.program_changed() && !memory.bind_program(overlay_first) &&
+              memory.commit_mapping() && !memory.program_changed(),
+          "An actual code change releases ownership until its instruction boundary commits");
+  require(memory.bind_program(overlay_first) &&
+              grant(memory, overlay_first).identity != first.identity,
+          "Changed bytes receive a different immutable code identity");
+  const auto changed_identity = grant(memory, overlay_first).identity;
+  require(memory.write({.address = overlay_first, .value = original}) && memory.commit_mapping() &&
+              memory.bind_program(overlay_first) &&
+              grant(memory, overlay_first).identity == first.identity,
+          "Restoring identical contents reuses the original translation identity");
+  memory.power_on();
+  require(!memory.bind_program(overlay_first) && grant(memory, overlay_first).writable,
+          "Power-on removes executable ownership and does not manufacture initialized RAM");
+  require(memory.commit_mapping(), "Power-on retires the preceding executable grant");
+  for (std::size_t index = 0; index < overlay_bytes; ++index) {
+    require(memory.write({.address = static_cast<cpu12::Address>(overlay_first + index),
+                          .value = replacement}),
+            "Initialize different code after power-on");
+  }
+  require(memory.bind_program(overlay_first) &&
+              grant(memory, overlay_first).identity != first.identity &&
+              grant(memory, overlay_first).identity != changed_identity,
+          "Power-on cannot reuse an old identity for different executable bytes");
+}
+
+struct ProgramWriter {
+  blofeld::vi::mcu::Memory &memory;
+  cpu12::Core *core = nullptr;
+
+  static bool write(void *owner, const cpu12::ByteWrite access) noexcept {
+    auto &self = *static_cast<ProgramWriter *>(owner);
+    const bool accepted = self.memory.write(access);
+    if (self.memory.program_changed()) { self.core->request_yield(); }
+    return accepted;
+  }
+
+  static bool write_word(void *owner, const cpu12::WordWrite access) noexcept {
+    constexpr unsigned byte_mask = 0xff;
+    return write(owner,
+                 {.address = access.address,
+                  .value = static_cast<cpu12::Byte>(access.value >> 8U)}) &&
+           write(owner,
+                 {.address = static_cast<cpu12::Address>(access.address + 1U),
+                  .value = static_cast<cpu12::Byte>(access.value & byte_mask)});
+  }
+};
+
+void native_program_transition(const bool word) {
+  namespace isa = cpu12::isa;
+  constexpr cpu12::Byte replacement = 0x5a;
+  constexpr cpu12::Byte previous = 0x12;
+  constexpr cpu12::Address operand = overlay_first + 6;
+  constexpr cpu12::Address stack = 0x1fff;
+  constexpr auto byte_program =
+      isa::program(isa::opcode<isa::Opcode::ldaa_immediate>(),
+                   std::array{replacement},
+                   isa::opcode<isa::Opcode::staa_extended>(),
+                   std::array<cpu12::Byte, 2>{static_cast<cpu12::Byte>(operand >> 8U),
+                                              static_cast<cpu12::Byte>(operand)},
+                   isa::opcode<isa::Opcode::ldab_immediate>(),
+                   std::array{previous},
+                   isa::wai);
+  constexpr cpu12::Address word_operand = overlay_first + 7;
+  constexpr auto word_program =
+      isa::program(isa::opcode<isa::Opcode::ldd_immediate>(),
+                   std::array<cpu12::Byte, 2>{0x5a, 0x96},
+                   isa::opcode<isa::Opcode::std_extended>(),
+                   std::array<cpu12::Byte, 2>{static_cast<cpu12::Byte>(word_operand >> 8U),
+                                              static_cast<cpu12::Byte>(word_operand)},
+                   isa::opcode<isa::Opcode::ldd_immediate>(),
+                   std::array<cpu12::Byte, 2>{0x12, 0x34},
+                   isa::wai);
+  const auto program = word ? std::span<const cpu12::Byte>(word_program)
+                            : std::span<const cpu12::Byte>(byte_program);
+  blofeld::vi::FlashImage image;
+  blofeld::vi::mcu::Memory memory(image);
+  for (std::size_t index = 0; index < overlay_bytes; ++index) {
+    const auto byte = index < program.size() ? program[index] : isa::nop[0];
+    require(memory.write(
+                {.address = static_cast<cpu12::Address>(overlay_first + index), .value = byte}),
+            "Load an authored program with a real write to its following immediate operand");
+  }
+  require(memory.bind_program(overlay_first), "Bind initialized RAM code before native execution");
+  auto views = memory.regions();
+  const auto identity = grant(memory, overlay_first).identity;
+  ProgramWriter writer{.memory = memory};
+  cpu12::Io io{
+      .owner = &writer, .write = ProgramWriter::write, .write_word = ProgramWriter::write_word};
+  cpu12::Core core(cpu12::Memory::mapped(views), &io);
+  writer.core = &core;
+  core.set_registers({.pc = overlay_first, .sp = stack});
+  const auto prefix = core.run();
+  require(prefix.fault == cpu12::Fault::none && prefix.retired == 2 &&
+              core.registers().pc == overlay_first + (word ? 6 : 5) && memory.program_changed(),
+          "A genuine code write completes exactly once before leaving the old native binding");
+  require(memory.commit_mapping() && memory.bind_program(core.registers().pc) &&
+              grant(memory, overlay_first).identity != identity,
+          "The consumer publishes changed code at the actual completed-instruction boundary");
+  auto next = memory.regions();
+  core.set_memory(cpu12::Memory::mapped(next));
+  views.swap(next);
+  const auto suffix = core.run();
+  constexpr cpu12::Address byte_expected = 0x5a5a;
+  constexpr cpu12::Address word_expected = 0x5a96;
+  require(suffix.fault == cpu12::Fault::none && suffix.retired == 2 &&
+              suffix.state == cpu12::ExecutionState::waiting &&
+              core.registers().d == (word ? word_expected : byte_expected),
+          "The new binding executes the changed operand without replaying the prior store");
+}
+
+void interrupt_program_transition() {
+  constexpr cpu12::Address stack = overlay_first + 9;
+  constexpr cpu12::Address vector = 0xfff0;
+  constexpr std::size_t vector_offset = 0x7ff0;
+  blofeld::vi::FlashImage image;
+  image.known.fill(1);
+  image.bytes[vector_offset] = static_cast<cpu12::Byte>(overlay_first >> 8U);
+  image.bytes[vector_offset + 1] = static_cast<cpu12::Byte>(overlay_first);
+  blofeld::vi::mcu::Memory memory(image);
+  for (std::size_t index = 0; index < overlay_bytes; ++index) {
+    require(memory.write({.address = static_cast<cpu12::Address>(overlay_first + index),
+                          .value = cpu12::isa::nop[0]}),
+            "Initialize an authored overlay before an overlapping interrupt stack write");
+  }
+  require(memory.bind_program(overlay_first), "Bind the original program before warming it");
+  auto views = memory.regions();
+  ProgramWriter writer{.memory = memory};
+  cpu12::Io io{
+      .owner = &writer, .write = ProgramWriter::write, .write_word = ProgramWriter::write_word};
+  cpu12::Core core(cpu12::Memory::mapped(views), &io);
+  writer.core = &core;
+  core.set_registers({.pc = overlay_first, .sp = stack});
+  require(core.run(1).retired == 1, "Warm an actual native entry for the original code image");
+  const auto entered = core.interrupt({.vector = vector});
+  require(entered.accepted && memory.program_changed() && core.registers().pc == overlay_first,
+          "A real interrupt frame can overwrite code before its target instruction executes");
+  require(memory.commit_mapping() && memory.bind_program(core.registers().pc),
+          "Commit interrupt-entry writes before preparing the next executable binding");
+  auto next = memory.regions();
+  core.set_memory(cpu12::Memory::mapped(next));
+  views.swap(next);
+  const auto result = core.run();
+  require(result.fault == cpu12::Fault::unsupported_instruction && result.retired == 0 &&
+              result.pc == overlay_first && result.opcode == 0,
+          "The newly written zero CCR byte is decoded instead of executing stale cached NOPs");
+}
 }
 
 int main() try {
   mapping();
   native_memory();
   unknown_memory();
+  program_bindings();
+  native_program_transition(false);
+  native_program_transition(true);
+  interrupt_program_transition();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

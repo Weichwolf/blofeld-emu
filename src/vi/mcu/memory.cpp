@@ -3,6 +3,7 @@
 
 #include "storage/flash_image.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cpu12/core.hpp>
 #include <cpu12/memory.hpp>
@@ -40,6 +41,8 @@ Memory::Memory(FlashImage &flash) : flash_(flash) {
 }
 
 void Memory::reset() {
+  program_changed_ = program_changed_ || program_.has_value();
+  program_.reset();
   mapping_ = {9, 0, 1, 0x0d};
   pending_ = mapping_;
   written_ = 0;
@@ -110,6 +113,10 @@ bool Memory::read(const std::uint16_t address, std::uint8_t &value) const noexce
 bool Memory::write(const cpu12::ByteWrite access) noexcept {
   const auto location = locate(access.address);
   if (location.space == Space::system_ram) {
+    if (program_contains(location) && system_[location.offset] != access.value) {
+      program_.reset();
+      program_changed_ = true;
+    }
     system_[location.offset] = access.value;
     system_known_[location.offset] = 1;
     return true;
@@ -120,6 +127,37 @@ bool Memory::write(const cpu12::ByteWrite access) noexcept {
     return true;
   }
   return false;
+}
+
+bool Memory::program_contains(const Location location) const noexcept {
+  return program_ && location.space == Space::system_ram && location.offset >= program_offset_ &&
+         std::size_t{location.offset} - program_offset_ < program_bytes;
+}
+
+bool Memory::bind_program(const std::uint16_t pc) {
+  if (program_ || program_changed_ || pc < program_first ||
+      std::size_t{pc} - program_first >= program_bytes) {
+    return false;
+  }
+  const auto first = locate(program_first);
+  const auto last = locate(static_cast<std::uint16_t>(program_first + program_bytes - 1));
+  if (first.space != Space::system_ram || last.space != first.space ||
+      last.offset != first.offset + program_bytes - 1) {
+    return false;
+  }
+  const auto known = std::span(system_known_).subspan(first.offset, program_bytes);
+  if (std::ranges::any_of(known, [](const auto byte) { return byte == 0; })) { return false; }
+  std::array<std::uint8_t, program_bytes> image{};
+  std::ranges::copy(std::span(system_).subspan(first.offset, program_bytes), image.begin());
+  const auto found = std::ranges::find(programs_, image);
+  if (found == programs_.end()) {
+    programs_.push_back(image);
+    program_ = programs_.size() - 1;
+  } else {
+    program_ = static_cast<std::size_t>(found - programs_.begin());
+  }
+  program_offset_ = first.offset;
+  return true;
 }
 
 cpu12::Ram Memory::region(const Location start, const std::size_t size) {
@@ -135,6 +173,7 @@ cpu12::Ram Memory::region(const Location start, const std::size_t size) {
 
 std::vector<cpu12::Ram> Memory::regions() {
   std::vector<cpu12::Ram> views;
+  const auto identity = program_ ? *program_ + 1 : 0;
   constexpr unsigned end = cpu12::address_bytes;
   const auto grantable = [this](const Location at) {
     return at.space == Space::system_ram || at.space == Space::queue_ram ||
@@ -148,15 +187,21 @@ std::vector<cpu12::Ram> Memory::regions() {
       continue;
     }
     const auto first = address++;
+    const bool executable = program_contains(start);
     while (address < end) {
       const auto next = locate(static_cast<std::uint16_t>(address));
       if (next.space != start.space || next.offset != start.offset + address - first ||
-          !grantable(next)) {
+          !grantable(next) || program_contains(next) != executable) {
         break;
       }
       ++address;
     }
     auto view = region(start, address - first);
+    if (executable) {
+      view.known = {};
+      view.writable = false;
+      view.identity = identity;
+    }
     view.first = static_cast<std::uint16_t>(first);
     views.push_back(view);
   }
@@ -178,7 +223,9 @@ bool Memory::write_mapping(const cpu12::ByteWrite access) {
 }
 
 bool Memory::commit_mapping() noexcept {
-  const bool changed = mapping_ != pending_;
+  const bool changed = mapping_ != pending_ || program_changed_;
+  if (mapping_ != pending_) { program_.reset(); }
+  program_changed_ = false;
   mapping_ = pending_;
   return changed;
 }

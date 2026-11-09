@@ -8,6 +8,7 @@
 #include <cpu12/memory.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 namespace blofeld::vi::mcu {
@@ -35,6 +36,12 @@ public:
   [[nodiscard]] std::vector<cpu12::Ram> regions();
   [[nodiscard]] bool read(std::uint16_t address, std::uint8_t &value) const noexcept;
   [[nodiscard]] bool write(cpu12::ByteWrite access) noexcept;
+  // Bind a fully initialized resident overlay at an execution-owner boundary.
+  // A real write releases the binding before the next instruction executes.
+  [[nodiscard]] bool bind_program(std::uint16_t pc);
+
+  [[nodiscard]] bool program_changed() const noexcept { return program_changed_; }
+
   [[nodiscard]] std::uint8_t read_mapping(std::uint16_t offset) const;
   // Stage known mapping-register writes; true requests an instruction-boundary
   // return. Commit and rebind after that complete instruction, not every cycle.
@@ -43,6 +50,7 @@ public:
 
 private:
   [[nodiscard]] cpu12::Ram region(Location start, std::size_t size);
+  [[nodiscard]] bool program_contains(Location location) const noexcept;
   FlashImage &flash_;
   static constexpr std::size_t system_bytes = 3584;
   static constexpr std::size_t queue_bytes = 1536;
@@ -53,5 +61,11 @@ private:
   std::array<std::uint8_t, 4> mapping_{};
   std::array<std::uint8_t, 4> pending_{};
   std::uint8_t written_ = 0;
+  static constexpr std::uint16_t program_first = 0x1600;
+  static constexpr std::size_t program_bytes = 0x210;
+  std::vector<std::array<std::uint8_t, program_bytes>> programs_;
+  std::optional<std::size_t> program_;
+  std::uint16_t program_offset_ = 0;
+  bool program_changed_ = false;
 };
 }

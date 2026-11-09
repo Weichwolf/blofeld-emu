@@ -131,6 +131,12 @@ Use documented nominal device clocks and analytical divider/deadline arithmetic.
 MCU OC7M/OC7D retain their actual values for input-capture channels, including
 firmware use as scratch storage. Unsupported compare-output activation fails
 regardless of whether the mask or channel selection is written first.
+Fully initialized resident MCU RAM overlays receive read-only executable grants
+at owner boundaries before pending interrupt entry. A changed byte or word write completes through the owner,
+releases that grant and forces rebinding before the next instruction. Exact cold
+image comparisons select stable identities, allowing identical loaded contents
+to reuse native translations without per-instruction code scanning. Adjacent RAM
+and unknown bytes retain their ordinary contracts.
 The UF32 uses its 12 MHz reference and nominal 60 MHz PHY output; qualify clock
 availability through the documented detector window, without analog PLL or
 external waveform models. Keep oscillator-driven RTI independent of CPU clock

@@ -444,7 +444,9 @@ private:
       }
       return true;
     }
-    return memory_.write(access);
+    const bool accepted = memory_.write(access);
+    if (memory_.program_changed()) { core_->request_yield(); }
+    return accepted;
   }
 
   bool read_word(const std::uint16_t address, std::uint16_t &value) noexcept {
@@ -611,6 +613,16 @@ std::vector<cpu12::Ram> regions(Memory &memory, Usb &usb) {
 
 enum class Dispatch : std::uint8_t { run, again, done };
 
+void bind_memory(cpu12::Core &core, Memory &memory, Usb &usb, std::vector<cpu12::Ram> &grants) {
+  const bool mapping_changed = memory.commit_mapping();
+  const bool buffers_changed = usb.commit_mapping();
+  const bool program_changed = memory.bind_program(core.registers().pc);
+  if (!mapping_changed && !buffers_changed && !program_changed) { return; }
+  auto next_grants = regions(memory, usb);
+  core.set_memory(cpu12::Memory::mapped(next_grants));
+  grants.swap(next_grants);
+}
+
 Dispatch prepare(cpu12::Core &core, Devices &devices, ExecutionReport &report) {
   advance(core, devices);
   const auto state = core.state().execution;
@@ -664,6 +676,7 @@ ExecutionReport execute(FlashImage &image,
     return report;
   }
   while (!stop.stop_requested()) {
+    bind_memory(core, memory, devices.usb, grants);
     const auto dispatch = prepare(core, devices, report);
     if (dispatch == Dispatch::done) { break; }
     if (dispatch == Dispatch::again) { continue; }
@@ -685,13 +698,6 @@ ExecutionReport execute(FlashImage &image,
       break;
     }
     if (!io.complete_events()) { break; }
-    const auto memory_changed = memory.commit_mapping();
-    const auto buffers_changed = devices.usb.commit_mapping();
-    if (memory_changed || buffers_changed) {
-      auto next_grants = regions(memory, devices.usb);
-      core.set_memory(cpu12::Memory::mapped(next_grants));
-      grants.swap(next_grants);
-    }
     advance(core, devices);
     devices.activity(result.state);
   }
