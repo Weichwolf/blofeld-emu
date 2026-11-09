@@ -52,6 +52,19 @@ void mappings_and_masks() {
   }
 }
 
+void external_modes() {
+  Interrupts controller;
+  require(!controller.external_edge(0x10), "Reset selects the level-sensitive external mode");
+  for (const Word vector : {0x10U, 0x12U, 0x14U, 0x16U}) {
+    const auto shift = ((vector - 0x10U) / 2) * 3;
+    require(controller.write({.address = Interrupts::core_address, .value = Word{6} << shift}) &&
+                controller.external_edge(vector) && !controller.external_edge(vector + 1),
+            "IAL bit two selects the external negative-edge request independently of IPL");
+  }
+  require(!controller.external_edge(0) && !controller.external_edge(dma0_vector),
+          "Non-external vectors have no external edge selector");
+}
+
 void priority_and_order() {
   Interrupts controller;
   require(controller.write({.address = Interrupts::core_address, .value = dsp56300::word_mask}) &&
@@ -95,6 +108,7 @@ void priority_and_order() {
 
 int main() try {
   mappings_and_masks();
+  external_modes();
   priority_and_order();
 } catch (const std::exception &error) {
 

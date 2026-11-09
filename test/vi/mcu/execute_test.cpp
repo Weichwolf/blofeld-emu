@@ -4,6 +4,7 @@
 #include "execution.hpp"
 #include "io/controls.hpp"
 #include "io/dsp_reset.hpp"
+#include "io/peer_port.hpp"
 #include "io/shi.hpp"
 #include "isa.hpp"
 #include "mcu/execute.hpp"
@@ -13,6 +14,7 @@
 #include <array>
 #include <atomic>
 #include <cpu12/memory.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <iostream>
@@ -176,6 +178,100 @@ void native_display_status() {
           "The final owner snapshot retains the actual LCD command and unknown RAM");
 }
 
+void native_package_and_peer() {
+  namespace isa = cpu12::isa;
+  constexpr cpu12::Byte datum = 0xa5;
+  constexpr cpu12::Address marker = 0x3000;
+  constexpr cpu12::Byte peer_byte_mask = 0xff;
+  constexpr std::array<cpu12::Byte, 2> input_address{2, 0x60};
+  constexpr std::array<cpu12::Byte, 2> marker_address{static_cast<cpu12::Byte>(marker >> 8U),
+                                                      static_cast<cpu12::Byte>(marker)};
+  std::vector<cpu12::Byte> program;
+  const auto append = [&](const auto &bytes) {
+    program.insert(program.end(), bytes.begin(), bytes.end());
+  };
+  const auto store = [&](const cpu12::Byte value, const cpu12::Byte address) {
+    append(std::array{isa::opcode<isa::Opcode::ldab_immediate>()[0],
+                      value,
+                      isa::opcode<isa::Opcode::stab_direct>()[0],
+                      address});
+  };
+  store(4, 9);
+  store(4, 8);
+  append(
+      isa::program(isa::opcode<isa::Opcode::brclr_direct>(), std::array<cpu12::Byte, 3>{8, 8, 0}));
+  const auto first = program.size() - 1;
+  store(0, 8);
+  append(
+      isa::program(isa::opcode<isa::Opcode::brset_direct>(), std::array<cpu12::Byte, 3>{8, 8, 0}));
+  const auto second = program.size() - 1;
+  constexpr auto select_64 = isa::program(isa::opcode<isa::Opcode::ldab_immediate>(),
+                                          std::array<cpu12::Byte, 1>{3},
+                                          isa::opcode<isa::Opcode::stab_extended>(),
+                                          std::array<cpu12::Byte, 2>{2, 0x57});
+  append(isa::program(isa::opcode<isa::Opcode::bra_relative>(),
+                      std::array{static_cast<cpu12::Byte>(select_64.size())}));
+  program[first] = static_cast<cpu12::Byte>(program.size() - first - 1);
+  program[second] = static_cast<cpu12::Byte>(program.size() - second - 1);
+  append(select_64);
+  append(isa::program(isa::opcode<isa::Opcode::ldab_extended>(),
+                      input_address,
+                      isa::opcode<isa::Opcode::stab_extended>(),
+                      marker_address));
+  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  image->known.fill(1);
+  std::ranges::copy(program, image->bytes.begin());
+  image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
+  image->bytes.back() = 0;
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  blofeld::vi::PeerPort peer;
+  peer.dsp_data({.mask = peer_byte_mask, .known = peer_byte_mask, .value = datum});
+  const auto report = blofeld::vi::mcu::execute(*image, shi, reset, {}, nullptr, nullptr, &peer);
+  require(report.failure && report.failure->address == marker && report.failure->value == datum,
+          "Actual package-sense branches select 100-pin routing and PTQ samples the DSP driver");
+}
+
+void native_peer_xirq() {
+  namespace isa = cpu12::isa;
+  constexpr cpu12::Byte datum = 0xb2;
+  constexpr cpu12::Byte peer_byte_mask = 0xff;
+  constexpr cpu12::Address marker = 0x3000;
+  constexpr std::array<cpu12::Byte, 2> input_address{2, 0x60};
+  constexpr std::array<cpu12::Byte, 2> marker_address{static_cast<cpu12::Byte>(marker >> 8U),
+                                                      static_cast<cpu12::Byte>(marker)};
+  constexpr std::uint16_t stack = 0x1fff;
+  constexpr auto setup =
+      isa::program(isa::opcode<isa::Opcode::lds_immediate>(),
+                   std::array<cpu12::Byte, 2>{static_cast<cpu12::Byte>(stack >> 8U),
+                                              static_cast<cpu12::Byte>(stack)},
+                   isa::opcode<isa::Opcode::andcc_immediate>(),
+                   std::array<cpu12::Byte, 1>{0xbf},
+                   isa::wai);
+  constexpr auto handler = isa::program(isa::opcode<isa::Opcode::ldab_extended>(),
+                                        input_address,
+                                        isa::opcode<isa::Opcode::stab_extended>(),
+                                        marker_address);
+  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  image->known.fill(1);
+  std::ranges::copy(setup, image->bytes.begin());
+  std::ranges::copy(handler, image->bytes.begin() + static_cast<std::ptrdiff_t>(setup.size()));
+  constexpr auto entry = static_cast<std::uint16_t>(0x8000 + setup.size());
+  image->bytes[blofeld::vi::FlashImage::byte_count - 12] = static_cast<cpu12::Byte>(entry >> 8U);
+  image->bytes[blofeld::vi::FlashImage::byte_count - 11] = static_cast<cpu12::Byte>(entry);
+  image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
+  image->bytes.back() = 0;
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  blofeld::vi::PeerPort peer;
+  peer.dsp_data({.mask = peer_byte_mask, .known = peer_byte_mask, .value = datum});
+  require(peer.dsp_ready(true) && peer.dsp_ready(false), "Post an actual external request pulse");
+  const auto report = blofeld::vi::mcu::execute(*image, shi, reset, {}, nullptr, nullptr, &peer);
+  require(report.failure && report.failure->address == marker && report.failure->value == datum &&
+              !peer.mcu_interrupt(),
+          "Unmasking X wakes through the real XIRQ vector despite I remaining masked");
+}
+
 void native_pedal_input() {
   namespace isa = cpu12::isa;
   constexpr cpu12::Byte other_outputs = 0x37;
@@ -211,6 +307,8 @@ int main() try {
   native_boot_word();
   firmware_controls_reset();
   native_display_status();
+  native_package_and_peer();
+  native_peer_xirq();
   native_pedal_input();
 } catch (const std::exception &error) {
 

@@ -29,6 +29,13 @@ public:
     return address == core_address || address == peripheral_address;
   }
 
+  [[nodiscard]] bool external_edge(const dsp56300::Word vector) const noexcept {
+    constexpr dsp56300::Word first = 0x10;
+    constexpr dsp56300::Word last = 0x16;
+    return vector >= first && vector <= last && (vector & 1) == 0 &&
+           ((core_ >> (((vector - first) / 2) * 3)) & 4) != 0;
+  }
+
   void reset() noexcept { core_ = peripheral_ = 0; }
 
   [[nodiscard]] bool read(const dsp56300::Word address, dsp56300::Word &value) const noexcept {

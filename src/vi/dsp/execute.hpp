@@ -4,6 +4,7 @@
 #include "execution.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/pcm_output.hpp"
+#include "io/peer_port.hpp"
 #include "io/shi.hpp"
 #include "storage/media_image.hpp"
 
@@ -17,5 +18,6 @@ namespace blofeld::vi::dsp {
                                       DspReset &reset,
                                       const std::stop_token &stop,
                                       MediaImage *image = nullptr,
-                                      PcmOutput output = {});
+                                      PcmOutput output = {},
+                                      PeerPort *peer = nullptr);
 }

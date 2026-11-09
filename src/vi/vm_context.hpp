@@ -7,6 +7,7 @@
 #include "io/controls.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/pcm_output.hpp"
+#include "io/peer_port.hpp"
 #include "io/shi.hpp"
 #include "storage/flash_image.hpp"
 #include "storage/media_image.hpp"
@@ -57,6 +58,7 @@ private:
   DisplayState display_;
   PcmOutput output_;
   Shi shi_;
+  PeerPort peer_;
   DspReset reset_;
   std::array<ExecutionReport, 2> reports_;
   std::atomic<unsigned> completed_{0};

@@ -7,6 +7,7 @@
 #include "io/controls.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/mcu_flash.hpp"
+#include "io/peer_port.hpp"
 #include "io/sci.hpp"
 #include "io/shi.hpp"
 #include "io/usb.hpp"
@@ -29,6 +30,12 @@
 namespace blofeld::vi::mcu {
 namespace {
 constexpr std::uint16_t reset_vector = 0xfffe;
+constexpr std::uint16_t xirq_vector = 0xfff4;
+constexpr std::uint16_t peer_q_data = 0x260;
+constexpr std::uint16_t peer_q_input = 0x261;
+constexpr std::uint16_t peer_q_direction = 0x262;
+constexpr std::uint16_t peer_j_data = 0x250;
+constexpr std::uint16_t peer_j_direction = 0x252;
 constexpr std::uint16_t mapping_first = 0x10;
 constexpr std::uint16_t mapping_last = 0x13;
 constexpr std::uint8_t all_bits = 0xff;
@@ -37,6 +44,7 @@ constexpr std::uint8_t all_bits = 0xff;
 constexpr auto no_deadline = std::numeric_limits<Timer::Cycle>::max() / 2;
 
 struct Devices {
+  PeerPort *peer = nullptr;
   Timer timer;
   Clock clock;
   Sci sci;
@@ -99,7 +107,8 @@ public:
      DspReset &reset,
      const std::stop_token &stop,
      const Controls *controls,
-     DisplayState *display)
+     DisplayState *display,
+     PeerPort *peer)
       : memory_(memory),
         flash_(image),
         ports_(shi),
@@ -107,7 +116,8 @@ public:
         reset_(reset),
         stop_(stop),
         controls_(controls),
-        display_state_(display) {
+        display_state_(display),
+        peer_(peer) {
     // B3/B5..B7 are passive controls, with no input producer in the firmware
     // contract. Use an inactive sample while they are inputs, not a device reply.
     constexpr std::uint8_t passive_controls = 0xe8;
@@ -155,6 +165,7 @@ private:
   }
 
   bool interrupted() noexcept {
+    if (peer_ != nullptr && peer_->mcu_interrupt()) { core_->request_yield(); }
     if (!stop_.stop_requested()) { return false; }
     core_->request_yield();
     return true;
@@ -194,16 +205,7 @@ private:
     }
     if (at.space == Space::registers && Ports::contains(at.offset)) {
       if (at.offset == 0 && display_.reading()) { return display_.read(value, mask); }
-      constexpr std::uint16_t port_m = 0x248;
-      constexpr std::uint16_t input_m = 0x249;
-      if (at.offset == port_m || at.offset == input_m) {
-        constexpr std::uint8_t pedal_bit = 8;
-        ports_.input(
-            Port::m,
-            {.mask = pedal_bit,
-             .known = pedal_bit,
-             .value = controls_ != nullptr && controls_->pedal() ? pedal_bit : std::uint8_t{0}});
-      }
+      sample_inputs(at.offset);
       return ports_.read(at.offset, value, mask);
     }
     if (at.space == Space::registers && at.offset >= mapping_first && at.offset <= mapping_last) {
@@ -221,10 +223,62 @@ private:
     });
   }
 
+  void sample_inputs(const std::uint16_t offset) {
+    if (peer_ != nullptr && offset == 8) { package_input(); }
+    if (peer_ != nullptr && (offset == peer_q_data || offset == peer_q_input)) {
+      const auto sample = peer_->dsp_data();
+      ports_.input(Port::q, {.mask = sample.mask, .known = sample.known, .value = sample.value});
+    }
+    constexpr std::uint16_t port_m = 0x248;
+    constexpr std::uint16_t input_m = 0x249;
+    if (offset == port_m || offset == input_m) {
+      constexpr std::uint8_t pedal_bit = 8;
+      ports_.input(
+          Port::m,
+          {.mask = pedal_bit,
+           .known = pedal_bit,
+           .value = controls_ != nullptr && controls_->pedal() ? pedal_bit : std::uint8_t{0}});
+    }
+  }
+
+  void package_input() {
+    constexpr std::uint8_t probe_output = 4;
+    constexpr std::uint8_t package_sense = 8;
+    const auto output = ports_.output(Port::e);
+    const bool driven = output && (output->direction & probe_output) != 0;
+    // The runtime Q interface requires the resident probe's 100-pin route.
+    // Sample the driven E2 level at E3; this is a profile input, not a peer reply.
+    ports_.input(
+        Port::e,
+        {.mask = driven ? package_sense : std::uint8_t{0},
+         .known = driven && (output->known & probe_output) != 0 ? package_sense : std::uint8_t{0},
+         .value = driven && (output->value & probe_output) != 0 ? package_sense : std::uint8_t{0}});
+  }
+
+  bool publish_peer(const std::uint16_t offset) noexcept {
+    if (peer_ == nullptr || (offset != peer_q_data && offset != peer_q_direction &&
+                             offset != peer_j_data && offset != peer_j_direction)) {
+      return true;
+    }
+    const auto data = ports_.output(Port::q);
+    const auto request = ports_.output(Port::j);
+    if (!data || !request || (request->direction & ~request->known & 1) != 0) { return false; }
+    peer_->mcu_data({.mask = data->direction, .known = data->known, .value = data->value});
+    const bool active = (request->direction & 1) != 0 && (request->value & 1) == 0;
+    if (!peer_->mcu_strobe(active)) { return false; }
+    if (active != peer_strobe_) {
+      peer_strobe_ = active;
+      core_->request_yield();
+    }
+    return true;
+  }
+
   bool write_port(const Ports::Write access) noexcept {
     constexpr std::uint16_t data_u = 0x278;
     constexpr std::uint16_t direction_u = 0x27a;
-    if (!ports_.write(access) || !display_.write(ports_, access)) { return false; }
+    if (!ports_.write(access) || !display_.write(ports_, access) || !publish_peer(access.offset)) {
+      return false;
+    }
     if (ports_.boot_pending()) { core_->request_yield(); }
     if (access.offset != data_u && access.offset != direction_u) { return true; }
     const auto output = ports_.output(Port::u);
@@ -351,6 +405,8 @@ private:
   const std::stop_token &stop_;
   const Controls *controls_;
   DisplayState *display_state_;
+  PeerPort *peer_;
+  bool peer_strobe_ = false;
   cpu12::Core *core_ = nullptr;
 };
 
@@ -398,9 +454,12 @@ Access operation(const cpu12::Fault fault) {
 }
 
 bool interrupt(cpu12::Core &core, const Devices &devices, ExecutionReport &report) {
-  const auto vector = devices.pending();
-  if (!vector || !core.interrupt_ready(cpu12::InterruptKind::maskable)) { return false; }
-  const auto entered = core.interrupt({.vector = *vector});
+  const auto external = devices.peer != nullptr ? devices.peer->mcu_interrupt() : std::nullopt;
+  const bool xirq = external && core.interrupt_ready(cpu12::InterruptKind::xirq);
+  const auto vector = xirq ? std::optional<std::uint16_t>{xirq_vector} : devices.pending();
+  const auto kind = xirq ? cpu12::InterruptKind::xirq : cpu12::InterruptKind::maskable;
+  if (!vector || !core.interrupt_ready(kind)) { return false; }
+  const auto entered = core.interrupt({.vector = *vector, .kind = kind});
   if (entered.fault != cpu12::Fault::none) {
     report.failure = Failure{.operation = operation(entered.fault),
                              .pc = entered.pc,
@@ -411,6 +470,9 @@ bool interrupt(cpu12::Core &core, const Devices &devices, ExecutionReport &repor
     return false;
   }
   if (!entered.accepted) { throw std::logic_error("Eligible MCU device interrupt was refused"); }
+  if (xirq && !devices.peer->acknowledge_mcu(*external)) {
+    throw std::logic_error("Accepted MCU peer interrupt has an invalid generation");
+  }
   return true;
 }
 
@@ -460,11 +522,13 @@ ExecutionReport execute(FlashImage &image,
                         DspReset &reset,
                         const std::stop_token &stop,
                         const Controls *controls,
-                        DisplayState *display) {
+                        DisplayState *display,
+                        PeerPort *peer) {
   Memory memory(image);
   Devices devices;
+  devices.peer = peer;
   auto grants = regions(memory, devices.usb);
-  Io io(memory, image, devices, shi, reset, stop, controls, display);
+  Io io(memory, image, devices, shi, reset, stop, controls, display, peer);
   auto callbacks = io.callbacks();
   cpu12::Core core(cpu12::Memory::mapped(grants), &callbacks);
   io.bind(core);

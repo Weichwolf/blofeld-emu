@@ -14,6 +14,7 @@
 #include "io/dsp_reset.hpp"
 #include "io/memory_controller.hpp"
 #include "io/pcm_output.hpp"
+#include "io/peer_port.hpp"
 #include "io/shi.hpp"
 #include "storage/media_image.hpp"
 
@@ -35,6 +36,7 @@ constexpr dsp56300::Word reset_mode = 0x305;
 constexpr dsp56300::Word once_data_address = 0xfffffc;
 constexpr dsp56300::Word reserved_x_address = 0xffff80;
 constexpr dsp56300::Word audio_data_address = 0xffff80;
+constexpr dsp56300::Word peer_data_address = 0xffffbd;
 constexpr unsigned esai1_transmit_request = 22;
 constexpr unsigned dax_request = 10;
 constexpr unsigned timer_request_first = 18;
@@ -56,13 +58,15 @@ public:
      DspReset &reset,
      const std::stop_token &stop,
      MediaImage *image,
-     const PcmOutput output)
+     const PcmOutput output,
+     PeerPort *peer)
       : boot_(boot),
         shi_(shi),
         reset_(reset),
         stop_(stop),
         audio_(esai_1_, dax_, output, stop),
-        controller_(image) {}
+        controller_(image),
+        peer_(peer) {}
 
   void bind(dsp56300::Core &core, const std::uint64_t epoch) noexcept {
     core_ = &core;
@@ -85,6 +89,7 @@ public:
     timers_.reset();
     memory_.configure(0);
     ports_.reset();
+    if (peer_ != nullptr) { peer_->reset_dsp(); }
     controller_.reset();
     bool ready = false;
     if (controller_.ready(ready)) { static_cast<void>(timers_.input(1, ready)); }
@@ -177,9 +182,15 @@ public:
       const auto request = interrupts_.select(sources, state.sr);
       if (request) {
         if (core_->interrupt_ready()) {
+          const auto external = peer_ != nullptr && request->vector == 0x10
+                                    ? peer_->dsp_interrupt(interrupts_.external_edge(0x10))
+                                    : std::nullopt;
           core_->request_interrupt((state.vba & vector_base_mask) | request->vector,
                                    request->level);
           acknowledge(request->vector);
+          if (external && !peer_->acknowledge_dsp(*external)) {
+            throw std::logic_error("Accepted DSP peer interrupt has an invalid generation");
+          }
         }
         // An eligible request still observes REP completion and the interrupt shadow.
         return completed(core_->step());
@@ -217,7 +228,7 @@ public:
             dsp56300::Word &value) noexcept override {
     if (interrupted()) { return false; }
     if (memory_.read(space, address, value)) { return true; }
-    if (Ports::contains(space, address)) { return ports_.read(space, address, value); }
+    if (Ports::contains(space, address)) { return read_port(space, address, value); }
     if (space == dsp56300::Space::y && Esai::contains(address)) {
       return esai_1_.read(address, value);
     }
@@ -273,7 +284,7 @@ public:
     if (!memory_.read(request.space, request.address, value)) {
       bool accepted = false;
       if (Ports::contains(request.space, request.address)) {
-        accepted = ports_.read(request.space, request.address, value);
+        accepted = read_port(request.space, request.address, value);
       } else if (request.space == dsp56300::Space::x) {
         accepted = read_x(request.address, value);
       } else if (request.space == dsp56300::Space::y) {
@@ -385,14 +396,17 @@ private:
     return true;
   }
 
-  [[nodiscard]] std::array<dsp56300::Word, 8> interrupt_sources() const noexcept {
-    std::array<dsp56300::Word, 8> sources{};
+  [[nodiscard]] std::array<dsp56300::Word, 9> interrupt_sources() const noexcept {
+    std::array<dsp56300::Word, 9> sources{};
     const auto pending = dma_.interrupts();
     for (unsigned channel = 0; channel < 6; ++channel) {
       if ((pending & (1U << channel)) != 0) { sources[channel] = dma0_vector + (channel * 2); }
     }
     sources[6] = timers_.interrupt().value_or(0);
     sources[7] = dax_.interrupt().value_or(0);
+    if (peer_ != nullptr && peer_->dsp_interrupt(interrupts_.external_edge(0x10))) {
+      sources[8] = 0x10;
+    }
     return sources;
   }
 
@@ -495,6 +509,27 @@ private:
     return true;
   }
 
+  bool read_port(const dsp56300::Space space, const dsp56300::Word address, dsp56300::Word &value) {
+    if (peer_ != nullptr && space == dsp56300::Space::x && address == peer_data_address) {
+      const auto input = peer_->mcu_data();
+      ports_.input(Port::c, {.mask = input.mask, .known = input.known, .value = input.value});
+    }
+    return ports_.read(space, address, value);
+  }
+
+  [[nodiscard]] bool publish_peer() const {
+    if (peer_ == nullptr) { return true; }
+    const auto data = ports_.output(Port::c);
+    constexpr dsp56300::Word byte_mask = 0xff;
+    constexpr dsp56300::Word ready = 1U << 9U;
+    peer_->dsp_data({.mask = static_cast<std::uint8_t>(data.mask & byte_mask),
+                     .known = static_cast<std::uint8_t>(data.known & byte_mask),
+                     .value = static_cast<std::uint8_t>(data.value & byte_mask)});
+    const auto request = ports_.output(Port::e);
+    if ((request.mask & ~request.known & ready) != 0) { return false; }
+    return peer_->dsp_ready((request.mask & ready) != 0 && (request.value & ready) == 0);
+  }
+
   bool update_ports() noexcept {
     const bool esai_connected = esai_1_.connected();
     const bool dax_connected = dax_.connected();
@@ -516,7 +551,7 @@ private:
     const auto output = controller_.output();
     ports_.input(Port::f,
                  {.mask = data_mask, .known = output ? data_mask : 0, .value = output.value_or(0)});
-    return true;
+    return publish_peer();
   }
 
   bool read_x(const dsp56300::Word address, dsp56300::Word &value) noexcept {
@@ -532,6 +567,12 @@ private:
   }
 
   bool interrupted() noexcept {
+    if (peer_ != nullptr && peer_->dsp_interrupt(interrupts_.external_edge(0x10))) {
+      constexpr std::array<dsp56300::Word, 1> source{0x10};
+      if (interrupts_.select(source, 0) && interrupts_.select(source, core_->registers().sr)) {
+        core_->request_yield();
+      }
+    }
     if (stop_.stop_requested()) {
       core_->request_yield();
       return true;
@@ -569,6 +610,7 @@ private:
   Memory memory_;
   Ports ports_;
   MemoryController controller_;
+  PeerPort *peer_;
   Failure completion_failure_;
 };
 
@@ -652,11 +694,12 @@ ExecutionReport execute(const std::span<const dsp56300::Word> boot,
                         DspReset &reset,
                         const std::stop_token &stop,
                         MediaImage *image,
-                        const PcmOutput output) {
+                        const PcmOutput output,
+                        PeerPort *peer) {
   if (boot.empty() || boot.size() > dsp56300::address_words - boot_first) {
     throw std::invalid_argument("DSP boot ROM has invalid bounds");
   }
-  Io io(boot, shi, reset, stop, image, output);
+  Io io(boot, shi, reset, stop, image, output, peer);
   ExecutionReport report;
   std::uint64_t applied = 0;
   while (!stop.stop_requested()) {
