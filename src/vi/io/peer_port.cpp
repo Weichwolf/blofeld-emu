@@ -31,7 +31,10 @@ void PeerPort::mcu_data(const Sample value) noexcept {
 
 void PeerPort::dsp_data(const Sample value) noexcept {
   const auto word = encode(value);
-  if (dsp_.load(std::memory_order_relaxed) != word) { dsp_.store(word, std::memory_order_release); }
+  if (dsp_.load(std::memory_order_relaxed) != word) {
+    reply_.announced.store(false, std::memory_order_release);
+    dsp_.store(word, std::memory_order_release);
+  }
   constexpr std::uint8_t byte_mask = 0xff;
   if (value.mask != byte_mask && reply_.recording.load(std::memory_order_acquire)) {
     const std::lock_guard lock(reply_.mutex);
@@ -152,7 +155,11 @@ std::optional<std::uint64_t> PeerPort::dsp_interrupt(const bool edge) const noex
 }
 
 std::optional<std::uint64_t> PeerPort::mcu_interrupt() const noexcept {
-  return to_mcu_.pending(false);
+  if (const auto level = to_mcu_.pending(false)) { return level; }
+  if (reply_.announced.load(std::memory_order_acquire)) {
+    return to_mcu_.posted.load(std::memory_order_acquire);
+  }
+  return {};
 }
 
 bool PeerPort::acknowledge_dsp(const std::uint64_t observed) noexcept {

@@ -61,7 +61,7 @@ The runtime peer interface shares the actual low-byte MCU Port Q and DSP Port C
 register views, including direction and unknown bits. Raw reads retain the current
 value. Active-low MCU J0 posts DSP IRQA using its configured edge/level mode;
 DSP E9 asserts MCU XIRQ, which is level-sensitive (9S12UF32DGV1 section 2.4.24).
-An ended E9 pulse is not retained behind the MCU X mask. Only accepted native
+An ended ordinary E9 pulse is not retained behind the MCU X mask. Only accepted native
 interrupt entry acknowledges an IRQA edge, and an older acknowledgement cannot
 discard a newer request. Admission does not clear an asserted level. DSP reset releases
 its own outputs and cancels stale requests without resetting generation counters.
@@ -70,7 +70,10 @@ the VM supplies that profile input because runtime Port Q requires this route.
 This is a functional inference, not a recovered PCB connection. Raw register
 sharing alone does not establish cross-core transaction timing: short handshake
 phases must also remain observable on the common instrument timeline.
-Report commands 13/14 announce a fixed 16-byte response. The following MCU request
+Report commands 13/14 announce a fixed 16-byte response. Their notification remains
+pending while the actual command stays driven and unchanged, until the MCU strobe
+accepts the transaction. Interrupt entry alone does not consume the command; DSP
+withdrawal or reset cancels it without retaining released GPIO data. The following MCU request
 opens one bounded transfer of actual DSP PDRC data writes; repeated bytes remain
 distinct writes. Full-byte Port Q input reads consume that decoded transfer in
 order, including after GPIO turnaround. Other reads retain raw register behavior.

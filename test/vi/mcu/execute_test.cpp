@@ -277,6 +277,16 @@ void native_peer_xirq() {
   require(report.failure && report.failure->address == marker && report.failure->value == datum &&
               peer.mcu_interrupt() == 2 && peer.dsp_ready(false) && !peer.mcu_interrupt(),
           "Unmasking X wakes through the real XIRQ vector despite I remaining masked");
+  blofeld::vi::PeerPort announced;
+  constexpr cpu12::Byte command = 0x0d;
+  announced.dsp_data({.mask = peer_byte_mask, .known = peer_byte_mask, .value = command});
+  require(announced.dsp_ready(true) && announced.dsp_ready(false),
+          "Publish a real report command before the MCU owner starts");
+  const auto pending =
+      blofeld::vi::mcu::execute(*image, shi, reset, {}, nullptr, nullptr, &announced);
+  require(pending.failure && pending.failure->address == marker &&
+              pending.failure->value == command && announced.mcu_interrupt() == 1,
+          "A still-driven report enters the original XIRQ vector after MCU unmasking");
 }
 
 void native_pedal_input() {

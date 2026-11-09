@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "io/peer_port.hpp"
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <exception>
@@ -109,6 +110,50 @@ void begin_reply(PeerPort &peer) {
           "A real report announcement and MCU request establish bounded response ownership");
 }
 
+void report_notifications() {
+  constexpr std::array<std::uint8_t, 2> commands{0x0d, 0x0e};
+  for (const auto command : commands) {
+    PeerPort peer;
+    const PeerPort::Sample driven{.mask = 0xff, .known = 0xff, .value = command};
+    peer.dsp_data(driven);
+    require(peer.dsp_ready(true) && peer.dsp_ready(false) && peer.mcu_interrupt() == 1,
+            "An unchanged announced report remains pending after its short readiness pulse");
+    require(peer.acknowledge_mcu(1) && peer.mcu_interrupt() == 1,
+            "Interrupt admission cannot consume an unaccepted report command");
+    peer.dsp_data(driven);
+    require(peer.mcu_interrupt() == 1 && peer.read_dsp_data(byte_mask) == driven,
+            "Unchanged GPIO publication retains notification without inventing report bytes");
+    require(peer.mcu_strobe(true) && peer.mcu_strobe(false) && !peer.mcu_interrupt() &&
+                peer.dsp_interrupt(true) == 1,
+            "The actual MCU strobe accepts the report and posts its native DSP request");
+  }
+}
+
+void withdrawn_reports() {
+  constexpr PeerPort::Sample command{.mask = 0xff, .known = 0xff, .value = 0x0d};
+  constexpr std::array<PeerPort::Sample, 4> withdrawals{
+      PeerPort::Sample{},
+      PeerPort::Sample{.mask = 0x7f, .known = 0xff, .value = 0x0d},
+      PeerPort::Sample{.mask = 0xff, .known = 0x7f, .value = 0x0d},
+      PeerPort::Sample{.mask = 0xff, .known = 0xff, .value = 0x0e}};
+  for (const auto withdrawal : withdrawals) {
+    PeerPort peer;
+    peer.dsp_data(command);
+    require(peer.dsp_ready(true) && peer.dsp_ready(false) && peer.mcu_interrupt() == 1,
+            "A genuine report announcement precedes withdrawal");
+    peer.dsp_data(withdrawal);
+    require(!peer.mcu_interrupt() && peer.dsp_data() == withdrawal,
+            "Changed command, direction or knowledge cancels notification without holding data");
+    peer.dsp_data(command);
+    require(!peer.mcu_interrupt(), "Reusing an old command latch cannot recreate its announcement");
+    require(peer.dsp_ready(true) && peer.dsp_ready(false) && peer.mcu_interrupt() == 2,
+            "A fresh announcement belongs to a new request generation");
+    peer.reset_dsp();
+    require(!peer.mcu_interrupt() && peer.dsp_data() == PeerPort::Sample{},
+            "Reset cancels an unaccepted report and releases its real data");
+  }
+}
+
 PeerPort::Sample reply_byte(const unsigned index) {
   return {.mask = static_cast<std::uint8_t>(byte_mask),
           .known = static_cast<std::uint8_t>(byte_mask),
@@ -203,6 +248,8 @@ int main() try {
   data_views();
   requests();
   concurrent_exchange();
+  report_notifications();
+  withdrawn_reports();
   fixed_reply();
   reply_errors();
   concurrent_reply();

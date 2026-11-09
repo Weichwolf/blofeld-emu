@@ -30,7 +30,8 @@ public:
     return error_.load(std::memory_order_acquire);
   }
 
-  // Active-low requests: J0 -> configured IRQA edge/level, E9 -> level-sensitive XIRQ.
+  // J0 -> configured IRQA; E9 -> XIRQ. Announced report commands stay pending
+  // until the actual MCU strobe or DSP withdrawal; ordinary pulses stay level-only.
   [[nodiscard]] bool mcu_strobe(bool active) noexcept;
   [[nodiscard]] bool dsp_ready(bool active) noexcept;
   [[nodiscard]] std::optional<std::uint64_t> dsp_interrupt(bool edge) const noexcept;
