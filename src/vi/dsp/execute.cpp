@@ -719,6 +719,7 @@ bool run_instance(Io &io,
     if (result.state != dsp56300::ExecutionState::running && !io.waiting_event()) { break; }
   }
   static_cast<void>(io.flush_audio(report));
+  report.stopped_pc = core.registers().pc;
   io.unbind();
   return restart;
 }

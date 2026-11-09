@@ -622,6 +622,7 @@ ExecutionReport execute(FlashImage &image,
 
   if (display != nullptr) { display->request(); }
   io.capture_display();
+  report.stopped_pc = core.registers().pc;
   return report;
 }
 }

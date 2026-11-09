@@ -158,6 +158,9 @@ int main(const int argc, char **argv) try {
     if (report.exception) { std::rethrow_exception(report.exception); }
     const auto *name = index == 0 ? "MCU" : "DSP";
     std::cerr << name << " retired=" << report.instructions;
+    if (report.stopped_pc) {
+      std::cerr << " stopped-pc=0x" << std::hex << *report.stopped_pc << std::dec;
+    }
     if (report.failure) {
       const auto &fault = *report.failure;
       std::cerr << " " << operation(fault.operation) << " space=" << fault.space << " pc=0x"

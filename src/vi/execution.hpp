@@ -19,6 +19,7 @@ struct Failure {
 struct ExecutionReport {
   std::optional<Failure> failure;
   std::exception_ptr exception;
+  std::optional<std::uint32_t> stopped_pc;
   std::uint64_t instructions = 0;
 };
 }
