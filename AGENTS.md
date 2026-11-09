@@ -31,8 +31,9 @@
 - Use Release for performance. Test affected core semantics independently and with
   ASan/UBSan, including native dependencies; use separate TSan for concurrent code.
   Keep checks focused; no GitHub workflows.
-- Blofeld firmware probes stop within 10 host seconds and fail unless playable.
-  Until real time, no long firmware runs or unchanged failed-probe repetitions.
+- Bound firmware probes to the duration needed for their stated purpose, with
+  explicit timeout guards and prompt fault shutdown. A run fails unless playable;
+  do not repeat unchanged failed probes without new evidence.
 - Telemetry is runtime-selectable and off by default; no hot-path statistics.
 - README describes implemented use; OBJECTIVE defines acceptance; doc/ contains
   one target architecture and primary references. No diaries or result archives.
