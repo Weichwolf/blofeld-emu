@@ -24,7 +24,7 @@
 namespace blofeld::app {
 namespace {
 constexpr unsigned rate = 44100;
-constexpr std::chrono::seconds startup_limit{10};
+constexpr std::chrono::minutes startup_limit{1};
 constexpr std::chrono::milliseconds startup_poll{1}, control_poll{10};
 
 const std::filesystem::path &required_path(const std::optional<std::filesystem::path> &path) {
@@ -86,7 +86,7 @@ std::optional<std::uint64_t> OfflineRender::startup(vi::VmContext &vm,
     if (const auto origin = startup.poll(vm.midi(), readiness)) { return origin; }
     if (std::chrono::steady_clock::now() - started_ >= startup_limit) {
       std::cerr
-          << "Startup failed: no original MIDI identity and valid PCM within 10 host seconds.\n";
+          << "Startup failed: no original MIDI identity and valid PCM within one host minute.\n";
       break;
     }
   }

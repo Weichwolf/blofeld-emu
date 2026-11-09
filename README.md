@@ -159,7 +159,7 @@ build/release/blofeld-headless --profile /path/to/instrument.profile \
 `--tail` selects whole seconds after the final serialized MIDI event/track end;
 it defaults to five seconds. Choose sufficient release/effect time for the programs.
 Successful renders report valid frame totals, startup/active host time and throughput.
-MIDI deadline deviation remains unmeasured. Startup fails after ten host seconds
+MIDI deadline deviation remains unmeasured. Startup fails after one host minute
 without both original identity and PCM. Existing output files are never replaced.
 
 With no arguments it reads `$XDG_CONFIG_HOME/blofeld-emu/default.profile`,

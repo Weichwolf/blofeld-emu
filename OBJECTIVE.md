@@ -123,9 +123,10 @@ throughput. The cores' >=70% matched host-ASM target does not gate integration.
 
 Milestones remain 1x/99%, 10x/99.9% and 100x/99.99% playable-instrument coverage;
 these do not replace complete acceptance or the >=4x sustained requirement.
-Until real time, original-firmware startup probes have a hard ten-host-second
-limit and fail unless playable; no automatic extension or unchanged repetition.
-Then qualify MIDI-triggered original sound and at least ten seconds of audio at
+Choose explicit probe guards for the stated diagnostic or qualification purpose;
+allow the original startup to complete. A probe fails unless playable; no
+unchanged failed repetition without new evidence. Qualify MIDI-triggered original
+sound and at least ten seconds of audio at
 >=44100 stereo frames per host second. Stop immediately on runtime faults.
 
 Future application: rapid original-synthesis rendering for automatic native
