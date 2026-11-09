@@ -356,7 +356,7 @@ void native_timer_interrupt(const bool waiting) {
           "returns via RTI");
 }
 
-void native_audio_dma() {
+void native_audio_dma(const bool throwing) {
   namespace isa = dsp56300::isa;
   using dsp56300::Word;
   constexpr Word immediate = 0x34;
@@ -400,30 +400,53 @@ void native_audio_dma() {
   struct Consumer {
     std::stop_source stop;
     bool correct = false;
+    bool submitted = false;
+    bool throwing = false;
+    unsigned closed = 0;
+    std::thread::id thread = std::this_thread::get_id();
+    bool closed_on_owner = false;
   } consumer;
+
+  consumer.throwing = throwing;
 
   const blofeld::vi::PcmOutput output{
       .owner = &consumer,
-      .write = [](void *owner, const blofeld::vi::PcmOutput::Block block, const std::stop_token &) {
-        auto &result = *static_cast<Consumer *>(owner);
-        result.correct =
-            block.frames.size() == 16 && block.first_frame == 0 && block.underruns == 0;
-        constexpr std::int32_t scale = 65536;
-        constexpr std::int32_t negative = 8388608;
-        for (unsigned index = 0; index < block.frames.size(); ++index) {
-          const auto left = static_cast<std::int32_t>((index * 2) + 1) * scale;
-          const auto right = (static_cast<std::int32_t>((index * 2) + 2) * scale) - negative;
-          result.correct =
-              result.correct && block.frames[index] == blofeld::vi::PcmOutput::Frame{left, right};
-        }
-        result.stop.request_stop();
-        return true;
-      }};
+      .write =
+          [](void *owner, const blofeld::vi::PcmOutput::Block block, const std::stop_token &) {
+            auto &result = *static_cast<Consumer *>(owner);
+            result.submitted = true;
+            if (result.throwing) { throw std::runtime_error("Expected PCM consumer exception"); }
+            result.correct =
+                block.frames.size() == 16 && block.first_frame == 0 && block.underruns == 0;
+            constexpr std::int32_t scale = 65536;
+            constexpr std::int32_t negative = 8388608;
+            for (unsigned index = 0; index < block.frames.size(); ++index) {
+              const auto left = static_cast<std::int32_t>((index * 2) + 1) * scale;
+              const auto right = (static_cast<std::int32_t>((index * 2) + 2) * scale) - negative;
+              result.correct = result.correct &&
+                               block.frames[index] == blofeld::vi::PcmOutput::Frame{left, right};
+            }
+            result.stop.request_stop();
+            return true;
+          },
+      .close =
+          [](void *owner) noexcept {
+            auto &result = *static_cast<Consumer *>(owner);
+            ++result.closed;
+            result.closed_on_owner = result.thread == std::this_thread::get_id();
+          }};
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report =
-      blofeld::vi::dsp::execute(program, shi, reset, consumer.stop.get_token(), nullptr, output);
-  require(!report.failure && consumer.correct,
+  blofeld::vi::ExecutionReport report;
+  bool caught = false;
+  try {
+    report =
+        blofeld::vi::dsp::execute(program, shi, reset, consumer.stop.get_token(), nullptr, output);
+  } catch (const std::runtime_error &) { caught = true; }
+  require(consumer.submitted && caught == throwing && consumer.closed == 1 &&
+              consumer.closed_on_owner,
+          "PCM ownership closes once on its execution thread after stop or exception");
+  require(throwing || (!report.failure && consumer.correct),
           "Native guest RAM, real timed DMA and ESAI deliver sixteen exact stereo frames to the "
           "consumer");
 }
@@ -757,7 +780,8 @@ int main(const int argc, char **argv) try {
   native_dma_program_write();
   native_dma_esai_write();
   native_dma_dax_write();
-  native_audio_dma();
+  native_audio_dma(false);
+  native_audio_dma(true);
   native_timer_events();
   native_timer_interrupt(false);
   native_timer_interrupt(true);

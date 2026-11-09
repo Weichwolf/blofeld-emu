@@ -22,5 +22,7 @@ struct PcmOutput {
 
   void *owner = nullptr;
   bool (*write)(void *, Block, const std::stop_token &) = nullptr;
+  // Runs on the execution owner after its final submission, including unwinding.
+  void (*close)(void *) noexcept = nullptr;
 };
 }

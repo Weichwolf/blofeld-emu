@@ -370,6 +370,10 @@ Playback::Playback(const unsigned rate, const std::string_view name)
 
 Playback::~Playback() = default;
 
+Playback::Producer Playback::producer() const {
+  return Producer(std::chrono::nanoseconds::zero());
+}
+
 void Playback::stop() noexcept {
   impl_->stop();
 }

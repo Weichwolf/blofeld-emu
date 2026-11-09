@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "audio/buffer.hpp"
+#include "audio/device_buffer.hpp"
 #include "audio/playback.hpp"
 #include "audio/render_buffer.hpp"
 
@@ -32,6 +33,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <vector>
 
 namespace blofeld::host::audio {
 namespace {
@@ -71,6 +73,22 @@ AudioObjectID default_device() {
   return device;
 }
 
+struct DeviceFrames {
+  UInt32 minimum = 0, maximum = 0;
+  bool operator==(const DeviceFrames &) const = default;
+};
+
+DeviceFrames device_frame_grant(const AudioObjectID device) {
+  const auto minimum = property<UInt32>(device, {.selector = kAudioDevicePropertyBufferFrameSize});
+  const AudioObjectPropertyAddress variable{kAudioDevicePropertyUsesVariableBufferFrameSizes,
+                                            kAudioObjectPropertyScopeGlobal,
+                                            kAudioObjectPropertyElementMain};
+  const auto maximum = AudioObjectHasProperty(device, &variable) != 0
+                           ? property<UInt32>(device, {.selector = variable.mSelector})
+                           : 0;
+  return {.minimum = minimum, .maximum = std::max(minimum, maximum)};
+}
+
 std::string text_property(const AudioObjectID device, const AudioObjectPropertySelector selector) {
   const auto *const text = property<CFStringRef>(device, {.selector = selector});
   if (text == nullptr) { throw std::runtime_error("Missing audio device identifier"); }
@@ -81,6 +99,29 @@ std::string text_property(const AudioObjectID device, const AudioObjectPropertyS
   CFRelease(text);
   if (converted == 0) { throw std::runtime_error("Audio device identifier exceeds UTF-8 bounds"); }
   return bytes.data();
+}
+
+UInt32 output_stream_latency(const AudioObjectID device) {
+  const AudioObjectPropertyAddress address{kAudioDevicePropertyStreams,
+                                           kAudioObjectPropertyScopeOutput,
+                                           kAudioObjectPropertyElementMain};
+  UInt32 bytes = 0;
+  require(AudioObjectGetPropertyDataSize(device, &address, 0, nullptr, &bytes),
+          "Query output stream list size");
+  if (bytes == 0 || bytes % sizeof(AudioObjectID) != 0) {
+    throw std::runtime_error("Invalid native output stream list");
+  }
+  std::vector<AudioObjectID> streams(bytes / sizeof(AudioObjectID));
+  const auto payload = std::as_writable_bytes(std::span(streams));
+  require(AudioObjectGetPropertyData(device, &address, 0, nullptr, &bytes, payload.data()),
+          "Query native output streams");
+  if (bytes != payload.size()) { throw std::runtime_error("Native output stream list changed"); }
+  UInt32 maximum = 0;
+  for (const auto stream : streams) {
+    maximum =
+        std::max(maximum, property<UInt32>(stream, {.selector = kAudioStreamPropertyLatency}));
+  }
+  return maximum;
 }
 
 template <typename T>
@@ -103,15 +144,20 @@ struct Playback::Impl {
   Grants granted;
   AudioUnit unit = nullptr;
   AudioObjectID device = kAudioObjectUnknown;
-  UInt32 device_frames = 0, maximum_slice = 0;
+  DeviceBuffer device_buffer;
+  DeviceFrames device_frames;
+  UInt32 maximum_slice = 0;
   std::size_t physical_buffer = 0;
   std::int64_t device_latency_us = 0;
+  std::chrono::nanoseconds producer_poll{0};
+  std::chrono::nanoseconds device_period{0};
   std::unique_ptr<RenderBuffer> buffer;
   std::exception_ptr error;
   std::atomic<Phase> phase{Phase::opening};
   std::atomic<OSStatus> render_error{noErr};
   std::atomic<bool> reset_pending{false};
   std::atomic<std::uint64_t> submitted{0}, underruns{0}, renders{0};
+  std::atomic<std::uint64_t> underrun_frames{0};
   std::binary_semaphore reset_done{0};
   std::mutex wake_mutex;
   std::condition_variable wake;
@@ -165,7 +211,11 @@ struct Playback::Impl {
     const auto supplied = self.buffer->render(output);
     self.submitted.fetch_add(supplied, std::memory_order_relaxed);
     self.renders.fetch_add(1, std::memory_order_release);
-    if (supplied != frames) { self.underruns.fetch_add(1, std::memory_order_release); }
+    if (supplied != frames) {
+      self.underrun_frames.store((std::uint64_t{frames} << 32) | supplied,
+                                 std::memory_order_relaxed);
+      self.underruns.fetch_add(1, std::memory_order_release);
+    }
     if (flags != nullptr) {
       if (supplied == 0) {
         *flags |= kAudioUnitRenderAction_OutputIsSilence;
@@ -220,6 +270,8 @@ struct Playback::Impl {
   void initialize(const unsigned rate) {
     device = default_device();
     create_unit(rate);
+    constexpr UInt32 requested_device_frames = 32;
+    device_buffer.open({.device = device, .frames = requested_device_frames});
     const auto client = unit_property<AudioStreamBasicDescription>(
         unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input);
     if (client.mFormatID != kAudioFormatLinearPCM || client.mSampleRate != rate ||
@@ -238,16 +290,23 @@ struct Playback::Impl {
       throw std::runtime_error("Unsupported device sample rate");
     }
     const auto sink_hz = static_cast<unsigned>(sink_rate);
-    device_frames = property<UInt32>(device, {.selector = kAudioDevicePropertyBufferFrameSize});
+    device_frames = device_frame_grant(device);
     maximum_slice = unit_property<UInt32>(unit, kAudioUnitProperty_MaximumFramesPerSlice);
-    physical_buffer =
-        static_cast<std::size_t>((std::uint64_t{device_frames} * rate + sink_hz - 1) / sink_hz);
+    physical_buffer = static_cast<std::size_t>(
+        (std::uint64_t{device_frames.maximum} * rate + sink_hz - 1) / sink_hz);
     constexpr unsigned prime_quanta = 3;
-    const auto target = std::max(physical_buffer * prime_quanta, std::size_t{maximum_slice});
-    const auto capacity = target + maximum_slice;
-    if (physical_buffer == 0 || maximum_slice == 0 || capacity > rate) {
+    const auto target = physical_buffer * prime_quanta;
+    const auto capacity = target + physical_buffer;
+    if (device_frames.minimum == 0 || physical_buffer == 0 || maximum_slice == 0 ||
+        capacity > rate) {
       throw std::runtime_error("Native audio grant exceeds the one-second queue bound");
     }
+    constexpr std::uint64_t ns_per_second = 1000000000;
+    device_period =
+        std::chrono::nanoseconds(std::uint64_t{device_frames.minimum} * ns_per_second / sink_hz);
+    constexpr unsigned polls_per_quantum = 4;
+    producer_poll = std::chrono::nanoseconds(
+        std::max<std::uint64_t>(1, physical_buffer * ns_per_second / rate / polls_per_quantum));
     buffer = std::make_unique<RenderBuffer>(capacity);
     const auto latency = property<UInt32>(
         device,
@@ -261,7 +320,8 @@ struct Playback::Impl {
     }
     device_latency_us =
         static_cast<std::int64_t>(std::ceil(unit_latency * us_per_second)) +
-        static_cast<std::int64_t>((std::uint64_t{latency} + safety + device_frames) *
+        static_cast<std::int64_t>((std::uint64_t{latency} + safety + device_frames.maximum +
+                                   output_stream_latency(device)) *
                                   us_per_second / sink_hz);
     const auto hardware = unit_property<AudioStreamBasicDescription>(
         unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output);
@@ -287,8 +347,7 @@ struct Playback::Impl {
     if (default_device() != device ||
         property<Float64>(device, {.selector = kAudioDevicePropertyNominalSampleRate}) !=
             granted.sink_rate ||
-        property<UInt32>(device, {.selector = kAudioDevicePropertyBufferFrameSize}) !=
-            device_frames ||
+        device_frame_grant(device) != device_frames ||
         property<UInt32>(device, {.selector = kAudioDevicePropertyDeviceIsAlive}) == 0) {
       throw std::runtime_error("Audio device disconnected or changed");
     }
@@ -304,10 +363,7 @@ struct Playback::Impl {
     std::uint64_t observed = 0;
     while (!stop.stop_requested()) {
       if (reset_pending.exchange(false, std::memory_order_acq_rel)) { reset(); }
-      require(render_error.load(std::memory_order_acquire), "Native render format changed");
-      if (underruns.load(std::memory_order_acquire) != 0) {
-        throw std::runtime_error("Native audio output underrun");
-      }
+      check_render();
       const auto now = std::chrono::steady_clock::now();
       if (now >= next_check) {
         check_device();
@@ -333,6 +389,16 @@ struct Playback::Impl {
     }
   }
 
+  void check_render() const {
+    require(render_error.load(std::memory_order_acquire), "Native render format changed");
+    if (underruns.load(std::memory_order_acquire) != 0) {
+      const auto frames = underrun_frames.load(std::memory_order_relaxed);
+      throw std::runtime_error(
+          "Native audio output underrun: requested=" + std::to_string(frames >> 32) +
+          " supplied=" + std::to_string(static_cast<std::uint32_t>(frames)));
+    }
+  }
+
   void run(const unsigned rate, const std::stop_token &stop) noexcept {
     try {
       initialize(rate);
@@ -353,6 +419,14 @@ struct Playback::Impl {
       AudioUnitUninitialize(unit);
       AudioComponentInstanceDispose(unit);
     }
+    try {
+      device_buffer.close();
+    } catch (...) {
+      if (phase.load(std::memory_order_acquire) != Phase::failed) {
+        error = std::current_exception();
+        phase.store(Phase::failed, std::memory_order_release);
+      }
+    }
     phase.notify_all();
   }
 };
@@ -361,6 +435,10 @@ Playback::Playback(const unsigned rate, const std::string_view name)
     : impl_(std::make_unique<Impl>(rate, name)) {}
 
 Playback::~Playback() = default;
+
+Playback::Producer Playback::producer() const {
+  return Producer(impl_->device_period);
+}
 
 void Playback::stop() noexcept {
   impl_->stop();
@@ -374,10 +452,7 @@ void Playback::check() const {
   if (impl_->phase.load(std::memory_order_acquire) == Impl::Phase::failed) {
     std::rethrow_exception(impl_->error);
   }
-  require(impl_->render_error.load(std::memory_order_acquire), "Native render format changed");
-  if (impl_->underruns.load(std::memory_order_acquire) != 0) {
-    throw std::runtime_error("Native audio output underrun");
-  }
+  impl_->check_render();
 }
 
 bool Playback::write(std::span<const Frame> frames, const std::stop_token &stop) {
@@ -387,7 +462,7 @@ bool Playback::write(std::span<const Frame> frames, const std::stop_token &stop)
       frames = frames.subspan(count);
       impl_->wake.notify_one();
     } else {
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      std::this_thread::sleep_for(impl_->producer_poll);
     }
   }
   return frames.empty() && !stop.stop_requested() && impl_->open();

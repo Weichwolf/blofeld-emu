@@ -184,6 +184,14 @@ The app consumer receives bounded borrowed spans outside native callbacks and
 owns pacing/backpressure. DAX retains its own device effects without duplicating
 the host stream.
 
+Host audio scheduling belongs to the dedicated execution owner, never the render
+callback. On Darwin, the producer uses a granted hardware quantum as its Mach
+deadline and joins its own asynchronous audio workgroup. Work intervals delimit
+native production from queue backpressure. Its context closes on that execution
+owner after the final PCM submission, including exception unwinding, before the
+thread exits. Darwin's QoS opt-out persists until thread exit; do not configure
+arbitrary application threads. Linux retains its native scheduling policy.
+
 VmContext owns one bounded, bidirectional DIN MIDI port. The host owner submits
 ordered packets in nominal 60 MHz device time; complete 8N1 characters retain
 31,250-baud spacing. The MCU owner admits input at character starts and lets SCI
