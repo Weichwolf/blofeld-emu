@@ -436,6 +436,106 @@ void native_polling_progress() {
               report.failure->address == marker && report.failure->value == datum,
           "A native timer-poll loop publishes device time so its peer can deliver the real XIRQ");
 }
+
+void native_panel_sampling(const bool timed_boundary) {
+  namespace isa = cpu12::isa;
+  constexpr cpu12::Byte phase_marker = 0x42;
+  constexpr cpu12::Byte response = 0x5a;
+  constexpr cpu12::Address marker = 0x3000;
+  constexpr cpu12::Byte all_bits = 0xff;
+  constexpr cpu12::Byte bank_outputs = 0xc0;
+  constexpr cpu12::Byte bank_a = 0x40;
+
+  enum Offset : cpu12::Byte {
+    direction_s = 0x72,
+    data_s = 0x70,
+    data_j = 0x50,
+    direction_j = 0x52,
+    pull_q = 0x64,
+    polarity_q = 0x65,
+    data_q = 0x60,
+    timer_count = 0x44
+  };
+
+  std::vector<cpu12::Byte> program;
+  const auto append = [&program](const auto &bytes) {
+    program.insert(program.end(), bytes.begin(), bytes.end());
+  };
+  const auto store = [&](const cpu12::Byte value, const cpu12::Byte offset) {
+    append(std::array{isa::opcode<isa::Opcode::ldab_immediate>()[0],
+                      value,
+                      isa::opcode<isa::Opcode::stab_extended>()[0],
+                      cpu12::Byte{2},
+                      offset});
+  };
+  store(bank_outputs, direction_s);
+  store(bank_a, data_s);
+  store(1, data_j); // J0 is an inactive DSP request.
+  store(1, direction_j);
+  store(all_bits, pull_q);
+  store(all_bits, polarity_q); // Actual MCU pull-downs define inactive panel inputs.
+  store(phase_marker, data_q); // Q remains an input; this is not a DSP request.
+  constexpr unsigned samples = 128;
+  for (unsigned index = 0; index < samples; ++index) {
+    append(isa::program(isa::opcode<isa::Opcode::ldab_extended>(),
+                        std::array<cpu12::Byte, 2>{2, data_q}));
+  }
+  if (timed_boundary) {
+    append(isa::program(isa::opcode<isa::Opcode::ldab_direct>(),
+                        std::array<cpu12::Byte, 1>{timer_count},
+                        isa::opcode<isa::Opcode::ldab_extended>(),
+                        std::array<cpu12::Byte, 2>{2, data_q}));
+  }
+  append(isa::program(isa::opcode<isa::Opcode::stab_extended>(),
+                      std::array<cpu12::Byte, 2>{static_cast<cpu12::Byte>(marker >> 8U), 0}));
+  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  image->known.fill(1);
+  std::ranges::copy(program, image->bytes.begin());
+  image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
+  image->bytes.back() = 0;
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  blofeld::vi::PeerPort peer;
+  blofeld::vi::ExecutionTime time;
+  std::promise<blofeld::vi::ExecutionReport> result;
+  auto completed = result.get_future();
+  std::jthread mcu([&](const std::stop_token &stop) {
+    try {
+      result.set_value(
+          blofeld::vi::mcu::execute(*image, shi, reset, stop, nullptr, nullptr, &peer, &time));
+    } catch (...) { result.set_exception(std::current_exception()); }
+  });
+  bool sampled = false;
+  bool resumed = false;
+  std::jthread dsp([&](const std::stop_token &stop) {
+    std::uint64_t ticks = 0;
+    while (const auto limit = time.dsp_limit(ticks, stop)) {
+      ticks = *limit;
+      if (sampled) {
+        peer.dsp_data({.mask = all_bits, .known = all_bits, .value = response});
+        continue;
+      }
+      if (peer.mcu_data().mask != 0 || peer.mcu_data().value != phase_marker) { continue; }
+      sampled = true;
+      const auto next = time.dsp_limit(ticks, stop);
+      resumed = next.has_value();
+      if (!timed_boundary || !next) { return; }
+      ticks = *next;
+      peer.dsp_data({.mask = all_bits, .known = all_bits, .value = response});
+    }
+  });
+  const auto ready = completed.wait_for(std::chrono::seconds(1));
+  mcu.request_stop();
+  dsp.request_stop();
+  mcu.join();
+  dsp.join();
+  const auto report = completed.get();
+  const auto expected = timed_boundary ? response : cpu12::Byte{0};
+  require(ready == std::future_status::ready && sampled && resumed == timed_boundary &&
+              report.failure && report.failure->address == marker &&
+              report.failure->value == expected,
+          "A selected input bank samples locally until a real device boundary or DSP driver");
+}
 }
 
 int main() try {
@@ -447,6 +547,8 @@ int main() try {
   native_pedal_input();
   native_local_port_access();
   native_polling_progress();
+  native_panel_sampling(false);
+  native_panel_sampling(true);
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

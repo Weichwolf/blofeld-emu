@@ -193,6 +193,7 @@ public:
   }
 
   bool complete_events() {
+    panel_sampled_ = false;
     capture_display();
     if (!devices_.advance(*core_) ||
         (devices_.time != nullptr && !devices_.time->publish_mcu(devices_.clock.ticks()))) {
@@ -214,6 +215,7 @@ public:
 
 private:
   template <typename Action> bool shared_access(const Action &action) noexcept {
+    panel_sampled_ = false;
     auto *time = devices_.time;
     if (time == nullptr) { return action(); }
     if (!devices_.advance(*core_) || !time->enter_mcu(devices_.clock.ticks(), stop_)) {
@@ -255,10 +257,32 @@ private:
       const auto output = ports_.output(Port::q);
       input = !output || (output->direction & mask) != mask;
     }
-    return input ? shared_access(action) : action();
+    if (!input) { return action(); }
+    if (panel_sampled_ && (peer_->dsp_data().mask & mask) == 0) { return action(); }
+    const bool accepted = shared_access(action);
+    panel_sampled_ = accepted && peer_ != nullptr && local_input_bank() &&
+                     peer_->dsp_data().mask == 0 && !peer_->mcu_interrupt();
+    return accepted;
+  }
+
+  [[nodiscard]] bool local_input_bank() const noexcept {
+    constexpr std::uint8_t banks = 0xc0;
+    constexpr std::uint8_t bank_a = 0x40;
+    constexpr std::uint8_t bank_b = 0x80;
+    const auto select = ports_.output(Port::s);
+    const auto request = ports_.output(Port::j);
+    const auto data = ports_.output(Port::q);
+    if (!select || !request || !data || data->direction != 0 ||
+        (select->direction & select->known & banks) != banks ||
+        (request->direction & request->known & request->value & 1) == 0) {
+      return false;
+    }
+    const auto selected = select->value & banks;
+    return selected == bank_a || selected == bank_b;
   }
 
   template <typename Action> bool access_devices(const Action &action) noexcept {
+    panel_sampled_ = false;
     const auto pending = devices_.pending();
     const auto deadline = devices_.deadline();
     const auto enabled = devices_.interrupts_enabled();
@@ -274,7 +298,10 @@ private:
   }
 
   bool interrupted() noexcept {
-    if (peer_ != nullptr && peer_->mcu_interrupt()) { core_->request_yield(); }
+    if (peer_ != nullptr && peer_->mcu_interrupt()) {
+      panel_sampled_ = false;
+      core_->request_yield();
+    }
     if (!stop_.stop_requested()) { return false; }
     core_->request_yield();
     return true;
@@ -385,6 +412,7 @@ private:
   }
 
   bool write_port(const Ports::Write access) noexcept {
+    panel_sampled_ = false;
     constexpr std::uint16_t data_u = 0x278;
     constexpr std::uint16_t direction_u = 0x27a;
     if (!ports_.write(access) || !display_.write(ports_, access) || !publish_peer(access.offset)) {
@@ -523,6 +551,7 @@ private:
   DisplayState *display_state_;
   PeerPort *peer_;
   bool peer_strobe_ = false;
+  bool panel_sampled_ = false;
   cpu12::Core *core_ = nullptr;
 };
 

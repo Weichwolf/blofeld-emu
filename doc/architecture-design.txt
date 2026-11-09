@@ -42,6 +42,11 @@ at one device timestamp; the DSP grants only at the published frontier. Short
 host-side adaptive spins precede atomic waits. Registered waiters recheck the
 predicate and a wake generation; cancellation wakes them without a device-time
 change. Reset origin and progress remain atomic; no handoff mutex is required.
+With a local input bank selected by S7/S6, Q inputs and inactive J0, the first
+sample admits the peer frontier. Once the DSP has released its data byte, further
+panel reads use the actual GPIO inputs/pulls without another DSP rendezvous.
+Every read still executes. Timed I/O, GPIO writes, owner returns, DSP drive or a
+peer request end this local sampling phase; no device clock is advanced or scaled.
 
 VmContext owns concrete bindings, stable memory, channel lifetimes and shutdown.
 Each worker exclusively mutates its core and local device state. Transfer actual
