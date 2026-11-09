@@ -290,10 +290,12 @@ void invalid_and_cancelled() {
   }
   {
     Fixture fixture;
-    const std::stop_source stop;
+    std::stop_source stop;
+    const auto token = stop.get_token();
     stop.request_stop();
-    require(!fixture.write(0, ticks, guest_epoch, 0, stop.get_token()) &&
-                !fixture.consumer->has_pcm() && fixture.device.producers == 0,
+    stop = std::stop_source(std::nostopstate);
+    require(!fixture.write(0, ticks, guest_epoch, 0, token) && !fixture.consumer->has_pcm() &&
+                fixture.device.producers == 0,
             "Stop applies before boot validation or host producer creation");
   }
   {

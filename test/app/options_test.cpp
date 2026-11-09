@@ -2,8 +2,10 @@
 #include "options.hpp"
 
 #include <array>
+#include <cstdint>
 #include <exception>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 
 namespace {
@@ -31,6 +33,16 @@ int main() try {
   const auto zero =
       options(std::array{"--profile", "p", "--midi", "m", "--wav", "w", "--tail", "0"});
   require(zero.tail_seconds == 0, "An explicit zero tail is valid");
+  const auto routed =
+      options(std::array{"--profile", "p", "--midi-group", "15", "--midi-source", "-2147483648"});
+  require(routed.midi_source == std::numeric_limits<std::int32_t>::min() && routed.midi_group == 15,
+          "Preserve signed native IDs and select an explicit UMP group");
+  rejects(std::array{"--midi-source", "1", "--midi-source", "2"});
+  rejects(std::array{"--midi-group", "0", "--midi-group", "1"});
+  rejects(std::array{"--midi-group", "16"});
+  rejects(std::array{"--midi-source", "2147483648"});
+  rejects(std::array{"--midi-source", "1", "--midi", "m", "--wav", "w"});
+  rejects(std::array{"--midi-group", "0", "--midi", "m", "--wav", "w"});
   rejects(std::array{"--profile"});
   rejects(std::array{"--profile", "p", "--midi", "m"});
   rejects(std::array{"--profile", "p", "--wav", "w"});

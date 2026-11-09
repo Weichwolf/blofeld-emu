@@ -45,7 +45,7 @@ std::optional<std::uint64_t> MidiStartup::poll(vi::MidiPort &port, const Readine
   if (port.error() != nullptr) { throw std::runtime_error(port.error()); }
   if (origin_) { return origin_; }
   const auto frontier = port.input_limit();
-  if (!frontier) { throw std::logic_error("Offline startup requires a streaming MIDI input"); }
+  if (!frontier) { throw std::logic_error("Firmware startup requires a streaming MIDI input"); }
   const bool enquire = readiness.application && readiness.pcm;
   if (observations_.identity && enquire) {
     origin_ = frontier;

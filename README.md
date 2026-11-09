@@ -15,9 +15,14 @@ The VM exposes bounded, timed DIN input shared by MCU SCI and DSP Timer0,
 with genuine SCI output. Native MIDI input uses CoreMIDI on macOS and the ALSA
 sequencer on Linux, with selected source identifiers and bounded queues. Linux
 records monotonic receipt points in a dedicated native input owner, rather than
-claiming hardware arrival precision. It reads the granted UMP/legacy protocol; legacy sources
-expose group 0. Both paths share MIDI 1.0 validation. Application routing and its
-audio-aligned time mapping remain incomplete.
+claiming hardware arrival precision. It reads the granted UMP/legacy protocol;
+legacy sources expose group 0. Both paths share MIDI 1.0 validation.
+Live routing selects one source/group and waits for original application WAI,
+MIDI identity and valid PCM before priming native output. A bounded history of
+native audio observations maps input timestamps into original musical time with
+an explicit finite delivery allowance and a fixed session correlation budget.
+Estimates beyond that budget are rejected. Late input and missing clock contracts fail;
+the MCU clock is not a host timestamp anchor. Live deadline qualification is incomplete.
 The host SMF reader streams timestamped events with tempo/SMPTE handling and
 separate metadata; independent patterns require explicit selection. An offline
 PCM consumer writes signed 24-bit stereo WAV, rejecting underruns, frame/time
@@ -29,7 +34,15 @@ then requires the original reply and valid PCM, selects a musical origin, stream
 the file and retains its EOF barrier until the output boundary is
 published. Only the musical interval and selected tail enter the WAV; startup
 PCM is validated and discarded. Failed or interrupted renders stay unpublished.
-Normal file rendering remains gated by incomplete original-firmware readiness.
+Normal file rendering uses this original-firmware readiness handshake.
+With one connected native MIDI source, live mode selects it automatically. With
+several sources, the diagnostic lists their IDs; select one using `--midi-source ID`
+and optionally `--midi-group 0..15`. Native routing options apply only to live mode.
+Without the selected source, firmware and display start while the control owner
+waits for a connection. Source discovery does not block the live input pacer.
+Events timestamped before the native audio clock becomes ready are discarded.
+Start playing after `Live MIDI input active`; late events, queue overflow and
+disconnects stop the session explicitly.
 The display viewer is used in live mode. Offline rendering reports statistics
 in the terminal and does not publish display snapshots.
 Complete instrument acceptance and sustained real-time operation remain unverified.
@@ -90,8 +103,8 @@ assertions retire the previous DSP Core before peripheral reset and ROM restart.
 `blofeld-headless` loads local images and executes their native JIT paths;
 unimplemented device accesses stop with context. Flash program/erase and interrupts,
 watchdog reset/recovery, USB transactions, MCU MISO sampling and SHI interrupt delivery,
-the remaining device contracts and host MIDI are incomplete, so it is not yet
-a playable instrument. Complete requirements are in
+the remaining device contracts, native MIDI output and host-visible USB transport
+are incomplete. Complete playable-instrument acceptance remains open. Complete requirements are in
 [OBJECTIVE.md](OBJECTIVE.md) and [ACCEPTANCE.tsv](ACCEPTANCE.tsv).
 
 - `src/vi/`: instrument behavior and firmware device contracts.

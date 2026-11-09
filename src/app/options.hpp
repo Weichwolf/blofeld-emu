@@ -10,6 +10,8 @@ namespace blofeld::app {
 struct Options {
   std::filesystem::path profile;
   std::optional<std::filesystem::path> midi, wav;
+  std::optional<std::int32_t> midi_source;
+  std::uint8_t midi_group = 0;
   std::uint64_t tail_seconds = 5;
 };
 

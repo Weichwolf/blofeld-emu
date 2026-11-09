@@ -373,6 +373,18 @@ Source faults abort the channel and wake its owners. Cancellation cannot resume
 after a rejected chunk. Establish the real musical origin and route native host
 ports in application composition; these contracts alone do not prove readiness.
 
+Live composition uses the same original identity/application-WAI/PCM readiness
+handshake before selecting its musical origin. Validate and discard boot PCM,
+then prime a fresh native output epoch with subsequent original frames. The
+control owner publishes display state and discovers the selected MIDI source;
+firmware can boot without it. Publish one stable native input to the independent
+pacer and retain it until that owner joins. Before accepting external events,
+require native audio correlation and discard input predating that readiness.
+Map timestamps only inside retained original audio intervals. Commit bounded
+silence after the delivery cutoff, retain DIN serialization and never acknowledge
+live EOF. Missing clocks, late input, native faults and underruns stop the session.
+Offline rendering constructs none of these live display/audio/MIDI bindings.
+
 The app connects ordered PCM blocks to a bounded SPSC host queue. A separate
 PulseAudio I/O owner pushes available frames and dispatches server events; there
 is no application data audio callback. Query actual stream/sink format and buffer
@@ -427,8 +439,12 @@ unnecessary half-second request. Read actual grants; total source queue bound C
 includes the native maximum and the 256-frame local queue. Retain 3*C source
 frames for correlation and require reopen when native buffer grants change.
 Additional correlation uncertainty is published atomically and retained unchanged
-in PCM clock points. Live admission must account for that bound or explicitly
-reject it; it must not treat an estimated observation as an exact timestamp.
+in PCM clock points. Live admission fixes a session budget at its first point:
+zero for exact native timestamps, or 250 microseconds for bounded estimates.
+Delay silence commitments by that additional budget and add it to MIDI lead;
+never retime queued input when later uncertainty decreases. Reject estimates
+outside the budget or an exact session becoming uncertain. These bounds describe
+backend observations; physical key-to-analog latency remains a separate gate.
 Native contract and implementation references (dependency version is pinned):
 https://www.freedesktop.org/software/pulseaudio/doxygen/structpa__timing__info.html
 https://www.freedesktop.org/software/pulseaudio/doxygen/stream_8h.html
