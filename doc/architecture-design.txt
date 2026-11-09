@@ -25,7 +25,9 @@ There is no global per-instruction/per-clock coordinator.
 
 ExecutionTime publishes completed MCU progress in nominal 60 MHz units. DSP native
 execution uses that frontier as a conservative grant; local MCU progress does not
-wait. Actual shared-port accesses and completed SPI words rendezvous before their
+wait. Device-clock accesses also publish elapsed progress inside long native runs,
+so a timer-poll loop cannot starve the DSP until its own timeout. Publication neither
+waits for the peer nor forces a Core return. Actual shared-port accesses and completed SPI words rendezvous before their
 effects commit, keeping short producer phases observable without adding read/pop
 effects. DSP time follows the programmed PLL with retained fractional phase.
 Q/J direction-register reads, output-latch reads, unchanged drive states and

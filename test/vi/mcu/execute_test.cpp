@@ -369,6 +369,73 @@ void native_local_port_access() {
               !peer.dsp_interrupt(true),
           "Local register reads, ignored writes and undriven latches need no DSP owner");
 }
+
+void native_polling_progress() {
+  namespace isa = cpu12::isa;
+  constexpr cpu12::Address marker = 0x3000;
+  constexpr cpu12::Byte datum = 0x5a;
+  constexpr std::uint64_t peer_time = 1000;
+  constexpr auto setup = isa::program(isa::opcode<isa::Opcode::lds_immediate>(),
+                                      std::array<cpu12::Byte, 2>{0x1f, 0xff},
+                                      isa::opcode<isa::Opcode::andcc_immediate>(),
+                                      std::array<cpu12::Byte, 1>{0xbf},
+                                      isa::opcode<isa::Opcode::ldab_immediate>(),
+                                      std::array<cpu12::Byte, 1>{0x80},
+                                      isa::opcode<isa::Opcode::stab_extended>(),
+                                      std::array<cpu12::Byte, 2>{0, 0x46});
+  constexpr cpu12::Byte repeat_poll = 0xfb;
+  constexpr auto loop = isa::program(isa::opcode<isa::Opcode::ldab_extended>(),
+                                     std::array<cpu12::Byte, 2>{0, 0x44},
+                                     isa::opcode<isa::Opcode::bra_relative>(),
+                                     std::array{repeat_poll});
+  constexpr auto handler = isa::program(isa::opcode<isa::Opcode::ldab_immediate>(),
+                                        std::array{datum},
+                                        isa::opcode<isa::Opcode::stab_extended>(),
+                                        std::array<cpu12::Byte, 2>{0x30, 0});
+  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  image->known.fill(1);
+  std::ranges::copy(setup, image->bytes.begin());
+  std::ranges::copy(loop, image->bytes.begin() + static_cast<std::ptrdiff_t>(setup.size()));
+  const auto offset = setup.size() + loop.size();
+  std::ranges::copy(handler, image->bytes.begin() + static_cast<std::ptrdiff_t>(offset));
+  constexpr auto entry = static_cast<cpu12::Address>(0x8000 + offset);
+  image->bytes[blofeld::vi::FlashImage::byte_count - 12] = static_cast<cpu12::Byte>(entry >> 8U);
+  image->bytes[blofeld::vi::FlashImage::byte_count - 11] = static_cast<cpu12::Byte>(entry);
+  image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
+  image->bytes.back() = 0;
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  blofeld::vi::PeerPort peer;
+  blofeld::vi::ExecutionTime time;
+  std::promise<blofeld::vi::ExecutionReport> result;
+  auto completed = result.get_future();
+  std::jthread mcu([&](const std::stop_token &stop) {
+    try {
+      result.set_value(
+          blofeld::vi::mcu::execute(*image, shi, reset, stop, nullptr, nullptr, &peer, &time));
+    } catch (...) { result.set_exception(std::current_exception()); }
+  });
+  bool posted = false;
+  std::jthread dsp([&](const std::stop_token &stop) {
+    std::uint64_t ticks = 0;
+    while (const auto limit = time.dsp_limit(ticks, stop)) {
+      ticks = *limit;
+      if (ticks >= peer_time) {
+        posted = peer.dsp_ready(true);
+        return;
+      }
+    }
+  });
+  const auto ready = completed.wait_for(std::chrono::seconds(1));
+  mcu.request_stop();
+  dsp.request_stop();
+  mcu.join();
+  dsp.join();
+  const auto report = completed.get();
+  require(ready == std::future_status::ready && posted && report.failure &&
+              report.failure->address == marker && report.failure->value == datum,
+          "A native timer-poll loop publishes device time so its peer can deliver the real XIRQ");
+}
 }
 
 int main() try {
@@ -379,6 +446,7 @@ int main() try {
   native_peer_xirq();
   native_pedal_input();
   native_local_port_access();
+  native_polling_progress();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

@@ -263,6 +263,9 @@ private:
     const auto deadline = devices_.deadline();
     const auto enabled = devices_.interrupts_enabled();
     if (!devices_.advance(*core_) || !action()) { return false; }
+    if (devices_.time != nullptr && !devices_.time->publish_mcu(devices_.clock.ticks())) {
+      return false;
+    }
     if (pending != devices_.pending() || deadline != devices_.deadline() ||
         enabled != devices_.interrupts_enabled()) {
       core_->request_yield();
