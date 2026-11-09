@@ -34,8 +34,11 @@ void reset_and_qualification() {
   constexpr Clock::Cycle qualified_at = 20;
   constexpr Clock::Cycle after_pll = 40;
   constexpr Clock::Cycle after_divider = 160;
+  constexpr Clock::Cycle projected_ticks = 100;
   constexpr unsigned divided_bus_period = 40;
   Clock clock;
+  require(clock.cycles() == 0 && clock.at_ticks(1) == 1 && clock.at_ticks(projected_ticks) == 10,
+          "Input timestamps project to the next complete oscillator bus cycle");
   require(read(clock, flags) == power_on && read(clock, usb_control) == 8 &&
               read(clock, usb_control + 1) == 0x20 && clock.bus_period() == 10 &&
               !clock.deadline() && !clock.pending(),
@@ -57,6 +60,9 @@ void reset_and_qualification() {
   write(clock, {.offset = select, .value = pll});
   require(clock.bus_period() == 2 && clock.advance(12) && clock.ticks() == after_pll,
           "PLL selection changes the nominal bus to 30 MHz, independent of host time");
+  require(clock.cycles() == 12 && clock.at_ticks(after_pll) == 12 &&
+              clock.at_ticks(after_pll + 5) == 15,
+          "Timestamp projection uses the current bus period and rounds future edges upwards");
   write(clock, {.offset = divider, .value = 15});
   require(read(clock, divider) == 0, "REFDV cannot change while PLLSEL is set");
   write(clock, {.offset = select, .value = 0});

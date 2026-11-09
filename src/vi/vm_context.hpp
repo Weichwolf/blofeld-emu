@@ -7,6 +7,7 @@
 #include "io/controls.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/execution_time.hpp"
+#include "io/midi_port.hpp"
 #include "io/pcm_output.hpp"
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
@@ -38,6 +39,8 @@ public:
 
   void pedal(const bool level) noexcept { controls_.pedal(level); }
 
+  [[nodiscard]] MidiPort &midi() noexcept { return midi_; }
+
   void request_display() noexcept { display_.request(); }
 
   [[nodiscard]] std::optional<St7565> take_display() { return display_.take(); }
@@ -56,6 +59,7 @@ private:
   std::vector<dsp56300::Word> boot_;
   std::unique_ptr<MediaImage> media_;
   Controls controls_;
+  MidiPort midi_;
   DisplayState display_;
   PcmOutput output_;
   Shi shi_;

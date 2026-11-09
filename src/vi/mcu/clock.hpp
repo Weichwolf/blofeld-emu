@@ -34,6 +34,11 @@ public:
 
   [[nodiscard]] Cycle ticks() const noexcept { return ticks_; }
 
+  [[nodiscard]] Cycle cycles() const noexcept { return time_; }
+
+  // Current bus-period projection; callers also honor the next clock event.
+  [[nodiscard]] std::optional<Cycle> at_ticks(Cycle ticks) const noexcept;
+
 private:
   [[nodiscard]] Cycle rti_period() const noexcept;
   [[nodiscard]] bool rti_running() const noexcept;

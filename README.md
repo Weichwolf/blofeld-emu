@@ -11,6 +11,8 @@ free-running timer capture/compare, CRG/USB clock selection, periodic interrupts
 and interrupt wakeup, SCI character/register handling, USB configuration and direct
 endpoint-buffer windows, and independent
 MCU/DSP execution threads and DSP56371 PLL register/nominal ratio handling.
+The VM exposes bounded, timed DIN MIDI input/output through its SCI binding;
+external host MIDI ports are not yet connected by the application.
 DSP interrupt arbitration uses configured priorities, SR masks and source ordering.
 Timer, DMA and DAX requests enter native vectors with VBA/REP/RTI handling;
 timer and DMA acknowledgements occur on accepted admission. SHI and ESAI

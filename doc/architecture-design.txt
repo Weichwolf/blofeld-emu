@@ -174,7 +174,16 @@ including when a channel is enabled after transmission has started.
 ESAI TX0 slots form signed stereo blocks with explicit hardware underrun flags.
 The app consumer receives bounded borrowed spans outside native callbacks and
 owns pacing/backpressure. DAX retains its own device effects without duplicating
-the host stream. Host MIDI still needs its application binding.
+the host stream.
+
+VmContext owns one bounded, bidirectional DIN MIDI port. The host owner submits
+ordered packets in nominal 60 MHz device time; complete 8N1 characters retain
+31,250-baud spacing. The MCU owner admits input at character starts and lets SCI
+produce its actual data/status/interrupt effects. Output carries genuine SCI
+character-completion timestamps. Clock transitions are event boundaries; conversion
+does not assume a constant MCU bus frequency. Overflow and unsupported output
+formats are explicit errors. Host port routing still needs its application binding;
+USB endpoint transactions remain separate from this DIN input.
 
 The app connects ordered PCM blocks to a bounded SPSC host queue. A separate
 PulseAudio I/O owner pushes available frames and dispatches server events; there

@@ -8,6 +8,7 @@
 #include "io/dsp_reset.hpp"
 #include "io/execution_time.hpp"
 #include "io/mcu_flash.hpp"
+#include "io/midi_port.hpp"
 #include "io/peer_port.hpp"
 #include "io/sci.hpp"
 #include "io/shi.hpp"
@@ -47,17 +48,65 @@ constexpr auto no_deadline = std::numeric_limits<Timer::Cycle>::max() / 2;
 struct Devices {
   PeerPort *peer = nullptr;
   ExecutionTime *time = nullptr;
+  MidiPort *midi = nullptr;
   Timer timer;
   Clock clock;
   Sci sci;
   Usb usb;
   Timer::Cycle idle = 0;
+  const char *midi_error = nullptr;
+
+  bool point(const Timer::Cycle now) noexcept {
+    const auto before = clock.cycles();
+    const auto ticks = clock.ticks();
+    const auto period = clock.bus_period();
+    if (!timer.advance(now) || !clock.advance(now) || !sci.advance(now)) { return false; }
+    if (midi == nullptr) { return true; }
+    while (const auto output = sci.take_output()) {
+      if (output->bits != 8 || output->word > all_bits || output->cycle < before ||
+          output->cycle > now) {
+        midi_error = "SCI MIDI output has an unsupported format or completion time";
+        return false;
+      }
+      if (!midi->write_output({.ticks = ticks + ((output->cycle - before) * period),
+                               .byte = static_cast<std::uint8_t>(output->word)})) {
+        return false;
+      }
+    }
+    while (const auto input = midi->peek_input()) {
+      if (input->ticks > clock.ticks()) { break; }
+      if (!sci.receive({.word = input->byte})) {
+        midi_error = "SCI could not accept the scheduled MIDI character";
+        return false;
+      }
+      midi->pop_input();
+    }
+    midi->publish_time(clock.ticks());
+    return midi->error() == nullptr;
+  }
 
   bool advance(const cpu12::Core &core) noexcept {
     const auto cycles = core.progress().estimated_cycles;
-    return idle <= std::numeric_limits<Timer::Cycle>::max() - cycles &&
-           timer.advance(cycles + idle) && clock.advance(cycles + idle) &&
-           sci.advance(cycles + idle);
+    if (idle > std::numeric_limits<Timer::Cycle>::max() - cycles) { return false; }
+    const auto now = cycles + idle;
+    if (midi == nullptr) { return point(now); }
+    for (;;) {
+      auto next = now;
+      if (const auto event = clock.deadline(); event && *event < next) { next = *event; }
+      if (const auto input = midi->peek_input()) {
+        const auto event = clock.at_ticks(input->ticks);
+        if (!event) { return false; }
+        next = std::min(next, *event);
+      }
+      if (!point(next)) { return false; }
+      if (next == now) { return true; }
+    }
+  }
+
+  [[nodiscard]] const char *error() const noexcept {
+    if (midi_error != nullptr) { return midi_error; }
+    if (midi != nullptr && midi->error() != nullptr) { return midi->error(); }
+    return sci.error();
   }
 
   [[nodiscard]] std::optional<std::uint16_t> pending() const noexcept {
@@ -71,6 +120,9 @@ struct Devices {
     };
     offer(clock.deadline());
     offer(sci.deadline());
+    if (midi != nullptr) {
+      if (const auto input = midi->peek_input()) { offer(clock.at_ticks(input->ticks)); }
+    }
     return next;
   }
 
@@ -157,7 +209,7 @@ public:
 
   [[nodiscard]] const char *error() const noexcept {
     if (peer_ != nullptr && peer_->error() != nullptr) { return peer_->error(); }
-    return display_.error() != nullptr ? display_.error() : devices_.sci.error();
+    return display_.error() != nullptr ? display_.error() : devices_.error();
   }
 
 private:
@@ -519,7 +571,7 @@ bool interrupt(cpu12::Core &core, const Devices &devices, ExecutionReport &repor
 void advance(const cpu12::Core &core, Devices &devices) {
   if (!devices.advance(core) ||
       (devices.time != nullptr && !devices.time->publish_mcu(devices.clock.ticks()))) {
-    if (devices.sci.error() != nullptr) { throw std::runtime_error(devices.sci.error()); }
+    if (devices.error() != nullptr) { throw std::runtime_error(devices.error()); }
     throw std::overflow_error("MCU device time is not representable or monotonic");
   }
 }
@@ -565,11 +617,13 @@ ExecutionReport execute(FlashImage &image,
                         const Controls *controls,
                         DisplayState *display,
                         PeerPort *peer,
-                        ExecutionTime *time) {
+                        ExecutionTime *time,
+                        MidiPort *midi) {
   Memory memory(image);
   Devices devices;
   devices.peer = peer;
   devices.time = time;
+  devices.midi = midi;
   auto grants = regions(memory, devices.usb);
   Io io(memory, image, devices, shi, reset, stop, controls, display, peer);
   auto callbacks = io.callbacks();

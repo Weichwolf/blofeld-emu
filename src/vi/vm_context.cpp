@@ -43,7 +43,7 @@ void VmContext::start() {
     const auto stop = stop_.get_token();
     try {
       reports_[0] =
-          mcu::execute(*image_, shi_, reset_, stop, &controls_, &display_, &peer_, &time_);
+          mcu::execute(*image_, shi_, reset_, stop, &controls_, &display_, &peer_, &time_, &midi_);
     } catch (...) { reports_[0].exception = std::current_exception(); }
     completed_.fetch_add(1, std::memory_order_release);
     completed_.notify_one();

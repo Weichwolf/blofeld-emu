@@ -133,6 +133,12 @@ std::optional<Clock::Cycle> Clock::deadline() const noexcept {
   return time_ + *delta;
 }
 
+std::optional<Clock::Cycle> Clock::at_ticks(const Cycle ticks) const noexcept {
+  const auto delta = ticks > ticks_ ? ceiling(ticks - ticks_, bus_period()) : 0;
+  if (delta > std::numeric_limits<Cycle>::max() - time_) { return {}; }
+  return time_ + delta;
+}
+
 bool Clock::write_usb(const std::uint16_t value) noexcept {
   auto next = usb_;
   if ((usb_ & module_enable) == 0) {

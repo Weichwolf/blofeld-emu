@@ -62,6 +62,9 @@ target_link_libraries(blofeld_vi_mcu_memory PUBLIC blofeld_vi_storage cpu12::cor
 add_library(blofeld_vi_peer src/vi/io/peer_port.cpp src/vi/io/execution_time.cpp)
 target_include_directories(blofeld_vi_peer PUBLIC src/vi)
 target_link_libraries(blofeld_vi_peer PUBLIC blofeld_quality Threads::Threads)
+add_library(blofeld_vi_midi src/vi/io/midi_port.cpp)
+target_include_directories(blofeld_vi_midi PUBLIC src/vi)
+target_link_libraries(blofeld_vi_midi PUBLIC blofeld_quality)
 add_library(blofeld_vi_execution
   src/vi/display/port.cpp
   src/vi/io/memory_controller.cpp src/vi/io/dsp_reset.cpp src/vi/io/shi.cpp src/vi/io/sci.cpp src/vi/io/usb.cpp src/vi/io/mcu_flash.cpp
@@ -69,7 +72,7 @@ add_library(blofeld_vi_execution
   src/vi/mcu/execute.cpp src/vi/dsp/audio.cpp src/vi/dsp/clock.cpp src/vi/dsp/dax.cpp src/vi/dsp/dma.cpp src/vi/dsp/esai.cpp src/vi/dsp/interrupts.cpp src/vi/dsp/memory.cpp src/vi/dsp/ports.cpp src/vi/dsp/timers.cpp src/vi/dsp/execute.cpp src/vi/vm_context.cpp)
 target_include_directories(blofeld_vi_execution PUBLIC src/vi)
 target_link_libraries(blofeld_vi_execution PUBLIC
-  blofeld_vi_mcu_memory blofeld_vi_display blofeld_vi_peer dsp56300::core Threads::Threads)
+  blofeld_vi_mcu_memory blofeld_vi_display blofeld_vi_peer blofeld_vi_midi dsp56300::core Threads::Threads)
 add_library(blofeld_app_profile src/app/profile.cpp)
 add_library(blofeld_host_process src/host/process/configuration.cpp src/host/process/signals.cpp)
 target_include_directories(blofeld_host_process PUBLIC src/host)
@@ -107,6 +110,9 @@ if(BUILD_TESTING)
   blofeld_unit(vi-display-test test/vi/display/st7565_test.cpp blofeld_vi_display)
   blofeld_unit(vi-display-port-test test/vi/display/port_test.cpp blofeld_vi_execution)
   blofeld_unit(vi-peer-port-test test/vi/io/peer_port_test.cpp blofeld_vi_peer)
+  blofeld_unit(vi-midi-port-test test/vi/io/midi_port_test.cpp "blofeld_vi_midi;Threads::Threads")
+  blofeld_unit(vi-mcu-midi-test test/vi/mcu/midi_test.cpp blofeld_vi_execution)
+  target_include_directories(vi-mcu-midi-test PRIVATE "${BLOFELD_CPU12_ROOT}/test/support")
   blofeld_unit(vi-execution-time-test test/vi/io/execution_time_test.cpp blofeld_vi_peer)
   blofeld_unit(vi-display-state-test test/vi/display/state_test.cpp blofeld_vi_display)
   blofeld_unit(vi-lcd-image-test test/vi/display/lcd_image_test.cpp blofeld_vi_display)
