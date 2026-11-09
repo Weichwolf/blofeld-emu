@@ -14,9 +14,12 @@
 namespace blofeld::app {
 vi::PcmOutput AudioConsumer::output() noexcept {
   return {.owner = this,
-          .write = [](void *owner, const vi::PcmOutput::Block block, const std::stop_token &stop) {
-            return static_cast<AudioConsumer *>(owner)->write(block, stop);
-          }};
+          .write =
+              [](void *owner, const vi::PcmOutput::Block block, const std::stop_token &stop) {
+                return static_cast<AudioConsumer *>(owner)->write(block, stop);
+              },
+          .close =
+              [](void *owner) noexcept { static_cast<AudioConsumer *>(owner)->producer_.reset(); }};
 }
 
 bool AudioConsumer::write(const vi::PcmOutput::Block block, const std::stop_token &stop) {
@@ -24,6 +27,8 @@ bool AudioConsumer::write(const vi::PcmOutput::Block block, const std::stop_toke
       std::uint64_t{block.frame_ticks} * playback_.grants().rate != block.reference_hz) {
     throw std::runtime_error("Unsupported original PCM block format/rate");
   }
+  if (!producer_) { producer_.emplace(playback_.producer()); }
+  producer_->end_work();
   const auto arrived = std::chrono::steady_clock::now();
   if (epoch_ && *epoch_ != block.epoch) {
     if (block.epoch < *epoch_) { throw std::runtime_error("PCM reset epoch moved backwards"); }
@@ -36,6 +41,7 @@ bool AudioConsumer::write(const vi::PcmOutput::Block block, const std::stop_toke
     throw std::runtime_error("PCM frame sequence is discontinuous");
   }
   if (!playback_.write(block.frames, stop)) { return false; }
+  producer_->begin_work();
   const auto completed = std::chrono::steady_clock::now();
   if (previous_) {
     const auto elapsed =

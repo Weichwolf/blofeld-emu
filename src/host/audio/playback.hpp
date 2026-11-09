@@ -3,6 +3,7 @@
 
 #include "audio/buffer.hpp"
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -31,6 +32,24 @@ struct PlaybackStatus {
 // I/O owner handles device events; render callbacks only consume prepared frames.
 class Playback {
 public:
+  // Darwin permanently opts the dedicated producer thread out of QoS scheduling.
+  class Producer {
+  public:
+    ~Producer();
+    Producer(Producer &&) noexcept;
+    Producer(const Producer &) = delete;
+    Producer &operator=(const Producer &) = delete;
+    Producer &operator=(Producer &&) = delete;
+    void begin_work();
+    void end_work();
+
+  private:
+    friend class Playback;
+    explicit Producer(std::chrono::nanoseconds period);
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+  };
+
   explicit Playback(unsigned rate, std::string_view name = "Virtual instrument");
   ~Playback();
   Playback(const Playback &) = delete;
@@ -41,6 +60,7 @@ public:
   void check() const;
   [[nodiscard]] const Grants &grants() const noexcept;
   [[nodiscard]] PlaybackStatus status() const noexcept;
+  [[nodiscard]] Producer producer() const;
 
 private:
   struct Impl;

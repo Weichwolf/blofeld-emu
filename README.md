@@ -28,10 +28,13 @@ PulseAudio client owner; macOS uses a CoreAudio output unit. The producer suppli
 stereo 24-bit PCM in 32-bit containers. CoreAudio consumes prepared frames through
 a lock-free render buffer and converts them exactly to float32; the output unit
 handles the granted device format/rate. Actual device formats and buffer grants
-are queried. Host backpressure paces the DSP owner. Reset stops and flushes the old
+are queried. macOS requests a small hardware buffer within its reported range;
+its dedicated DSP producer uses a Mach deadline and an asynchronous audio workgroup.
+The output owner sizes bounded queues from actual device quanta, including variable
+buffer bounds. Host backpressure paces the DSP owner. Reset stops and flushes the old
 stream epoch before accepting new frames. Disconnects, endpoint changes and host
 underruns stop execution with an error. Reported output latency combines queued
-frames and native driver/unit latency information; it is not a physical
+frames and native device, stream and output-unit latency information; it is not a physical
 keyboard-to-sound measurement.
 DAX register access and DMA writes retain the distinct XADR/channel buffers,
 non-audio metadata, block position, refill requests and observed-underrun clearing.

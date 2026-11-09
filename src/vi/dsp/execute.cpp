@@ -52,6 +52,14 @@ struct BitAccess {
   dsp56300::BitAction action;
 };
 
+struct OutputOwner {
+  PcmOutput output;
+
+  ~OutputOwner() {
+    if (output.close != nullptr) { output.close(output.owner); }
+  }
+};
+
 class Io final : public dsp56300::Io {
 public:
   Io(const std::span<const dsp56300::Word> boot,
@@ -736,6 +744,7 @@ ExecutionReport execute(const std::span<const dsp56300::Word> boot,
   if (boot.empty() || boot.size() > dsp56300::address_words - boot_first) {
     throw std::invalid_argument("DSP boot ROM has invalid bounds");
   }
+  const OutputOwner owner{output};
   Io io(boot, shi, reset, stop, image, output, peer, time);
   ExecutionReport report;
   std::uint64_t applied = 0;
