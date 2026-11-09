@@ -32,9 +32,10 @@ See [target architecture](doc/architecture-design.txt).
 - Use the session's normal audio output and actual capability/latency grants.
   Bounded queues report overload, underruns and disconnects. Audio callbacks
   never allocate, lock, throw or access files.
-- Independent GTK display from original LCD state. Atomically publish PBM/text
+- In live mode, independent GTK display from original LCD state. Atomically publish PBM/text
   under $XDG_RUNTIME_DIR/blofeld-emu/ and save PNG screenshots; follow directory
   recreation. Unknown display contents remain explicit.
+  Offline MIDI-to-WAV has no viewer binding; report rendering statistics in the console.
 - Simple unit tests mirror src/. The normal emulator provides reset-to-instrument,
   long-run/load, trace and memory-inspection acceptance runs. Cover every documented
   Desktop SL function on both host platforms in ACCEPTANCE.tsv, with fixed scope,

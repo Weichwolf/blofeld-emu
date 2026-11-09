@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "render.hpp"
 
-#include "display/lcd_image.hpp"
-#include "display/publication.hpp"
 #include "io/midi_port.hpp"
 #include "io/pcm_output.hpp"
 #include "midi/startup.hpp"
@@ -28,14 +26,6 @@ namespace {
 constexpr unsigned rate = 44100;
 constexpr std::chrono::seconds startup_limit{10};
 constexpr std::chrono::milliseconds startup_poll{1}, control_poll{10};
-constexpr std::chrono::milliseconds display_interval{100};
-
-void publish_display(vi::VmContext &vm, DisplayPublication &display) {
-  if (const auto controller = vm.take_display()) {
-    constexpr vi::LcdPanel panel{.width = 128, .reverse_commons = true};
-    static_cast<void>(display.publish(vi::capture_lcd(*controller, panel)));
-  }
-}
 
 const std::filesystem::path &required_path(const std::optional<std::filesystem::path> &path) {
   if (!path) { throw std::invalid_argument("Offline render requires MIDI and WAV paths"); }
@@ -85,21 +75,12 @@ vi::PcmOutput OfflineRender::output() noexcept {
 }
 
 std::optional<std::uint64_t> OfflineRender::startup(vi::VmContext &vm,
-                                                    const host::Signals &signals,
-                                                    DisplayPublication &display) {
+                                                    const host::Signals &signals) {
   MidiStartup startup;
   static_cast<void>(startup.poll(vm.midi(), {}));
-  vm.request_display();
   vm.start();
-  auto next_display = std::chrono::steady_clock::now();
   while (!vm.finished()) {
     if (signals.wait(startup_poll)) { break; }
-    const auto now = std::chrono::steady_clock::now();
-    if (now >= next_display) {
-      publish_display(vm, display);
-      vm.request_display();
-      next_display = now + display_interval;
-    }
     const MidiStartup::Readiness readiness{.application = vm.mcu_wait_time().has_value(),
                                            .pcm = wav_.has_pcm()};
     if (const auto origin = startup.poll(vm.midi(), readiness)) { return origin; }
@@ -133,17 +114,15 @@ void OfflineRender::feed(vi::MidiPort &port,
 
 int OfflineRender::run(vi::VmContext &vm,
                        const host::Signals &signals,
-                       DisplayPublication &display,
                        const std::chrono::steady_clock::time_point launched) {
   if (vm_ != nullptr) { throw std::logic_error("An offline render can only run once"); }
   vm_ = &vm;
   launched_ = launched;
   started_ = std::chrono::steady_clock::now();
-  const auto origin = startup(vm, signals, display);
+  const auto origin = startup(vm, signals);
   if (!origin) {
     vm.request_stop();
     const auto reports = vm.wait();
-    publish_display(vm, display);
     return report_execution(reports) ? 2 : 1;
   }
   ready_ = std::chrono::steady_clock::now();
@@ -158,19 +137,12 @@ int OfflineRender::run(vi::VmContext &vm,
       vm.request_stop();
     }
   });
-  auto next_display = ready_;
   while (!vm.finished()) {
     if (signals.wait(control_poll)) {
       vm.request_stop();
       break;
     }
     while (vm.midi().read_output()) {} // Drain ordinary firmware replies, never synthesize them.
-    const auto now = std::chrono::steady_clock::now();
-    if (now >= next_display) {
-      publish_display(vm, display);
-      vm.request_display();
-      next_display = now + display_interval;
-    }
   }
   input.request_stop();
   vm.request_stop();
