@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "audio/consumer.hpp"
 
+#include "audio/pcm_clock.hpp"
 #include "audio/playback.hpp"
 #include "io/pcm_output.hpp"
 
@@ -8,10 +9,15 @@
 #include <bit>
 #include <chrono>
 #include <cstdint>
+#include <limits>
+#include <optional>
 #include <stdexcept>
 #include <stop_token>
 
 namespace blofeld::app {
+AudioConsumer::AudioConsumer(host::audio::Playback &playback)
+    : playback_(playback), clock_(playback.grants().position_history_frames.value_or(0)) {}
+
 vi::PcmOutput AudioConsumer::output() noexcept {
   return {.owner = this,
           .write =
@@ -19,7 +25,11 @@ vi::PcmOutput AudioConsumer::output() noexcept {
                 return static_cast<AudioConsumer *>(owner)->write(block, stop);
               },
           .close =
-              [](void *owner) noexcept { static_cast<AudioConsumer *>(owner)->producer_.reset(); }};
+              [](void *owner) noexcept {
+                auto &consumer = *static_cast<AudioConsumer *>(owner);
+                consumer.clock_.clear();
+                consumer.producer_.reset();
+              }};
 }
 
 bool AudioConsumer::write(const vi::PcmOutput::Block block, const std::stop_token &stop) {
@@ -33,13 +43,19 @@ bool AudioConsumer::write(const vi::PcmOutput::Block block, const std::stop_toke
   const auto arrived = std::chrono::steady_clock::now();
   if (epoch_ && *epoch_ != block.epoch) {
     if (block.epoch < *epoch_) { throw std::runtime_error("PCM reset epoch moved backwards"); }
+    clock_.clear();
+    if (audio_epoch_ == std::numeric_limits<std::uint64_t>::max()) {
+      throw std::overflow_error("PCM host audio epoch exhausted");
+    }
     if (!playback_.reset(stop)) { return false; }
+    ++audio_epoch_;
     next_frame_ = 0;
     last_tick_.reset();
     previous_.reset();
   }
   epoch_ = block.epoch;
-  if (block.first_frame != next_frame_) {
+  if (block.first_frame != next_frame_ ||
+      block.frames.size() > std::numeric_limits<std::uint64_t>::max() - next_frame_) {
     throw std::runtime_error("PCM frame sequence is discontinuous");
   }
   auto tick = last_tick_;
@@ -47,7 +63,14 @@ bool AudioConsumer::write(const vi::PcmOutput::Block block, const std::stop_toke
     if (tick && next <= *tick) { throw std::runtime_error("PCM completion time moved backwards"); }
     tick = next;
   }
-  if (!playback_.write(block.frames, stop)) { return false; }
+  if (!playback_.write(block.frames, stop)) {
+    clock_.clear();
+    return false;
+  }
+  if (playback_.grants().position_history_frames) {
+    clock_.append(block, audio_epoch_);
+    if (const auto position = playback_.status().position) { clock_.observe(*position); }
+  }
   last_tick_ = tick;
   producer_->begin_work();
   const auto completed = std::chrono::steady_clock::now();
@@ -65,6 +88,17 @@ bool AudioConsumer::write(const vi::PcmOutput::Block block, const std::stop_toke
   underruns_.fetch_add(static_cast<std::uint64_t>(std::popcount(block.underruns)),
                        std::memory_order_relaxed);
   return true;
+}
+
+std::optional<PcmClock::Point> AudioConsumer::clock() const noexcept {
+  if (!playback_.grants().position_history_frames) { return {}; }
+  const auto native = playback_.status().position;
+  if (!native) { return {}; }
+  const auto point = clock_.read();
+  if (!point || point->audio_epoch != native->epoch || point->host_ns > native->host_ns) {
+    return {};
+  }
+  return point;
 }
 
 PcmStatistics AudioConsumer::statistics() const noexcept {
