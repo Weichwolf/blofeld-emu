@@ -347,6 +347,23 @@ notes or establish keyboard-to-sound latency. Primary API contracts:
 https://developer.apple.com/documentation/coremidi/midireceiveblock
 https://developer.apple.com/documentation/coremidi/midiclientdispose(_:)
 
+Linux binds the ALSA sequencer UAPI directly, without a userspace MIDI-library
+dependency. Read the granted protocol: prefer MIDI 1.0 UMP when available;
+otherwise adapt typed legacy events to the same UMP decoder and require group 0.
+Keep both the kernel pool and decoded SPSC packet queue bounded. A dedicated
+native input owner polls the selected source and records CLOCK_MONOTONIC receipt
+points before publishing packets. Application reads only consume prepared slots.
+These receipt points do not claim kernel or hardware arrival precision. Foreign
+ALSA queue-relative timestamps do not establish a shared monotonic epoch; queue
+timer restarts can also make them discontinuous. Do not reinterpret or clamp them.
+The input owner detects connection loss and malformed input; overflows and faults
+remain latched. A wake descriptor cancels polling and the owner joins before its
+storage is destroyed. Native input performs no work in the audio callback.
+Receiving packets alone proves neither instrument admission nor physical latency.
+Primary ABI and timestamp contracts:
+https://www.alsa-project.org/alsa-doc/alsa-lib/seq.html
+https://github.com/torvalds/linux/blob/v6.12/include/uapi/sound/asequencer.h
+
 The app file adapter maps all selected tracks into one explicit DIN destination.
 It preserves channel/SysEx/escape bytes, keeps meta payloads off the wire and
 rejects cross-track SysEx collisions. Validated file EOF returns the final known

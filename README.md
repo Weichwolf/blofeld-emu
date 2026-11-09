@@ -12,9 +12,12 @@ and interrupt wakeup, SCI character/register handling, USB configuration and dir
 endpoint-buffer windows, and independent
 MCU/DSP execution threads and DSP56371 PLL register/nominal ratio handling.
 The VM exposes bounded, timed DIN input shared by MCU SCI and DSP Timer0,
-with genuine SCI output. The macOS CoreMIDI input backend discovers actual source
-identifiers and receives a selected group with native timestamps through a bounded
-queue. Application routing and its audio-aligned time mapping remain incomplete.
+with genuine SCI output. Native MIDI input uses CoreMIDI on macOS and the ALSA
+sequencer on Linux, with selected source identifiers and bounded queues. Linux
+records monotonic receipt points in a dedicated native input owner, rather than
+claiming hardware arrival precision. It reads the granted UMP/legacy protocol; legacy sources
+expose group 0. Both paths share MIDI 1.0 validation. Application routing and its
+audio-aligned time mapping remain incomplete.
 The host SMF reader streams timestamped events with tempo/SMPTE handling and
 separate metadata; independent patterns require explicit selection. An offline
 PCM consumer writes signed 24-bit stereo WAV, rejecting underruns, frame/time
