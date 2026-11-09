@@ -43,6 +43,7 @@ int main(const int argc, char **argv) try {
   for (const auto *invalid : {"boot-rom a\nboot-rom b\n",
                               "boot-rom a\nboot-prefix b\ndevice-state c\n",
                               "boot-prefix a\nboot-rom b\ndevice-state c\n",
+                              "boot-rom a\ndevice-state c\ndisplay elsewhere\n",
                               "instruction-budget 10\n",
                               ""}) {
     {

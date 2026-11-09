@@ -29,7 +29,7 @@ private:
   [[nodiscard]] bool write(vi::PcmOutput::Block block, const std::stop_token &stop);
   host::audio::Playback &playback_;
   std::optional<host::audio::Playback::Producer> producer_;
-  std::optional<std::uint64_t> epoch_;
+  std::optional<std::uint64_t> epoch_, last_tick_;
   std::optional<std::chrono::steady_clock::time_point> previous_;
   std::uint64_t next_frame_ = 0, active_ns_ = 0, timed_frames_ = 0;
   std::atomic<std::uint64_t> accepted_{0}, underruns_{0}, measured_ns_{0}, measured_frames_{0};

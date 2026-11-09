@@ -101,7 +101,7 @@ public:
     dma_.reset();
     esai_1_.reset();
     dax_.reset();
-    audio_.reset(epoch);
+    audio_.reset({.id = epoch, .origin = origin_});
     audio_dirty_ = true;
     timers_.reset();
     midi_.reset(origin_);
@@ -137,7 +137,7 @@ public:
       return false;
     }
     if (audio_dirty_) {
-      if (!audio_.configure(device_cycles(), clock_.ratio())) { return audio_failure(report); }
+      if (!audio_.configure(device_cycles(), clock_)) { return audio_failure(report); }
       audio_dirty_ = false;
     }
     while (const auto next = audio_.deadline()) {

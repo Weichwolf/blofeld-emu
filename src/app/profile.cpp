@@ -48,8 +48,6 @@ Profile load_profile(const std::filesystem::path &path) {
       profile.device_state = file;
     } else if (key == "nand") {
       profile.storage = file;
-    } else if (key == "display") {
-      profile.display = file;
     } else {
       throw std::runtime_error("Unknown instrument profile field: " + key);
     }

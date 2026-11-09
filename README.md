@@ -17,8 +17,9 @@ identifiers and receives a selected group with native timestamps through a bound
 queue. Application routing and its audio-aligned time mapping remain incomplete.
 The host SMF reader streams timestamped events with tempo/SMPTE handling and
 separate metadata; independent patterns require explicit selection. An offline
-PCM consumer writes signed 24-bit stereo WAV, rejecting underruns and timeline
-discontinuities. The file adapter feeds the VM through a bounded input frontier;
+PCM consumer writes signed 24-bit stereo WAV, rejecting underruns, frame/time
+discontinuities and drift. Original PCM carries per-frame completion points in
+the common instrument clock. The file adapter feeds the VM through a bounded input frontier;
 producer delays suspend native execution without advancing device time. A complete
 SMF-to-WAV render command and its readiness/tail orchestration remain incomplete.
 DSP interrupt arbitration uses configured priorities, SR masks and source ordering.
@@ -164,9 +165,9 @@ The MCU image uses
 the versioned `.bfnvm` format with explicit known-byte and erase metadata.
 Images must already exist; startup does not provision or modify files.
 The media image uses the checksummed `.bfnand` format with explicit known bits.
-The optional `display` directory overrides `$XDG_RUNTIME_DIR/blofeld-emu`
-(default runtime root: `/run/user/UID` on Linux, the Darwin user temporary
-directory on macOS). The MCU owner supplies controller snapshots;
+The emulator and viewer share `$XDG_RUNTIME_DIR/blofeld-emu`, without display-path
+overrides. The default runtime root is `/run/user/UID` on Linux and the Darwin
+user temporary directory on macOS. The MCU owner supplies controller snapshots;
 the app publishes atomic `display.pbm` and `display.txt` files. Unknown pixels remain
 explicit in text and remove the bitmap until a known frame is available.
 The optional `firmware` path is parsed but not yet connected to execution. Startup

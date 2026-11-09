@@ -23,7 +23,8 @@ vi::PcmOutput AudioConsumer::output() noexcept {
 }
 
 bool AudioConsumer::write(const vi::PcmOutput::Block block, const std::stop_token &stop) {
-  if (block.frames.empty() || block.frames.size() > 16 || block.frame_ticks == 0 ||
+  if (block.frames.empty() || block.frames.size() > 16 ||
+      block.ticks.size() != block.frames.size() || block.frame_ticks == 0 ||
       std::uint64_t{block.frame_ticks} * playback_.grants().rate != block.reference_hz) {
     throw std::runtime_error("Unsupported original PCM block format/rate");
   }
@@ -34,13 +35,20 @@ bool AudioConsumer::write(const vi::PcmOutput::Block block, const std::stop_toke
     if (block.epoch < *epoch_) { throw std::runtime_error("PCM reset epoch moved backwards"); }
     if (!playback_.reset(stop)) { return false; }
     next_frame_ = 0;
+    last_tick_.reset();
     previous_.reset();
   }
   epoch_ = block.epoch;
   if (block.first_frame != next_frame_) {
     throw std::runtime_error("PCM frame sequence is discontinuous");
   }
+  auto tick = last_tick_;
+  for (const auto next : block.ticks) {
+    if (tick && next <= *tick) { throw std::runtime_error("PCM completion time moved backwards"); }
+    tick = next;
+  }
   if (!playback_.write(block.frames, stop)) { return false; }
+  last_tick_ = tick;
   producer_->begin_work();
   const auto completed = std::chrono::steady_clock::now();
   if (previous_) {

@@ -104,13 +104,12 @@ class DisplayWindow:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--runtime-dir", type=Path, help="XDG runtime root (default: current user)")
     parser.add_argument("--screenshot", type=Path, help="Save the current LCD as PNG and exit")
     arguments = parser.parse_args()
     if os.getuid() == 0:
         parser.exit(1, "Run the display viewer as a regular user.\n")
     try:
-        runtime = arguments.runtime_dir or runtime_directory()
+        runtime = runtime_directory()
         if not runtime.is_absolute():
             raise ValueError("The runtime directory must be absolute")
     except ValueError as error:

@@ -19,8 +19,12 @@ public:
   Audio(Esai &esai, Dax &dax, PcmOutput output, const std::stop_token &stop)
       : esai_(esai), dax_(dax), output_(output), stop_(stop) {}
 
-  void reset(std::uint64_t epoch) noexcept;
-  [[nodiscard]] bool configure(std::uint64_t cycles, Clock::Ratio ratio);
+  struct Epoch {
+    std::uint64_t id = 0, origin = 0;
+  };
+
+  void reset(Epoch epoch) noexcept;
+  [[nodiscard]] bool configure(std::uint64_t cycles, const Clock &clock);
   [[nodiscard]] std::optional<std::uint64_t> deadline() const noexcept;
   // Consume only the next due event. The caller services its real DMA requests
   // before advancing to another event or submitting a complete PCM block.
@@ -40,15 +44,25 @@ private:
     [[nodiscard]] bool advance() noexcept;
   };
 
-  [[nodiscard]] bool capture(const Esai::Slot &slot) noexcept;
+  struct Projection {
+    std::optional<Clock> current, previous;
+    std::uint64_t since = 0, origin = 0;
+    [[nodiscard]] bool configure(std::uint64_t cycles, const Clock &clock) noexcept;
+    [[nodiscard]] std::optional<std::uint64_t> at(std::uint64_t cycles) const noexcept;
+  };
+
+  [[nodiscard]] bool capture(const Esai::Slot &slot, std::uint64_t cycles) noexcept;
   [[nodiscard]] bool fail(const char *message) noexcept;
   Esai &esai_;
   Dax &dax_;
   PcmOutput output_;
   const std::stop_token &stop_;
   Pulse transmit_, digital_;
+  Projection projection_;
   std::array<PcmOutput::Frame, 16> frames_{};
+  std::array<std::uint64_t, 16> ticks_{};
   PcmOutput::Frame frame_{};
+  std::optional<std::uint64_t> last_tick_;
   std::uint64_t epoch_ = 0, next_frame_ = 0;
   unsigned used_ = 0, frame_ticks_ = 0;
   std::uint16_t underruns_ = 0;

@@ -113,8 +113,7 @@ void drive(blofeld::vi::VmContext &vm,
 int main(const int argc, char **argv) try {
   const blofeld::host::Signals signals;
   const auto profile = blofeld::app::load_profile(selected_profile(argc, argv));
-  const auto display_path =
-      profile.display.empty() ? blofeld::host::runtime_home() / "blofeld-emu" : profile.display;
+  const auto display_path = blofeld::host::runtime_home() / "blofeld-emu";
   std::filesystem::create_directories(display_path);
   blofeld::app::DisplayPublication display(display_path);
   std::cerr << "Display: " << display_path << '\n';

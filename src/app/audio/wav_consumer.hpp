@@ -21,9 +21,10 @@ public:
 private:
   enum class Phase : std::uint8_t { writing, closed, failed, finished };
   bool write(vi::PcmOutput::Block block, const std::stop_token &stop);
+  void validate_time(vi::PcmOutput::Block block);
   host::audio::Wav wav_;
   unsigned rate_;
-  std::optional<std::uint64_t> epoch_;
+  std::optional<std::uint64_t> epoch_, first_tick_, last_tick_;
   Phase phase_ = Phase::writing;
 };
 }
