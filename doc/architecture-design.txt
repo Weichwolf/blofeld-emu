@@ -251,6 +251,27 @@ while the input producer waits for whole-packet credit from both independent
 MCU/DSP cursors. Live input retains its existing contract; bounded streaming is
 explicitly selected when constructing VM.
 
+The macOS host input requests MIDI 1.0 universal packets from one selected native
+source identifier and group. Convert channel/system/SysEx7 framing into exact DIN
+bytes, retaining message boundaries and native timestamps. A split SysEx remains
+open across callbacks; only realtime bytes may interleave. Unsupported protocol,
+malformed data, backwards/missing timestamps and full queues fail explicitly.
+The receive callback only decodes and publishes fixed-size queue slots; no
+allocation, waiting, file access or exceptions occur there. One consumer converts
+Mach timestamps to monotonic nanoseconds; the queried host time uses the same epoch.
+
+Keep the MIDI runtime's first client on an owned CFRunLoop until process exit.
+CoreMIDI may stop its server when the final process client closes. Dispose input
+callbacks before destroying their decoder and queue. Notification delivery may
+belong to a different library's first client/runloop; a bounded-rate identity
+query also detects the selected source's disappearance. Resolve the selected ID
+directly, independently of other endpoints being added/removed. Discovery retries
+an unstable snapshot a bounded number of times. Native transport is separate from
+application audio/MIDI clock alignment; receiving packets alone does not schedule
+notes or establish keyboard-to-sound latency. Primary API contracts:
+https://developer.apple.com/documentation/coremidi/midireceiveblock
+https://developer.apple.com/documentation/coremidi/midiclientdispose(_:)
+
 The app file adapter maps all selected tracks into one explicit DIN destination.
 It preserves channel/SysEx/escape bytes, keeps meta payloads off the wire and
 rejects cross-track SysEx collisions. Validated file EOF returns the final known
