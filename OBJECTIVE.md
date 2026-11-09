@@ -74,6 +74,10 @@ effects and sample use on this host; design for 10x. Keep instrument behavior,
 guest time, complete audio and bounded live latency. Change the >=4x target only
 with quantitative reproducible feasibility evidence.
 
+Live operation must deliver every audio buffer on time without host-induced gaps,
+lost or repeated frames, including first use of firmware paths and JIT translation.
+Average throughput or offline reserve cannot compensate for a missed live deadline.
+
 Live key-to-sound latency targets 2-5 ms, with a hard upper bound of 10 ms,
 on both macOS ARM64 and Linux x86-64. Measure from physical keyboard actuation
 to the synthesized sound at the analog audio output, including keyboard scan,
