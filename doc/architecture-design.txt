@@ -345,6 +345,21 @@ not establish analog presentation or physical key-to-sound latency. Primary cont
 https://developer.apple.com/documentation/audiotoolbox/aurendercallback
 https://developer.apple.com/documentation/audiotoolbox/audiounitrender(_:_:_:_:_:_:)
 
+Successful complete Darwin render intervals publish their first source-frame
+index, frame count, native audio-reset epoch and host time in monotonic nanoseconds.
+Convert Mach ticks with the queried rational timebase, checking overflow before
+consuming PCM. The host epoch counts audio resets independently of VI reset IDs;
+composition must bind the two explicitly. Reset revokes the old observation before
+repriming. Priming, stopped and failed/underrunning streams expose no position.
+One writer publishes a coherent atomic snapshot; reads make at most three attempts
+and may return unavailable during contention. Sequentially consistent version and
+payload accesses prevent torn observations without callback locks or reader waits.
+This is a render-submission correlation point, not a DAC latency measurement or
+an admission policy. PulseAudio exposes no position until its native timing
+contract is qualified. Actual source-frame/VI-time mapping and live input grants
+still belong in application composition. Native timestamp definition:
+https://developer.apple.com/documentation/coreaudiotypes/audiotimestamp
+
 Each PCM frame carries its completion edge in the common 60 MHz instrument clock.
 Project the actual scheduled native edge through the canonical DSP clock state,
 retaining the preceding PLL segment for pending older edges. Same-ratio control

@@ -2,6 +2,7 @@
 #pragma once
 
 #include "audio/buffer.hpp"
+#include "audio/render_position.hpp"
 
 #include <chrono>
 #include <cstddef>
@@ -26,6 +27,8 @@ struct PlaybackStatus {
   std::size_t queued_frames = 0, server_buffer_frames = 0;
   std::optional<std::int64_t> latency_us;
   bool started = false, failed = false;
+  // Render submission clock; unavailable before priming or on an unqualified backend.
+  std::optional<RenderPosition> position;
 };
 
 // Push-mode native client. One producer supplies complete stereo frames. The
