@@ -223,27 +223,30 @@ void rom_and_reserved() {
 
 void reserved_y_read() {
   Memory memory;
-  constexpr Word last = 0xffffff;
   constexpr Word canary = 0x654321;
-  for (const Word mode : {0U, 0x600080U}) {
+  constexpr Word boundary = 0x16000;
+  for (const Word mode : {0U, 0x80U, 0x200080U, 0x400080U, 0x600080U}) {
     memory.configure(mode);
-    Word value = canary;
-    require(memory.read(Space::y, last, value) && value == 0,
-            "The single reserved Y word completes with the deterministic VM read value");
-    require(!memory.write({.space = Space::y, .address = last, .value = canary}) &&
-                memory.read(Space::y, last, value) && value == 0,
-            "The reserved read has no writable latch");
-    for (const auto space : {Space::program, Space::x, Space::y}) {
-      value = canary;
-      require(!memory.read(space, last - 1, value) && value == canary,
-              "Adjacent unmapped reads still fail without replacing the output value");
-      if (space != Space::y) {
-        require(!memory.read(space, last, value), "The reserved read belongs only to Y space");
+    for (const Word last : {0x16000U, 0xffffffU}) {
+      Word value = canary;
+      require(memory.read(Space::y, last, value) && value == 0,
+              "Qualified reserved Y words complete with the deterministic reference VM value");
+      require(memory.write({.space = Space::y, .address = last, .value = canary}) ==
+                      (last == boundary) &&
+                  memory.read(Space::y, last, value) && value == 0,
+              "Accepted discarded stores and refused peripheral stores create no writable latch");
+      for (const auto space : {Space::program, Space::x, Space::y}) {
+        value = canary;
+        require(!memory.read(space, last - 1, value) && value == canary,
+                "Adjacent unmapped reads still fail without replacing the output value");
+        if (space != Space::y) {
+          require(!memory.read(space, last, value), "The reserved read belongs only to Y space");
+        }
       }
-    }
-    for (const auto &window : memory.windows(Space::y)) {
-      require(last < window.address || last - window.address >= window.words.size(),
-              "The reserved read never grants extra native RAM");
+      for (const auto &window : memory.windows(Space::y)) {
+        require(last < window.address || last - window.address >= window.words.size(),
+                "The reserved read never grants extra native RAM");
+      }
     }
   }
 }

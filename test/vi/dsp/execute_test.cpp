@@ -79,12 +79,11 @@ void unknown_boot_tail() {
           "A known boot prefix executes before an unprovided ROM word fails at its actual PC");
 }
 
-void native_reserved_y_read() {
+template <dsp56300::Word reserved> void native_reserved_y_read() {
   namespace isa = dsp56300::isa;
   constexpr dsp56300::Word absolute = 0x30;
   constexpr dsp56300::Word read = 0x8000;
   constexpr dsp56300::Word x0 = 4;
-  constexpr dsp56300::Word reserved = 0xffffff;
   constexpr dsp56300::Word marker = 0xc000;
   constexpr auto load = isa::opcode<isa::Opcode::move_y_effective>()[0] | (absolute << 8U) | read;
   constexpr auto store = isa::opcode<isa::Opcode::movem_effective>()[0] | (absolute << 8U) | x0;
@@ -844,7 +843,9 @@ int main(const int argc, char **argv) try {
   native_missing_media(argv[2]);
   native_clock_register();
   unknown_boot_tail();
-  native_reserved_y_read();
+  constexpr dsp56300::Word delay_boundary = 0x16000;
+  native_reserved_y_read<delay_boundary>();
+  native_reserved_y_read<dsp56300::word_mask>();
   native_transmit_registers();
   native_interrupt_priorities();
   native_memory_switch();
