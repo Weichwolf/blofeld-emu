@@ -4,7 +4,6 @@
 #include "display/lcd_image.hpp"
 #include "files/directory.hpp"
 
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <stdexcept>
