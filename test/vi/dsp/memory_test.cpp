@@ -75,6 +75,53 @@ void borrowed_windows() {
           "Callback and native stores share the same data without copying");
 }
 
+void initialized_windows() {
+  Memory memory;
+  const auto x = memory.windows(Space::x);
+  const auto y = memory.windows(Space::y);
+  const auto words = x[0].words.size();
+  auto *const backing = x[0].words.data();
+  constexpr Word datum = 0x654321;
+  for (std::size_t address = 0; address + 1 < words; ++address) {
+    require(
+        memory.write({.space = Space::x, .address = static_cast<Word>(address), .value = datum}),
+        "Initialize actual low X RAM through callback stores");
+  }
+  require(!memory.promote_initialized() && !memory.windows(Space::x)[0].known.empty(),
+          "One unknown word prevents a fully initialized native grant");
+  Word value = 0;
+  require(!memory.read(Space::x, static_cast<Word>(words - 1), value),
+          "No promotion invents the final unknown word");
+  x[0].words.back() = datum;
+  x[0].known.back() = 1;
+  require(memory.promote_initialized() && memory.windows(Space::x)[0].known.empty() &&
+              !memory.promote_initialized() && x[0].words.data() == backing &&
+              !memory.windows(Space::y)[0].known.empty(),
+          "A real native store completes proof for X alone without changing backing");
+  constexpr Word replacement = 0x123456;
+  require(memory.write({.space = Space::x, .address = 7, .value = replacement}) &&
+              memory.read(Space::x, 7, value) && value == replacement && backing[7] == replacement,
+          "Callback stores still update initialized native RAM");
+  for (const Word mode : {0x80U, 0x200080U, 0x400080U, 0x600080U, 0U}) {
+    memory.configure(mode);
+    require(memory.windows(Space::x)[0].known.empty() && memory.read(Space::x, 7, value) &&
+                value == replacement && !memory.read(Space::y, 7, value) &&
+                !memory.read(Space::x, static_cast<Word>(words), value),
+            "Bank switches retain the proved low RAM without granting unknown Y or holes");
+  }
+  for (std::size_t address = 0; address < y[0].words.size(); ++address) {
+    y[0].words[address] = datum;
+    y[0].known[address] = 1;
+  }
+  require(memory.promote_initialized() && memory.windows(Space::y)[0].known.empty() &&
+              memory.write({.space = Space::y, .address = 7, .value = replacement}) &&
+              memory.read(Space::y, 7, value) && value == replacement,
+          "Native initialization proves Y independently and preserves callback stores");
+  const auto high_x = memory.windows(Space::x).back();
+  require(!high_x.known.empty() && !memory.read(Space::x, high_x.address, value),
+          "Promoting invariant RAM never grants unknown banked memory");
+}
+
 void switched_maps() {
   struct Map {
     Word mode = 0, program_end = 0, x_end = 0, y_end = 0;
@@ -206,6 +253,7 @@ void reserved_y_read() {
 int main() try {
   contents_and_boundaries();
   borrowed_windows();
+  initialized_windows();
   switched_maps();
   retained_aliases();
   rom_and_reserved();

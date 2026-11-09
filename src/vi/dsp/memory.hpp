@@ -26,6 +26,8 @@ public:
   Memory(const Memory &) = delete;
   Memory &operator=(const Memory &) = delete;
   void configure(dsp56300::Word omr) noexcept;
+  // Publish only at an owner boundary with a new native mapping revision.
+  [[nodiscard]] bool promote_initialized() noexcept;
   [[nodiscard]] bool
   read(dsp56300::Space space, dsp56300::Word address, dsp56300::Word &value) const noexcept;
   // Known reserved data writes are discarded, inferred from the original clear.
@@ -55,6 +57,7 @@ private:
   Block<0x2000> y_;
   Block<high_x_words> high_x_;
   Block<high_y_words> high_y_;
+  bool initialized_x_ = false, initialized_y_ = false;
   std::array<dsp56300::MemoryWindow, 3> program_windows_, x_windows_, y_windows_;
 };
 }
