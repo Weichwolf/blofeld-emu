@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "audio/consumer.hpp"
 #include "audio/playback.hpp"
+#include "boot_rom.hpp"
 #include "display/lcd_image.hpp"
 #include "display/publication.hpp"
 #include "execution.hpp"
@@ -14,7 +15,6 @@
 
 #include <chrono>
 #include <cstddef>
-#include <dsp56300/memory.hpp>
 #include <exception>
 #include <filesystem>
 #include <iomanip>
@@ -26,7 +26,6 @@
 #include <string_view>
 #include <unistd.h>
 #include <utility>
-#include <vector>
 
 namespace {
 std::filesystem::path selected_profile(const int argc, char **argv) {
@@ -45,19 +44,6 @@ const char *operation(const blofeld::vi::Access access) {
     case blofeld::vi::Access::reset: return "reset";
     default: return "unknown";
   }
-}
-
-std::vector<dsp56300::Word> boot_rom(const std::filesystem::path &path) {
-  constexpr std::size_t bytes = 576;
-  const auto input = blofeld::host::read_file(path, bytes);
-  if (input.size() != bytes) { throw std::runtime_error("DSP SPI boot ROM requires 576 bytes"); }
-  std::vector<dsp56300::Word> words;
-  words.reserve(bytes / 3);
-  for (std::size_t at = 0; at < input.size(); at += 3) {
-    words.push_back((static_cast<dsp56300::Word>(input[at]) << 16U) |
-                    (static_cast<dsp56300::Word>(input[at + 1]) << 8U) | input[at + 2]);
-  }
-  return words;
 }
 
 void status(const blofeld::host::audio::Playback &audio,
@@ -136,6 +122,7 @@ int main(const int argc, char **argv) try {
       blofeld::host::read_file(profile.device_state, blofeld::vi::FlashImage::file_bytes)));
   auto media = std::make_unique<blofeld::vi::MediaImage>(
       blofeld::host::read_file(profile.storage, blofeld::vi::MediaImage::max_bytes));
+  auto boot = blofeld::app::load_boot_rom(profile.boot_rom, profile.boot_format);
   constexpr unsigned sample_rate = 44100;
   blofeld::host::audio::Playback audio(sample_rate, "blofeld-emu");
   const auto &grant = audio.grants();
@@ -151,8 +138,7 @@ int main(const int argc, char **argv) try {
   if (grant.rate != grant.sink_rate) { std::cerr << "Audio backend performs rate conversion.\n"; }
   std::cerr << "MIDI is not connected; instrument readiness remains incomplete.\n";
   blofeld::app::AudioConsumer consumer(audio);
-  blofeld::vi::VmContext vm(
-      std::move(image), boot_rom(profile.boot_rom), std::move(media), consumer.output());
+  blofeld::vi::VmContext vm(std::move(image), std::move(boot), std::move(media), consumer.output());
   drive(vm, audio, consumer, signals, display);
   const auto reports = vm.wait();
   publish_display(vm, display);

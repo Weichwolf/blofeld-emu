@@ -132,7 +132,27 @@ device-state "device.bfnvm"
 nand "samples.bfnand"
 ```
 
-The DSP boot input contains 192 big-endian 24-bit words. The MCU image uses
+The `boot-rom` input contains exactly 192 big-endian 24-bit words. Alternatively,
+`boot-prefix` explicitly selects the 55 known words of the published NXP SPI
+bootstrap. The two fields are mutually exclusive. The prefix is not a complete
+hardware ROM dump; addresses beyond its known words remain unmapped and fail
+on access. Do not pad missing words with invented values.
+
+The optional offline assembler in `cmake/dependencies.json` can build this prefix
+natively. With that tool and the verified NXP manual available locally:
+
+```sh
+python3.14 tools/extract_nxp_spi_bootstrap.py \
+  --native-assembler /path/to/dsp56300-asm \
+  --manual build/local/reference-inputs/DSP56371UM.pdf \
+  --output build/local/spi-prefix
+```
+
+The tool requires the existing canonical NXP-assembled 55-word hash, retains
+source/listings/provenance locally and also supports the pinned vendor assembler
+through `--nxp-assembler`. It introduces no runtime emulator dependency.
+
+The MCU image uses
 the versioned `.bfnvm` format with explicit known-byte and erase metadata.
 Images must already exist; startup does not provision or modify files.
 The media image uses the checksummed `.bfnand` format with explicit known bits.

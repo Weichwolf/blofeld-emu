@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "boot_rom.hpp"
 #include "process/configuration.hpp"
 #include "profile.hpp"
 
@@ -28,9 +29,22 @@ int main(const int argc, char **argv) try {
   }
   const auto profile = blofeld::app::load_profile(file);
   require(profile.boot_rom == root / "boot.bin" && profile.device_state == root / "unit.bfnvm" &&
-              profile.storage == root / "sample image.bfnand",
+              profile.storage == root / "sample image.bfnand" &&
+              profile.boot_format == blofeld::app::BootFormat::rom,
           "Relative and quoted paths are resolved against the profile");
-  for (const auto *invalid : {"boot-rom a\nboot-rom b\n", "instruction-budget 10\n", ""}) {
+  {
+    std::ofstream output(file);
+    output << "boot-prefix prefix.bin\ndevice-state unit.bfnvm\nnand unit.bfnand\n";
+  }
+  const auto prefix = blofeld::app::load_profile(file);
+  require(prefix.boot_rom == root / "prefix.bin" &&
+              prefix.boot_format == blofeld::app::BootFormat::spi_prefix,
+          "An explicitly selected document-derived SPI prefix preserves its input kind");
+  for (const auto *invalid : {"boot-rom a\nboot-rom b\n",
+                              "boot-rom a\nboot-prefix b\ndevice-state c\n",
+                              "boot-prefix a\nboot-rom b\ndevice-state c\n",
+                              "instruction-budget 10\n",
+                              ""}) {
     {
       std::ofstream output(file);
       output << invalid;

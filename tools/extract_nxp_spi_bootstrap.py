@@ -64,18 +64,84 @@ def assemble_nxp(assembler: Path, source: Path, output: Path) -> tuple[list[int]
     return nxp_words(listing), version
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--nxp-assembler", required=True, type=Path,
-                        help="Path to the optional NXP asm56300 6.3.28 reference tool")
-    args = parser.parse_args()
-    reference = next(row for row in json.loads((ROOT / "doc/hardware/sources.json").read_text())
-                     if row["file"] == "DSP56371UM.pdf")
-    manual = ROOT / "doc/hardware" / reference["file"]
-    if hashlib.sha256(manual.read_bytes()).hexdigest() != reference["sha256"]:
-        raise ValueError("The downloaded NXP manual does not match the pinned reference")
-    output = ROOT / "build/local"
-    output.mkdir(parents=True, exist_ok=True)
+def native_listing(path: Path) -> tuple[list[int], dict[str, int]]:
+    words, symbols = {}, {}
+    for line in path.read_text().splitlines():
+        fields = line.split()
+        if len(fields) != 3 or fields[0] not in ("P", "I"):
+            raise ValueError("Unexpected native assembler record")
+        if fields[0] == "P":
+            address, word = (int(value, 16) for value in fields[1:])
+            if address in words or not 0 <= word <= 0xFFFFFF:
+                raise ValueError("Overlapping or out-of-width native program words")
+            words[address] = word
+        else:
+            name, value = fields[2].lower(), int(fields[1], 16)
+            if name in symbols:
+                raise ValueError("Duplicate native assembler symbol")
+            symbols[name] = value
+    if not words or sorted(words) != list(range(0xFF0000, 0xFF0000 + len(words))):
+        raise ValueError("Unexpected gaps in the native SPI prefix")
+    return [words[address] for address in sorted(words)], symbols
+
+
+def native_assembly(assembler: Path, source: Path, output: Path):
+    listing = output / (source.stem + ".native.lst")
+    records = output / (source.stem + ".native.lod")
+    result = subprocess.run([str(assembler), str(source), "-f", "lod", "-o", str(records),
+                             "-l", str(listing)], capture_output=True, text=True,
+                            check=True, timeout=10)
+    report = result.stdout + result.stderr
+    (output / (source.stem + ".native.log")).write_text(report)
+    if re.search(r"\bwarning\b", report, re.I):
+        raise ValueError("Native SPI assembly must report zero warnings")
+    words, symbols = native_listing(records)
+    return words, symbols, listing
+
+
+def resolve_native_branches(source: Path, listing: Path, symbols: dict[str, int]):
+    positions = {}
+    for line in listing.read_text().splitlines():
+        match = re.search(r":(\d+)\s+P:([A-F0-9]{6})\b", line)
+        if match:
+            positions[int(match[1])] = int(match[2], 16)
+    pattern = re.compile(r"(\s*bra\s+)<\s*(\*|[A-Za-z_]\w*)(\s*(?:;.*)?)", re.I)
+    lines = source.read_text().splitlines()
+    branches = [(index, pattern.fullmatch(line)) for index, line in enumerate(lines)]
+    branches = [(index, match) for index, match in branches if match]
+    if len(branches) != 3 or any(index + 1 not in positions for index, _ in branches):
+        raise ValueError("Unexpected NXP forced-short branch layout")
+    addresses = [positions[index + 1] for index, _ in branches]
+    bindings = []
+    for index, match in branches:
+        old_pc = positions[index + 1]
+        target = old_pc if match[2] == "*" else symbols[match[2].lower()]
+        relocated = target - sum(address < target for address in addresses)
+        pc = old_pc - sum(address < old_pc for address in addresses)
+        if not -256 <= relocated - pc <= 255:
+            raise ValueError("NXP forced-short branch exceeds its signed nine-bit range")
+        lines[index] = match[1] + f"<${relocated:06x}" + match[3]
+        bindings.append({"line": index + 1, "target": match[2], "pc": pc, "resolved": relocated})
+    return "\n".join(lines) + "\n", bindings
+
+
+def assemble_native(assembler: Path, source: Path, output: Path) -> tuple[list[int], str]:
+    version = subprocess.check_output([str(assembler), "--version"], text=True, timeout=10).strip()
+    if version != "dsp56300-asm 1.0.0":
+        raise ValueError("Unexpected native DSP assembler version")
+    words, symbols, listing = native_assembly(assembler, source, output)
+    if len(words) != 58:
+        raise ValueError("Unexpected native pre-relaxation prefix size")
+    # Version 1.0.0 discards symbolic forced-short BRA hints; retain NXP's exact encoding.
+    resolved, bindings = resolve_native_branches(source, listing, symbols)
+    normalized = output / "nxp-spi-bootstrap-resolved.asm"
+    normalized.write_text(resolved)
+    (output / "nxp-spi-bootstrap-relocations.json").write_text(json.dumps(bindings, indent=2) + "\n")
+    words, _, _ = native_assembly(assembler, normalized, output)
+    return words, version
+
+
+def extract_source(manual: Path, output: Path) -> Path:
     text_path = output / "DSP56371UM.txt"
     subprocess.run(["pdftotext", "-layout", str(manual), str(text_path)], check=True)
     text = text_path.read_text()
@@ -89,16 +155,39 @@ def main() -> None:
         if re.match(r"^[A-Za-z_][A-Za-z0-9_]*\s*$", line):
             line = line.rstrip() + ":"
         lines.append(line)
-    # Resolve references to omitted modes using the source's layout. No body is
-    # supplied for either target; a DSP access outside the prefix stays unknown.
     lines.extend([
         "SerialEEPROM equ $ffff00 ; Address from the separate published EEPROM listing.",
         "BURN: ; Original following code begins here; that body is deliberately absent.",
     ])
     source = output / "nxp-spi-bootstrap.asm"
     source.write_text("\n".join(lines) + "\n")
-    assembler = args.nxp_assembler.resolve()
-    words, version = assemble_nxp(assembler, source, output)
+    return source
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    assembler = parser.add_mutually_exclusive_group(required=True)
+    assembler.add_argument("--nxp-assembler", type=Path,
+                           help="Path to the optional NXP asm56300 6.3.28 reference tool")
+    assembler.add_argument("--native-assembler", type=Path,
+                           help="Path to the optional dsp56300-asm 1.0.0 offline tool")
+    parser.add_argument("--manual", type=Path, help="Path to the pinned NXP DSP56371 manual")
+    parser.add_argument("--output", type=Path, default=ROOT / "build/local")
+    args = parser.parse_args()
+    reference = next(row for row in json.loads((ROOT / "doc/hardware/sources.json").read_text())
+                     if row["file"] == "DSP56371UM.pdf")
+    local_manual = ROOT / "build/local/reference-inputs" / reference["file"]
+    manual = args.manual or (local_manual if local_manual.exists()
+                             else ROOT / "doc/hardware" / reference["file"])
+    data = manual.read_bytes()
+    if len(data) != reference["bytes"] or hashlib.sha256(data).hexdigest() != reference["sha256"]:
+        raise ValueError("The downloaded NXP manual does not match the pinned reference")
+    output = args.output.resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    source = extract_source(manual.resolve(), output)
+    executable = (args.nxp_assembler or args.native_assembler).resolve()
+    assemble = assemble_nxp if args.nxp_assembler else assemble_native
+    words, version = assemble(executable, source, output)
     data = b"".join(word.to_bytes(3, "big") for word in words)
     if len(words) != 55 or hashlib.sha256(data).hexdigest() != PREFIX_SHA256:
         raise ValueError("Assembly differs from the pinned document-derived prefix")
@@ -107,15 +196,26 @@ def main() -> None:
     provenance = {
         "manual_sha256": reference["sha256"],
         "assembler_version": version,
-        "assembler_archive": "doc/reference-tools.json",
-        "assembler_sha256": hashlib.sha256(assembler.read_bytes()).hexdigest(),
+        "manual_source": reference["source"],
+        "manual_bytes": reference["bytes"],
+        "assembler_reference": "doc/reference-tools.json" if args.nxp_assembler
+                                else "cmake/dependencies.json:dsp56300_assembly_tool",
+        "assembler_bytes": executable.stat().st_size,
+        "assembler_sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
         "binary_sha256": PREFIX_SHA256,
         "words": len(words),
         "status": "Document-derived partial SPI ROM, not a hardware dump; other modes absent.",
     }
+    if args.nxp_assembler:
+        provenance["assembler_archive"] = "doc/reference-tools.json"
+    else:
+        provenance["resolved_source_sha256"] = hashlib.sha256(
+            (output / "nxp-spi-bootstrap-resolved.asm").read_bytes()).hexdigest()
+        provenance["relocations_sha256"] = hashlib.sha256(
+            (output / "nxp-spi-bootstrap-relocations.json").read_bytes()).hexdigest()
     (output / "nxp-spi-bootstrap-provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
-    print(f"Wrote {len(words)} document-derived words to ignored {binary.relative_to(ROOT)}")
+    print(f"Wrote {len(words)} document-derived words to {binary}")
 
 
 if __name__ == "__main__":
