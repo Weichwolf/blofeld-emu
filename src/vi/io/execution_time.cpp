@@ -2,9 +2,8 @@
 #include "io/execution_time.hpp"
 
 #include <atomic>
-#include <condition_variable>
 #include <cstdint>
-#include <mutex>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <stop_token>
@@ -13,9 +12,14 @@ namespace blofeld::vi {
 namespace {
 static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
 static_assert(std::atomic<bool>::is_always_lock_free);
+constexpr std::uint64_t phase_mask = 3, requested = 1, granted = 2, next_generation = 4;
 
 struct Waiting {
   std::atomic<bool> &flag;
+
+  explicit Waiting(std::atomic<bool> &value) : flag(value) {
+    flag.store(true, std::memory_order_seq_cst);
+  }
 
   ~Waiting() { flag.store(false, std::memory_order_seq_cst); }
 };
@@ -29,107 +33,128 @@ void relax() noexcept {
   std::atomic_signal_fence(std::memory_order_seq_cst);
 #endif
 }
+}
+
+void ExecutionTime::signal() noexcept {
+  changed_.fetch_add(1, std::memory_order_seq_cst);
+  changed_.notify_all();
+}
+
+void ExecutionTime::notify() noexcept {
+  if (waiting_mcu_.load(std::memory_order_seq_cst) ||
+      waiting_dsp_.load(std::memory_order_seq_cst)) {
+    signal();
+  }
+}
 
 template <typename Ready>
-bool await(std::condition_variable_any &changed,
-           std::unique_lock<std::mutex> &lock,
-           const std::stop_token &stop,
-           Ready ready) {
-  // Host-side adaptive waiting only; this never advances device time.
+bool ExecutionTime::await(std::atomic<bool> &waiting, const std::stop_token &stop, Ready ready) {
   constexpr unsigned spin_attempts = 64;
   for (unsigned attempt = 0; attempt < spin_attempts; ++attempt) {
-    if (ready()) { return true; }
     if (stop.stop_requested()) { return false; }
-    lock.unlock();
+    if (ready()) { return true; }
     relax();
-    lock.lock();
   }
-  return changed.wait(lock, stop, ready);
-}
+  // SC registration + predicate recheck: either observe a publication or wake.
+  const Waiting registered{waiting};
+  const std::stop_callback cancelled(stop, [this] { signal(); });
+  for (;;) {
+    const auto observed = changed_.load(std::memory_order_seq_cst);
+    if (stop.stop_requested()) { return false; }
+    if (ready()) { return true; }
+    changed_.wait(observed, std::memory_order_acquire);
+  }
 }
 
 bool ExecutionTime::publish_mcu(const std::uint64_t ticks) noexcept {
   const auto before = mcu_.load(std::memory_order_seq_cst);
   if (ticks < before) { return false; }
   if (ticks == before) { return true; }
-  // One MCU owner publishes progress. SC publication and wait registration
-  // ensure either the waiter sees this value or the publisher wakes it.
   mcu_.store(ticks, std::memory_order_seq_cst);
-  if (waiting_.load(std::memory_order_seq_cst)) {
-    const std::lock_guard lock(mutex_);
-    changed_.notify_all();
-  }
+  notify();
   return true;
 }
 
 bool ExecutionTime::enter_mcu(const std::uint64_t ticks, const std::stop_token &stop) {
-  std::unique_lock lock(mutex_);
-  if (pending_ || ticks < mcu_.load(std::memory_order_seq_cst) || stop.stop_requested()) {
+  const auto previous = transaction_.load(std::memory_order_seq_cst);
+  if ((previous & phase_mask) != 0 || ticks < mcu_.load(std::memory_order_seq_cst) ||
+      previous > std::numeric_limits<std::uint64_t>::max() - next_generation ||
+      stop.stop_requested()) {
     return false;
   }
   mcu_.store(ticks, std::memory_order_seq_cst);
-  pending_ = true;
-  granted_ = held_;
-  changed_.notify_all();
-  if (!await(changed_, lock, stop, [&] { return granted_ || held_; }) || stop.stop_requested()) {
-    pending_ = granted_ = false;
-    changed_.notify_all();
+  // Generations distinguish consecutive transactions even at the same tick.
+  const auto generation = previous + next_generation;
+  const auto request = generation | requested;
+  transaction_.store(request, std::memory_order_seq_cst);
+  notify();
+  if (!await(waiting_mcu_, stop, [&] {
+        return held_.load(std::memory_order_seq_cst) ||
+               transaction_.load(std::memory_order_seq_cst) == (generation | granted);
+      })) {
+    leave_mcu();
     return false;
   }
   return true;
 }
 
 void ExecutionTime::leave_mcu() noexcept {
-  const std::lock_guard lock(mutex_);
-  pending_ = granted_ = false;
-  changed_.notify_all();
+  const auto current = transaction_.load(std::memory_order_seq_cst);
+  transaction_.store(current & ~phase_mask, std::memory_order_seq_cst);
+  notify();
 }
 
 std::optional<std::uint64_t> ExecutionTime::dsp_limit(const std::uint64_t ticks,
                                                       const std::stop_token &stop) {
-  std::unique_lock lock(mutex_);
-  if (ticks < dsp_) {
+  if (ticks < dsp_.load(std::memory_order_seq_cst)) {
     throw std::logic_error("DSP execution time moved backwards within its epoch");
   }
-  dsp_ = ticks;
-  while (!stop.stop_requested() && !held_) {
+  dsp_.store(ticks, std::memory_order_seq_cst);
+  while (!stop.stop_requested() && !held_.load(std::memory_order_seq_cst)) {
+    auto transaction = transaction_.load(std::memory_order_seq_cst);
     const auto frontier = mcu_.load(std::memory_order_seq_cst);
-    if (pending_ && ticks >= frontier) {
-      granted_ = true;
-      changed_.notify_all();
-      if (!await(changed_, lock, stop, [&] { return !pending_ || !granted_ || held_; })) {
+    if ((transaction & phase_mask) != 0 && ticks >= frontier) {
+      if ((transaction & phase_mask) == requested) {
+        const auto grant = (transaction & ~phase_mask) | granted;
+        // A stale observation must never grant a newer MCU transaction.
+        if (!transaction_.compare_exchange_strong(transaction, grant, std::memory_order_seq_cst)) {
+          continue;
+        }
+        transaction = grant;
+        notify();
+      }
+      if (!await(waiting_dsp_, stop, [&] {
+            return transaction_.load(std::memory_order_seq_cst) != transaction ||
+                   held_.load(std::memory_order_seq_cst);
+          })) {
         return {};
       }
     } else if (frontier > ticks) {
       return frontier;
-    } else {
-      waiting_.store(true, std::memory_order_seq_cst);
-      const Waiting registered{waiting_};
-      if (!await(changed_, lock, stop, [&] {
-            return pending_ || held_ || mcu_.load(std::memory_order_seq_cst) > ticks;
-          })) {
-        return {};
-      }
+    } else if (!await(waiting_dsp_, stop, [&] {
+                 return (transaction_.load(std::memory_order_seq_cst) & phase_mask) != 0 ||
+                        held_.load(std::memory_order_seq_cst) ||
+                        mcu_.load(std::memory_order_seq_cst) > ticks;
+               })) {
+      return {};
     }
   }
   return {};
 }
 
 void ExecutionTime::hold_dsp() noexcept {
-  const std::lock_guard lock(mutex_);
-  held_ = true;
-  changed_.notify_all();
+  held_.store(true, std::memory_order_seq_cst);
+  notify();
 }
 
 void ExecutionTime::release_dsp(const std::uint64_t origin) noexcept {
-  const std::lock_guard lock(mutex_);
-  origin_ = dsp_ = origin;
-  held_ = false;
-  changed_.notify_all();
+  origin_.store(origin, std::memory_order_seq_cst);
+  dsp_.store(origin, std::memory_order_seq_cst);
+  held_.store(false, std::memory_order_seq_cst);
+  notify();
 }
 
 std::uint64_t ExecutionTime::dsp_origin() const noexcept {
-  const std::lock_guard lock(mutex_);
-  return origin_;
+  return origin_.load(std::memory_order_seq_cst);
 }
 }

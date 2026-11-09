@@ -37,9 +37,11 @@ without a DSP rendezvous. Always-input Port Q reads retain their shared boundary
 Reset release establishes a fresh local epoch at the MCU's instrument timestamp.
 Stop and reset cancel grant waits. This temporal contract does not itself prove
 complete startup, instrument behavior or real-time performance.
-Short host-side adaptive spins precede sleeping for close owner handoffs. They
-check readiness under the same lock, remain stop-aware and never advance or scale
-device time. Slow peers still sleep through the ordinary cancellable wait.
+Shared access uses atomic request/grant generations, including repeated accesses
+at one device timestamp; the DSP grants only at the published frontier. Short
+host-side adaptive spins precede atomic waits. Registered waiters recheck the
+predicate and a wake generation; cancellation wakes them without a device-time
+change. Reset origin and progress remain atomic; no handoff mutex is required.
 
 VmContext owns concrete bindings, stable memory, channel lifetimes and shutdown.
 Each worker exclusively mutates its core and local device state. Transfer actual

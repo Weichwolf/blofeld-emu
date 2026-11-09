@@ -2,15 +2,14 @@
 #pragma once
 
 #include <atomic>
-#include <condition_variable>
 #include <cstdint>
-#include <mutex>
 #include <optional>
 #include <stop_token>
 
 namespace blofeld::vi {
 // Conservative grants in nominal 60 MHz units. Only actual shared transactions
 // wait for the other owner; publishing completed MCU work never waits for DSP work.
+// One MCU owner and one DSP owner; reset follows their existing epoch handoff.
 class ExecutionTime {
 public:
   [[nodiscard]] bool publish_mcu(std::uint64_t ticks) noexcept;
@@ -23,11 +22,13 @@ public:
   [[nodiscard]] std::uint64_t dsp_origin() const noexcept;
 
 private:
-  mutable std::mutex mutex_;
-  std::condition_variable_any changed_;
+  void notify() noexcept;
+  void signal() noexcept;
+  template <typename Ready>
+  [[nodiscard]] bool await(std::atomic<bool> &waiting, const std::stop_token &stop, Ready ready);
+
   std::atomic<std::uint64_t> mcu_{0};
-  std::atomic<bool> waiting_{false};
-  std::uint64_t dsp_ = 0, origin_ = 0;
-  bool pending_ = false, granted_ = false, held_ = false;
+  std::atomic<std::uint64_t> dsp_{0}, origin_{0}, transaction_{0}, changed_{0};
+  std::atomic<bool> waiting_mcu_{false}, waiting_dsp_{false}, held_{false};
 };
 }
