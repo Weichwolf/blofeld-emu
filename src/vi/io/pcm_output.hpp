@@ -11,10 +11,12 @@ namespace blofeld::vi {
 // it may apply backpressure and must honor stop. Accepted spans are fully consumed
 // before returning. The host backend needs no knowledge of instrument registers.
 struct PcmOutput {
+  static constexpr unsigned time_hz = 60000000;
   using Frame = std::array<std::int32_t, 2>; // Signed, unshifted 24-bit PCM.
 
   struct Block {
     std::span<const Frame> frames;
+    std::span<const std::uint64_t> ticks; // Instrument completion, not host presentation.
     std::uint64_t epoch = 0, first_frame = 0;
     unsigned reference_hz = 0, frame_ticks = 0;
     std::uint16_t underruns = 0; // One bit per hardware frame, including retained-data repeats.

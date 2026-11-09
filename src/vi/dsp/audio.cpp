@@ -61,14 +61,35 @@ bool Audio::Pulse::advance() noexcept {
   return true;
 }
 
+bool Audio::Projection::configure(const std::uint64_t cycles, const Clock &clock) noexcept {
+  if (current && current->ratio() == clock.ratio()) { return true; }
+  auto next = clock;
+  if (!next.advance(cycles)) { return false; }
+  previous = current;
+  current = next;
+  since = cycles;
+  return true;
+}
+
+std::optional<std::uint64_t> Audio::Projection::at(const std::uint64_t cycles) const noexcept {
+  auto point = cycles < since ? previous : current;
+  if (!point || !point->advance(cycles) ||
+      point->ticks() > std::numeric_limits<std::uint64_t>::max() - origin) {
+    return {};
+  }
+  return origin + point->ticks();
+}
+
 bool Audio::fail(const char *message) noexcept {
   error_ = message;
   return false;
 }
 
-void Audio::reset(const std::uint64_t epoch) noexcept {
+void Audio::reset(const Epoch epoch) noexcept {
+  projection_ = {.current = {}, .previous = {}, .origin = epoch.origin};
+  last_tick_.reset();
   transmit_ = digital_ = {};
-  epoch_ = epoch;
+  epoch_ = epoch.id;
   next_frame_ = 0;
   used_ = frame_ticks_ = 0;
   underruns_ = 0;
@@ -76,7 +97,11 @@ void Audio::reset(const std::uint64_t epoch) noexcept {
   error_ = nullptr;
 }
 
-bool Audio::configure(const std::uint64_t cycles, const Clock::Ratio ratio) {
+bool Audio::configure(const std::uint64_t cycles, const Clock &clock) {
+  if (!projection_.configure(cycles, clock)) {
+    return fail("PCM clock projection is not monotonic");
+  }
+  const auto ratio = clock.ratio();
   std::uint32_t ticks = 0;
   if (esai_.active()) {
     const auto format = esai_.format();
@@ -93,11 +118,11 @@ bool Audio::configure(const std::uint64_t cycles, const Clock::Ratio ratio) {
   if (!transmit_.configure(cycles, ticks * ratio.numerator, ratio.denominator)) {
     return fail("ESAI_1 clock deadline is not representable");
   }
-  const auto clock = dax_.clock();
-  const auto numerator = dax_.connected() ? clock.frame_ticks / 2 : 0;
+  const auto digital = dax_.clock();
+  const auto numerator = dax_.connected() ? digital.frame_ticks / 2 : 0;
   if (!digital_.configure(cycles,
-                          numerator * (clock.external ? ratio.numerator : 1),
-                          clock.external ? ratio.denominator : 1)) {
+                          numerator * (digital.external ? ratio.numerator : 1),
+                          digital.external ? ratio.denominator : 1)) {
     return fail("DAX clock deadline is not representable");
   }
   return true;
@@ -110,7 +135,7 @@ std::optional<std::uint64_t> Audio::deadline() const noexcept {
   return digital;
 }
 
-bool Audio::capture(const Esai::Slot &slot) noexcept {
+bool Audio::capture(const Esai::Slot &slot, const std::uint64_t cycles) noexcept {
   if ((slot.enabled & slot.known & 1) == 0) {
     return fail("ESAI_1 output word is disabled or unknown");
   }
@@ -123,6 +148,12 @@ bool Audio::capture(const Esai::Slot &slot) noexcept {
   if (!have_left_ || used_ == frames_.size()) {
     return fail("ESAI_1 stereo output ownership is invalid");
   }
+  const auto tick = projection_.at(cycles);
+  if (!tick || (last_tick_ && *tick <= *last_tick_)) {
+    return fail("PCM frame completion time is not representable or monotonic");
+  }
+  ticks_[used_] = *tick;
+  last_tick_ = tick;
   frame_[1] = sample(slot.samples[0]);
   frames_[used_] = frame_;
   if (underrun_ || slot.repeated) { underruns_ |= static_cast<std::uint16_t>(1U << used_); }
@@ -137,7 +168,8 @@ bool Audio::clock() {
   if (!next || error_ != nullptr) { return false; }
   if (transmit_.deadline() == next) {
     const auto slot = esai_.clock_slot();
-    if (!slot || !capture(*slot)) { return fail("ESAI_1 clock produced no valid stereo word"); }
+    if (!slot) { return fail("ESAI_1 clock produced no valid stereo word"); }
+    if (!capture(*slot, *next)) { return false; }
     if (!transmit_.advance()) { return fail("ESAI_1 clock overflow"); }
   }
   if (digital_.deadline() == next) {
@@ -151,6 +183,7 @@ bool Audio::submit(const bool partial) {
   if (used_ == 0 || (!partial && used_ != frames_.size())) { return true; }
   if (output_.write != nullptr && !output_.write(output_.owner,
                                                  {.frames = std::span(frames_).first(used_),
+                                                  .ticks = std::span(ticks_).first(used_),
                                                   .epoch = epoch_,
                                                   .first_frame = next_frame_ - used_,
                                                   .reference_hz = reference_hz,

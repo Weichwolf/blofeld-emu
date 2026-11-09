@@ -457,15 +457,19 @@ void native_audio_dma(const bool throwing) {
             auto &result = *static_cast<Consumer *>(owner);
             result.submitted = true;
             if (result.throwing) { throw std::runtime_error("Expected PCM consumer exception"); }
-            result.correct =
-                block.frames.size() == 16 && block.first_frame == 0 && block.underruns == 0;
+            result.correct = block.frames.size() == 16 &&
+                             block.ticks.size() == block.frames.size() && block.first_frame == 0 &&
+                             block.underruns == 0;
             constexpr std::int32_t scale = 65536;
             constexpr std::int32_t negative = 8388608;
             for (unsigned index = 0; index < block.frames.size(); ++index) {
               const auto left = static_cast<std::int32_t>((index * 2) + 1) * scale;
               const auto right = (static_cast<std::int32_t>((index * 2) + 2) * scale) - negative;
               result.correct = result.correct &&
-                               block.frames[index] == blofeld::vi::PcmOutput::Frame{left, right};
+                               block.frames[index] == blofeld::vi::PcmOutput::Frame{left, right} &&
+                               block.ticks.size() == block.frames.size() &&
+                               block.ticks[index] > 0 &&
+                               (index == 0 || block.ticks[index] > block.ticks[index - 1]);
             }
             result.stop.request_stop();
             return true;

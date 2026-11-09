@@ -332,9 +332,20 @@ latency and underruns; endpoint changes/disconnects stop with context. The contr
 thread consumes blocked termination signals and requests a shared VM stop.
 Live producer-reserve estimates exclude consumer blocking and are not offline RTF.
 
+Each PCM frame carries its completion edge in the common 60 MHz instrument clock.
+Project the actual scheduled native edge through the canonical DSP clock state,
+retaining the preceding PLL segment for pending older edges. Same-ratio control
+changes retain their prior projection; a reset supplies its actual common origin.
+The fixed PCM block owns frame/time arrays until its synchronous consumer returns.
+These points are instrument completions, not DAC presentation timestamps. Source
+and host presentation positions must be correlated separately for live MIDI.
+
 Offline PCM uses the same execution-owner output contract. The app rejects
-underruns, rate changes, reset epochs and discontinuous frame indices before
-passing signed 24-bit stereo frames to a host WAV writer. The writer batches
+underruns, rate changes, reset epochs, missing/backwards completion points and
+discontinuous frame indices before
+passing signed 24-bit stereo frames to a host WAV writer. Accumulated frame time
+must follow the nominal rate within one half-frame plus integer quantization;
+a gap or drift cannot silently compress the instrument's musical timeline. The writer batches
 bounded PCM blocks and publishes a completed RIFF file without replacing an
 existing path. Its size limit is explicit; failed or unfinalized output stays
 unpublished. Finalization follows owner shutdown and successful render validation.

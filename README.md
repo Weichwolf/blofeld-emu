@@ -17,8 +17,9 @@ identifiers and receives a selected group with native timestamps through a bound
 queue. Application routing and its audio-aligned time mapping remain incomplete.
 The host SMF reader streams timestamped events with tempo/SMPTE handling and
 separate metadata; independent patterns require explicit selection. An offline
-PCM consumer writes signed 24-bit stereo WAV, rejecting underruns and timeline
-discontinuities. The file adapter feeds the VM through a bounded input frontier;
+PCM consumer writes signed 24-bit stereo WAV, rejecting underruns, frame/time
+discontinuities and drift. Original PCM carries per-frame completion points in
+the common instrument clock. The file adapter feeds the VM through a bounded input frontier;
 producer delays suspend native execution without advancing device time. A complete
 SMF-to-WAV render command and its readiness/tail orchestration remain incomplete.
 DSP interrupt arbitration uses configured priorities, SR masks and source ordering.

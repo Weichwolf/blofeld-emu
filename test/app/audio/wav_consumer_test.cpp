@@ -23,8 +23,12 @@ using blofeld::vi::PcmOutput;
 constexpr unsigned rate = 44100, reference_hz = 11289600, frame_ticks = 256;
 constexpr std::size_t header_bytes = 44;
 constexpr std::array<PcmOutput::Frame, 2> frames{PcmOutput::Frame{-1, 1}, PcmOutput::Frame{0, 0}};
-constexpr PcmOutput::Block initial{
-    .frames = frames, .epoch = 9, .reference_hz = reference_hz, .frame_ticks = frame_ticks};
+constexpr std::array<std::uint64_t, 2> completion_ticks{1360, 2721};
+constexpr PcmOutput::Block initial{.frames = frames,
+                                   .ticks = completion_ticks,
+                                   .epoch = 9,
+                                   .reference_hz = reference_hz,
+                                   .frame_ticks = frame_ticks};
 
 void require(const bool condition, const char *message) {
   if (!condition) { throw std::runtime_error(message); }
@@ -45,6 +49,8 @@ void successful(const std::filesystem::path &root) {
   require(output.write(output.owner, initial, {}), "Accept an original stereo PCM block");
   auto next = initial;
   next.first_frame = frames.size();
+  constexpr std::array<std::uint64_t, 2> next_ticks{4081, 5442};
+  next.ticks = next_ticks;
   require(output.write(output.owner, next, {}) && consumer.frames() == frames.size() * 2,
           "Accept consecutive frames exactly once");
   rejects<std::logic_error>([&] { consumer.finish(); },
@@ -60,6 +66,22 @@ void successful(const std::filesystem::path &root) {
   rejects<std::logic_error>([&] { consumer.finish(); }, "Do not finalize the same render twice");
 }
 
+void quantized_timing(const std::filesystem::path &root) {
+  WavConsumer consumer(root / "quantized.wav", rate);
+  const auto output = consumer.output();
+  constexpr std::array<std::uint64_t, 6> ticks{1632, 2857, 4081, 5714, 6938, 8163};
+  auto block = initial;
+  for (std::size_t first = 0; first < ticks.size(); first += frames.size()) {
+    block.first_frame = first;
+    block.ticks = std::span(ticks).subspan(first, frames.size());
+    require(output.write(output.owner, block, {}),
+            "Legal native completion rounding preserves the nominal musical timeline");
+  }
+  output.close(output.owner);
+  consumer.finish();
+  require(consumer.frames() == ticks.size(), "Quantization never adds or loses a frame");
+}
+
 void invalid_blocks(const std::filesystem::path &root) {
   auto wrong_rate = initial;
   wrong_rate.frame_ticks = frame_ticks / 2;
@@ -70,7 +92,34 @@ void invalid_blocks(const std::filesystem::path &root) {
   auto reset = initial;
   reset.epoch = initial.epoch + 1;
   reset.first_frame = frames.size();
-  const std::array invalid{wrong_rate, underrun, discontinuity, reset, PcmOutput::Block{}};
+  auto missing_ticks = initial;
+  missing_ticks.first_frame = frames.size();
+  missing_ticks.ticks = {};
+  auto repeated_tick = missing_ticks;
+  constexpr std::array<std::uint64_t, 2> repeated{4000, 4000};
+  repeated_tick.ticks = repeated;
+  auto reversed_tick = repeated_tick;
+  constexpr std::array<std::uint64_t, 2> reversed{5000, 4000};
+  reversed_tick.ticks = reversed;
+  auto old_tick = repeated_tick;
+  old_tick.ticks = completion_ticks;
+  auto gap = repeated_tick;
+  constexpr std::array<std::uint64_t, 2> skipped{5442, 6802};
+  gap.ticks = skipped;
+  auto stretched = repeated_tick;
+  constexpr std::array<std::uint64_t, 2> drift{4770, 6130};
+  stretched.ticks = drift;
+  const std::array invalid{wrong_rate,
+                           underrun,
+                           discontinuity,
+                           reset,
+                           missing_ticks,
+                           repeated_tick,
+                           reversed_tick,
+                           old_tick,
+                           gap,
+                           stretched,
+                           PcmOutput::Block{}};
   for (std::size_t index = 0; index < invalid.size(); ++index) {
     const auto path = root / (std::to_string(index) + ".wav");
     {
@@ -124,7 +173,11 @@ void owner_handoff(const std::filesystem::path &root) {
   std::jthread producer([&] {
     try {
       auto block = initial;
+      std::array<std::uint64_t, 2> ticks{};
+      block.ticks = ticks;
       for (std::size_t index = 0; index < blocks; ++index) {
+        ticks[0] = (block.first_frame + 1) * PcmOutput::time_hz / rate;
+        ticks[1] = (block.first_frame + 2) * PcmOutput::time_hz / rate;
         require(output.write(output.owner, block, {}), "Owner submits consecutive original frames");
         block.first_frame += frames.size();
       }
@@ -143,6 +196,7 @@ int main(const int argc, char **argv) try {
   const auto root = std::filesystem::path(argv[1]) / std::to_string(::getpid());
   require(std::filesystem::create_directories(root), "Create owned unit directory");
   successful(root);
+  quantized_timing(root);
   invalid_blocks(root);
   lifecycle(root);
   owner_handoff(root);
