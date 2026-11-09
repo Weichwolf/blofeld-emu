@@ -100,6 +100,19 @@ def controls():
     return [events]
 
 
+def sl_samples():
+    events = []
+    for tick, parameter, value in ((0, 15, 1), (PPQN // 8, 8, 0)):
+        payload = bytes((0x3e, 0x13, 0x7f, 0x20, 0,
+                         parameter >> 7, parameter & 127, value, 0xf7))
+        events.append((tick, b"\xf0" + vlq(len(payload)) + payload))
+    pitches = (48, 55, 60, 64, 67, 72, 76, 79)
+    for index in range(16):
+        start = (2 * index + 1) * PPQN
+        note(events, 0, pitches[index % len(pitches)], start, start + PPQN, 96)
+    return [events]
+
+
 def write_case(output, name, tracks, requirements, tempo_change=False):
     conductor = [message(0, 0xff, 0x51, 3, 7, 0xa1, 0x20)]
     if tempo_change:
@@ -132,6 +145,11 @@ def main():
         write_case(args.output, "controls-programs", controls(),
                    ["Single mode, channel 1; preserve tempo change, SysEx and program transitions"],
                    tempo_change=True),
+        write_case(args.output, "sl-samples", sl_samples(),
+                   ["Shared Desktop SL image generated with --init-program; Single mode, channel 1",
+                    "No program change: retain the selected Init sound with other oscillators off",
+                    "Original SNDP messages select Osc1 sample bank 1 before Shape 0 (Clavinet)",
+                    "Verify real sample reads and audible original PCM; selection alone is not proof"]),
     ]
     manifest = {
         "scope": "Authored deterministic MIDI workload inputs, not instrument qualification",
