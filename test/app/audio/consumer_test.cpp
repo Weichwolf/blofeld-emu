@@ -54,6 +54,12 @@ Device *&active_device() {
   static Device *device = nullptr;
   return device;
 }
+
+Device &selected_device() {
+  auto *device = active_device();
+  if (device == nullptr) { throw std::logic_error("No selected test audio device"); }
+  return *device;
+}
 }
 
 namespace blofeld::host::audio {
@@ -74,7 +80,7 @@ struct Playback::Producer::Impl {
 };
 
 Playback::Playback(const unsigned requested_rate, const std::string_view name)
-    : impl_(std::make_unique<Impl>(Impl{.device = *active_device()})) {
+    : impl_(std::make_unique<Impl>(Impl{.device = selected_device()})) {
   require(requested_rate == rate && !name.empty(), "Actual requested host format");
 }
 
@@ -113,7 +119,7 @@ Playback::Producer Playback::producer() const {
 }
 
 Playback::Producer::Producer(const std::chrono::nanoseconds period)
-    : impl_(std::make_unique<Impl>(Impl{.device = *active_device()})) {
+    : impl_(std::make_unique<Impl>(Impl{.device = selected_device()})) {
   require(period.count() > 0, "A bounded native producer period");
   ++impl_->device.producers;
 }
@@ -284,7 +290,7 @@ void invalid_and_cancelled() {
   }
   {
     Fixture fixture;
-    std::stop_source stop;
+    const std::stop_source stop;
     stop.request_stop();
     require(!fixture.write(0, ticks, guest_epoch, 0, stop.get_token()) &&
                 !fixture.consumer->has_pcm() && fixture.device.producers == 0,
