@@ -16,6 +16,7 @@ constexpr std::uint16_t enabled = 0x80, fast = 0x90, wait_disabled = 0xc0;
 constexpr std::uint16_t irq0 = 0xffee, irq1 = 0xffec, irq7 = 0xffe0, irq_overflow = 0xffde;
 constexpr Timer::Cycle period = 65536;
 constexpr std::uint16_t all_channels = 255, output_control = 0x48;
+constexpr std::uint16_t compare_mask = 0x42, compare_data = 0x43;
 
 void require(const bool condition, const char *message) {
   if (!condition) { throw std::runtime_error(message); }
@@ -201,6 +202,34 @@ void unsupported_contracts() {
           "Unconnected compare outputs cannot be enabled");
   require(!timer.capture({.channel = 8, .rising = true}), "Unknown capture channel fails");
 }
+
+void retained_compare_mask() {
+  Timer timer;
+  constexpr std::uint16_t mask = 0x40;
+  constexpr std::uint16_t data = 0xa5;
+  constexpr Timer::Cycle elapsed = 100;
+  write(timer, {.offset = compare_mask, .value = mask});
+  write(timer, {.offset = compare_data, .value = data});
+  write(timer, {.offset = tscr1, .value = enabled});
+  write(timer, {.offset = tie, .value = all_channels});
+  advance(timer, elapsed);
+  require(read(timer, {.offset = compare_mask}) == mask &&
+              read(timer, {.offset = compare_data}) == data && read(timer, {.offset = tios}) == 0 &&
+              !timer.pending() && !timer.deadline(),
+          "Input capture retains OC7M/OC7D without inventing output comparisons");
+  require(!timer.write({.offset = tios, .value = mask}) && read(timer, {.offset = tios}) == 0 &&
+              read(timer, {.offset = compare_mask}) == mask,
+          "Selecting a masked output fails before changing either retained register");
+  write(timer, {.offset = tios, .value = 1});
+  require(!timer.write({.offset = compare_mask, .value = mask | 1}) &&
+              read(timer, {.offset = compare_mask}) == mask,
+          "Adding a mask for an existing output cannot silently enable unsupported routing");
+  write(timer, {.offset = compare_mask, .value = 0});
+  write(timer, {.offset = tios, .value = mask});
+  require(!timer.write({.offset = compare_mask, .value = mask}) &&
+              read(timer, {.offset = compare_mask}) == 0,
+          "An output selected first observes the same unsupported-route boundary");
+}
 }
 
 int main() try {
@@ -210,6 +239,7 @@ int main() try {
   capture_and_fast_clear();
   overflow_and_atomic_access();
   unsupported_contracts();
+  retained_compare_mask();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

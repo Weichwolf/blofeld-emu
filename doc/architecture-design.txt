@@ -127,6 +127,9 @@ behavior rather than hypothetical silicon phases. Qualify ordering, IRQ delivery
 partial transactions and musical latency against firmware and independent tests.
 
 Use documented nominal device clocks and analytical divider/deadline arithmetic.
+MCU OC7M/OC7D retain their actual values for input-capture channels, including
+firmware use as scratch storage. Unsupported compare-output activation fails
+regardless of whether the mask or channel selection is written first.
 The UF32 uses its 12 MHz reference and nominal 60 MHz PHY output; qualify clock
 availability through the documented detector window, without analog PLL or
 external waveform models. Keep oscillator-driven RTI independent of CPU clock

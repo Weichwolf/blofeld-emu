@@ -11,6 +11,7 @@ namespace blofeld::vi::mcu {
 namespace {
 constexpr std::uint16_t base = 0x40, end = 0x70;
 constexpr unsigned select = 0, force = 1, counter_high = 4, counter_low = 5;
+constexpr unsigned compare_mask = 2;
 constexpr unsigned control1 = 6, interrupt_enable = 12, control2 = 13, flags1 = 14, flags2 = 15;
 constexpr unsigned first_channel = 16, channel_end = 32;
 constexpr unsigned pulse_control = 32, pulse_high = 34, pulse_low = 35;
@@ -130,6 +131,12 @@ bool Timer::read(const Read access, std::uint16_t &value) noexcept {
 }
 
 bool Timer::write_control(const unsigned index, const std::uint8_t value) noexcept {
+  // OC7M is ordinary retained state for input channels. Reject an unsupported
+  // output route whether its mask or its TIOS selection is written first.
+  if ((index == compare_mask && (value & registers_[select]) != 0) ||
+      (index == select && (value & registers_[compare_mask]) != 0)) {
+    return false;
+  }
   if (index == flags1 || index == flags2) {
     if ((registers_[control1] & timer_enable) != 0) {
       registers_[index] = static_cast<std::uint8_t>(registers_[index] & ~value);
@@ -150,7 +157,7 @@ bool Timer::write_control(const unsigned index, const std::uint8_t value) noexce
   if (index == force) { return true; }
   // Compare output routing is not connected. Refuse enabling it rather than
   // silently accepting a configuration that cannot affect the GPIO registers.
-  if (index == 2 || index == 7 || index == 8 || index == 9) {
+  if (index == 7 || index == 8 || index == 9) {
     if (value != 0) { return false; }
   }
   registers_[index] = value;
