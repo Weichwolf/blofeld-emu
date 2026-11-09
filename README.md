@@ -90,10 +90,15 @@ execution, bounded channels and audio-driven consumption.
 
 Generate deterministic MIDI workload inputs with
 `python3 tools/midi_bench_inputs.py --output build/local/bench-midi`.
-The four cases cover single notes, chords/pedal, sixteen channels and
-controllers/program changes/SysEx/tempo. Their manifest records hashes and required
-instrument setup; generation executes no firmware. Render comparisons require
-matching firmware, programs and images, with actual voice/FX/sample use verified.
+The five cases cover single notes, chords/pedal, sixteen channels,
+controllers/program changes/SysEx/tempo and SL samples. Their manifest records
+hashes and required instrument setup; generation executes no firmware. Render
+comparisons require matching firmware, programs and images, with actual
+voice/FX/sample use verified.
+For `sl-samples.mid`, generate the common image with
+`../blofeld-src/tools/blofeld_image.py --init-program` and its required input arguments.
+The file selects Osc1 bank 1, then Shape 0 through ordinary parameter-change SysEx;
+it retains the selected Init sound and requires actual sample playback verification.
 
 Hosts are Linux x86-64 and macOS ARM64, with LLVM 19, CMake 3.25+, Ninja,
 Python 3.11+ and Git. Core checkouts must match
