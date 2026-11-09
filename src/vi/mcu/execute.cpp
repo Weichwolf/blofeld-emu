@@ -156,6 +156,7 @@ public:
   }
 
   [[nodiscard]] const char *error() const noexcept {
+    if (peer_ != nullptr && peer_->error() != nullptr) { return peer_->error(); }
     return display_.error() != nullptr ? display_.error() : devices_.sci.error();
   }
 
@@ -182,8 +183,7 @@ private:
   bool
   read_port(const std::uint16_t offset, std::uint8_t &value, const std::uint8_t mask) noexcept {
     const auto action = [&] {
-      sample_inputs(offset);
-      return ports_.read(offset, value, mask);
+      return sample_inputs(offset, mask) && ports_.read(offset, value, mask);
     };
     return shared_port(offset) ? shared_access(action) : action();
   }
@@ -258,11 +258,13 @@ private:
     });
   }
 
-  void sample_inputs(const std::uint16_t offset) {
+  bool sample_inputs(const std::uint16_t offset, const std::uint8_t mask) {
     if (peer_ != nullptr && offset == 8) { package_input(); }
     if (peer_ != nullptr && (offset == peer_q_data || offset == peer_q_input)) {
-      const auto sample = peer_->dsp_data();
-      ports_.input(Port::q, {.mask = sample.mask, .known = sample.known, .value = sample.value});
+      const auto sample =
+          offset == peer_q_data ? peer_->read_dsp_data(mask) : std::optional{peer_->dsp_data()};
+      if (!sample) { return false; }
+      ports_.input(Port::q, {.mask = sample->mask, .known = sample->known, .value = sample->value});
     }
     constexpr std::uint16_t port_m = 0x248;
     constexpr std::uint16_t input_m = 0x249;
@@ -274,6 +276,7 @@ private:
            .known = pedal_bit,
            .value = controls_ != nullptr && controls_->pedal() ? pedal_bit : std::uint8_t{0}});
     }
+    return true;
   }
 
   void package_input() {

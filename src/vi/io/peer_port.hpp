@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <cstdint>
+#include <mutex>
 #include <optional>
 
 namespace blofeld::vi {
 // Functional low-byte Port Q/Port C exchange. Each producer owns its GPIO state;
-// reads retain the current value. IRQ acknowledgements cannot erase a newer edge.
+// raw reads retain the current value. Fixed report blocks transfer actual DSP
+// writes through bounded ownership; IRQ acknowledgements cannot erase a newer edge.
 class PeerPort {
 public:
   struct Sample {
@@ -19,6 +22,13 @@ public:
   void dsp_data(Sample value) noexcept;
   [[nodiscard]] Sample mcu_data() const noexcept;
   [[nodiscard]] Sample dsp_data() const noexcept;
+  // Actual PDRC data writes, distinct from direction/mux/latch publication.
+  [[nodiscard]] bool dsp_write(Sample value) noexcept;
+  [[nodiscard]] std::optional<Sample> read_dsp_data(std::uint8_t mask) noexcept;
+
+  [[nodiscard]] const char *error() const noexcept {
+    return error_.load(std::memory_order_acquire);
+  }
 
   // Active-low functional requests: J0 -> IRQA, E9 -> XIRQ. Release is inactive.
   [[nodiscard]] bool mcu_strobe(bool active) noexcept;
@@ -31,6 +41,16 @@ public:
   void reset_dsp() noexcept;
 
 private:
+  struct Reply {
+    std::mutex mutex;
+    std::array<Sample, 16> bytes{};
+    unsigned written = 0, read = 0;
+    std::atomic<bool> active{false}, recording{false}, announced{false};
+  };
+
+  [[nodiscard]] bool start_reply() noexcept;
+  [[nodiscard]] bool fail(const char *message) noexcept;
+
   struct Request {
     std::atomic<std::uint64_t> posted{0}, accepted{0};
     std::atomic<bool> active{false};
@@ -41,5 +61,7 @@ private:
 
   std::atomic<std::uint32_t> mcu_{0}, dsp_{0};
   Request to_dsp_, to_mcu_;
+  Reply reply_;
+  std::atomic<const char *> error_{nullptr};
 };
 }

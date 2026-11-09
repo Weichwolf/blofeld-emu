@@ -55,7 +55,7 @@ Active data/status inputs must come from their devices, never from this policy.
 The attached SHI SS/SCK/MOSI pull-ups supply released B1/B2/B4 input samples.
 
 The runtime peer interface shares the actual low-byte MCU Port Q and DSP Port C
-register views, including direction and unknown bits. Reads retain the current
+register views, including direction and unknown bits. Raw reads retain the current
 value. Active-low MCU J0 posts DSP IRQA using its configured edge/level mode;
 DSP E9 posts MCU XIRQ. Only accepted native interrupt entry acknowledges an edge,
 and an older acknowledgement cannot discard a newer request. DSP reset releases
@@ -65,6 +65,14 @@ the VM supplies that profile input because runtime Port Q requires this route.
 This is a functional inference, not a recovered PCB connection. Raw register
 sharing alone does not establish cross-core transaction timing: short handshake
 phases must also remain observable on the common instrument timeline.
+Report commands 13/14 announce a fixed 16-byte response. The following MCU request
+opens one bounded transfer of actual DSP PDRC data writes; repeated bytes remain
+distinct writes. Full-byte Port Q input reads consume that decoded transfer in
+order, including after GPIO turnaround. Other reads retain raw register behavior.
+Both original transfer routines still execute in full. Incomplete or excessive
+producer writes, missing consumer bytes and unknown bits remain explicit errors;
+no ready byte, payload or interrupt acknowledgement is synthesized. This is a
+functional instrument protocol adapter, not a claim of GPIO cycle accuracy.
 
 PM3 samples an external pedal level, initially inactive in the VM. The MCU sends
 its raw 0/8 change event; the DSP's class-3 handler normalizes sustain and applies

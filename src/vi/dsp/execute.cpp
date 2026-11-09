@@ -168,6 +168,7 @@ public:
   }
 
   [[nodiscard]] const char *error() const noexcept {
+    if (peer_ != nullptr && peer_->error() != nullptr) { return peer_->error(); }
     if (audio_.error() != nullptr) { return audio_.error(); }
     if (media_error_ != nullptr) { return media_error_; }
     if (timers_.error() != nullptr) { return timers_.error(); }
@@ -523,6 +524,10 @@ private:
 
   bool write_port(const Ports::Write access, const dsp56300::Word pc) noexcept {
     if (!ports_.write(access) || !update_ports()) { return false; }
+    if (peer_ != nullptr && access.space == dsp56300::Space::x &&
+        access.address == peer_data_address && !peer_->dsp_write(peer_->dsp_data())) {
+      return false;
+    }
     if (controller_.pending() && controller_.epoch() != media_epoch_) {
       if (!synchronize_timers(true) || !schedule_media()) { return false; }
       completion_failure_ = {.operation = Access::write,

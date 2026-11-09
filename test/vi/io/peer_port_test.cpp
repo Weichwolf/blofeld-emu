@@ -99,12 +99,112 @@ void concurrent_exchange() {
   require(posted && coherent && accepted && last == pulses && !peer.dsp_interrupt(true),
           "Concurrent snapshots are coherent and final posted/accepted generations agree");
 }
+
+void begin_reply(PeerPort &peer) {
+  constexpr PeerPort::Sample report{.mask = 0xff, .known = 0xff, .value = 0x0d};
+  peer.dsp_data(report);
+  require(peer.dsp_ready(true) && peer.dsp_ready(false) && peer.mcu_strobe(true) &&
+              peer.mcu_strobe(false),
+          "A real report announcement and MCU request establish bounded response ownership");
+}
+
+PeerPort::Sample reply_byte(const unsigned index) {
+  return {.mask = static_cast<std::uint8_t>(byte_mask),
+          .known = static_cast<std::uint8_t>(byte_mask),
+          .value = static_cast<std::uint8_t>(index / 2)};
+}
+
+void fixed_reply() {
+  PeerPort ordinary;
+  constexpr PeerPort::Sample raw{.mask = 0xff, .known = 0xff, .value = 0x0d};
+  ordinary.dsp_data(raw);
+  require(
+      ordinary.mcu_strobe(true) && ordinary.mcu_strobe(false) &&
+          ordinary.read_dsp_data(byte_mask) == raw && ordinary.read_dsp_data(byte_mask) == raw,
+      "A command-looking latch without an actual announcement remains an ordinary retained read");
+  PeerPort peer;
+  begin_reply(peer);
+  constexpr unsigned bytes = 16;
+  for (unsigned index = 0; index < bytes; ++index) {
+    const auto value = reply_byte(index);
+    peer.dsp_data(value);
+    require(peer.dsp_write(value), "Capture every actual data write, including equal neighbors");
+  }
+  peer.dsp_data({});
+  require(peer.read_dsp_data(1) == PeerPort::Sample{} && peer.dsp_data() == PeerPort::Sample{},
+          "Masked and raw GPIO reads retain the real released input and consume no response");
+  for (unsigned index = 0; index < bytes; ++index) {
+    require(peer.read_dsp_data(byte_mask) == reply_byte(index),
+            "A complete MCU block read receives the exact original DSP write sequence");
+  }
+  require(peer.read_dsp_data(byte_mask) == PeerPort::Sample{} && peer.error() == nullptr &&
+              peer.dsp_interrupt(true) == 1 && peer.mcu_interrupt() == 1,
+          "The block ends at its fixed length without manufacturing data or interrupt acceptance");
+}
+
+void reply_errors() {
+  PeerPort early;
+  begin_reply(early);
+  require(!early.read_dsp_data(byte_mask) && early.error() != nullptr,
+          "A missing producer byte is an explicit underrun, not a repeated or invented sample");
+  early.reset_dsp();
+  require(early.error() == nullptr && early.read_dsp_data(byte_mask) == PeerPort::Sample{},
+          "Reset cancels an incomplete response before a new epoch");
+  PeerPort excess;
+  begin_reply(excess);
+  constexpr unsigned bytes = 16;
+  for (unsigned index = 0; index < bytes; ++index) {
+    require(excess.dsp_write(reply_byte(index)), "Fill precisely one bounded response");
+  }
+  require(!excess.dsp_write(reply_byte(bytes)) && excess.error() != nullptr,
+          "A seventeenth data write is a visible overflow");
+  PeerPort unknown;
+  begin_reply(unknown);
+  constexpr PeerPort::Sample partial{.mask = 0xff, .known = 0x0f, .value = 0xa5};
+  require(unknown.dsp_write(partial) && unknown.read_dsp_data(byte_mask) == partial,
+          "Response ownership cannot turn unknown producer bits into valid data");
+  unknown.dsp_data({});
+  require(unknown.error() != nullptr, "Premature producer release reports an incomplete response");
+}
+
+void concurrent_reply() {
+  PeerPort peer;
+  begin_reply(peer);
+  std::atomic<unsigned> published{0};
+  bool valid = true;
+  constexpr unsigned bytes = 16;
+  std::jthread producer([&] {
+    for (unsigned index = 0; index < bytes; ++index) {
+      const auto value = reply_byte(index);
+      peer.dsp_data(value);
+      valid = peer.dsp_write(value) && valid;
+      published.store(index + 1, std::memory_order_release);
+      published.notify_one();
+    }
+    peer.dsp_data({});
+  });
+  for (unsigned index = 0; index < bytes; ++index) {
+    auto ready = published.load(std::memory_order_acquire);
+    while (ready <= index) {
+      published.wait(ready, std::memory_order_acquire);
+      ready = published.load(std::memory_order_acquire);
+    }
+    require(peer.read_dsp_data(byte_mask) == reply_byte(index),
+            "Concurrent response consumption preserves every produced word and its ownership");
+  }
+  producer.join();
+  require(valid && peer.error() == nullptr,
+          "Independent producer and consumer finish one bounded block");
+}
 }
 
 int main() try {
   data_views();
   requests();
   concurrent_exchange();
+  fixed_reply();
+  reply_errors();
+  concurrent_reply();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';
