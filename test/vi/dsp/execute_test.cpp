@@ -335,6 +335,8 @@ void native_timer_interrupt(const bool waiting) {
   } else {
     program.push_back(isa::opcode<isa::Opcode::rep_immediate>()[0] | (repeat << 8U));
     program.push_back(isa::nop[0]);
+    constexpr unsigned masked_work = 512;
+    program.insert(program.end(), masked_work, isa::opcode<isa::Opcode::add_x0_b>()[0]);
     program.push_back(unmask);
     program.push_back(isa::nop[0]);
     program.push_back(isa::nop[0]);

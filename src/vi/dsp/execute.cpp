@@ -153,6 +153,10 @@ public:
 
   [[nodiscard]] std::uint64_t program_revision() const noexcept override { return revision_; }
 
+  [[nodiscard]] bool interrupt_pending(const dsp56300::Word status) const noexcept override {
+    return interrupts_.select(interrupt_sources(), status).has_value();
+  }
+
   [[nodiscard]] const char *error() const noexcept {
     if (audio_.error() != nullptr) { return audio_.error(); }
     if (media_error_ != nullptr) { return media_error_; }
@@ -171,13 +175,17 @@ public:
     if (interrupts_.select(sources, 0)) {
       const auto state = core_->registers();
       const auto request = interrupts_.select(sources, state.sr);
-      if (request && core_->interrupt_ready()) {
-        core_->request_interrupt((state.vba & vector_base_mask) | request->vector, request->level);
-        acknowledge(request->vector);
+      if (request) {
+        if (core_->interrupt_ready()) {
+          core_->request_interrupt((state.vba & vector_base_mask) | request->vector,
+                                   request->level);
+          acknowledge(request->vector);
+        }
+        // An eligible request still observes REP completion and the interrupt shadow.
+        return completed(core_->step());
       }
-      // A pending request must observe SR changes, REP completion and the
-      // architectural interrupt shadow before another normal instruction.
-      return completed(core_->step());
+      // Masked requests do not turn ordinary execution into single stepping.
+      // The Core returns at a real mask change before another instruction runs.
     }
     const auto next = deadline();
     return completed(next ? core_->run_until(*next - idle_) : core_->run());
