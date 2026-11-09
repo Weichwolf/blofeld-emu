@@ -16,6 +16,7 @@ constexpr dsp56300::Word boot_first = 0xff0000;
 constexpr dsp56300::Word memory_switch = 0x80;
 constexpr std::size_t switched_x_words = 0x4000;
 constexpr dsp56300::Word y_program_first = 0x3000;
+constexpr dsp56300::Word reserved_y_last = 0xffffff;
 }
 
 Memory::Memory(const Rom rom) : rom_(rom) {
@@ -90,6 +91,13 @@ std::optional<Memory::Cell> Memory::locate(const dsp56300::Space space,
 bool Memory::read(const dsp56300::Space space,
                   const dsp56300::Word address,
                   dsp56300::Word &value) const noexcept {
+  // Table 3-8 reserves this word without defining its data. The unchanged
+  // TASKING DSP56371 simulator completes its read as zero; use that VM value.
+  // This is no status register, readable RAM grant or claim about silicon data.
+  if (space == dsp56300::Space::y && address == reserved_y_last) {
+    value = 0;
+    return true;
+  }
   const auto cell = locate(space, address);
   if (!cell || (cell->known != nullptr && *cell->known == 0)) { return false; }
   value = *cell->value;

@@ -79,6 +79,25 @@ void unknown_boot_tail() {
           "A known boot prefix executes before an unprovided ROM word fails at its actual PC");
 }
 
+void native_reserved_y_read() {
+  namespace isa = dsp56300::isa;
+  constexpr dsp56300::Word absolute = 0x30;
+  constexpr dsp56300::Word read = 0x8000;
+  constexpr dsp56300::Word x0 = 4;
+  constexpr dsp56300::Word reserved = 0xffffff;
+  constexpr dsp56300::Word marker = 0xc000;
+  constexpr auto load = isa::opcode<isa::Opcode::move_y_effective>()[0] | (absolute << 8U) | read;
+  constexpr auto store = isa::opcode<isa::Opcode::movem_effective>()[0] | (absolute << 8U) | x0;
+  constexpr auto program = isa::program(std::array{load, reserved, store, marker});
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+  require(report.failure && report.failure->operation == blofeld::vi::Access::write &&
+              report.failure->space == 'P' && report.failure->address == marker &&
+              report.failure->value == 0,
+          "The native Y load executes before its result reaches the independent fault sink");
+}
+
 void native_memory_switch() {
   namespace isa = dsp56300::isa;
   constexpr dsp56300::Word immediate = 0x34;
@@ -821,6 +840,7 @@ int main(const int argc, char **argv) try {
   native_missing_media(argv[2]);
   native_clock_register();
   unknown_boot_tail();
+  native_reserved_y_read();
   native_transmit_registers();
   native_interrupt_priorities();
   native_memory_switch();

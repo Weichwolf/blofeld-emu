@@ -174,6 +174,33 @@ void rom_and_reserved() {
   require(rejected, "Reject data ROM words wider than 24 bits before native execution");
 }
 
+void reserved_y_read() {
+  Memory memory;
+  constexpr Word last = 0xffffff;
+  constexpr Word canary = 0x654321;
+  for (const Word mode : {0U, 0x600080U}) {
+    memory.configure(mode);
+    Word value = canary;
+    require(memory.read(Space::y, last, value) && value == 0,
+            "The single reserved Y word completes with the deterministic VM read value");
+    require(!memory.write({.space = Space::y, .address = last, .value = canary}) &&
+                memory.read(Space::y, last, value) && value == 0,
+            "The reserved read has no writable latch");
+    for (const auto space : {Space::program, Space::x, Space::y}) {
+      value = canary;
+      require(!memory.read(space, last - 1, value) && value == canary,
+              "Adjacent unmapped reads still fail without replacing the output value");
+      if (space != Space::y) {
+        require(!memory.read(space, last, value), "The reserved read belongs only to Y space");
+      }
+    }
+    for (const auto &window : memory.windows(Space::y)) {
+      require(last < window.address || last - window.address >= window.words.size(),
+              "The reserved read never grants extra native RAM");
+    }
+  }
+}
+
 }
 
 int main() try {
@@ -182,6 +209,7 @@ int main() try {
   switched_maps();
   retained_aliases();
   rom_and_reserved();
+  reserved_y_read();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';
