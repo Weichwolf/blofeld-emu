@@ -563,7 +563,7 @@ void native_interrupt_priorities() {
   }
 }
 
-enum class MediaCase : std::uint8_t { read, erase, program };
+enum class MediaCase : std::uint8_t { read, released_read, erase, program };
 
 struct MediaGuest {
   using Word = dsp56300::Word;
@@ -688,6 +688,10 @@ struct MediaGuest {
     }
     ready();
     if (!writing) { input(); }
+    if (operation == MediaCase::released_read) {
+      constexpr Word released = 0x300;
+      control(released);
+    }
     observe();
   }
 };
@@ -838,6 +842,7 @@ void reset_running_core() {
 int main(const int argc, char **argv) try {
   require(argc == 3, "Supply artifact and fixture directories");
   native_media(argv[2], MediaCase::read);
+  native_media(argv[2], MediaCase::released_read);
   native_media(argv[2], MediaCase::erase);
   native_media(argv[2], MediaCase::program);
   native_missing_media(argv[2]);

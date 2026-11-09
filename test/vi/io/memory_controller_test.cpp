@@ -71,8 +71,8 @@ std::uint8_t read(MemoryController &controller) {
   const auto value = controller.output();
   if (!value) { throw std::runtime_error("The selected byte must exist"); }
   require(controller.output() == value, "Repeated register reads retain a held byte");
-  require(controller.write({.controls = idle}) && !controller.output(),
-          "Advance only on read release");
+  require(controller.write({.controls = idle}) && controller.output() == value,
+          "Advance only on read release while retaining the sampled register byte");
   return *value;
 }
 
@@ -89,6 +89,31 @@ void reads(MemoryController &controller) {
   begin(controller, {.page = 32});
   constexpr std::uint8_t expected_first = 32;
   require(read(controller) == expected_first, "An explicit new address crosses a block boundary");
+}
+
+void released_reads(MemoryController &controller) {
+  controller.reset();
+  begin(controller, {});
+  for (unsigned column = 0; column < blofeld::vi::MediaImage::page_bytes; ++column) {
+    const auto expected = static_cast<std::uint8_t>(column);
+    require(controller.write({.controls = read_active}) && controller.output() == expected &&
+                controller.write({.controls = idle}) && controller.output() == expected &&
+                controller.write({.controls = idle}) && controller.output() == expected,
+            "Every main/spare byte survives read release without a duplicate cursor advance");
+  }
+  require(controller.write({.controls = read_active}) && !controller.output(),
+          "A read beyond the completed page cannot reuse its last held byte");
+  begin(controller, {.page = 32, .column = unknown_column - 1});
+  static_cast<void>(read(controller));
+  require(!controller.write({.controls = read_active}) && !controller.output(),
+          "An unknown next byte invalidates the previous latch before reporting failure");
+  controller.reset();
+  begin(controller, {});
+  static_cast<void>(read(controller));
+  pulse(controller, {.controls = command, .value = reset_command});
+  require(!controller.output() && controller.pending() && controller.complete() &&
+              !controller.output(),
+          "A real command clears the retained data without manufacturing a reset reply");
 }
 
 void inactive_read_strobes(MemoryController &controller) {
@@ -431,6 +456,7 @@ int main(const int argc, char **argv) try {
       std::filesystem::path(argv[2]) / "media.bfnand", blofeld::vi::MediaImage::max_bytes));
   MemoryController controller(&image);
   reads(controller);
+  released_reads(controller);
   inactive_read_strobes(controller);
   input_mode_setup(controller);
   cancel_and_reset(controller);

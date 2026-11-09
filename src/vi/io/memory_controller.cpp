@@ -171,6 +171,7 @@ bool MemoryController::latch(const Write access) noexcept {
 }
 
 bool MemoryController::read_output() noexcept {
+  output_.reset();
   if (status_mode_) {
     output_ = status();
     return true;
@@ -179,7 +180,6 @@ bool MemoryController::read_output() noexcept {
     // A shared-port strobe without readable data has an undefined output. The
     // actual data-register read must reject that unknown value; this control
     // write neither consumes a byte nor manufactures a device acknowledgement.
-    output_.reset();
     return true;
   }
   const auto offset = column_ * 2;
@@ -211,7 +211,8 @@ bool MemoryController::write(const Write access) noexcept {
     if (!read_output()) { return false; }
   }
   if ((previous & read_strobe) == 0 && (controls & read_strobe) != 0 && output_) {
-    output_.reset();
+    // Advance once, retaining the sampled byte for the firmware's post-release
+    // register read. The next read strobe or command replaces that latch.
     if (!status_mode_ && ++column_ == MediaImage::page_bytes) { phase_ = Phase::end; }
   }
   controls_ = controls;
