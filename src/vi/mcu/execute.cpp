@@ -244,6 +244,9 @@ public:
       return false;
     }
     if (release_reset_) {
+      if (peer_ != nullptr && !peer_->release_mcu_data(devices_.clock.ticks(), stop_)) {
+        return false;
+      }
       if (devices_.time != nullptr) { devices_.time->release_dsp(devices_.clock.ticks()); }
       if (!reset_.release(stop_)) { return false; }
       release_reset_ = false;
@@ -270,25 +273,19 @@ private:
     return accepted;
   }
 
-  [[nodiscard]] static bool shared_port(const std::uint16_t offset) noexcept {
+  [[nodiscard]] bool shared_write(const Ports::Write access) const noexcept {
     constexpr std::uint16_t data_u = 0x278;
     constexpr std::uint16_t direction_u = 0x27a;
-    return offset == peer_q_data || offset == peer_q_direction || offset == peer_j_data ||
-           offset == peer_j_direction || offset == data_u || offset == direction_u;
-  }
-
-  [[nodiscard]] bool shared_write(const Ports::Write access) const noexcept {
-    if (!shared_port(access.offset)) { return false; }
-    const bool data = access.offset == peer_q_data || access.offset == peer_j_data;
-    const bool direction = access.offset == peer_q_direction || access.offset == peer_j_direction;
-    if (!data && !direction) { return true; } // Reset retains its explicit transition boundary.
-    const bool q = access.offset == peer_q_data || access.offset == peer_q_direction;
-    const auto output = ports_.output(q ? Port::q : Port::j);
-    if (!output) { return true; }
-    const unsigned mask = q ? all_bits : 1U;
-    if (direction) { return ((unsigned{output->direction} ^ access.value) & mask) != 0; }
-    const auto driven = output->direction & mask;
-    return (driven & (~unsigned{output->known} | (unsigned{output->value} ^ access.value))) != 0;
+    if (access.offset != peer_j_data && access.offset != peer_j_direction) {
+      return access.offset == data_u || access.offset == direction_u;
+    }
+    const auto output = ports_.output(Port::j);
+    if (!output || (output->known & 1) == 0) { return true; }
+    const bool before = (output->direction & 1) != 0 && (output->value & 1) == 0;
+    const auto direction = access.offset == peer_j_direction ? access.value : output->direction;
+    const auto value = access.offset == peer_j_data ? access.value : output->value;
+    const bool after = (direction & 1) != 0 && (value & 1) == 0;
+    return before != after;
   }
 
   bool
@@ -451,7 +448,11 @@ private:
     const auto data = ports_.output(Port::q);
     const auto request = ports_.output(Port::j);
     if (!data || !request || (request->direction & ~request->known & 1) != 0) { return false; }
-    peer_->mcu_data({.mask = data->direction, .known = data->known, .value = data->value});
+    if (!peer_->mcu_data({.mask = data->direction, .known = data->known, .value = data->value},
+                         devices_.clock.ticks(),
+                         stop_)) {
+      return false;
+    }
     const bool active = (request->direction & 1) != 0 && (request->value & 1) == 0;
     if (!peer_->mcu_strobe(active)) { return false; }
     if (active != peer_strobe_) {
@@ -476,6 +477,7 @@ private:
     const bool previous = reset_.state().held;
     if (held && !previous) {
       ports_.reset_boot_transfer();
+      if (peer_ != nullptr) { peer_->hold_mcu_data(); }
       if (!reset_.assert_reset()) { return false; }
       if (devices_.time != nullptr) { devices_.time->hold_dsp(); }
     } else if (!held && previous) {
@@ -513,6 +515,9 @@ private:
     }
     if (at.space == Space::registers && Ports::contains(at.offset)) {
       const auto action = [&] { return write_port({.offset = at.offset, .value = access.value}); };
+      if (at.offset == peer_q_data || at.offset == peer_q_direction) {
+        return access_devices(action);
+      }
       return shared_write({.offset = at.offset, .value = access.value}) ? shared_access(action)
                                                                         : action();
     }

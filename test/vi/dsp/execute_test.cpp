@@ -5,6 +5,7 @@
 #include "files/read.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/pcm_output.hpp"
+#include "io/peer_port.hpp"
 #include "io/shi.hpp"
 #include "storage/media_image.hpp"
 #include "support/isa.hpp"
@@ -56,6 +57,56 @@ void native_clock_register() {
               report.failure->space == 'P' && report.failure->address == unmapped &&
               report.failure->value == expected,
           "Native MOVEP/BCLR share PCTL and native RAM stores/loads retain its actual value");
+}
+
+void native_timed_peer_input() {
+  namespace isa = dsp56300::isa;
+  using dsp56300::Word;
+  constexpr Word data = 0xffffbd;
+  constexpr Word direction = 0xffffbe;
+  constexpr Word function = 0xffffbf;
+  constexpr Word immediate = 0x34;
+  constexpr Word absolute = 0x30;
+  constexpr Word loading = 0x8000;
+  constexpr Word x0 = 4;
+  constexpr Word marker = 0xc000;
+  constexpr Word byte_mask = 0xff;
+  constexpr Word before = 0x12;
+  constexpr Word after = 0x34;
+  constexpr auto literal =
+      isa::opcode<isa::Opcode::move_x_effective>()[0] | (immediate << 8U) | loading;
+  constexpr auto store = isa::opcode<isa::Opcode::move_x_effective>()[0] | (absolute << 8U);
+  constexpr auto read = store | loading;
+  constexpr auto sink = isa::opcode<isa::Opcode::movem_effective>()[0] | (absolute << 8U) | x0;
+  constexpr auto program = isa::program(std::array{literal,
+                                                   Word{0},
+                                                   store,
+                                                   data,
+                                                   store,
+                                                   direction,
+                                                   literal,
+                                                   byte_mask,
+                                                   store,
+                                                   function,
+                                                   read,
+                                                   data,
+                                                   sink,
+                                                   marker});
+  constexpr std::uint64_t later = 1000000;
+  for (const std::uint64_t second_tick : {std::uint64_t{1}, later}) {
+    blofeld::vi::PeerPort peer;
+    require(peer.mcu_data({.mask = byte_mask, .known = byte_mask, .value = before}, 0) &&
+                peer.mcu_data({.mask = byte_mask, .known = byte_mask, .value = after}, second_tick),
+            "Queue two real MCU data states before native DSP execution");
+    blofeld::vi::Shi shi;
+    blofeld::vi::DspReset reset;
+    const auto report = blofeld::vi::dsp::execute(program, shi, reset, {}, nullptr, {}, &peer);
+    const auto expected = second_tick == later ? before : after;
+    require(report.failure && report.failure->operation == blofeld::vi::Access::write &&
+                report.failure->space == 'P' && report.failure->address == marker &&
+                report.failure->value == expected,
+            "Native Port C reads use their completed prefix time without leaking future data");
+  }
 }
 
 void unknown_boot_tail() {
@@ -847,6 +898,7 @@ int main(const int argc, char **argv) try {
   native_media(argv[2], MediaCase::program);
   native_missing_media(argv[2]);
   native_clock_register();
+  native_timed_peer_input();
   unknown_boot_tail();
   constexpr dsp56300::Word delay_boundary = 0x16000;
   native_reserved_y_read<delay_boundary>();

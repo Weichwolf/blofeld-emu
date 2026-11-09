@@ -21,6 +21,7 @@
 #include <exception>
 #include <future>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <stop_token>
@@ -344,6 +345,8 @@ void native_local_port_access() {
                                         std::array<cpu12::Byte, 1>{1},
                                         isa::opcode<isa::Opcode::stab_extended>(),
                                         std::array<cpu12::Byte, 2>{2, 0x50},
+                                        isa::opcode<isa::Opcode::stab_extended>(),
+                                        std::array<cpu12::Byte, 2>{2, 0x52},
                                         isa::opcode<isa::Opcode::clr_extended>(),
                                         std::array<cpu12::Byte, 2>{2, 0x62},
                                         isa::opcode<isa::Opcode::ldab_immediate>(),
@@ -385,6 +388,53 @@ void native_local_port_access() {
               peer.mcu_data().mask == 0 && peer.mcu_data().value == datum &&
               !peer.dsp_interrupt(true),
           "Local register reads, ignored writes and undriven latches need no DSP owner");
+}
+
+void native_queued_data_without_dsp() {
+  namespace isa = cpu12::isa;
+  constexpr cpu12::Byte first = 0x12;
+  constexpr cpu12::Byte last = 0x34;
+  constexpr cpu12::Byte outputs = 0xff;
+  constexpr cpu12::Address marker = 0x3000;
+  constexpr auto program = isa::program(isa::opcode<isa::Opcode::ldab_immediate>(),
+                                        std::array{outputs},
+                                        isa::opcode<isa::Opcode::stab_extended>(),
+                                        std::array<cpu12::Byte, 2>{2, 0x62},
+                                        isa::opcode<isa::Opcode::ldab_immediate>(),
+                                        std::array{first},
+                                        isa::opcode<isa::Opcode::stab_extended>(),
+                                        std::array<cpu12::Byte, 2>{2, 0x60},
+                                        isa::opcode<isa::Opcode::ldab_immediate>(),
+                                        std::array{last},
+                                        isa::opcode<isa::Opcode::stab_extended>(),
+                                        std::array<cpu12::Byte, 2>{2, 0x60},
+                                        isa::opcode<isa::Opcode::stab_extended>(),
+                                        std::array<cpu12::Byte, 2>{0x30, 0});
+  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  image->known.fill(1);
+  std::ranges::copy(program, image->bytes.begin());
+  image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
+  image->bytes.back() = 0;
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  blofeld::vi::PeerPort peer;
+  blofeld::vi::ExecutionTime time;
+  std::promise<blofeld::vi::ExecutionReport> result;
+  auto completed = result.get_future();
+  std::jthread mcu([&](const std::stop_token &stop) {
+    result.set_value(
+        blofeld::vi::mcu::execute(*image, shi, reset, stop, nullptr, nullptr, &peer, &time));
+  });
+  const auto ready = completed.wait_for(std::chrono::seconds(1));
+  mcu.request_stop();
+  mcu.join();
+  const auto report = completed.get();
+  require(ready == std::future_status::ready && report.failure &&
+              report.failure->address == marker && report.failure->value == last &&
+              peer.mcu_data().value == last && peer.sample_mcu_data(0).mask == 0 &&
+              peer.sample_mcu_data(std::numeric_limits<std::uint64_t>::max()) ==
+                  blofeld::vi::PeerPort::Sample{.mask = outputs, .known = outputs, .value = last},
+          "Native MCU data and direction writes queue real timestamped values without a DSP wait");
 }
 
 void native_polling_progress(const bool pulse) {
@@ -523,22 +573,16 @@ void native_panel_sampling(const bool timed_boundary) {
     } catch (...) { result.set_exception(std::current_exception()); }
   });
   bool sampled = false;
-  bool resumed = false;
   std::jthread dsp([&](const std::stop_token &stop) {
     std::uint64_t ticks = 0;
     while (const auto limit = time.dsp_limit(ticks, stop)) {
       ticks = *limit;
-      if (sampled) {
-        peer.dsp_data({.mask = all_bits, .known = all_bits, .value = response});
-        continue;
-      }
-      if (peer.mcu_data().mask != 0 || peer.mcu_data().value != phase_marker) { continue; }
+      const auto input = peer.sample_mcu_data(ticks);
+      if (input.mask != 0 || input.value != phase_marker) { continue; }
       sampled = true;
-      const auto next = time.dsp_limit(ticks, stop);
-      resumed = next.has_value();
-      if (!timed_boundary || !next) { return; }
-      ticks = *next;
-      peer.dsp_data({.mask = all_bits, .known = all_bits, .value = response});
+      if (timed_boundary) {
+        peer.dsp_data({.mask = all_bits, .known = all_bits, .value = response});
+      }
     }
   });
   const auto ready = completed.wait_for(std::chrono::seconds(1));
@@ -548,10 +592,10 @@ void native_panel_sampling(const bool timed_boundary) {
   dsp.join();
   const auto report = completed.get();
   const auto expected = timed_boundary ? response : cpu12::Byte{0};
-  require(ready == std::future_status::ready && sampled && resumed == timed_boundary &&
-              report.failure && report.failure->address == marker &&
-              report.failure->value == expected,
-          "A selected input bank samples locally until a real device boundary or DSP driver");
+  require(
+      ready == std::future_status::ready && sampled && report.failure &&
+          report.failure->address == marker && report.failure->value == expected,
+      "Repeated input-bank reads preserve inactive inputs and actual data across a timer access");
 }
 }
 
@@ -563,6 +607,7 @@ int main() try {
   native_peer_xirq();
   native_pedal_input();
   native_local_port_access();
+  native_queued_data_without_dsp();
   native_polling_progress(false);
   native_polling_progress(true);
   native_panel_sampling(false);

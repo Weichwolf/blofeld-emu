@@ -17,6 +17,9 @@ complete instrument or its performance has been achieved.
                     device channels   |
                                       +-- complete PCM blocks --> host audio/WAV
 
+Linux x86-64 and macOS ARM64 share the VI, firmware, complete bootstrap and
+image/settings contracts. Only host bindings and the native JIT backend differ.
+
 Each core runs independently in long native sessions, on its own execution
 thread. Audioframes and bounded queues govern progress and backpressure.
 Synchronize for real command/data ownership, readiness/IRQ transitions, audio,
@@ -26,17 +29,26 @@ There is no global per-instruction/per-clock coordinator.
 ExecutionTime publishes completed MCU progress in nominal 60 MHz units. DSP native
 execution uses that frontier as a conservative grant; local MCU progress does not
 wait. Atomic progress publication wakes only a registered frontier waiter; ordered
-registration and rechecking prevent lost wakeups. Device-clock accesses also publish elapsed progress inside long native runs,
-so a timer-poll loop cannot starve the DSP until its own timeout. Publication neither
-waits for the peer nor forces a Core return. Actual shared-port accesses and completed SPI words rendezvous before their
-effects commit, keeping short producer phases observable without adding read/pop
-effects. DSP time follows the programmed PLL with retained fractional phase.
-Q/J direction-register reads, output-latch reads, unchanged drive states and
-undriven data-latch writes stay local. They perform their real register effects
-without a DSP rendezvous. Always-input Port Q reads retain their shared boundary.
-Reset release establishes a fresh local epoch at the MCU's instrument timestamp.
-Stop and reset cancel grant waits. This temporal contract does not itself prove
-complete startup, instrument behavior or real-time performance.
+registration and rechecking prevent lost wakeups. Device-clock accesses publish
+elapsed progress inside long native runs, so polling cannot starve the DSP.
+
+MCU data/direction changes use a bounded single-producer/single-consumer timeline.
+The MCU commits its actual register effects and timestamps without a DSP rendezvous.
+The DSP applies only entries at or before its completed instruction-prefix time,
+both on data reads and before a grant wait. Repeated reads retain the sampled value;
+future entries stay queued. Full transport waits for actual space and honors stop.
+Unchanged states need no entry. Preserve unknown bits and ownership changes.
+Actual J0 request transitions, response reads and completed SPI words keep their
+ordered shared boundaries. Inactive request-direction changes remain local.
+
+During asserted reset, coalesce MCU-owned input changes into their retained latch.
+Capture the old published prefix before asserting reset; the DSP retires that prefix
+after disposing of its Core and before acknowledging reset. Publish the retained
+input at release; old-prefix retirement must never discard that newer entry.
+Reset release establishes a fresh DSP epoch at the MCU's instrument timestamp.
+DSP time follows the programmed PLL with retained fractional phase. Stop and reset
+cancel grant waits without changing guest clocks. These contracts alone do not
+establish complete startup, instrument behavior or real-time performance.
 Shared access uses atomic request/grant generations, including repeated accesses
 at one device timestamp; the DSP grants only at the published frontier. Short
 host-side adaptive spins precede atomic waits. Registered waiters recheck the

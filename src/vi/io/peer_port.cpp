@@ -6,6 +6,7 @@
 #include <limits>
 #include <mutex>
 #include <optional>
+#include <stop_token>
 
 namespace blofeld::vi {
 namespace {
@@ -25,9 +26,98 @@ PeerPort::Sample decode(const std::uint32_t word) noexcept {
 }
 }
 
-void PeerPort::mcu_data(const Sample value) noexcept {
+bool PeerPort::wait_input_space(const std::uint64_t published, const std::stop_token &stop) {
+  inputs_.waiting.store(true, std::memory_order_seq_cst);
+  const std::stop_callback cancelled(stop, [this] {
+    inputs_.changed.fetch_add(1, std::memory_order_seq_cst);
+    inputs_.changed.notify_one();
+  });
+  bool available = false;
+  while (!stop.stop_requested()) {
+    const auto observed = inputs_.changed.load(std::memory_order_seq_cst);
+    if (published - inputs_.consumed.load(std::memory_order_seq_cst) < Inputs::capacity) {
+      available = true;
+      break;
+    }
+    inputs_.changed.wait(observed, std::memory_order_acquire);
+  }
+  inputs_.waiting.store(false, std::memory_order_seq_cst);
+  return available;
+}
+
+bool PeerPort::mcu_data(const Sample value,
+                        const std::uint64_t ticks,
+                        const std::stop_token &stop) {
+  if (ticks < inputs_.last_tick) { return fail("MCU peer data time moved backwards"); }
+  if (stop.stop_requested()) { return false; }
   const auto word = encode(value);
-  if (mcu_.load(std::memory_order_relaxed) != word) { mcu_.store(word, std::memory_order_release); }
+  if (inputs_.held) {
+    mcu_.store(word, std::memory_order_release);
+  } else if (mcu_.load(std::memory_order_relaxed) != word) {
+    if (!append_mcu_data(value, ticks, stop)) { return false; }
+  }
+  inputs_.last_tick = ticks;
+  return true;
+}
+
+bool PeerPort::append_mcu_data(const Sample value,
+                               const std::uint64_t ticks,
+                               const std::stop_token &stop) {
+  const auto published = inputs_.published.load(std::memory_order_relaxed);
+  if (published == std::numeric_limits<std::uint64_t>::max()) {
+    return fail("MCU peer data publication count is exhausted");
+  }
+  if (published - inputs_.consumed.load(std::memory_order_acquire) == Inputs::capacity &&
+      !wait_input_space(published, stop)) {
+    return false;
+  }
+  inputs_.entries[published % Inputs::capacity] = {.ticks = ticks, .data = value};
+  inputs_.published.store(published + 1, std::memory_order_release);
+  mcu_.store(encode(value), std::memory_order_release);
+  return true;
+}
+
+void PeerPort::release_input_space(const std::uint64_t consumed) noexcept {
+  // SC registration/recheck makes a full-queue waiter observe space or a wake.
+  inputs_.consumed.store(consumed, std::memory_order_seq_cst);
+  if (inputs_.waiting.load(std::memory_order_seq_cst)) {
+    inputs_.changed.fetch_add(1, std::memory_order_seq_cst);
+    inputs_.changed.notify_one();
+  }
+}
+
+PeerPort::Sample PeerPort::sample_mcu_data(const std::uint64_t ticks) noexcept {
+  auto consumed = inputs_.consumed.load(std::memory_order_relaxed);
+  const auto before = consumed;
+  const auto published = inputs_.published.load(std::memory_order_acquire);
+  while (consumed != published) {
+    const auto &input = inputs_.entries[consumed % Inputs::capacity];
+    if (input.ticks > ticks) { break; }
+    inputs_.sample = input.data;
+    ++consumed;
+  }
+  if (consumed != before) { release_input_space(consumed); }
+  return inputs_.sample;
+}
+
+void PeerPort::hold_mcu_data() noexcept {
+  inputs_.held = true;
+  inputs_.reset_through.store(inputs_.published.load(std::memory_order_relaxed),
+                              std::memory_order_release);
+}
+
+bool PeerPort::release_mcu_data(const std::uint64_t ticks, const std::stop_token &stop) {
+  if (!inputs_.held) { return true; }
+  if (ticks < inputs_.last_tick) { return fail("MCU peer reset release time moved backwards"); }
+  if (stop.stop_requested() || !append_mcu_data(mcu_data(), ticks, stop)) { return false; }
+  inputs_.last_tick = ticks;
+  inputs_.held = false;
+  return true;
+}
+
+void PeerPort::retire_mcu_data() noexcept {
+  const auto through = inputs_.reset_through.load(std::memory_order_acquire);
+  if (through > inputs_.consumed.load(std::memory_order_relaxed)) { release_input_space(through); }
 }
 
 void PeerPort::dsp_data(const Sample value) noexcept {

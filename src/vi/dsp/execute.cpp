@@ -435,6 +435,7 @@ private:
     if (clock_.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_) {
       throw std::overflow_error("DSP reset origin exceeds instrument time");
     }
+    if (peer_ != nullptr) { static_cast<void>(peer_->sample_mcu_data(origin_ + clock_.ticks())); }
     const auto limit = time_->dsp_limit(origin_ + clock_.ticks(), stop_);
     if (!limit) { return false; }
     peer_deadline_ = clock_.deadline(*limit - origin_);
@@ -593,7 +594,11 @@ private:
 
   bool read_port(const dsp56300::Space space, const dsp56300::Word address, dsp56300::Word &value) {
     if (peer_ != nullptr && space == dsp56300::Space::x && address == peer_data_address) {
-      const auto input = peer_->mcu_data();
+      if (!clock_.advance(device_cycles()) ||
+          clock_.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_) {
+        return false;
+      }
+      const auto input = peer_->sample_mcu_data(origin_ + clock_.ticks());
       ports_.input(Port::c, {.mask = input.mask, .known = input.known, .value = input.value});
     }
     return ports_.read(space, address, value);
@@ -798,6 +803,7 @@ ExecutionReport execute(const std::span<const dsp56300::Word> boot,
       // run_instance has destroyed the previous Core before peripherals change.
       // Reset retains SRAM; its known bytes remain owned by this execution Io.
       shi.reset();
+      if (peer != nullptr) { peer->retire_mcu_data(); }
       applied = state.epoch;
       if (!reset.acknowledge(applied)) { throw std::logic_error("Invalid DSP reset epoch"); }
     }
