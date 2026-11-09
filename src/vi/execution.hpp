@@ -9,10 +9,15 @@ namespace blofeld::vi {
 enum class Access : std::uint8_t { read, write, fetch, bit, execute, reset };
 
 struct Failure {
+  struct MediaAddress {
+    std::uint32_t page = 0, column = 0;
+  };
+
   Access operation = Access::execute;
   std::uint32_t pc = 0, address = 0, value = 0, code = 0;
   char space = '-';
   const char *reason = "";
+  std::optional<MediaAddress> media = std::nullopt;
 };
 
 // Published only after an execution owner exits. No live Core/state inspection.

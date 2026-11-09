@@ -44,6 +44,10 @@ public:
 
   [[nodiscard]] const char *error() const noexcept { return error_; }
 
+  [[nodiscard]] std::optional<MediaImage::Location> failure_location() const noexcept {
+    return failure_location_;
+  }
+
 private:
   enum class Phase : std::uint8_t {
     idle,
@@ -63,9 +67,11 @@ private:
   void interrupt_write() noexcept;
   [[nodiscard]] bool address(std::uint8_t value) noexcept;
   [[nodiscard]] std::uint8_t status() const noexcept;
-  [[nodiscard]] bool fail(const char *message) noexcept;
+  [[nodiscard]] bool fail(const char *message,
+                          std::optional<MediaImage::Location> location = std::nullopt) noexcept;
   MediaImage *image_;
   const char *error_ = nullptr;
+  std::optional<MediaImage::Location> failure_location_;
   Phase phase_ = Phase::idle;
   Operation operation_ = Operation::none;
   std::uint32_t controls_ = 0, page_ = 0, column_ = 0, pointer_ = 0;

@@ -12,6 +12,7 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
 #include <exception>
 #include <filesystem>
@@ -55,6 +56,27 @@ void native_clock_register() {
               report.failure->space == 'P' && report.failure->address == unmapped &&
               report.failure->value == expected,
           "Native MOVEP/BCLR share PCTL and native RAM stores/loads retain its actual value");
+}
+
+void unknown_boot_tail() {
+  constexpr dsp56300::Word next = 0xff0001;
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  const auto report = blofeld::vi::dsp::execute(dsp56300::isa::nop, shi, reset, {});
+  const bool correct =
+      report.instructions == 1 && report.failure &&
+      report.failure->operation == blofeld::vi::Access::read && report.failure->space == 'P' &&
+      report.failure->pc == next && report.failure->address == next &&
+      report.failure->code == static_cast<std::uint32_t>(dsp56300::FaultKind::memory_read) &&
+      report.stopped_pc && *report.stopped_pc == next;
+  if (!correct && report.failure) {
+    std::cerr << "Boot boundary: retired=" << report.instructions
+              << " operation=" << static_cast<unsigned>(report.failure->operation)
+              << " pc=" << std::hex << report.failure->pc << " address=" << report.failure->address
+              << " code=" << report.failure->code << std::dec << '\n';
+  }
+  require(correct,
+          "A known boot prefix executes before an unprovided ROM word fails at its actual PC");
 }
 
 void native_memory_switch() {
@@ -684,6 +706,29 @@ void native_media(const std::filesystem::path &root, const MediaCase operation) 
   require(matched, "Native media operations refresh held status/data at actual completion");
 }
 
+void native_missing_media(const std::filesystem::path &root) {
+  constexpr dsp56300::Word column = 17;
+  constexpr dsp56300::Word page = 32;
+  MediaGuest guest;
+  guest.command(0);
+  for (const auto byte : std::array{column, page, dsp56300::Word{0}, dsp56300::Word{0}}) {
+    guest.address(byte);
+  }
+  guest.ready();
+  guest.input();
+  guest.observe();
+  blofeld::vi::MediaImage image(
+      blofeld::host::read_file(root / "media.bfnand", blofeld::vi::MediaImage::max_bytes));
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  const auto report = blofeld::vi::dsp::execute(guest.code, shi, reset, {}, &image);
+  require(report.failure && report.failure->operation == blofeld::vi::Access::write &&
+              report.failure->space == 'X' && report.failure->address == MediaGuest::c_data &&
+              report.failure->media && report.failure->media->page == page &&
+              report.failure->media->column == column,
+          "Native missing-data failure retains both DSP register access and physical NAND address");
+}
+
 void consecutive_receive_registers() {
   namespace isa = dsp56300::isa;
   constexpr dsp56300::Word receive_port = 0x14;
@@ -773,7 +818,9 @@ int main(const int argc, char **argv) try {
   native_media(argv[2], MediaCase::read);
   native_media(argv[2], MediaCase::erase);
   native_media(argv[2], MediaCase::program);
+  native_missing_media(argv[2]);
   native_clock_register();
+  unknown_boot_tail();
   native_transmit_registers();
   native_interrupt_priorities();
   native_memory_switch();

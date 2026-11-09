@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "profile.hpp"
 
+#include "boot_rom.hpp"
 #include "files/read.hpp"
 #include "process/configuration.hpp"
 
@@ -39,8 +40,10 @@ Profile load_profile(const std::filesystem::path &path) {
     const auto file = (base / value).lexically_normal();
     if (key == "firmware") {
       profile.firmware = file;
-    } else if (key == "boot-rom") {
+    } else if (key == "boot-rom" || key == "boot-prefix") {
+      if (!profile.boot_rom.empty()) { throw std::runtime_error("Conflicting DSP boot inputs"); }
       profile.boot_rom = file;
+      profile.boot_format = key == "boot-prefix" ? BootFormat::spi_prefix : BootFormat::rom;
     } else if (key == "device-state") {
       profile.device_state = file;
     } else if (key == "nand") {
@@ -52,7 +55,7 @@ Profile load_profile(const std::filesystem::path &path) {
     }
   }
   if (profile.boot_rom.empty() || profile.device_state.empty()) {
-    throw std::runtime_error("Profile requires boot-rom and device-state paths");
+    throw std::runtime_error("Profile requires one DSP boot input and a device-state path");
   }
   return profile;
 }
