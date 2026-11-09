@@ -11,6 +11,7 @@
 #include <exception>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <thread>
@@ -71,6 +72,54 @@ void exact_points() {
   const auto current = clock.read();
   require(current && current->ticks == later.front() && current->host_ns == first_host * 2,
           "Skipped native observations do not synthesize or skip source frames");
+}
+
+void selected_source_origin() {
+  constexpr std::uint64_t origin = 48003;
+  PcmClock clock(history_frames);
+  clock.clear(origin);
+  clock.append(block(origin, initial_ticks), native_epoch);
+  require(!clock.read(), "A source origin alone cannot invent a native render observation");
+  const auto fresh = clock.read(position(1, 2));
+  require(fresh == PcmClock::Point{.epoch = guest_epoch,
+                                   .audio_epoch = native_epoch,
+                                   .ticks = initial_ticks[1],
+                                   .host_ns = first_host},
+          "The first native callback maps original frame numbers before another PCM write");
+  require(!clock.read(), "A concurrent lookup does not rewrite the owner's observation stream");
+  clock.observe(position(1, 2));
+  require(clock.read() == fresh, "Owner publication and direct native lookup agree exactly");
+  constexpr std::array<std::uint64_t, 8> later{501, 502, 600, 601, 700, 800, 900, 1000};
+  clock.append(block(origin + initial_ticks.size(), later), native_epoch);
+  require(!clock.read(position(3)), "An expired interval cannot alias a recycled history slot");
+  const auto retained = clock.read(position(4, 4, first_host + 1));
+  require(retained && retained->ticks == later.front(),
+          "History wrapping uses original source indices and native-relative frame positions");
+  clock.clear(origin + (2 * history_frames));
+  require(!clock.read() && !clock.read(position(4)), "Reset revokes both correlation interfaces");
+  rejects([&] { clock.append(block(origin, initial_ticks), native_epoch); });
+}
+
+void source_origin_limits() {
+  constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+  constexpr std::array<std::uint64_t, 1> tick{0};
+  PcmClock clock(history_frames);
+  clock.clear(maximum - 1);
+  clock.append(block(maximum - 1, tick), native_epoch);
+  const auto point = clock.read(position(0));
+  require(point && point->ticks == 0,
+          "A high source origin and zero original tick retain their full integer range");
+  require(!clock.read(position(maximum)) && !clock.read(position(1)) &&
+              !clock.read(position(0, 2)) && !clock.read(position(0, 0)),
+          "Native-relative intervals cannot overflow or exceed their actual source suffix");
+  rejects([&] { clock.append(block(maximum, tick), native_epoch); });
+  require(!clock.read(position(0)), "A source overflow failure revokes fresh native lookup");
+  clock.clear();
+  clock.append(block(0, initial_ticks), native_epoch);
+  require(!clock.read(position(0, 1, 0)), "Host timestamp zero is never a native clock point");
+  auto wrong = position(0);
+  ++wrong.epoch;
+  require(!clock.read(wrong), "A native reset epoch never binds the preceding source history");
 }
 
 void retention_and_reset() {
@@ -194,15 +243,61 @@ void concurrent() {
   require(point && point->host_ns == count * 7 && point->ticks == count * 11,
           "Final quiescent publication survives concurrent reads");
 }
+
+void concurrent_native_lookup() {
+  PcmClock clock(history_frames);
+  blofeld::host::audio::RenderPositionStore native;
+  std::atomic<bool> done{false};
+  constexpr std::uint64_t count = 20000;
+  constexpr std::uint64_t per_epoch = 257;
+  constexpr std::uint64_t base = 1000000003;
+  std::jthread writer([&] {
+    for (std::uint64_t index = 1; index <= count; ++index) {
+      const auto epoch = (index - 1) / per_epoch;
+      const auto frame = (index - 1) % per_epoch;
+      const auto origin = base + (epoch * 4096);
+      if (frame == 0) { clock.clear(origin); }
+      const std::array<std::uint64_t, 1> ticks{index * 11};
+      clock.append(block(origin + frame, ticks, epoch * 2), epoch);
+      require(
+          native.publish({.epoch = epoch, .first_frame = frame, .host_ns = index * 7, .frames = 1}),
+          "The authored native callback sequence remains representable");
+    }
+    done.store(true, std::memory_order_release);
+  });
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  std::uint64_t previous = 0;
+  do {
+    if (const auto position = native.read()) {
+      if (const auto point = clock.read(*position)) {
+        const auto index = position->host_ns / 7;
+        require(index != 0 && index >= previous && index <= count && point->ticks == index * 11 &&
+                    point->host_ns == index * 7 && point->epoch == 2 * point->audio_epoch &&
+                    point->audio_epoch == (index - 1) / per_epoch,
+                "Concurrent first-callback lookups stay coherent across wrap and selected origins");
+        previous = index;
+      }
+    }
+    require(std::chrono::steady_clock::now() < deadline, "Native lookups remain bounded");
+  } while (!done.load(std::memory_order_acquire));
+  writer.join();
+  const auto position = native.read();
+  const auto point = position ? clock.read(*position) : std::nullopt;
+  require(point && point->host_ns == count * 7 && point->ticks == count * 11 && !clock.read(),
+          "Fresh native correlation needs no later producer observation or invented anchor");
+}
 }
 
 int main() try {
   exact_points();
+  selected_source_origin();
+  source_origin_limits();
   retention_and_reset();
   native_failures();
   source_failures();
   full_range_and_disabled();
   concurrent();
+  concurrent_native_lookup();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

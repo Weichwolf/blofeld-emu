@@ -27,37 +27,41 @@ void PcmClock::append(const vi::PcmOutput::Block block, const std::uint64_t audi
   const auto phase = phase_.load();
   if (phase == Phase::failed) { fail("PCM clock requires reset after failure"); }
   if (ticks_.empty()) { return; }
+  const auto head = next_frame_.load();
+  const auto origin = origin_.load();
   constexpr std::size_t maximum_block = 16;
   if (block.ticks.empty() || block.ticks.size() != block.frames.size() ||
-      block.ticks.size() > maximum_block || block.first_frame != next_frame_ ||
-      block.ticks.size() > std::numeric_limits<std::uint64_t>::max() - next_frame_ ||
-      (phase != Phase::empty && (epoch_ != block.epoch || audio_epoch_ != audio_epoch))) {
+      block.ticks.size() > maximum_block || block.first_frame != head ||
+      block.ticks.size() > std::numeric_limits<std::uint64_t>::max() - head ||
+      (phase != Phase::empty &&
+       (epoch_.load() != block.epoch || audio_epoch_.load() != audio_epoch))) {
     fail("PCM clock source sequence or epoch is discontinuous");
   }
-  auto previous = next_frame_ == 0
+  auto previous = head == origin
                       ? std::optional<std::uint64_t>{}
-                      : std::optional<std::uint64_t>{ticks_[(next_frame_ - 1) % ticks_.size()]};
+                      : std::optional<std::uint64_t>{ticks_[(head - 1) % ticks_.size()].load()};
   for (const auto tick : block.ticks) {
     if (previous && tick <= *previous) { fail("PCM clock completion time moved backwards"); }
     previous = tick;
   }
-  epoch_ = block.epoch;
-  audio_epoch_ = audio_epoch;
-  for (const auto tick : block.ticks) {
-    ticks_[static_cast<std::size_t>(next_frame_ % ticks_.size())] = tick;
-    ++next_frame_;
+  const auto version = source_version_.load();
+  if (version > std::numeric_limits<std::uint64_t>::max() - 2) {
+    fail("PCM source publication exhausted");
   }
+  source_version_.store(version + 1);
+  epoch_.store(block.epoch);
+  audio_epoch_.store(audio_epoch);
+  for (std::size_t index = 0; index < block.ticks.size(); ++index) {
+    ticks_[static_cast<std::size_t>((head + index) % ticks_.size())].store(block.ticks[index]);
+  }
+  next_frame_.store(head + block.ticks.size());
+  source_version_.store(version + 2);
   if (phase == Phase::empty) { phase_.store(Phase::buffering); }
 }
 
 void PcmClock::observe(const host::audio::RenderPosition position) {
-  const auto phase = phase_.load();
-  if ((phase != Phase::buffering && phase != Phase::published) || ticks_.empty() ||
-      position.epoch != audio_epoch_ || position.frames == 0 || position.host_ns == 0 ||
-      position.first_frame >= next_frame_ || position.frames > next_frame_ - position.first_frame ||
-      next_frame_ - position.first_frame > ticks_.size()) {
-    fail("Native audio position has no retained original PCM interval");
-  }
+  const auto point = read(position);
+  if (!point) { fail("Native audio position has no retained original PCM interval"); }
   if (previous_) {
     if (position == *previous_) { return; }
     if (position.first_frame <= previous_->first_frame || position.host_ns <= previous_->host_ns ||
@@ -71,19 +75,57 @@ void PcmClock::observe(const host::audio::RenderPosition position) {
   }
   // One SC order encloses payload access; clear() revokes without recycling a version.
   version_.store(version + 1);
-  published_epoch_.store(epoch_);
-  published_audio_epoch_.store(audio_epoch_);
-  published_ticks_.store(ticks_[static_cast<std::size_t>(position.first_frame % ticks_.size())]);
-  published_host_ns_.store(position.host_ns);
+  published_epoch_.store(point->epoch);
+  published_audio_epoch_.store(point->audio_epoch);
+  published_ticks_.store(point->ticks);
+  published_host_ns_.store(point->host_ns);
   version_.store(version + 2);
   phase_.store(Phase::published);
   previous_ = position;
 }
 
-void PcmClock::clear() noexcept {
+void PcmClock::clear(const std::uint64_t source_origin) noexcept {
   phase_.store(Phase::empty);
   previous_.reset();
-  next_frame_ = 0;
+  const auto version = source_version_.load();
+  if (version > std::numeric_limits<std::uint64_t>::max() - 2) {
+    phase_.store(Phase::failed);
+    return;
+  }
+  source_version_.store(version + 1);
+  origin_.store(source_origin);
+  next_frame_.store(source_origin);
+  source_version_.store(version + 2);
+}
+
+std::optional<PcmClock::Point>
+PcmClock::read(const host::audio::RenderPosition position) const noexcept {
+  constexpr unsigned attempts = 3;
+  for (unsigned attempt = 0; attempt < attempts; ++attempt) {
+    const auto phase = phase_.load();
+    if ((phase != Phase::buffering && phase != Phase::published) || ticks_.empty()) { return {}; }
+    const auto version = source_version_.load();
+    if ((version & 1U) != 0) { continue; }
+    const auto origin = origin_.load();
+    const auto head = next_frame_.load();
+    const auto audio_epoch = audio_epoch_.load();
+    if (head < origin || position.epoch != audio_epoch || position.frames == 0 ||
+        position.host_ns == 0 || position.first_frame >= head - origin ||
+        position.frames > head - origin - position.first_frame) {
+      return {};
+    }
+    const auto first = origin + position.first_frame;
+    if (head - first > ticks_.size()) { return {}; }
+    const Point point{.epoch = epoch_.load(),
+                      .audio_epoch = audio_epoch,
+                      .ticks = ticks_[static_cast<std::size_t>(first % ticks_.size())].load(),
+                      .host_ns = position.host_ns};
+    if (version == source_version_.load()) {
+      const auto current = phase_.load();
+      if (current == Phase::buffering || current == Phase::published) { return point; }
+    }
+  }
+  return {};
 }
 
 std::optional<PcmClock::Point> PcmClock::read() const noexcept {

@@ -94,11 +94,7 @@ std::optional<PcmClock::Point> AudioConsumer::clock() const noexcept {
   if (!playback_.grants().position_history_frames) { return {}; }
   const auto native = playback_.status().position;
   if (!native) { return {}; }
-  const auto point = clock_.read();
-  if (!point || point->audio_epoch != native->epoch || point->host_ns > native->host_ns) {
-    return {};
-  }
-  return point;
+  return clock_.read(*native);
 }
 
 PcmStatistics AudioConsumer::statistics() const noexcept {
