@@ -400,11 +400,14 @@ struct Playback::Impl {
                                   us_per_second / sink_hz);
     const auto hardware = unit_property<AudioStreamBasicDescription>(
         unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output);
+    // Cover the published interval, an in-flight render and a full producer queue.
+    constexpr unsigned position_history_intervals = 3;
     granted = {.rate = rate,
                .sink_rate = sink_hz,
                .target_frames = target,
                .maximum_frames = capacity,
                .minimum_request_frames = {},
+               .position_history_frames = position_history_intervals * capacity,
                .sink = text_property(device, kAudioObjectPropertyName),
                .sink_format = "CoreAudio " + std::to_string(hardware.mBitsPerChannel) + "bit/" +
                               std::to_string(hardware.mChannelsPerFrame) + "ch PCM"};

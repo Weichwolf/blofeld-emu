@@ -27,6 +27,7 @@ the file and retains its EOF barrier until the output boundary is
 published. Only the musical interval and selected tail enter the WAV; startup
 PCM is validated and discarded. Failed or interrupted renders stay unpublished.
 Normal file rendering remains gated by incomplete original-firmware readiness.
+The viewer receives LCD snapshots while firmware readiness is pending.
 Complete instrument acceptance and sustained real-time operation remain unverified.
 DSP interrupt arbitration uses configured priorities, SR masks and source ordering.
 Timer, DMA and DAX requests enter native vectors with VBA/REP/RTI handling;

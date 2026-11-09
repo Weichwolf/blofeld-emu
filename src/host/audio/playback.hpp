@@ -19,6 +19,7 @@ struct Grants {
   unsigned rate = 0, sink_rate = 0;
   std::size_t target_frames = 0, maximum_frames = 0;
   std::optional<std::size_t> minimum_request_frames;
+  std::optional<std::size_t> position_history_frames;
   std::string sink, sink_format;
 };
 

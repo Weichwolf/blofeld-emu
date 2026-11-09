@@ -375,6 +375,19 @@ contract is qualified. Actual source-frame/VI-time mapping and live input grants
 still belong in application composition. Native timestamp definition:
 https://developer.apple.com/documentation/coreaudiotypes/audiotimestamp
 
+The backend grants a maximum source-frame lookback for this correlation. Darwin
+uses 3*C for queue capacity C: one published interval, one consumed but not yet
+published interval, and one full producer queue. After each accepted complete
+PCM write, the app retains its actual completion ticks in that bounded history.
+Map a native interval only when its entire source range is accepted and retained;
+copy the first frame's actual tick without nominal-rate interpolation. Keep VI
+and native audio epoch IDs distinct. Revoke the mapping before host reset and at
+owner shutdown. Bad ranges, epochs or chronology latch failure until explicit
+reset. Concurrent reads receive coherent copied points, gated by the current
+native stream, without accessing producer-owned history. An absent retention
+grant disables correlation; no guessed backend bound is substituted. These
+points still need live MIDI admission and an actual readiness boundary.
+
 Each PCM frame carries its completion edge in the common 60 MHz instrument clock.
 Project the actual scheduled native edge through the canonical DSP clock state,
 retaining the preceding PLL segment for pending older edges. Same-ratio control

@@ -27,8 +27,8 @@ public:
           std::chrono::steady_clock::time_point launched);
 
 private:
-  [[nodiscard]] std::optional<std::uint64_t> startup(vi::VmContext &vm,
-                                                     const host::Signals &signals);
+  [[nodiscard]] std::optional<std::uint64_t>
+  startup(vi::VmContext &vm, const host::Signals &signals, DisplayPublication &display);
   void feed(vi::MidiPort &port, std::uint64_t origin, const std::stop_token &stop);
   void statistics() const;
   WavConsumer wav_;
