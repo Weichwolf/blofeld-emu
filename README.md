@@ -141,7 +141,7 @@ explicit in text and remove the bitmap until a known frame is available.
 The optional `firmware` path is parsed but not yet connected to execution. Startup
 currently exits unsuccessfully because the instrument is incomplete; successful execution of a short program is not instrument readiness.
 SIGINT/SIGTERM request coordinated shutdown. Live status reports server-submitted
-frames, local queue occupancy, server buffer grants, measured latency and host/device
+frames, local queue occupancy, native buffer grants, estimated output latency and host/device
 underruns. The approximate producer reserve excludes blocking in the host consumer;
 it is not the offline instrument throughput or proof of physical playback.
 
