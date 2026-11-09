@@ -17,9 +17,9 @@
 #include <sys/stdio.h>
 #include <sys/unistd.h>
 #else
-#include <cstdio>
 #include <fcntl.h>
 #include <sys/file.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #endif
 #include <system_error>
@@ -91,7 +91,13 @@ void Directory::replace(const std::string_view name,
     ::unlinkat(descriptor_, staging.c_str(), 0);
     throw std::system_error(error, std::generic_category(), "Close publication " + staging);
   }
-  if (::renameat(descriptor_, staging.c_str(), descriptor_, filename.c_str()) != 0) {
+#if defined(__APPLE__)
+  const auto replaced = ::renameat(descriptor_, staging.c_str(), descriptor_, filename.c_str());
+#else
+  const auto replaced =
+      ::syscall(SYS_renameat, descriptor_, staging.c_str(), descriptor_, filename.c_str());
+#endif
+  if (replaced != 0) {
     const auto error = errno;
     ::unlinkat(descriptor_, staging.c_str(), 0);
     throw std::system_error(error, std::generic_category(), "Replace publication " + filename);

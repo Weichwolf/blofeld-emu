@@ -98,7 +98,12 @@ void bounded_word_admission() {
                 drive(port, data),
             "Collect one complete word without modifying a full shared FIFO");
   }
+  // libc++ mutates the source on request_stop(); libstdc++ accepts a const source.
+#if defined(_LIBCPP_VERSION)
   std::stop_source stopped;
+#else
+  const std::stop_source stopped;
+#endif
   stopped.request_stop();
   require(port.pending() && !port.complete(stopped.get_token()) && port.pending(),
           "A canceled submission retains pending ownership and never reports completion");
