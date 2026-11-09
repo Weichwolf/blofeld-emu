@@ -53,6 +53,8 @@ void Memory::configure(const dsp56300::Word omr) noexcept {
   };
   bind(x_windows_, x_, high_x_, rom_.x, x_size);
   bind(y_windows_, y_, high_y_, rom_.y, y_size);
+  if (initialized_x_) { x_windows_[0].known = {}; }
+  if (initialized_y_) { y_windows_[0].known = {}; }
   program_windows_[1] = {.address = 0x1000,
                          .words = std::span(high_x_.words).subspan(switched_x_words),
                          .known = std::span(high_x_.known).subspan(switched_x_words),
@@ -108,10 +110,9 @@ bool Memory::write(const Write access) noexcept {
   if (access.value > dsp56300::word_mask || access.address >= dsp56300::address_words) {
     return false;
   }
-  if (const auto cell = locate(access.space, access.address);
-      cell && cell->writable && cell->known != nullptr) {
+  if (const auto cell = locate(access.space, access.address); cell && cell->writable) {
     *cell->value = access.value;
-    *cell->known = 1;
+    if (cell->known != nullptr) { *cell->known = 1; }
     return true;
   }
   switch (access.space) {
@@ -125,5 +126,21 @@ bool Memory::write(const Write access) noexcept {
 std::span<const dsp56300::MemoryWindow> Memory::windows(const dsp56300::Space space) noexcept {
   return space == dsp56300::Space::program ? std::span<const dsp56300::MemoryWindow>{}
                                            : view(space);
+}
+
+bool Memory::promote_initialized() noexcept {
+  bool changed = false;
+  // Low X/Y RAM never aliases P, changes banks or loses initialized words.
+  for (const auto space : {dsp56300::Space::x, dsp56300::Space::y}) {
+    auto &initialized = space == dsp56300::Space::x ? initialized_x_ : initialized_y_;
+    auto &low = space == dsp56300::Space::x ? x_windows_[0] : y_windows_[0];
+    if (!initialized &&
+        std::ranges::all_of(low.known, [](const auto known) { return known != 0; })) {
+      initialized = true;
+      low.known = {};
+      changed = true;
+    }
+  }
+  return changed;
 }
 }

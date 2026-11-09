@@ -173,6 +173,7 @@ public:
       return false;
     }
     if (program_changed_) {
+      static_cast<void>(memory_.promote_initialized());
       revision_ ^= 1U;
       program_changed_ = false;
     }
@@ -421,6 +422,7 @@ private:
 
   bool write_clock(const dsp56300::Word value) noexcept {
     if (!clock_.advance(device_cycles()) || !clock_.write(value)) { return false; }
+    if (memory_.promote_initialized()) { revision_ ^= 1U; }
     audio_changed();
     return true;
   }
