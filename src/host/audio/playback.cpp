@@ -421,6 +421,7 @@ PlaybackStatus Playback::status() const noexcept {
           .server_buffer_frames = impl_->server_buffer_frames.load(std::memory_order_relaxed),
           .latency_us = delay == unknown_latency ? std::optional<std::int64_t>{} : delay,
           .started = impl_->started.load(std::memory_order_acquire),
-          .failed = impl_->failed.load(std::memory_order_acquire)};
+          .failed = impl_->failed.load(std::memory_order_acquire),
+          .position = std::nullopt};
 }
 }

@@ -3,6 +3,7 @@
 #include "audio/device_buffer.hpp"
 #include "audio/playback.hpp"
 #include "audio/render_buffer.hpp"
+#include "audio/render_position.hpp"
 #include "audio/render_timeline.hpp"
 
 #include <AudioToolbox/AUComponent.h>
@@ -26,6 +27,7 @@
 #include <exception>
 #include <iomanip>
 #include <limits>
+#include <mach/mach_time.h>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -65,8 +67,8 @@ std::string timing_failure(const RenderTimeline::Fault &fault) {
           << "; frames=" << fault.request.frames;
   if (fault.expected) { message << " expected-sample=" << *fault.expected; }
   if (fault.request.sample) { message << " actual-sample=" << *fault.request.sample; }
-  if (fault.previous_host) { message << " previous-host-ticks=" << *fault.previous_host; }
-  if (fault.request.host) { message << " actual-host-ticks=" << *fault.request.host; }
+  if (fault.previous_host) { message << " previous-host-ns=" << *fault.previous_host; }
+  if (fault.request.host) { message << " actual-host-ns=" << *fault.request.host; }
   return message.str();
 }
 
@@ -74,6 +76,17 @@ void require(const OSStatus status, const std::string_view operation) {
   if (status != noErr) {
     throw std::runtime_error(std::string(operation) + ": OSStatus=" + std::to_string(status));
   }
+}
+
+std::optional<std::uint64_t> nanoseconds(const std::uint64_t ticks,
+                                         const mach_timebase_info_data_t timebase) noexcept
+    [[clang::nonblocking]] {
+  const auto whole = ticks / timebase.denom;
+  const auto fraction = (ticks % timebase.denom) * timebase.numer / timebase.denom;
+  if (whole > (std::numeric_limits<std::uint64_t>::max() - fraction) / timebase.numer) {
+    return {};
+  }
+  return (whole * timebase.numer) + fraction;
 }
 
 struct Property {
@@ -180,6 +193,9 @@ struct Playback::Impl {
   std::chrono::nanoseconds device_period{0};
   std::unique_ptr<RenderBuffer> buffer;
   RenderTimeline timeline;
+  RenderPositionStore position;
+  mach_timebase_info_data_t timebase{};
+  std::uint64_t epoch = 0, rendered_frame = 0;
   std::optional<RenderTimeline::Fault> timing_fault;
   std::exception_ptr error;
   std::atomic<Phase> phase{Phase::opening};
@@ -243,7 +259,7 @@ struct Playback::Impl {
                             ? std::optional<double>{time->mSampleTime}
                             : std::nullopt;
     const auto host = (time->mFlags & kAudioTimeStampHostTimeValid) != 0
-                          ? std::optional<std::uint64_t>{time->mHostTime}
+                          ? nanoseconds(time->mHostTime, self.timebase)
                           : std::nullopt;
     if (const auto fault =
             self.timeline.advance({.sample = sample, .host = host, .frames = frames})) {
@@ -251,7 +267,19 @@ struct Playback::Impl {
       self.render_error.store(kAudio_ParamError, std::memory_order_release);
       return kAudio_ParamError;
     }
+    if (!host || frames > std::numeric_limits<std::uint64_t>::max() - self.rendered_frame) {
+      self.render_error.store(kAudio_ParamError, std::memory_order_release);
+      return kAudio_ParamError;
+    }
     const auto supplied = self.buffer->render(output);
+    if (supplied == frames && !self.position.publish({.epoch = self.epoch,
+                                                      .first_frame = self.rendered_frame,
+                                                      .host_ns = *host,
+                                                      .frames = frames})) {
+      self.render_error.store(kAudio_ParamError, std::memory_order_release);
+      return kAudio_ParamError;
+    }
+    self.rendered_frame += supplied;
     self.submitted.fetch_add(supplied, std::memory_order_relaxed);
     self.renders.fetch_add(1, std::memory_order_release);
     if (supplied != frames) {
@@ -311,6 +339,10 @@ struct Playback::Impl {
   }
 
   void initialize(const unsigned rate) {
+    require(mach_timebase_info(&timebase), "Query native audio host timebase");
+    if (timebase.numer == 0 || timebase.denom == 0) {
+      throw std::runtime_error("Invalid native audio host timebase");
+    }
     device = default_device();
     create_unit(rate);
     constexpr UInt32 requested_device_frames = 32;
@@ -386,6 +418,11 @@ struct Playback::Impl {
     check_render();
     require(AudioUnitReset(unit, kAudioUnitScope_Global, 0), "Flush old audio epoch");
     timeline.reset();
+    if (epoch == std::numeric_limits<std::uint64_t>::max() || !position.clear()) {
+      throw std::overflow_error("Native audio epoch publication exhausted");
+    }
+    ++epoch;
+    rendered_frame = 0;
     buffer->discard();
     reset_done.release();
   }
@@ -544,6 +581,11 @@ PlaybackStatus Playback::status() const noexcept {
           .latency_us = impl_->device_latency_us +
                         static_cast<std::int64_t>(queued * us_per_second / impl_->granted.rate),
           .started = phase == Impl::Phase::playing,
-          .failed = phase == Impl::Phase::failed};
+          .failed = phase == Impl::Phase::failed,
+          .position = phase == Impl::Phase::playing &&
+                              impl_->render_error.load(std::memory_order_acquire) == noErr &&
+                              impl_->underruns.load(std::memory_order_acquire) == 0
+                          ? impl_->position.read()
+                          : std::nullopt};
 }
 }
