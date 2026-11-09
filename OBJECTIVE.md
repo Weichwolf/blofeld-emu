@@ -1,8 +1,9 @@
 # Objective
 
-A complete standalone Blofeld instrument executing unchanged original 1.25
-firmware from reset, using our independent cpu12 and dsp56300 JITs. Desktop SL
-is the immediate integration target; acceptance covers Desktop and Keyboard.
+A complete standalone Blofeld Desktop SL instrument executing unchanged original
+1.25 firmware from reset, using our independent cpu12 and dsp56300 JITs, on
+macOS ARM64 and Linux x86-64. An external MIDI keyboard supplies live notes;
+emulating the Blofeld Keyboard model and its keybed controller is outside scope.
 Correctness is instrument behavior: sound, musical time and documented functions.
 Electrical wiring, bus phases and cycle-by-cycle lockstep are not objectives.
 See [target architecture](doc/architecture-design.txt).
@@ -36,7 +37,7 @@ See [target architecture](doc/architecture-design.txt).
   recreation. Unknown display contents remain explicit.
 - Simple unit tests mirror src/. The normal emulator provides reset-to-instrument,
   long-run/load, trace and memory-inspection acceptance runs. Cover every documented
-  function on both profiles in ACCEPTANCE.tsv, with fixed scope,
+  Desktop SL function on both host platforms in ACCEPTANCE.tsv, with fixed scope,
   tolerances and independent references; incomplete scope never counts as passed.
 
 No firmware patches, skipped routines, invented success replies or substitute
@@ -45,6 +46,26 @@ hypotheses. Reconstruct missing contracts independently; physical disassembly
 or hardware access is not a prerequisite. Emulator success does not prove
 physical flashing safety; hardware programming needs established recovery.
 Manufacturer assets remain local, with source URLs, sizes and hashes recorded.
+
+## Acceptance catalogue
+
+ACCEPTANCE.tsv is the project-owned inventory of required instrument functions,
+host operation and qualification gates, not an executable test or a manufacturer
+certification. Profile D means Desktop with active SL. The macos_arm64 and
+linux_x86_64 columns record separate emulator results; the Linux developer owns
+Linux validation. Grouped rows pass only when their complete stated scope passes
+with identified inputs, independent references and fixed tolerances. Unit tests
+and isolated helpers cannot establish a playable-instrument pass.
+
+Status values are pending, failed, passed and not_applicable. Pending is no
+evidence of completion. hardware_reference records optional comparisons with
+a stock Blofeld; it is not an additional completion gate. The physical latency
+measurement required below still belongs in each platform's emulator result.
+
+Source M cites pages of the German Blofeld manual, version 1.1; S cites the German
+Spectre manual; U cites the firmware-update instructions. doc/downloads.json pins
+their manufacturer URLs, sizes and hashes. F-D cites the Desktop FAQ snapshot
+identified in doc/function-references.json. OBJECTIVE cites this specification.
 
 ## Performance and operation
 

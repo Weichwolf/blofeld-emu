@@ -38,6 +38,7 @@
 - Keep canonical main current. Commit reviewed increments; push only configured
   upstream/main (blofeld-emu) or origin/main (cores). No backup branches or
   --all/--mirror; preserve unrelated work and coordinate consumer dependency pins.
+  Push every qualified JIT-core increment; never leave core commits unpublished.
 - Issues belong only in private Weichwolf/blofeld-src; no routine status spam.
   Consult local implementations such as Gearmulator for known register maps,
   protocols and algorithms; write our implementation independently. Keep
