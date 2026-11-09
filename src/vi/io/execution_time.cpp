@@ -2,6 +2,7 @@
 #include "io/execution_time.hpp"
 
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <mutex>
 #include <optional>
@@ -18,6 +19,33 @@ struct Waiting {
 
   ~Waiting() { flag.store(false, std::memory_order_seq_cst); }
 };
+
+void relax() noexcept {
+#if defined(__x86_64__)
+  __builtin_ia32_pause();
+#elif defined(__aarch64__)
+  asm volatile("yield");
+#else
+  std::atomic_signal_fence(std::memory_order_seq_cst);
+#endif
+}
+
+template <typename Ready>
+bool await(std::condition_variable_any &changed,
+           std::unique_lock<std::mutex> &lock,
+           const std::stop_token &stop,
+           Ready ready) {
+  // Host-side adaptive waiting only; this never advances device time.
+  constexpr unsigned spin_attempts = 64;
+  for (unsigned attempt = 0; attempt < spin_attempts; ++attempt) {
+    if (ready()) { return true; }
+    if (stop.stop_requested()) { return false; }
+    lock.unlock();
+    relax();
+    lock.lock();
+  }
+  return changed.wait(lock, stop, ready);
+}
 }
 
 bool ExecutionTime::publish_mcu(const std::uint64_t ticks) noexcept {
@@ -43,7 +71,7 @@ bool ExecutionTime::enter_mcu(const std::uint64_t ticks, const std::stop_token &
   pending_ = true;
   granted_ = held_;
   changed_.notify_all();
-  if (!changed_.wait(lock, stop, [&] { return granted_ || held_; }) || stop.stop_requested()) {
+  if (!await(changed_, lock, stop, [&] { return granted_ || held_; }) || stop.stop_requested()) {
     pending_ = granted_ = false;
     changed_.notify_all();
     return false;
@@ -69,7 +97,7 @@ std::optional<std::uint64_t> ExecutionTime::dsp_limit(const std::uint64_t ticks,
     if (pending_ && ticks >= frontier) {
       granted_ = true;
       changed_.notify_all();
-      if (!changed_.wait(lock, stop, [&] { return !pending_ || !granted_ || held_; })) {
+      if (!await(changed_, lock, stop, [&] { return !pending_ || !granted_ || held_; })) {
         return {};
       }
     } else if (frontier > ticks) {
@@ -77,7 +105,7 @@ std::optional<std::uint64_t> ExecutionTime::dsp_limit(const std::uint64_t ticks,
     } else {
       waiting_.store(true, std::memory_order_seq_cst);
       const Waiting registered{waiting_};
-      if (!changed_.wait(lock, stop, [&] {
+      if (!await(changed_, lock, stop, [&] {
             return pending_ || held_ || mcu_.load(std::memory_order_seq_cst) > ticks;
           })) {
         return {};
