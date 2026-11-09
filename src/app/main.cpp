@@ -4,11 +4,14 @@
 #include "boot_rom.hpp"
 #include "display/lcd_image.hpp"
 #include "display/publication.hpp"
-#include "execution.hpp"
 #include "files/read.hpp"
+#include "io/midi_port.hpp"
+#include "options.hpp"
 #include "process/configuration.hpp"
 #include "process/signals.hpp"
 #include "profile.hpp"
+#include "render.hpp"
+#include "report.hpp"
 #include "storage/flash_image.hpp"
 #include "storage/media_image.hpp"
 #include "vm_context.hpp"
@@ -22,29 +25,12 @@
 #include <iostream>
 #include <memory>
 #include <ratio>
-#include <stdexcept>
+#include <span>
 #include <string_view>
 #include <unistd.h>
 #include <utility>
 
 namespace {
-std::filesystem::path selected_profile(const int argc, char **argv) {
-  if (argc == 1) { return blofeld::app::default_profile(); }
-  if (argc == 3 && std::string_view(argv[1]) == "--profile") { return argv[2]; }
-  throw std::invalid_argument("Usage: blofeld-headless [--profile FILE]");
-}
-
-const char *operation(const blofeld::vi::Access access) {
-  switch (access) {
-    case blofeld::vi::Access::read: return "read";
-    case blofeld::vi::Access::write: return "write";
-    case blofeld::vi::Access::fetch: return "fetch";
-    case blofeld::vi::Access::bit: return "bit";
-    case blofeld::vi::Access::execute: return "execute";
-    case blofeld::vi::Access::reset: return "reset";
-    default: return "unknown";
-  }
-}
 
 void status(const blofeld::host::audio::Playback &audio,
             const blofeld::app::AudioConsumer &consumer,
@@ -111,8 +97,11 @@ void drive(blofeld::vi::VmContext &vm,
 }
 
 int main(const int argc, char **argv) try {
+  const auto launched = std::chrono::steady_clock::now();
   const blofeld::host::Signals signals;
-  const auto profile = blofeld::app::load_profile(selected_profile(argc, argv));
+  const auto options = blofeld::app::options(
+      std::span<const char *const>(argv + 1, static_cast<std::size_t>(argc - 1)));
+  const auto profile = blofeld::app::load_profile(options.profile);
   const auto display_path = blofeld::host::runtime_home() / "blofeld-emu";
   std::filesystem::create_directories(display_path);
   blofeld::app::DisplayPublication display(display_path);
@@ -123,6 +112,15 @@ int main(const int argc, char **argv) try {
       blofeld::host::read_file(profile.storage, blofeld::vi::MediaImage::max_bytes));
   auto boot = blofeld::app::load_boot_rom(profile.boot_rom, profile.boot_format);
   constexpr unsigned sample_rate = 44100;
+  if (options.midi && options.wav) {
+    blofeld::app::OfflineRender render(options);
+    blofeld::vi::VmContext vm(std::move(image),
+                              std::move(boot),
+                              std::move(media),
+                              render.output(),
+                              blofeld::vi::MidiPort::InputMode::stream);
+    return render.run(vm, signals, display, launched);
+  }
   blofeld::host::audio::Playback audio(sample_rate, "blofeld-emu");
   const auto &grant = audio.grants();
   std::cerr << "Audio: s24-in-32 stereo " << grant.rate << "Hz -> " << grant.sink_format << ' '
@@ -143,30 +141,11 @@ int main(const int argc, char **argv) try {
   publish_display(vm, display);
   audio.stop();
   status(audio, consumer, false);
-  for (std::size_t index = 0; index < reports.size(); ++index) {
-    const auto &report = reports[index];
-    if (report.exception) { std::rethrow_exception(report.exception); }
-    const auto *name = index == 0 ? "MCU" : "DSP";
-    std::cerr << name << " retired=" << report.instructions;
-    if (report.stopped_pc) {
-      std::cerr << " stopped-pc=0x" << std::hex << *report.stopped_pc << std::dec;
-    }
-    if (report.failure) {
-      const auto &fault = *report.failure;
-      std::cerr << " " << operation(fault.operation) << " space=" << fault.space << " pc=0x"
-                << std::hex << fault.pc << " address=0x" << fault.address << " value=0x"
-                << fault.value << std::dec << " code=" << fault.code << ": " << fault.reason;
-      if (fault.media) {
-        std::cerr << "; media-page=0x" << std::hex << fault.media->page << " media-column=0x"
-                  << fault.media->column << std::dec;
-      }
-    }
-    std::cerr << '\n';
-  }
+  const bool valid = blofeld::app::report_execution(reports);
   audio.check();
   std::cerr << "Startup failed: the instrument is not playable; MIDI and remaining device "
                "contracts are incomplete.\n";
-  return 2;
+  return valid ? 2 : 1;
 } catch (const std::exception &error) {
 
   std::cerr << "blofeld-headless: " << error.what() << '\n';

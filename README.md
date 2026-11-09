@@ -20,8 +20,13 @@ separate metadata; independent patterns require explicit selection. An offline
 PCM consumer writes signed 24-bit stereo WAV, rejecting underruns, frame/time
 discontinuities and drift. Original PCM carries per-frame completion points in
 the common instrument clock. The file adapter feeds the VM through a bounded input frontier;
-producer delays suspend native execution without advancing device time. A complete
-SMF-to-WAV render command and its readiness/tail orchestration remain incomplete.
+producer delays suspend native execution without advancing device time. The offline
+command waits for the original MIDI identity reply and valid PCM, selects a musical
+origin, streams the file and retains its EOF barrier until the output boundary is
+published. Only the musical interval and selected tail enter the WAV; startup
+PCM is validated and discarded. Failed or interrupted renders stay unpublished.
+Normal file rendering remains gated by incomplete original-firmware readiness.
+Complete instrument acceptance and sustained real-time operation remain unverified.
 DSP interrupt arbitration uses configured priorities, SR masks and source ordering.
 Timer, DMA and DAX requests enter native vectors with VBA/REP/RTI handling;
 timer and DMA acknowledgements occur on accepted admission. SHI and ESAI
@@ -143,7 +148,16 @@ available. Core correctness suites run in their own projects.
 
 ```sh
 build/release/blofeld-headless --profile /path/to/instrument.profile
+build/release/blofeld-headless --profile /path/to/instrument.profile \
+  --midi /path/to/score.mid --wav /path/to/render.wav --tail 5
 ```
+
+`--midi` and `--wav` are paired and render without opening a host audio device.
+`--tail` selects whole seconds after the final serialized MIDI event/track end;
+it defaults to five seconds. Choose sufficient release/effect time for the programs.
+Successful renders report valid frame totals, startup/active host time and throughput.
+MIDI deadline deviation remains unmeasured. Startup fails after ten host seconds
+without both original identity and PCM. Existing output files are never replaced.
 
 With no arguments it reads `$XDG_CONFIG_HOME/blofeld-emu/default.profile`,
 falling back to `$HOME/.config/blofeld-emu/default.profile`. Profiles contain
