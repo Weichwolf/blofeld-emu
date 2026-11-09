@@ -16,6 +16,8 @@
 - Preserve musical time, message ordering, backpressure, reset and recovery.
   Query actual audio/MIDI grants. Audio callbacks never allocate, lock, throw
   or access files; hardware flashing requires established recovery.
+- Emulator and display viewer share the standard user runtime display directory.
+  Do not add profile or viewer display-path overrides.
 - Target >=4x sustained offline instrument throughput; design for 10x. Measure
   valid original stereo frames, startup separately; microbenchmarks are no proof.
 

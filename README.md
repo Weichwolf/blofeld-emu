@@ -165,9 +165,9 @@ The MCU image uses
 the versioned `.bfnvm` format with explicit known-byte and erase metadata.
 Images must already exist; startup does not provision or modify files.
 The media image uses the checksummed `.bfnand` format with explicit known bits.
-The optional `display` directory overrides `$XDG_RUNTIME_DIR/blofeld-emu`
-(default runtime root: `/run/user/UID` on Linux, the Darwin user temporary
-directory on macOS). The MCU owner supplies controller snapshots;
+The emulator and viewer share `$XDG_RUNTIME_DIR/blofeld-emu`, without display-path
+overrides. The default runtime root is `/run/user/UID` on Linux and the Darwin
+user temporary directory on macOS. The MCU owner supplies controller snapshots;
 the app publishes atomic `display.pbm` and `display.txt` files. Unknown pixels remain
 explicit in text and remove the bitmap until a known frame is available.
 The optional `firmware` path is parsed but not yet connected to execution. Startup
