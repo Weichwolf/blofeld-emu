@@ -76,6 +76,33 @@ void output_state() {
   require(!ports.output(static_cast<Port>(all_bits)), "An invalid port has no output state");
 }
 
+void attached_idle_bias() {
+  blofeld::vi::Shi shi;
+  Ports ports(shi);
+  std::uint8_t value = 0;
+  ports.input(Port::q, {.fallback_low = all_bits});
+  require(read(ports, port_q) == 0,
+          "An attached device can define its otherwise released input level");
+  write(ports, {.offset = pull_q, .value = all_bits});
+  require(read(ports, port_q) == all_bits,
+          "A fallback never overrides configured local input pulls");
+  write(ports, {.offset = pull_q, .value = 0});
+  ports.input(Port::q, {.mask = 1, .known = 0, .fallback_low = all_bits});
+  require(!ports.read(port_q, value) && ports.read(port_q, value, all_bits ^ 1) && value == 0,
+          "An active unknown driver remains unknown; only released bits receive the idle bias");
+  ports.input(Port::q, {.mask = 1, .known = 1, .value = 1, .fallback_low = all_bits});
+  require(read(ports, port_q) == 1, "Active data takes precedence over an attached idle bias");
+  ports.input(Port::q, {.fallback_low = all_bits});
+  write(ports, {.offset = direction_q, .value = all_bits});
+  require(read(ports, port_q) == 0, "PIM output latches retain their known reset value");
+  constexpr std::uint8_t datum = 0xa5;
+  write(ports, {.offset = port_q, .value = datum});
+  require(read(ports, port_q) == datum, "Idle input bias cannot overwrite a local output latch");
+  ports.input(Port::a, {.fallback_low = all_bits});
+  write(ports, {.offset = direction_a, .value = all_bits});
+  require(!ports.read(port_a, value), "Idle bias cannot fill an unknown driven output latch");
+}
+
 void pulls_and_inputs() {
   blofeld::vi::Shi shi;
   Ports ports(shi);
@@ -153,6 +180,7 @@ void reserved_and_masked() {
 int main() try {
   reset_and_latches();
   output_state();
+  attached_idle_bias();
   pulls_and_inputs();
   controls_and_routing();
   reserved_and_masked();

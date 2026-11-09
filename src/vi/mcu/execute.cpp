@@ -45,6 +45,14 @@ constexpr std::uint8_t all_bits = 0xff;
 // This unreachable horizon selects that Core path without an execution quantum.
 constexpr auto no_deadline = std::numeric_limits<Timer::Cycle>::max() / 2;
 
+struct PeerAdmission {
+  PeerPort *peer;
+
+  ~PeerAdmission() {
+    if (peer != nullptr) { static_cast<void>(peer->mcu_interrupt_ready(false)); }
+  }
+};
+
 struct Devices {
   explicit Devices(const std::stop_token &cancellation) : stop(cancellation) {}
 
@@ -162,8 +170,8 @@ struct Devices {
   }
 
   [[nodiscard]] bool interrupts_enabled() const noexcept {
-    return timer.interrupts_enabled() || clock.interrupts_enabled() || sci.interrupts_enabled() ||
-           usb.interrupts_enabled();
+    return peer != nullptr || timer.interrupts_enabled() || clock.interrupts_enabled() ||
+           sci.interrupts_enabled() || usb.interrupts_enabled();
   }
 
   void activity(const cpu12::ExecutionState state) {
@@ -399,7 +407,13 @@ private:
       const auto sample =
           offset == peer_q_data ? peer_->read_dsp_data(mask) : std::optional{peer_->dsp_data()};
       if (!sample) { return false; }
-      ports_.input(Port::q, {.mask = sample->mask, .known = sample->known, .value = sample->value});
+      // DSP56371UM Table 2-8 documents internal pull-downs on PC0..7,
+      // including reset-disconnected GPIO. They are not active reply data.
+      ports_.input(Port::q,
+                   {.mask = sample->mask,
+                    .known = sample->known,
+                    .value = sample->value,
+                    .fallback_low = all_bits});
     }
     constexpr std::uint16_t port_m = 0x248;
     constexpr std::uint16_t input_m = 0x249;
@@ -634,6 +648,10 @@ Access operation(const cpu12::Fault fault) {
 }
 
 bool interrupt(cpu12::Core &core, const Devices &devices, ExecutionReport &report) {
+  if (devices.peer != nullptr &&
+      !devices.peer->mcu_interrupt_ready(core.interrupt_ready(cpu12::InterruptKind::xirq))) {
+    throw std::overflow_error(devices.peer->error());
+  }
   const auto external = devices.peer != nullptr ? devices.peer->mcu_interrupt() : std::nullopt;
   const bool xirq = external && core.interrupt_ready(cpu12::InterruptKind::xirq);
   const auto vector = xirq ? std::optional<std::uint16_t>{xirq_vector} : devices.pending();
@@ -650,7 +668,8 @@ bool interrupt(cpu12::Core &core, const Devices &devices, ExecutionReport &repor
     return false;
   }
   if (!entered.accepted) { throw std::logic_error("Eligible MCU device interrupt was refused"); }
-  if (xirq && !devices.peer->acknowledge_mcu(*external)) {
+  if (xirq &&
+      (!devices.peer->mcu_interrupt_ready(false) || !devices.peer->acknowledge_mcu(*external))) {
     throw std::logic_error("Accepted MCU peer interrupt has an invalid generation");
   }
   return true;
@@ -719,6 +738,10 @@ ExecutionReport execute(FlashImage &image,
                         PeerPort *peer,
                         ExecutionTime *time,
                         MidiPort *midi) {
+  const PeerAdmission admission{peer};
+  if (peer != nullptr && !peer->mcu_interrupt_ready(false)) {
+    throw std::overflow_error(peer->error());
+  }
   Memory memory(image);
   Devices devices(stop);
   devices.peer = peer;

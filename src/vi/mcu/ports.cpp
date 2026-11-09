@@ -67,6 +67,9 @@ Ports::Sample Ports::pins(const std::size_t index) const noexcept {
   const auto external = static_cast<unsigned>(port.external.mask);
   result.known = (result.known & ~external) | (port.external.known & external);
   result.value = (result.value & ~external) | (port.external.value & external);
+  const auto idle = port.external.fallback_low & ~result.known & ~external & ~outputs;
+  result.known |= idle;
+  result.value &= ~idle;
   if ((routing_ & 3) == 3) {
     result.known |= tied[index];
     result.value &= ~tied[index];

@@ -277,6 +277,19 @@ void native_peer_xirq() {
   require(report.failure && report.failure->address == marker && report.failure->value == datum &&
               peer.mcu_interrupt() == 2 && peer.dsp_ready(false) && !peer.mcu_interrupt(),
           "Unmasking X wakes through the real XIRQ vector despite I remaining masked");
+  blofeld::vi::PeerPort idle;
+  require(idle.dsp_ready(true), "A real notification can accompany a released data bus");
+  const auto released = blofeld::vi::mcu::execute(*image, shi, reset, {}, nullptr, nullptr, &idle);
+  require(released.failure && released.failure->address == marker && released.failure->value == 0,
+          "Native MCU input reads the attached DSP's documented released-bus bias");
+  blofeld::vi::PeerPort unknown;
+  unknown.dsp_data({.mask = peer_byte_mask});
+  require(unknown.dsp_ready(true), "An active unknown driver accompanies a genuine notification");
+  const auto rejected =
+      blofeld::vi::mcu::execute(*image, shi, reset, {}, nullptr, nullptr, &unknown);
+  require(rejected.failure && rejected.failure->operation == blofeld::vi::Access::read &&
+              rejected.failure->address == ((unsigned{input_address[0]} << 8U) | input_address[1]),
+          "The native binding cannot convert actively unknown peer bytes into idle zeros");
   blofeld::vi::PeerPort announced;
   constexpr cpu12::Byte command = 0x0d;
   announced.dsp_data({.mask = peer_byte_mask, .known = peer_byte_mask, .value = command});
@@ -370,7 +383,7 @@ void native_local_port_access() {
           "Local register reads, ignored writes and undriven latches need no DSP owner");
 }
 
-void native_polling_progress() {
+void native_polling_progress(const bool pulse) {
   namespace isa = cpu12::isa;
   constexpr cpu12::Address marker = 0x3000;
   constexpr cpu12::Byte datum = 0x5a;
@@ -421,7 +434,7 @@ void native_polling_progress() {
     while (const auto limit = time.dsp_limit(ticks, stop)) {
       ticks = *limit;
       if (ticks >= peer_time) {
-        posted = peer.dsp_ready(true);
+        posted = peer.dsp_ready(true) && (!pulse || peer.dsp_ready(false));
         return;
       }
     }
@@ -546,7 +559,8 @@ int main() try {
   native_peer_xirq();
   native_pedal_input();
   native_local_port_access();
-  native_polling_progress();
+  native_polling_progress(false);
+  native_polling_progress(true);
   native_panel_sampling(false);
   native_panel_sampling(true);
 } catch (const std::exception &error) {
