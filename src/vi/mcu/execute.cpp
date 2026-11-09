@@ -46,6 +46,9 @@ constexpr std::uint8_t all_bits = 0xff;
 constexpr auto no_deadline = std::numeric_limits<Timer::Cycle>::max() / 2;
 
 struct Devices {
+  explicit Devices(const std::stop_token &cancellation) : stop(cancellation) {}
+
+  const std::stop_token &stop;
   PeerPort *peer = nullptr;
   ExecutionTime *time = nullptr;
   MidiPort *midi = nullptr;
@@ -55,6 +58,27 @@ struct Devices {
   Usb usb;
   Timer::Cycle idle = 0;
   const char *midi_error = nullptr;
+
+  [[nodiscard]] std::optional<std::uint64_t> input_tick() const noexcept {
+    if (midi == nullptr) { return {}; }
+    auto next = midi->input_limit();
+    if (const auto input = midi->peek_input(); input && (!next || input->ticks < *next)) {
+      next = input->ticks;
+    }
+    return next;
+  }
+
+  bool wait_input(const std::uint64_t ticks) noexcept {
+    if (time != nullptr && !time->publish_mcu(clock.ticks())) { return false; }
+    return midi->await_input(ticks, stop);
+  }
+
+  bool input_ready() noexcept {
+    if (const auto limit = midi->input_limit(); limit && clock.ticks() >= *limit) {
+      return wait_input(*limit);
+    }
+    return midi->await_input(clock.ticks(), stop);
+  }
 
   bool point(const Timer::Cycle now) noexcept {
     const auto before = clock.cycles();
@@ -85,20 +109,33 @@ struct Devices {
     return midi->error() == nullptr;
   }
 
+  bool input_point(const Timer::Cycle now) noexcept {
+    while (const auto limit = midi->input_limit()) {
+      if (*limit <= clock.ticks() || (*limit - clock.ticks()) % clock.bus_period() == 0) { break; }
+      const auto boundary = clock.at_ticks(*limit);
+      if (!boundary) { return false; }
+      if (now < *boundary) { break; }
+      // An unaligned exclusive frontier cannot authorize the following bus edge.
+      if (!point(*boundary - 1) || !wait_input(*limit)) { return false; }
+    }
+    return point(now);
+  }
+
   bool advance(const cpu12::Core &core) noexcept {
     const auto cycles = core.progress().estimated_cycles;
     if (idle > std::numeric_limits<Timer::Cycle>::max() - cycles) { return false; }
     const auto now = cycles + idle;
     if (midi == nullptr) { return point(now); }
     for (;;) {
+      if (!input_ready()) { return false; }
       auto next = now;
       if (const auto event = clock.deadline(); event && *event < next) { next = *event; }
-      if (const auto input = midi->peek_input()) {
-        const auto event = clock.at_ticks(input->ticks);
+      if (const auto tick = input_tick()) {
+        const auto event = clock.at_ticks(*tick);
         if (!event) { return false; }
         next = std::min(next, *event);
       }
-      if (!point(next)) { return false; }
+      if (!input_point(next)) { return false; }
       if (next == now) { return true; }
     }
   }
@@ -120,9 +157,7 @@ struct Devices {
     };
     offer(clock.deadline());
     offer(sci.deadline());
-    if (midi != nullptr) {
-      if (const auto input = midi->peek_input()) { offer(clock.at_ticks(input->ticks)); }
-    }
+    if (const auto tick = input_tick()) { offer(clock.at_ticks(*tick)); }
     return next;
   }
 
@@ -624,6 +659,7 @@ bool interrupt(cpu12::Core &core, const Devices &devices, ExecutionReport &repor
 void advance(const cpu12::Core &core, Devices &devices) {
   if (!devices.advance(core) ||
       (devices.time != nullptr && !devices.time->publish_mcu(devices.clock.ticks()))) {
+    if (devices.stop.stop_requested()) { return; }
     if (devices.error() != nullptr) { throw std::runtime_error(devices.error()); }
     throw std::overflow_error("MCU device time is not representable or monotonic");
   }
@@ -654,6 +690,7 @@ void bind_memory(cpu12::Core &core, Memory &memory, Usb &usb, std::vector<cpu12:
 
 Dispatch prepare(cpu12::Core &core, Devices &devices, ExecutionReport &report) {
   advance(core, devices);
+  if (devices.stop.stop_requested()) { return Dispatch::done; }
   const auto state = core.state().execution;
   if (state == cpu12::ExecutionState::stopped) { return Dispatch::done; }
   if (interrupt(core, devices, report)) {
@@ -683,7 +720,7 @@ ExecutionReport execute(FlashImage &image,
                         ExecutionTime *time,
                         MidiPort *midi) {
   Memory memory(image);
-  Devices devices;
+  Devices devices(stop);
   devices.peer = peer;
   devices.time = time;
   devices.midi = midi;

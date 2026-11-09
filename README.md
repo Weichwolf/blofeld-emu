@@ -11,13 +11,14 @@ free-running timer capture/compare, CRG/USB clock selection, periodic interrupts
 and interrupt wakeup, SCI character/register handling, USB configuration and direct
 endpoint-buffer windows, and independent
 MCU/DSP execution threads and DSP56371 PLL register/nominal ratio handling.
-The VM exposes bounded, timed DIN MIDI input/output through its SCI binding;
-external host MIDI ports are not yet connected by the application.
+The VM exposes bounded, timed DIN input shared by MCU SCI and DSP Timer0,
+with genuine SCI output. External host MIDI ports are not yet connected by the application.
 The host SMF reader streams timestamped events with tempo/SMPTE handling and
 separate metadata; independent patterns require explicit selection. An offline
 PCM consumer writes signed 24-bit stereo WAV, rejecting underruns and timeline
-discontinuities. These components are not yet connected to a complete SMF-to-WAV
-render command.
+discontinuities. The file adapter feeds the VM through a bounded input frontier;
+producer delays suspend native execution without advancing device time. A complete
+SMF-to-WAV render command and its readiness/tail orchestration remain incomplete.
 DSP interrupt arbitration uses configured priorities, SR masks and source ordering.
 Timer, DMA and DAX requests enter native vectors with VBA/REP/RTI handling;
 timer and DMA acknowledgements occur on accepted admission. SHI and ESAI

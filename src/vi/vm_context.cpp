@@ -3,6 +3,7 @@
 
 #include "dsp/execute.hpp"
 #include "execution.hpp"
+#include "io/midi_port.hpp"
 #include "io/pcm_output.hpp"
 #include "mcu/execute.hpp"
 #include "storage/flash_image.hpp"
@@ -23,8 +24,13 @@ namespace blofeld::vi {
 VmContext::VmContext(std::unique_ptr<FlashImage> image,
                      std::vector<dsp56300::Word> boot,
                      std::unique_ptr<MediaImage> media,
-                     const PcmOutput output)
-    : image_(std::move(image)), boot_(std::move(boot)), media_(std::move(media)), output_(output) {
+                     const PcmOutput output,
+                     const MidiPort::InputMode input)
+    : image_(std::move(image)),
+      boot_(std::move(boot)),
+      media_(std::move(media)),
+      midi_(input),
+      output_(output) {
   if (!image_) { throw std::invalid_argument("VM requires a persistent MCU image"); }
 }
 

@@ -229,7 +229,7 @@ owner after the final PCM submission, including exception unwinding, before the
 thread exits. Darwin's QoS opt-out persists until thread exit; do not configure
 arbitrary application threads. Linux retains its native scheduling policy.
 
-VmContext owns one bounded, bidirectional DIN MIDI port. The host owner submits
+VmContext owns one bounded, bidirectional DIN MIDI port. One host input owner submits
 ordered packets in nominal 60 MHz device time; complete 8N1 characters retain
 31,250-baud spacing. The MCU owner admits input at character starts and lets SCI
 produce its actual data/status/interrupt effects. Output carries genuine SCI
@@ -237,6 +237,28 @@ character-completion timestamps. Clock transitions are event boundaries; convers
 does not assume a constant MCU bus frequency. Overflow and unsupported output
 formats are explicit errors. Host port routing still needs its application binding;
 USB endpoint transactions remain separate from this DIN input.
+
+Streaming input has an exclusive known-until frontier. Accepted bytes extend it
+through their actual DIN character intervals; explicit known silence emits no
+character. The MCU stops at the earliest input or frontier boundary, including
+native loops without local I/O. An exclusive frontier between MCU bus edges
+holds at the last authorized edge until further input is known; rounding the
+frontier up must not make the next actual character late. Before waiting, it
+publishes its attained frontier so the DSP cannot deadlock behind stale progress.
+Source delay adds no device time. Admission, source waits and output waits honor
+cancellation and failures. A separate output consumer drains actual SCI replies
+while the input producer waits for whole-packet credit from both independent
+MCU/DSP cursors. Live input retains its existing contract; bounded streaming is
+explicitly selected when constructing VM.
+
+The app file adapter maps all selected tracks into one explicit DIN destination.
+It preserves channel/SysEx/escape bytes, keeps meta payloads off the wire and
+rejects cross-track SysEx collisions. Validated file EOF returns the final known
+tick while retaining the input barrier. The caller publishes its render limit
+before acknowledging input EOF; that prevents a completion-publication race.
+Source faults abort the channel and wake its owners. Cancellation cannot resume
+after a rejected chunk. Establish the real musical origin and route native host
+ports in application composition; these contracts alone do not prove readiness.
 
 The app connects ordered PCM blocks to a bounded SPSC host queue. A separate
 PulseAudio I/O owner pushes available frames and dispatches server events; there
