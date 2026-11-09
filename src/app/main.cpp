@@ -157,6 +157,10 @@ int main(const int argc, char **argv) try {
       std::cerr << " " << operation(fault.operation) << " space=" << fault.space << " pc=0x"
                 << std::hex << fault.pc << " address=0x" << fault.address << " value=0x"
                 << fault.value << std::dec << " code=" << fault.code << ": " << fault.reason;
+      if (fault.media) {
+        std::cerr << "; media-page=0x" << std::hex << fault.media->page << " media-column=0x"
+                  << fault.media->column << std::dec;
+      }
     }
     std::cerr << '\n';
   }

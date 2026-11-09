@@ -34,6 +34,7 @@ void MemoryController::interrupt_write() noexcept {
 void MemoryController::reset() noexcept {
   interrupt_write();
   error_ = nullptr;
+  failure_location_.reset();
   phase_ = Phase::idle;
   operation_ = Operation::none;
   controls_ = strobes;
@@ -45,8 +46,10 @@ void MemoryController::reset() noexcept {
   buffer_ = {};
 }
 
-bool MemoryController::fail(const char *message) noexcept {
+bool MemoryController::fail(const char *message,
+                            const std::optional<MediaImage::Location> location) noexcept {
   error_ = message;
+  failure_location_ = location;
   return false;
 }
 
@@ -182,7 +185,7 @@ bool MemoryController::read_output() noexcept {
   const auto offset = column_ * 2;
   constexpr std::uint8_t all_bits = 0xff;
   if (buffer_.empty() || buffer_[offset + 1] != all_bits) {
-    return fail("Unknown media image byte");
+    return fail("Unknown media image byte", MediaImage::Location{.page = page_, .column = column_});
   }
   output_ = buffer_[offset];
   return true;
@@ -220,14 +223,20 @@ bool MemoryController::complete() {
   if (operation_ == Operation::read) {
     if (image_ == nullptr) { return fail("Media image is not connected"); }
     buffer_ = image_->page(page_);
-    if (buffer_.empty()) { return fail("Unknown media image page"); }
+    if (buffer_.empty()) {
+      return fail("Unknown media image page",
+                  MediaImage::Location{.page = page_, .column = column_});
+    }
     phase_ = Phase::read;
   } else if (operation_ == Operation::erase || operation_ == Operation::program) {
     const auto result = operation_ == Operation::erase
                             ? image_->erase(page_ / MediaImage::block_pages)
                             : image_->program({.page = page_, .column = column_},
                                               std::span(program_).first(program_size_));
-    if (!result) { return fail("Unqualified media protection, validity or program history/limit"); }
+    if (!result) {
+      return fail("Unqualified media protection, validity or program history/limit",
+                  MediaImage::Location{.page = page_, .column = column_});
+    }
     failed_ = !*result;
     phase_ = Phase::idle;
   } else {

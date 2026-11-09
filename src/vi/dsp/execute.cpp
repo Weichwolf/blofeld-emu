@@ -108,7 +108,12 @@ public:
     if (controller_.ready(ready)) { static_cast<void>(timers_.input(1, ready)); }
   }
 
-  void unbind() noexcept { core_ = nullptr; }
+  void finish(ExecutionReport &report) {
+    static_cast<void>(flush_audio(report));
+    if (report.failure) { report.failure->media = media_failure(); }
+    report.stopped_pc = core_->registers().pc;
+    core_ = nullptr;
+  }
 
   bool complete_events(ExecutionReport &report) {
     if (media_deadline_ && device_cycles() >= *media_deadline_) {
@@ -181,6 +186,13 @@ public:
     if (media_error_ != nullptr) { return media_error_; }
     if (timers_.error() != nullptr) { return timers_.error(); }
     return esai_1_.error() != nullptr ? esai_1_.error() : controller_.error();
+  }
+
+  [[nodiscard]] std::optional<Failure::MediaAddress> media_failure() const noexcept {
+    if (const auto location = controller_.failure_location()) {
+      return Failure::MediaAddress{.page = location->page, .column = location->column};
+    }
+    return {};
   }
 
   [[nodiscard]] dsp56300::RunResult run() {
@@ -726,9 +738,7 @@ bool run_instance(Io &io,
     }
     if (result.state != dsp56300::ExecutionState::running && !io.waiting_event()) { break; }
   }
-  static_cast<void>(io.flush_audio(report));
-  report.stopped_pc = core.registers().pc;
-  io.unbind();
+  io.finish(report);
   return restart;
 }
 }

@@ -134,26 +134,33 @@ void input_mode_setup(MemoryController &controller) {
 void errors(MemoryController &controller) {
   controller.reset();
   begin(controller, {.page = 32, .column = unknown_column});
-  require(!controller.write({.controls = read_active}) && controller.error() != nullptr &&
-              !controller.output(),
+  const bool accepted = controller.write({.controls = read_active});
+  const auto byte_failure = controller.failure_location();
+  require(!accepted && controller.error() != nullptr && !controller.output() && byte_failure &&
+              byte_failure->page == 32 && byte_failure->column == unknown_column,
           "Missing image bits fail without a fabricated byte");
   controller.reset();
   constexpr std::uint8_t identification = 0x90;
   require(
       controller.write({.controls = command | idle, .known = true}) &&
           controller.write({.controls = command | 0x100, .known = true}) &&
-          !controller.write({.controls = command | idle, .value = identification, .known = true}),
+          !controller.write({.controls = command | idle, .value = identification, .known = true}) &&
+          !controller.failure_location(),
       "An unimplemented identification command cannot claim success");
   controller.reset();
-  require(!controller.output() && !controller.pending(),
+  require(!controller.output() && !controller.pending() && !controller.failure_location(),
           "Reset discards incomplete transfer state");
   pulse(controller, {.controls = command});
   for (const auto value : std::array<std::uint8_t, 4>{0, 1, 0, 0}) {
     pulse(controller, {.controls = address, .value = value});
   }
   bool ready = true;
-  require(controller.pending() && controller.ready(ready) && !ready && !controller.complete() &&
-              controller.error() != nullptr && !controller.ready(ready),
+  require(controller.pending() && controller.ready(ready) && !ready,
+          "Unknown page data does not bypass the pending read");
+  const bool completed = controller.complete();
+  const auto page_failure = controller.failure_location();
+  require(!completed && controller.error() != nullptr && !controller.ready(ready) && page_failure &&
+              page_failure->page == 1 && page_failure->column == 0,
           "Missing image pages cannot complete or publish readiness");
 }
 
