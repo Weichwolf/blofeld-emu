@@ -86,18 +86,19 @@ Live operation must deliver every audio buffer on time without host-induced gaps
 lost or repeated frames, including first use of firmware paths and JIT translation.
 Average throughput or offline reserve cannot compensate for a missed live deadline.
 
-Prioritize native execution speed over first-time translation latency. Analyze and
-precompile executable firmware before live readiness, including interrupt entries,
-indirect targets and runtime-loaded executable regions as they become available.
+Prioritize low ongoing execution cost and fast on-demand JIT translation. Measure
+first-use translation within actual live deadlines, including interrupt entries,
+indirect targets and runtime-loaded executable regions. Use selective or complete
+precompilation and a persistent native-code cache only where measurements establish
+that on-demand translation cannot meet those deadlines. First preparation may take
+substantially longer than ordinary startup; report it separately from original boot,
+warm execution and total readiness. It does not extend firmware execution probes.
 Do not decode arbitrary data or unknown memory as established executable code.
-Persist reusable native code locally, keyed by executable-input hashes, exact JIT
-revision, host architecture/features, code-generation options and binding ABI.
-Relocate instance-specific addresses when loading; never restore device state from
-the code cache. Reject incompatible or damaged entries and rebuild before playback.
-Report first preparation, cache loading, original boot and warm execution separately,
-including total time to readiness. First preparation may take substantially longer
-than ordinary startup; this does not extend the original-firmware execution probes
-below. A cache is not a substitute for removing measured runtime overhead.
+If caching is needed, key it by executable-input hashes, exact JIT revision, host
+architecture/features, code-generation options and binding ABI. Relocate instance
+addresses on load; never restore device state from a code cache. Reject damaged or
+incompatible entries and rebuild before playback. Preparation and caching never
+substitute for removing measured runtime overhead.
 
 Live key-to-sound latency targets 2-5 ms, with a hard upper bound of 10 ms,
 on both macOS ARM64 and Linux x86-64. Measure from physical keyboard actuation

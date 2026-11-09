@@ -71,17 +71,19 @@ https://docs.wasmtime.dev/contributing-architecture.html
 https://docs.wasmtime.dev/api/wasmtime/struct.Config.html
 https://docs.wasmtime.dev/examples-fast-execution.html
 
-Prepare native code before declaring the instrument live-ready. Analyze executable
-regions and control-flow entries, including vectors and resolved indirect targets;
-prepare runtime-loaded code when its actual bytes become available. Keep data and
-unknown memory distinct from code. Favor runtime optimization over first-compile
-latency, and report preparation separately from original boot and warm execution.
-Native successors remain linked within a core instance; typed I/O boundaries keep
-precise state and device effects without generic argument-array dispatch.
+Prioritize low ongoing execution cost and a fast on-demand JIT. Measure first use
+of executable paths, including vectors, indirect targets and runtime-loaded code,
+against live deadlines. Keep native successors linked within a core instance;
+typed I/O boundaries retain precise state and effects without generic argument
+arrays. Keep data and unknown memory distinct from established executable code.
+Only if measured translation misses live deadlines, prepare selected regions or
+the complete executable scope before playback. Its first preparation time may be
+substantial; report it separately from original boot and warm execution.
 
-Persist native code locally with relocations and binding metadata, never raw
-process pointers or device-state snapshots. Key it by executable-input hashes,
-exact JIT revision, host architecture/CPU features, generation options and binding
+Add a persistent local code cache only if measurements justify it. Store relocations
+and binding metadata, never raw process pointers or device-state snapshots. Key it
+by executable-input hashes, exact JIT revision, host architecture/CPU features,
+generation options and binding
 ABI. Resolve memory, context and typed I/O addresses for the new instance before
 making code executable; preserve W^X and validate cache sizes, integrity and
 compatibility. Rebuild rejected entries before playback. Runtime-loaded executable
