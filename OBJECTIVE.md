@@ -53,6 +53,18 @@ effects and sample use on this host; design for 10x. Keep instrument behavior,
 guest time, complete audio and bounded live latency. Change the >=4x target only
 with quantitative reproducible feasibility evidence.
 
+Live key-to-sound latency targets 2-5 ms, with a hard upper bound of 10 ms,
+on both macOS ARM64 and Linux x86-64. Measure from physical keyboard actuation
+to the synthesized sound at the analog audio output, including keyboard scan,
+MIDI transport, original firmware/synthesis, queues, driver and D/A conversion.
+Qualify with a specified immediate-attack original sound and representative
+polyphony, effects and sample load. Identify the keyboard, transport and audio
+device; report the latency distribution, maximum and jitter. Buffer duration,
+MIDI-arrival-to-render timing and driver latency estimates are separate partial
+metrics and cannot establish this end-to-end requirement. No measured response
+in the qualified live load scope may exceed 10 ms; retain underruns and misses
+as failures. Keep startup separate from live response latency.
+
 RTF = valid delivered stereo frames / (44100 * monotonic host seconds).
 4x is 176400 frames/s; 10x is 441000. Count each actual frame once. Report startup,
 warm-up, output rate/conversion, active processing, pacing, underruns and MIDI/audio
