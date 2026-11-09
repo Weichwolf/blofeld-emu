@@ -39,7 +39,8 @@ RenderPosition point(const std::uint64_t index) {
   return {.epoch = index / epoch_frames,
           .first_frame = index * 3,
           .host_ns = index * 7,
-          .frames = static_cast<std::uint32_t>(index % 16) + 1};
+          .frames = static_cast<std::uint32_t>(index % 16) + 1,
+          .uncertainty_ns = index * 5};
 }
 
 void concurrent() {

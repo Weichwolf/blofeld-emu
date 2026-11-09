@@ -45,7 +45,10 @@ ESAI_1 supplies signed stereo PCM blocks to an application consumer with positio
 and explicit underrun bits. Its receive path remains incomplete.
 The application connects those blocks to a bounded host queue. Linux uses a dedicated
 PulseAudio client owner; macOS uses a CoreAudio output unit. The producer supplies
-stereo 24-bit PCM in 32-bit containers. CoreAudio consumes prepared frames through
+stereo 24-bit PCM in 32-bit containers. Linux correlates fresh server consumption
+indices with bounded monotonic request/reply intervals, preserving their timing
+uncertainty through PCM correlation. It does not use smoothed playback time or
+claim hardware presentation timestamps. CoreAudio consumes prepared frames through
 a lock-free render buffer and converts them exactly to float32; the output unit
 handles the granted device format/rate. Actual device formats and buffer grants
 are queried. macOS requests a small hardware buffer within its reported range;

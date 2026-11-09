@@ -79,6 +79,7 @@ void PcmClock::observe(const host::audio::RenderPosition position) {
   published_audio_epoch_.store(point->audio_epoch);
   published_ticks_.store(point->ticks);
   published_host_ns_.store(point->host_ns);
+  published_uncertainty_ns_.store(point->uncertainty_ns);
   version_.store(version + 2);
   phase_.store(Phase::published);
   previous_ = position;
@@ -110,7 +111,9 @@ PcmClock::read(const host::audio::RenderPosition position) const noexcept {
     const auto head = next_frame_.load();
     const auto audio_epoch = audio_epoch_.load();
     if (head < origin || position.epoch != audio_epoch || position.frames == 0 ||
-        position.host_ns == 0 || position.first_frame >= head - origin ||
+        position.host_ns == 0 || position.uncertainty_ns >= position.host_ns ||
+        position.uncertainty_ns > std::numeric_limits<std::uint64_t>::max() - position.host_ns ||
+        position.first_frame >= head - origin ||
         position.frames > head - origin - position.first_frame) {
       return {};
     }
@@ -119,7 +122,8 @@ PcmClock::read(const host::audio::RenderPosition position) const noexcept {
     const Point point{.epoch = epoch_.load(),
                       .audio_epoch = audio_epoch,
                       .ticks = ticks_[static_cast<std::size_t>(first % ticks_.size())].load(),
-                      .host_ns = position.host_ns};
+                      .host_ns = position.host_ns,
+                      .uncertainty_ns = position.uncertainty_ns};
     if (version == source_version_.load()) {
       const auto current = phase_.load();
       if (current == Phase::buffering || current == Phase::published) { return point; }
@@ -137,7 +141,8 @@ std::optional<PcmClock::Point> PcmClock::read() const noexcept {
     const Point point{.epoch = published_epoch_.load(),
                       .audio_epoch = published_audio_epoch_.load(),
                       .ticks = published_ticks_.load(),
-                      .host_ns = published_host_ns_.load()};
+                      .host_ns = published_host_ns_.load(),
+                      .uncertainty_ns = published_uncertainty_ns_.load()};
     if (version_.load() == version && phase_.load() == Phase::published) { return point; }
   }
   return {};

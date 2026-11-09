@@ -2,6 +2,8 @@
 #include "audio/playback.hpp"
 
 #include "audio/buffer.hpp"
+#include "audio/pulse_position.hpp"
+#include "audio/render_position.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -38,8 +40,16 @@ constexpr std::size_t frame_bytes = sizeof(Frame);
 constexpr std::uint64_t timeout_us = 2000000;
 constexpr std::int64_t unknown_latency = std::numeric_limits<std::int64_t>::min();
 constexpr unsigned stereo_channels = 2;
+constexpr std::uint64_t ns_per_second = 1000000000;
 static_assert(frame_bytes == stereo_channels * sizeof(std::int32_t));
 static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
+
+std::uint64_t monotonic_ns() noexcept {
+  const auto count = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                         std::chrono::steady_clock::now().time_since_epoch())
+                         .count();
+  return count > 0 ? static_cast<std::uint64_t>(count) : 0;
+}
 }
 
 struct Playback::Impl {
@@ -66,6 +76,12 @@ struct Playback::Impl {
   std::atomic<bool> ready{false}, failed{false}, started{false}, reset_pending{false};
   std::atomic<std::uint64_t> submitted{0}, underruns{0};
   std::atomic<std::int64_t> latency{unknown_latency};
+  RenderPositionStore position;
+  std::optional<PulsePosition> position_clock;
+  Operation timing_request{nullptr, pa_operation_unref};
+  bool timing_done = false, timing_success = false;
+  std::uint64_t query_bound_ns = 0, query_sent_ns = 0, query_received_ns = 0, next_query_ns = 0;
+  std::uint64_t epoch_submitted = 0;
   std::binary_semaphore reset_done{0};
   std::jthread owner;
 
@@ -155,20 +171,22 @@ struct Playback::Impl {
     if (!stream) { fail("Create audio stream"); }
     constexpr std::uint32_t target = 512;
     constexpr std::uint32_t minimum = 128;
-    const pa_buffer_attr requested{.maxlength = static_cast<std::uint32_t>(rate * frame_bytes / 2),
-                                   .tlength = static_cast<std::uint32_t>(target * frame_bytes),
-                                   .prebuf = 0,
-                                   .minreq = static_cast<std::uint32_t>(minimum * frame_bytes),
-                                   .fragsize = std::numeric_limits<std::uint32_t>::max()};
+    const pa_buffer_attr requested{
+        .maxlength = static_cast<std::uint32_t>(std::size_t{2} * target * frame_bytes),
+        .tlength = static_cast<std::uint32_t>(target * frame_bytes),
+        .prebuf = 0,
+        .minreq = static_cast<std::uint32_t>(minimum * frame_bytes),
+        .fragsize = std::numeric_limits<std::uint32_t>::max()};
     constexpr auto flags =
-        std::bit_cast<pa_stream_flags_t>(PA_STREAM_START_CORKED | PA_STREAM_AUTO_TIMING_UPDATE |
-                                         PA_STREAM_INTERPOLATE_TIMING | PA_STREAM_ADJUST_LATENCY);
+        std::bit_cast<pa_stream_flags_t>(PA_STREAM_START_CORKED | PA_STREAM_ADJUST_LATENCY);
     if (pa_stream_connect_playback(stream.get(), nullptr, &requested, flags, nullptr, nullptr) <
         0) {
       fail("Connect audio stream");
     }
     while (pa_stream_get_state(stream.get()) != PA_STREAM_READY) { iterate(stop); }
     query(stop);
+    position_clock.emplace(query_bound_ns);
+    begin_epoch(stop);
     deadline(false);
     pa_stream_set_underflow_callback(
         stream.get(),
@@ -189,8 +207,14 @@ struct Playback::Impl {
     const auto *value = pa_stream_get_buffer_attr(stream.get());
     if (value == nullptr || value->tlength == 0 || value->maxlength < value->tlength ||
         value->maxlength > rate * frame_bytes || value->tlength % frame_bytes != 0 ||
-        value->minreq % frame_bytes != 0) {
+        value->minreq == 0 || value->minreq % frame_bytes != 0) {
       throw std::runtime_error("Unsupported or unbounded audio buffer grants");
+    }
+    if (granted.rate != 0 &&
+        (value->tlength / frame_bytes != granted.target_frames ||
+         value->maxlength / frame_bytes + Buffer::capacity != granted.maximum_frames ||
+         value->minreq / frame_bytes != granted.minimum_request_frames)) {
+      throw std::runtime_error("Native audio buffering grants changed; reopen required");
     }
     target_frames = value->tlength / frame_bytes;
     server_buffer_frames.store(target_frames, std::memory_order_relaxed);
@@ -206,8 +230,11 @@ struct Playback::Impl {
     }
     granted.rate = actual->rate;
     granted.target_frames = limits.tlength / frame_bytes;
-    granted.maximum_frames = limits.maxlength / frame_bytes;
+    granted.maximum_frames = limits.maxlength / frame_bytes + Buffer::capacity;
     granted.minimum_request_frames = limits.minreq / frame_bytes;
+    constexpr unsigned history_queues = 3;
+    granted.position_history_frames = history_queues * granted.maximum_frames;
+    query_bound_ns = std::uint64_t{limits.minreq / frame_bytes} * ns_per_second / rate;
     const auto *device = pa_stream_get_device_name(stream.get());
     if (device == nullptr) { fail("Read audio endpoint"); }
     granted.sink = device;
@@ -257,12 +284,36 @@ struct Playback::Impl {
     self.operation_done = true;
   }
 
+  void cancel_timing() noexcept {
+    if (timing_request) {
+      pa_operation_cancel(timing_request.get());
+      timing_request.reset();
+    }
+    timing_done = timing_success = false;
+    next_query_ns = 0;
+  }
+
+  void begin_epoch(const std::stop_token &stop) {
+    if (!position_clock) { throw std::logic_error("Native audio position clock is uninitialized"); }
+    auto &clock = *position_clock;
+    operation(pa_stream_update_timing_info(stream.get(), completed, this), stop);
+    const auto *timing = pa_stream_get_timing_info(stream.get());
+    if (timing == nullptr || timing->write_index_corrupt != 0 || timing->read_index_corrupt != 0) {
+      throw std::runtime_error("Native audio epoch has no valid corked PCM indices");
+    }
+    clock.reset(timing->write_index);
+    epoch_submitted = 0;
+  }
+
   void reset(const std::stop_token &stop) {
     started.store(false, std::memory_order_release);
+    cancel_timing();
+    if (!position.clear()) { throw std::overflow_error("Native audio position exhausted"); }
     operation(pa_stream_cork(stream.get(), 1, completed, this), stop);
     operation(pa_stream_flush(stream.get(), completed, this), stop);
     buffer.discard();
     primed = 0;
+    begin_epoch(stop);
     latency.store(unknown_latency, std::memory_order_relaxed);
     reset_done.release();
   }
@@ -283,12 +334,60 @@ struct Playback::Impl {
       }
       if (!buffer.consume(count)) { throw std::logic_error("Audio queue ownership is invalid"); }
       submitted.fetch_add(count, std::memory_order_relaxed);
+      if (count > std::numeric_limits<std::uint64_t>::max() - epoch_submitted) {
+        throw std::overflow_error("Native audio frame index exhausted");
+      }
+      epoch_submitted += count;
       if (!started.load(std::memory_order_relaxed)) { primed += count; }
       if (!started.load(std::memory_order_relaxed) && primed >= target_frames) {
         operation(pa_stream_cork(stream.get(), 0, completed, this), stop);
         started.store(true, std::memory_order_release);
       }
     }
+  }
+
+  static void measured(pa_stream * /*stream*/, const int success, void *data) noexcept {
+    auto &self = *static_cast<Impl *>(data);
+    self.query_received_ns = monotonic_ns();
+    self.timing_success = success != 0;
+    self.timing_done = true;
+  }
+
+  void update_position() {
+    if (!position_clock) { throw std::logic_error("Native audio position clock is uninitialized"); }
+    auto &clock = *position_clock;
+    const auto now = monotonic_ns();
+    if (timing_request) {
+      if (timing_done) {
+        if (!timing_success) { fail("Query native PCM position"); }
+        const auto *timing = pa_stream_get_timing_info(stream.get());
+        if (timing == nullptr) { fail("Read native PCM position"); }
+        const auto point = clock.observe({.sent_ns = query_sent_ns,
+                                          .received_ns = query_received_ns,
+                                          .submitted_frames = epoch_submitted,
+                                          .read_bytes = timing->read_index,
+                                          .playing = timing->playing != 0,
+                                          .corrupt = timing->read_index_corrupt != 0});
+        if (point && !position.publish(*point)) {
+          throw std::overflow_error("Native audio position exhausted");
+        }
+        timing_request.reset();
+        timing_done = false;
+      } else if (now < query_sent_ns || now - query_sent_ns > query_bound_ns) {
+        throw std::runtime_error("Native audio position query exceeded the minimum audio period");
+      }
+    }
+    if (timing_request || !started.load(std::memory_order_acquire) || now < next_query_ns) {
+      return;
+    }
+    query_sent_ns = monotonic_ns();
+    if (query_sent_ns == 0 ||
+        query_bound_ns > std::numeric_limits<std::uint64_t>::max() - query_sent_ns) {
+      throw std::overflow_error("Native audio query clock exhausted");
+    }
+    timing_request.reset(pa_stream_update_timing_info(stream.get(), measured, this));
+    if (!timing_request) { fail("Request native PCM position"); }
+    next_query_ns = query_sent_ns + (query_bound_ns / 2);
   }
 
   void update_latency() noexcept {
@@ -304,7 +403,8 @@ struct Playback::Impl {
   }
 
   void poll(const std::stop_token &stop) const {
-    if (pa_mainloop_prepare(loop.get(), -1) < 0) { fail("Prepare audio events"); }
+    const int timeout_ms = started.load(std::memory_order_acquire) ? 1 : -1;
+    if (pa_mainloop_prepare(loop.get(), timeout_ms) < 0) { fail("Prepare audio events"); }
     // Recheck after prepare clears its wake pipe, preventing a lost producer wake.
     if (stop.stop_requested() || reset_pending.load(std::memory_order_acquire) ||
         (!buffer.readable().empty() && pa_stream_writable_size(stream.get()) >= frame_bytes)) {
@@ -316,6 +416,8 @@ struct Playback::Impl {
   }
 
   void cleanup() noexcept {
+    cancel_timing();
+    static_cast<void>(position.clear());
     if (timer != nullptr) {
       pa_mainloop_get_api(loop.get())->time_free(timer);
       timer = nullptr;
@@ -342,6 +444,7 @@ struct Playback::Impl {
         check(stop);
         if (reset_pending.exchange(false, std::memory_order_acq_rel)) { reset(stop); }
         write_available(stop);
+        update_position();
         const auto now = pa_rtclock_now();
         if (now >= next_measurement) {
           static_cast<void>(attributes());
@@ -422,6 +525,9 @@ PlaybackStatus Playback::status() const noexcept {
           .latency_us = delay == unknown_latency ? std::optional<std::int64_t>{} : delay,
           .started = impl_->started.load(std::memory_order_acquire),
           .failed = impl_->failed.load(std::memory_order_acquire),
-          .position = std::nullopt};
+          .position = impl_->started.load(std::memory_order_acquire) &&
+                              !impl_->failed.load(std::memory_order_acquire)
+                          ? impl_->position.read()
+                          : std::nullopt};
 }
 }

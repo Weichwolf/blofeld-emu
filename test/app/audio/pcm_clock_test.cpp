@@ -74,6 +74,25 @@ void exact_points() {
           "Skipped native observations do not synthesize or skip source frames");
 }
 
+void correlation_uncertainty() {
+  PcmClock clock(history_frames);
+  clock.append(block(0, initial_ticks), native_epoch);
+  auto native = position(1, 2);
+  constexpr std::uint64_t uncertainty = 127;
+  native.uncertainty_ns = uncertainty;
+  const auto point = clock.read(native);
+  require(point && point->ticks == initial_ticks[1] && point->host_ns == first_host &&
+              point->uncertainty_ns == uncertainty,
+          "Native timing uncertainty survives direct source-frame correlation unchanged");
+  clock.observe(native);
+  require(clock.read() == point, "Owner publication retains the same complete bounded point");
+  native.uncertainty_ns = first_host;
+  require(!clock.read(native), "A native uncertainty interval cannot include time zero");
+  native.host_ns = std::numeric_limits<std::uint64_t>::max();
+  native.uncertainty_ns = 1;
+  require(!clock.read(native), "A native uncertainty interval cannot overflow host time");
+}
+
 void selected_source_origin() {
   constexpr std::uint64_t origin = 48003;
   PcmClock clock(history_frames);
@@ -221,7 +240,11 @@ void concurrent() {
       if (frame == 0) { clock.clear(); }
       const std::array<std::uint64_t, 1> ticks{index * 11};
       clock.append(block(frame, ticks, epoch * 2), epoch);
-      clock.observe({.epoch = epoch, .first_frame = frame, .host_ns = index * 7, .frames = 1});
+      clock.observe({.epoch = epoch,
+                     .first_frame = frame,
+                     .host_ns = index * 7,
+                     .frames = 1,
+                     .uncertainty_ns = index * 3});
     }
     done.store(true, std::memory_order_release);
   });
@@ -232,7 +255,7 @@ void concurrent() {
       const auto index = point->host_ns / 7;
       require(index != 0 && index >= previous && index <= count && point->host_ns == index * 7 &&
                   point->ticks == index * 11 && point->audio_epoch == (index - 1) / per_epoch &&
-                  point->epoch == 2 * point->audio_epoch,
+                  point->epoch == 2 * point->audio_epoch && point->uncertainty_ns == index * 3,
               "Concurrent readers receive coherent ordered points across independent epochs");
       previous = index;
     }
@@ -290,6 +313,7 @@ void concurrent_native_lookup() {
 
 int main() try {
   exact_points();
+  correlation_uncertainty();
   selected_source_origin();
   source_origin_limits();
   retention_and_reset();

@@ -19,6 +19,7 @@ bool RenderPositionStore::publish(const RenderPosition position) noexcept [[clan
   first_frame_.store(position.first_frame);
   host_ns_.store(position.host_ns);
   frames_.store(position.frames);
+  uncertainty_ns_.store(position.uncertainty_ns);
   version_.store(version + 2);
   return true;
 }
@@ -36,7 +37,8 @@ std::optional<RenderPosition> RenderPositionStore::read() const noexcept {
     const RenderPosition position{.epoch = epoch_.load(),
                                   .first_frame = first_frame_.load(),
                                   .host_ns = host_ns_.load(),
-                                  .frames = frames_.load()};
+                                  .frames = frames_.load(),
+                                  .uncertainty_ns = uncertainty_ns_.load()};
     if (version_.load() == version) {
       return position.frames == 0 ? std::optional<RenderPosition>{} : position;
     }

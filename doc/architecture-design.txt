@@ -405,10 +405,33 @@ One writer publishes a coherent atomic snapshot; reads make at most three attemp
 and may return unavailable during contention. Sequentially consistent version and
 payload accesses prevent torn observations without callback locks or reader waits.
 This is a render-submission correlation point, not a DAC latency measurement or
-an admission policy. PulseAudio exposes no position until its native timing
-contract is qualified. Actual source-frame/VI-time mapping and live input grants
-still belong in application composition. Native timestamp definition:
+an admission policy. Actual source-frame/VI-time mapping and live input grants
+belong in application composition. Native timestamp definition:
 https://developer.apple.com/documentation/coreaudiotypes/audiotimestamp
+
+PulseAudio uses explicit asynchronous raw timing requests, with at most one in
+flight; automatic timing updates and smoothed/interpolated playback time are off.
+The server's atomic read-index snapshot occurs within the monotonic send/receipt
+interval. Publish the last completely consumed source-frame index, the interval
+midpoint and its conservative half-width as uncertainty_ns. This describes a
+bounded server-consumption observation, not a HAL render interval, hardware sample
+edge or DAC presentation time. Repeated indices publish no new point. Reject
+corrupt, unaligned, backwards or unsubmitted indices and stopped consumption.
+Reject query intervals exceeding the granted minimum request frames divided by
+the source rate; this is an explicit validity policy, not a server scheduling
+guarantee. A fresh corked timing reply after flush supplies the next absolute
+write origin. Reset, failure and stop revoke previous observations.
+
+The requested server maximum is twice the 512-frame target, replacing an
+unnecessary half-second request. Read actual grants; total source queue bound C
+includes the native maximum and the 256-frame local queue. Retain 3*C source
+frames for correlation and require reopen when native buffer grants change.
+Additional correlation uncertainty is published atomically and retained unchanged
+in PCM clock points. Live admission must account for that bound or explicitly
+reject it; it must not treat an estimated observation as an exact timestamp.
+Native contract and implementation references (dependency version is pinned):
+https://www.freedesktop.org/software/pulseaudio/doxygen/structpa__timing__info.html
+https://www.freedesktop.org/software/pulseaudio/doxygen/stream_8h.html
 
 The backend grants a maximum source-frame lookback for this correlation. Darwin
 uses 3*C for queue capacity C: one published interval, one consumed but not yet

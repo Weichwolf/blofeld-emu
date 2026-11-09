@@ -14,7 +14,7 @@ namespace blofeld::app {
 class PcmClock {
 public:
   struct Point {
-    std::uint64_t epoch = 0, audio_epoch = 0, ticks = 0, host_ns = 0;
+    std::uint64_t epoch = 0, audio_epoch = 0, ticks = 0, host_ns = 0, uncertainty_ns = 0;
     bool operator==(const Point &) const = default;
   };
 
@@ -35,6 +35,6 @@ private:
       next_frame_{0};
   std::atomic<Phase> phase_{Phase::empty};
   std::atomic<std::uint64_t> version_{0}, published_epoch_{0}, published_audio_epoch_{0},
-      published_ticks_{0}, published_host_ns_{0};
+      published_ticks_{0}, published_host_ns_{0}, published_uncertainty_ns_{0};
 };
 }
