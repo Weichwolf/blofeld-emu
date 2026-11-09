@@ -13,8 +13,10 @@ sys.path.insert(0, str(modules))
 try:
     from ui.display import main
 except (ImportError, ValueError) as error:
-    sys.exit(f"GTK4 display viewer is unavailable: {error}\n"
-             "Debian packages: python3-gi python3-gi-cairo gir1.2-gtk-4.0")
+    packages = ("Homebrew: gtk4 pygobject3 py3cairo; use the Homebrew Python interpreter"
+                if sys.platform == "darwin" else
+                "Debian: python3-gi python3-gi-cairo gir1.2-gtk-4.0")
+    sys.exit(f"GTK4 display viewer is unavailable: {error}\n{packages}")
 
 if __name__ == "__main__":
     sys.exit(main())

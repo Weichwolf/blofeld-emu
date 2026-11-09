@@ -340,7 +340,7 @@ void native_local_port_access() {
   blofeld::vi::DspReset reset;
   blofeld::vi::PeerPort peer;
   blofeld::vi::ExecutionTime time;
-  const std::stop_source stop;
+  std::stop_source stop;
   auto worker = std::async(std::launch::async, [&] {
     return blofeld::vi::mcu::execute(
         *image, shi, reset, stop.get_token(), nullptr, nullptr, &peer, &time);

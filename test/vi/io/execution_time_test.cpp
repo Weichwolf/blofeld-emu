@@ -65,7 +65,7 @@ void reset_and_cancellation() {
   dsp.request_stop();
   dsp.join();
   require(cancelled, "Shutdown cancels a DSP waiting for a future device event");
-  const std::stop_source stop;
+  std::stop_source stop;
   stop.request_stop();
   require(!time.enter_mcu(reset_time, stop.get_token()),
           "Cancellation never grants a shared access or advances the source");

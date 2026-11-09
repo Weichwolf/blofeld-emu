@@ -98,7 +98,7 @@ void bounded_word_admission() {
                 drive(port, data),
             "Collect one complete word without modifying a full shared FIFO");
   }
-  const std::stop_source stopped;
+  std::stop_source stopped;
   stopped.request_stop();
   require(port.pending() && !port.complete(stopped.get_token()) && port.pending(),
           "A canceled submission retains pending ownership and never reports completion");

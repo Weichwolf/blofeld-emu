@@ -73,7 +73,7 @@ void status(const blofeld::host::audio::Playback &audio,
   } else {
     std::cerr << '?';
   }
-  std::cerr << " latency=";
+  std::cerr << " output-latency~=";
   if (host.latency_us) {
     std::cerr << std::chrono::duration<double, std::milli>(
                      std::chrono::microseconds(*host.latency_us))
@@ -141,9 +141,14 @@ int main(const int argc, char **argv) try {
   const auto &grant = audio.grants();
   std::cerr << "Audio: s24-in-32 stereo " << grant.rate << "Hz -> " << grant.sink_format << ' '
             << grant.sink_rate << "Hz on " << grant.sink << "; buffer=" << grant.target_frames
-            << " max=" << grant.maximum_frames << " minreq=" << grant.minimum_request_frames
-            << '\n';
-  if (grant.rate != grant.sink_rate) { std::cerr << "Audio server performs rate conversion.\n"; }
+            << " max=" << grant.maximum_frames << " minreq=";
+  if (grant.minimum_request_frames) {
+    std::cerr << *grant.minimum_request_frames;
+  } else {
+    std::cerr << '?';
+  }
+  std::cerr << '\n';
+  if (grant.rate != grant.sink_rate) { std::cerr << "Audio backend performs rate conversion.\n"; }
   std::cerr << "MIDI is not connected; instrument readiness remains incomplete.\n";
   blofeld::app::AudioConsumer consumer(audio);
   blofeld::vi::VmContext vm(

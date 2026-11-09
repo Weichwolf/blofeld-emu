@@ -7,9 +7,8 @@
       "binaryDir": "${sourceDir}/build/strict",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_C_COMPILER": "clang-19",
-        "CMAKE_CXX_COMPILER": "clang++-19",
-        "BLOFELD_SANITIZER": "address-undefined"
+        "BLOFELD_SANITIZER": "address-undefined",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/LLVM19.cmake"
       }
     },
     {
@@ -18,9 +17,8 @@
       "binaryDir": "${sourceDir}/build/release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_C_COMPILER": "clang-19",
-        "CMAKE_CXX_COMPILER": "clang++-19",
-        "BLOFELD_SANITIZER": "none"
+        "BLOFELD_SANITIZER": "none",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/LLVM19.cmake"
       }
     },
     {
@@ -29,9 +27,8 @@
       "binaryDir": "${sourceDir}/build/thread",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_C_COMPILER": "clang-19",
-        "CMAKE_CXX_COMPILER": "clang++-19",
-        "BLOFELD_SANITIZER": "thread"
+        "BLOFELD_SANITIZER": "thread",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/LLVM19.cmake"
       }
     }
   ],

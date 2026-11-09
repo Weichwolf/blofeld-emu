@@ -5,13 +5,18 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
-#include <fcntl.h>
 #include <filesystem>
 #include <limits>
 #include <span>
 #include <stdexcept>
 #include <sys/stat.h>
+#if defined(__APPLE__)
+#include <sys/_types/_ssize_t.h>
+#include <sys/fcntl.h>
+#else
+#include <fcntl.h>
 #include <sys/types.h>
+#endif
 #include <system_error>
 #include <unistd.h>
 #include <vector>
@@ -69,10 +74,21 @@ std::vector<std::uint8_t> read_file(const std::filesystem::path &path,
   std::vector<std::uint8_t> bytes(static_cast<std::size_t>(before.st_size));
   read_all(file, bytes);
   const auto after = information(file);
-  if (before.st_size != after.st_size || before.st_mtim.tv_sec != after.st_mtim.tv_sec ||
-      before.st_mtim.tv_nsec != after.st_mtim.tv_nsec ||
-      before.st_ctim.tv_sec != after.st_ctim.tv_sec ||
-      before.st_ctim.tv_nsec != after.st_ctim.tv_nsec) {
+#if defined(__APPLE__)
+  const auto &modified_before = before.st_mtimespec;
+  const auto &modified_after = after.st_mtimespec;
+  const auto &changed_before = before.st_ctimespec;
+  const auto &changed_after = after.st_ctimespec;
+#else
+  const auto &modified_before = before.st_mtim;
+  const auto &modified_after = after.st_mtim;
+  const auto &changed_before = before.st_ctim;
+  const auto &changed_after = after.st_ctim;
+#endif
+  if (before.st_size != after.st_size || modified_before.tv_sec != modified_after.tv_sec ||
+      modified_before.tv_nsec != modified_after.tv_nsec ||
+      changed_before.tv_sec != changed_after.tv_sec ||
+      changed_before.tv_nsec != changed_after.tv_nsec) {
     throw std::runtime_error("Input file changed while reading: " + path.string());
   }
   return bytes;
