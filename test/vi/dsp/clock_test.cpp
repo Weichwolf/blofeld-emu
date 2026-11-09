@@ -30,8 +30,9 @@ void reset_and_reserved() {
   clock.reset(true);
   require(clock.read() == enabled_reset && clock.ratio() == reset_ratio,
           "PINIT high selects the documented 29/4 reset ratio");
-  require(clock.write(all_bits) && clock.read() == implemented,
-          "Reserved PCTL bits read zero after a full-width write");
+  constexpr Clock::Ratio maximum_fields{.numerator = 255, .denominator = 3968};
+  require(clock.write(all_bits) && clock.read() == implemented && clock.ratio() == maximum_fields,
+          "Reserved bits read zero while maximum valid PLL fields retain their reduced ratio");
   constexpr dsp56300::Word low_power_only = 0x700;
   require(clock.write(low_power_only) &&
               clock.ratio() == Clock::Ratio{.numerator = 1, .denominator = 128},

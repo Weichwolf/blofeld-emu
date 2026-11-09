@@ -5,16 +5,23 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
-#include <fcntl.h>
 #include <filesystem>
 #include <limits>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#if defined(__APPLE__)
+#include <sys/_types/_ssize_t.h>
+#include <sys/fcntl.h>
+#include <sys/stdio.h>
+#include <sys/unistd.h>
+#else
+#include <cstdio>
+#include <fcntl.h>
 #include <sys/file.h>
-#include <sys/syscall.h>
 #include <sys/types.h>
+#endif
 #include <system_error>
 #include <unistd.h>
 
@@ -84,7 +91,7 @@ void Directory::replace(const std::string_view name,
     ::unlinkat(descriptor_, staging.c_str(), 0);
     throw std::system_error(error, std::generic_category(), "Close publication " + staging);
   }
-  if (::syscall(SYS_renameat, descriptor_, staging.c_str(), descriptor_, filename.c_str()) != 0) {
+  if (::renameat(descriptor_, staging.c_str(), descriptor_, filename.c_str()) != 0) {
     const auto error = errno;
     ::unlinkat(descriptor_, staging.c_str(), 0);
     throw std::system_error(error, std::generic_category(), "Replace publication " + filename);

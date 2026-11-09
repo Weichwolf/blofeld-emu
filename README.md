@@ -23,12 +23,16 @@ preserve masks, word precision, empty requests and retained-data underruns.
 ESAI_1 and DAX run from nominal VM clock deadlines, including PLL conversion.
 ESAI_1 supplies signed stereo PCM blocks to an application consumer with positions
 and explicit underrun bits. Its receive path remains incomplete.
-The application connects those blocks to a bounded host queue and a dedicated
-PulseAudio client owner. The stream uses stereo 24-bit PCM in 32-bit containers;
-actual server/sink formats and buffer grants are queried, and format/rate conversion
-is explicit. Host backpressure paces the DSP owner. Reset corks and flushes the old
+The application connects those blocks to a bounded host queue. Linux uses a dedicated
+PulseAudio client owner; macOS uses a CoreAudio output unit. The producer supplies
+stereo 24-bit PCM in 32-bit containers. CoreAudio consumes prepared frames through
+a lock-free render buffer and converts them exactly to float32; the output unit
+handles the granted device format/rate. Actual device formats and buffer grants
+are queried. Host backpressure paces the DSP owner. Reset stops and flushes the old
 stream epoch before accepting new frames. Disconnects, endpoint changes and host
-underruns stop execution with an error.
+underruns stop execution with an error. Reported output latency combines queued
+frames and native driver/unit latency information; it is not a physical
+keyboard-to-sound measurement.
 DAX register access and DMA writes retain the distinct XADR/channel buffers,
 non-audio metadata, block position, refill requests and observed-underrun clearing.
 Its output does not create a second host PCM stream.
@@ -70,9 +74,12 @@ a playable instrument. Complete requirements are in
 See the [target architecture](doc/architecture-design.txt) for independent core
 execution, bounded channels and audio-driven consumption.
 
-Requires Linux, LLVM 19, CMake 3.25+, Ninja, Python 3 and Git. Core checkouts must match
+Hosts are Linux x86-64 and macOS ARM64, with LLVM 19, CMake 3.25+, Ninja,
+Python 3.11+ and Git. Core checkouts must match
 [cmake/dependencies.json](cmake/dependencies.json); select paths with
 `BLOFELD_CPU12_ROOT` and `BLOFELD_DSP56300_ROOT`.
+
+On Linux:
 
 ```sh
 python3 tools/dependencies.py --fetch --component zlib
@@ -81,6 +88,27 @@ python3 tools/dependencies.py --fetch --component libsndfile
 python3 tools/dependencies.py --fetch --component meson
 cmake --preset release
 cmake --build --preset release --target quality
+```
+
+On macOS, use the Homebrew tools and native CoreAudio backend; PulseAudio,
+libsndfile and Meson are not needed for this backend:
+
+```sh
+brew install llvm@19 ninja ccache python@3.14 gtk4 pygobject3 py3cairo
+python3.14 tools/dependencies.py --fetch --component zlib
+cmake --preset release
+cmake --build --preset release --target quality --parallel 2
+```
+
+Presets discover LLVM 19 without replacing system compilers. For macOS 26.4+
+sanitizer builds, use the pinned core's LLVM 19 runtime bootstrap with its
+upstream dyld fixes, then share the generated resource directory:
+
+```sh
+export LLVM19_RESOURCE_DIR="$(python3.14 ../cpu12/tools/darwin_runtime.py --jobs 2)"
+cmake --preset strict
+cmake --build --preset strict --target quality --parallel 2
+cmake --preset thread
 ```
 
 `strict` enables ASan/UBSan; `thread` selects separate TSan. Compiler warnings,
@@ -106,7 +134,8 @@ the versioned `.bfnvm` format with explicit known-byte and erase metadata.
 Images must already exist; startup does not provision or modify files.
 The media image uses the checksummed `.bfnand` format with explicit known bits.
 The optional `display` directory overrides `$XDG_RUNTIME_DIR/blofeld-emu`
-(default runtime root: `/run/user/UID`). The MCU owner supplies controller snapshots;
+(default runtime root: `/run/user/UID` on Linux, the Darwin user temporary
+directory on macOS). The MCU owner supplies controller snapshots;
 the app publishes atomic `display.pbm` and `display.txt` files. Unknown pixels remain
 explicit in text and remove the bitmap until a known frame is available.
 The optional `firmware` path is parsed but not yet connected to execution. Startup
@@ -116,12 +145,16 @@ frames, local queue occupancy, server buffer grants, measured latency and host/d
 underruns. The approximate producer reserve excludes blocking in the host consumer;
 it is not the offline instrument throughput or proof of physical playback.
 
-The viewer needs `python3-gi`, `python3-gi-cairo` and `gir1.2-gtk-4.0` on Debian:
+The viewer needs `python3-gi`, `python3-gi-cairo` and `gir1.2-gtk-4.0` on Debian,
+or the Homebrew GTK/Python packages above on macOS:
 
 ```sh
 tools/blofeld-display
+# macOS checkout:
+python3.14 tools/blofeld-display
 ```
 
+The installed launcher uses the Python interpreter selected by CMake.
 It watches `$XDG_RUNTIME_DIR/blofeld-emu/display.pbm`, follows directory
 recreation. Its header button saves a PNG to the user's Pictures directory.
 For an explicit path without a window, use `tools/blofeld-display --screenshot FILE.png`. PBM and text publication

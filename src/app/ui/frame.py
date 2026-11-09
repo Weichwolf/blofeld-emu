@@ -5,6 +5,8 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 import stat
+import subprocess
+import sys
 
 WIDTH = 128
 HEIGHT = 64
@@ -38,7 +40,17 @@ def read_frame(path):
 
 
 def runtime_directory():
-    path = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}")
+    configured = os.environ.get("XDG_RUNTIME_DIR")
+    if configured:
+        path = Path(configured)
+    elif sys.platform == "darwin":
+        try:
+            path = Path(subprocess.check_output(
+                ["/usr/bin/getconf", "DARWIN_USER_TEMP_DIR"], text=True, timeout=1).strip())
+        except (OSError, subprocess.SubprocessError) as error:
+            raise ValueError("User runtime directory is unavailable") from error
+    else:
+        path = Path(f"/run/user/{os.getuid()}")
     if not path.is_absolute():
         raise ValueError("XDG_RUNTIME_DIR must be an absolute path")
     return path

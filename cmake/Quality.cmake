@@ -14,8 +14,16 @@ target_compile_options(blofeld_quality INTERFACE
   -Woverloaded-virtual -Wextra-semi -Wvla -Wswitch-enum -Wswitch-default
   -ffp-contract=off -fno-omit-frame-pointer)
 # Contextual control-path exceptions must never cross the audio callback.
-target_link_options(blofeld_quality INTERFACE
-  -Wl,--fatal-warnings -Wl,-z,defs)
+if(APPLE)
+  target_link_options(blofeld_quality INTERFACE -Wl,-fatal_warnings)
+  get_filename_component(BLOFELD_LLVM_BIN "${CMAKE_CXX_COMPILER}" DIRECTORY)
+  find_library(BLOFELD_EXPERIMENTAL_LIBRARY NAMES c++experimental
+    HINTS "${BLOFELD_LLVM_BIN}/../lib/c++" REQUIRED)
+  target_compile_options(blofeld_quality INTERFACE -fexperimental-library)
+  target_link_libraries(blofeld_quality INTERFACE "${BLOFELD_EXPERIMENTAL_LIBRARY}")
+else()
+  target_link_options(blofeld_quality INTERFACE -Wl,--fatal-warnings -Wl,-z,defs)
+endif()
 
 if(BLOFELD_SANITIZER STREQUAL "address-undefined")
   set(blofeld_sanitizers "address,undefined,float-divide-by-zero,unsigned-integer-overflow,implicit-conversion")

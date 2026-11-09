@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include <bits/types/sigset_t.h>
 #include <chrono>
+#if defined(__APPLE__)
+#include <sys/_types/_sigset_t.h>
+#else
+#include <signal.h>
+#endif
 
 namespace blofeld::host {
 // Construct before starting workers; they inherit the blocked termination mask.
@@ -17,6 +21,10 @@ public:
 
 private:
   sigset_t previous_{};
+#if defined(__APPLE__)
+  sigset_t selected_{};
+#else
   int descriptor_ = -1;
+#endif
 };
 }

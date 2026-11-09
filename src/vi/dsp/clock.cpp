@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <dsp56300/memory.hpp>
 #include <limits>
-#include <numeric>
 #include <optional>
 
 namespace blofeld::vi::dsp {
@@ -18,6 +17,16 @@ constexpr unsigned predivider_shift = 16, output_shift = 14;
 constexpr std::uint64_t reference_top = 3125, reference_bottom = 588;
 constexpr unsigned phase_bits = 32;
 constexpr std::uint64_t phase_unit = std::uint64_t{1} << phase_bits;
+
+// libc++'s binary gcd wraps unsigned intermediates under the strict sanitizer.
+std::uint32_t common_divisor(std::uint32_t left, std::uint32_t right) noexcept {
+  while (right != 0) {
+    const auto remainder = left % right;
+    left = right;
+    right = remainder;
+  }
+  return left;
+}
 
 std::optional<std::uint64_t> scaled(const std::uint64_t value,
                                     const std::uint64_t multiplier,
@@ -52,7 +61,7 @@ bool Clock::write(const dsp56300::Word value) noexcept {
     const auto feedback = (output & 2) != 0 ? 4U : 2U;
     ratio = {.numerator = multiplier * feedback,
              .denominator = predivider * low_power * output_divider};
-    const auto common = std::gcd(ratio.numerator, ratio.denominator);
+    const auto common = common_divisor(ratio.numerator, ratio.denominator);
     ratio.numerator /= common;
     ratio.denominator /= common;
   }

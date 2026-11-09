@@ -15,7 +15,8 @@
 namespace blofeld::host::audio {
 struct Grants {
   unsigned rate = 0, sink_rate = 0;
-  std::size_t target_frames = 0, maximum_frames = 0, minimum_request_frames = 0;
+  std::size_t target_frames = 0, maximum_frames = 0;
+  std::optional<std::size_t> minimum_request_frames;
   std::string sink, sink_format;
 };
 
@@ -27,7 +28,7 @@ struct PlaybackStatus {
 };
 
 // Push-mode native client. One producer supplies complete stereo frames. The
-// I/O owner handles server events and pacing; there is no data audio callback.
+// I/O owner handles device events; render callbacks only consume prepared frames.
 class Playback {
 public:
   explicit Playback(unsigned rate, std::string_view name = "Virtual instrument");
