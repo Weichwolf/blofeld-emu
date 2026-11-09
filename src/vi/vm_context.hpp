@@ -16,6 +16,7 @@
 
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <dsp56300/memory.hpp>
 #include <memory>
 #include <optional>
@@ -41,6 +42,10 @@ public:
   void pedal(const bool level) noexcept { controls_.pedal(level); }
 
   [[nodiscard]] MidiPort &midi() noexcept { return midi_; }
+
+  [[nodiscard]] std::optional<std::uint64_t> mcu_wait_time() const noexcept {
+    return time_.mcu_wait_time();
+  }
 
   void request_display() noexcept { display_.request(); }
 

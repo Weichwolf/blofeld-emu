@@ -79,11 +79,13 @@ vi::PcmOutput OfflineRender::output() noexcept {
 std::optional<std::uint64_t> OfflineRender::startup(vi::VmContext &vm,
                                                     const host::Signals &signals) {
   MidiStartup startup;
-  static_cast<void>(startup.poll(vm.midi(), false));
+  static_cast<void>(startup.poll(vm.midi(), {}));
   vm.start();
   while (!vm.finished()) {
     if (signals.wait(startup_poll)) { break; }
-    if (const auto origin = startup.poll(vm.midi(), wav_.has_pcm())) { return origin; }
+    const MidiStartup::Readiness readiness{.application = vm.mcu_wait_time().has_value(),
+                                           .pcm = wav_.has_pcm()};
+    if (const auto origin = startup.poll(vm.midi(), readiness)) { return origin; }
     if (std::chrono::steady_clock::now() - started_ >= startup_limit) {
       std::cerr
           << "Startup failed: no original MIDI identity and valid PCM within 10 host seconds.\n";
@@ -94,6 +96,7 @@ std::optional<std::uint64_t> OfflineRender::startup(vi::VmContext &vm,
   std::cerr << "Startup incomplete: queries=" << observed.queries
             << " MIDI-out-bytes=" << observed.output_bytes
             << " identity=" << (observed.identity ? "yes" : "no")
+            << " application=" << (vm.mcu_wait_time() ? "yes" : "no")
             << " PCM=" << (wav_.has_pcm() ? "yes" : "no") << '\n';
   return {};
 }

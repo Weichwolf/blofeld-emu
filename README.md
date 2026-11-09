@@ -21,8 +21,9 @@ PCM consumer writes signed 24-bit stereo WAV, rejecting underruns, frame/time
 discontinuities and drift. Original PCM carries per-frame completion points in
 the common instrument clock. The file adapter feeds the VM through a bounded input frontier;
 producer delays suspend native execution without advancing device time. The offline
-command waits for the original MIDI identity reply and valid PCM, selects a musical
-origin, streams the file and retains its EOF barrier until the output boundary is
+command observes the original MCU application WAI before sending identity queries,
+then requires the original reply and valid PCM, selects a musical origin, streams
+the file and retains its EOF barrier until the output boundary is
 published. Only the musical interval and selected tail enter the WAV; startup
 PCM is validated and discarded. Failed or interrupted renders stay unpublished.
 Normal file rendering remains gated by incomplete original-firmware readiness.

@@ -13,6 +13,9 @@ namespace blofeld::vi {
 class ExecutionTime {
 public:
   [[nodiscard]] bool publish_mcu(std::uint64_t ticks) noexcept;
+  // One MCU owner records its first actual WAI; observing this never advances a clock.
+  void publish_mcu_wait(std::uint64_t ticks) noexcept;
+  [[nodiscard]] std::optional<std::uint64_t> mcu_wait_time() const noexcept;
   [[nodiscard]] bool enter_mcu(std::uint64_t ticks, const std::stop_token &stop);
   void leave_mcu() noexcept;
   [[nodiscard]] std::optional<std::uint64_t> dsp_limit(std::uint64_t ticks,
@@ -27,7 +30,8 @@ private:
   template <typename Ready>
   [[nodiscard]] bool await(std::atomic<bool> &waiting, const std::stop_token &stop, Ready ready);
 
-  std::atomic<std::uint64_t> mcu_{0};
+  std::atomic<std::uint64_t> mcu_{0}, first_wait_{0};
+  std::atomic<bool> waited_{false};
   std::atomic<std::uint64_t> dsp_{0}, origin_{0}, transaction_{0}, changed_{0};
   std::atomic<bool> waiting_mcu_{false}, waiting_dsp_{false}, held_{false};
 };

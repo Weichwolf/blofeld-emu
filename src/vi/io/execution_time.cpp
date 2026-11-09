@@ -66,6 +66,17 @@ bool ExecutionTime::await(std::atomic<bool> &waiting, const std::stop_token &sto
   }
 }
 
+void ExecutionTime::publish_mcu_wait(const std::uint64_t ticks) noexcept {
+  if (waited_.load(std::memory_order_relaxed)) { return; }
+  first_wait_.store(ticks, std::memory_order_relaxed);
+  waited_.store(true, std::memory_order_release);
+}
+
+std::optional<std::uint64_t> ExecutionTime::mcu_wait_time() const noexcept {
+  if (!waited_.load(std::memory_order_acquire)) { return {}; }
+  return first_wait_.load(std::memory_order_relaxed);
+}
+
 bool ExecutionTime::publish_mcu(const std::uint64_t ticks) noexcept {
   const auto before = mcu_.load(std::memory_order_seq_cst);
   if (ticks < before) { return false; }

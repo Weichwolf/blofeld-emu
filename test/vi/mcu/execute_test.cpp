@@ -269,7 +269,11 @@ void native_peer_xirq() {
   blofeld::vi::PeerPort peer;
   peer.dsp_data({.mask = peer_byte_mask, .known = peer_byte_mask, .value = datum});
   require(peer.dsp_ready(true) && peer.dsp_ready(false), "Post an actual external request pulse");
-  const auto ended = blofeld::vi::mcu::execute(*image, shi, reset, {}, nullptr, nullptr, &peer);
+  blofeld::vi::ExecutionTime lifecycle;
+  const auto ended =
+      blofeld::vi::mcu::execute(*image, shi, reset, {}, nullptr, nullptr, &peer, &lifecycle);
+  require(lifecycle.mcu_wait_time().has_value(),
+          "Only the actual native WAI publishes the initial MCU wait observation");
   require(!ended.failure && ended.instructions == 3 && !peer.mcu_interrupt(),
           "An XIRQ pulse that ended before unmasking cannot enter its vector");
   require(peer.dsp_ready(true), "Keep an actual XIRQ source asserted through MCU admission");

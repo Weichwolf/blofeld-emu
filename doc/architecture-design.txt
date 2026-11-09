@@ -404,8 +404,13 @@ rounding up to the first tick at or after the event. Keep all meta payloads,
 including routing and SMPTE-offset labels, separate from transmittable bytes.
 Chunk extensions are retained and alien chunks skipped by length. Truncated or
 changed sources cannot finish cleanly. Primary format reference: midi-references.json.
-Offline application binding probes universal identity through actual DIN input
-and consumes the original reply alongside valid PCM. Startup grants bounded MIDI
+Offline application binding first observes the MCU's actual initial WAI through
+ExecutionTime, without advancing a clock or changing Core state. In original1.25
+the sole WAI follows the startup status checks and hold, at the application loop.
+Do not send early inquiry bytes: startup reads the same peer mailbox that the
+identity command overwrites, and SCI input reloads its shared hold counter.
+After application entry and valid PCM, probe universal identity through actual
+DIN input and consume the original reply. Startup grants bounded MIDI
 windows without advancing guest clocks; their committed frontier selects the
 musical origin. The file producer preserves the exclusive EOF barrier until the
 WAV end point (serialized file end plus selected tail) is published. Only then is

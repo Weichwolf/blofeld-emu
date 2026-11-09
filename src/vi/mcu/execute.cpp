@@ -181,6 +181,7 @@ struct Devices {
         timer.activity(Timer::Activity::running);
         break;
       case cpu12::ExecutionState::waiting:
+        if (time != nullptr) { time->publish_mcu_wait(clock.ticks()); }
         clock.activity(Clock::Activity::waiting);
         timer.activity(clock.bus_running() ? Timer::Activity::waiting : Timer::Activity::stopped);
         break;

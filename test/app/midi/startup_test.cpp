@@ -37,10 +37,26 @@ void rejects(const auto &action) {
   require(rejected, "Reject invalid destination state");
 }
 
+void startup_silence() {
+  MidiPort port(MidiPort::InputMode::stream);
+  MidiStartup startup;
+  require(
+      !startup.poll(port, {}) && port.input_limit() == interval && !port.peek_input(),
+      "Before application entry the host publishes silence rather than overwriting boot status");
+  port.publish_time(interval);
+  require(!startup.poll(port, {.pcm = true}) && port.input_limit() == interval * 2 &&
+              !port.peek_input() && startup.observations().queries == 0,
+          "Early PCM alone cannot authorize an inquiry into firmware still booting");
+  port.publish_time(interval * 2);
+  require(!startup.poll(port, {.application = true, .pcm = true}) && port.peek_input() &&
+              startup.observations().queries == 1,
+          "Only actual application entry and PCM enable the ordinary identity query");
+}
+
 void readiness() {
   MidiPort port(MidiPort::InputMode::stream);
   MidiStartup startup;
-  require(!startup.poll(port, false) && port.input_limit() == interval,
+  require(!startup.poll(port, {.application = true, .pcm = true}) && port.input_limit() == interval,
           "Grant an initial query window");
   constexpr std::array<std::uint8_t, 6> query{0xf0, 0x7e, 0x7f, 6, 1, 0xf7};
   for (const auto receiver : {MidiPort::Receiver::mcu, MidiPort::Receiver::dsp}) {
@@ -53,20 +69,21 @@ void readiness() {
       ++index;
     }
   }
-  require(!startup.poll(port, true) && port.input_limit() == interval,
+  require(!startup.poll(port, {.application = true, .pcm = true}) && port.input_limit() == interval,
           "PCM alone and host polling do not advance guest time");
   for (const auto byte : identity) {
     send(port, std::array{byte, realtime_clock});
-    const auto ready = startup.poll(port, false);
+    const auto ready = startup.poll(port, {.application = true});
     require(!ready, "Identity without PCM cannot establish a musical origin");
   }
-  require(startup.poll(port, true) == interval, "Both real paths select the committed frontier");
+  require(startup.poll(port, {.application = true, .pcm = true}) == interval,
+          "Both real paths select the committed frontier");
   const auto observed = startup.observations();
   require(observed.identity && observed.queries == 1 &&
               observed.output_bytes == identity.size() * 2,
           "Startup observations count only actual queries and received bytes");
   port.publish_time(interval);
-  require(startup.poll(port, false) == interval && port.input_limit() == interval,
+  require(startup.poll(port, {.application = true}) == interval && port.input_limit() == interval,
           "The selected origin is stable; do not send more probes");
 }
 
@@ -74,35 +91,39 @@ void invalid_identity() {
   for (const unsigned offset : {1U, 3U, 4U, 5U, 6U, 7U, 8U, 9U}) {
     MidiPort port(MidiPort::InputMode::stream);
     MidiStartup startup;
-    static_cast<void>(startup.poll(port, true));
+    static_cast<void>(startup.poll(port, {.application = true, .pcm = true}));
     auto wrong = identity;
     wrong[offset] ^= 1;
     send(port, wrong);
-    require(!startup.poll(port, true),
+    require(!startup.poll(port, {.application = true, .pcm = true}),
             "Unrelated or malformed identities do not establish readiness");
     send(port, identity);
-    require(startup.poll(port, true) == interval, "A valid subsequent reply recovers framing");
+    require(startup.poll(port, {.application = true, .pcm = true}) == interval,
+            "A valid subsequent reply recovers framing");
   }
   MidiPort port(MidiPort::InputMode::stream);
   MidiStartup startup;
-  static_cast<void>(startup.poll(port, true));
+  static_cast<void>(startup.poll(port, {.application = true, .pcm = true}));
   port.publish_time(interval);
-  require(!startup.poll(port, true) && port.input_limit() == 2 * interval,
+  require(!startup.poll(port, {.application = true, .pcm = true}) &&
+              port.input_limit() == 2 * interval,
           "Queries repeat only after actual guest progress");
   send(port, truncated);
-  require(!startup.poll(port, true), "Truncated replies do not establish readiness");
+  require(!startup.poll(port, {.application = true, .pcm = true}),
+          "Truncated replies do not establish readiness");
 }
 }
 
 int main() try {
+  startup_silence();
   readiness();
   invalid_identity();
   MidiPort live;
   MidiStartup startup;
-  rejects([&] { static_cast<void>(startup.poll(live, true)); });
+  rejects([&] { static_cast<void>(startup.poll(live, {.application = true, .pcm = true})); });
   MidiPort aborted(MidiPort::InputMode::stream);
   aborted.abort_input();
-  rejects([&] { static_cast<void>(startup.poll(aborted, true)); });
+  rejects([&] { static_cast<void>(startup.poll(aborted, {.application = true, .pcm = true})); });
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

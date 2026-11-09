@@ -16,6 +16,23 @@ void require(const bool condition, const char *message) {
   if (!condition) { throw std::runtime_error(message); }
 }
 
+void first_wait() {
+  constexpr std::uint64_t later_tick = 100;
+  ExecutionTime time;
+  require(!time.mcu_wait_time(), "Starting execution does not fabricate an application wait");
+  require(time.publish_mcu(later_tick), "Ordinary MCU progress is independent of WAI");
+  require(!time.mcu_wait_time(), "Advancing the native owner alone is no boot-completion signal");
+  std::jthread mcu([&] {
+    time.publish_mcu_wait(0);
+    time.publish_mcu_wait(later_tick);
+  });
+  mcu.join();
+  require(time.mcu_wait_time() == 0, "Zero is a valid first wait and later waits retain its time");
+  time.hold_dsp();
+  time.release_dsp(later_tick);
+  require(time.mcu_wait_time() == 0, "Resetting the DSP cannot rewrite the MCU lifecycle");
+}
+
 void ordered_transactions() {
   ExecutionTime time;
   std::uint64_t data = 0;
@@ -162,6 +179,7 @@ void cancelled_transactions() {
 }
 
 int main() try {
+  first_wait();
   ordered_transactions();
   reset_and_cancellation();
   publication_wakeups();

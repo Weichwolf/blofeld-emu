@@ -37,7 +37,7 @@ void MidiStartup::receive(const std::uint8_t byte) noexcept {
   used_ = 0;
 }
 
-std::optional<std::uint64_t> MidiStartup::poll(vi::MidiPort &port, const bool pcm) {
+std::optional<std::uint64_t> MidiStartup::poll(vi::MidiPort &port, const Readiness readiness) {
   while (const auto event = port.read_output()) {
     ++observations_.output_bytes;
     receive(event->byte);
@@ -46,7 +46,8 @@ std::optional<std::uint64_t> MidiStartup::poll(vi::MidiPort &port, const bool pc
   if (origin_) { return origin_; }
   const auto frontier = port.input_limit();
   if (!frontier) { throw std::logic_error("Offline startup requires a streaming MIDI input"); }
-  if (observations_.identity && pcm) {
+  const bool enquire = readiness.application && readiness.pcm;
+  if (observations_.identity && enquire) {
     origin_ = frontier;
     return origin_;
   }
@@ -57,12 +58,12 @@ std::optional<std::uint64_t> MidiStartup::poll(vi::MidiPort &port, const bool pc
   if (*frontier > std::numeric_limits<std::uint64_t>::max() - interval) {
     throw std::overflow_error("Startup MIDI timeline is exhausted");
   }
-  if ((!observations_.identity && !port.write_input(query, *frontier)) ||
+  if ((enquire && !observations_.identity && !port.write_input(query, *frontier)) ||
       !port.advance_input(*frontier + interval)) {
     throw std::runtime_error(port.error() != nullptr ? port.error()
                                                      : "Startup MIDI admission failed");
   }
-  if (!observations_.identity) { ++observations_.queries; }
+  if (enquire && !observations_.identity) { ++observations_.queries; }
   return {};
 }
 }

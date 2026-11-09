@@ -12,6 +12,10 @@ namespace blofeld::app {
 // Probe the ordinary bidirectional DIN path; replies always come from firmware.
 class MidiStartup {
 public:
+  struct Readiness {
+    bool application = false, pcm = false;
+  };
+
   struct Observations {
     std::uint64_t queries = 0, output_bytes = 0;
     bool identity = false;
@@ -19,7 +23,7 @@ public:
 
   [[nodiscard]] Observations observations() const noexcept { return observations_; }
 
-  [[nodiscard]] std::optional<std::uint64_t> poll(vi::MidiPort &port, bool pcm);
+  [[nodiscard]] std::optional<std::uint64_t> poll(vi::MidiPort &port, Readiness readiness);
 
 private:
   void receive(std::uint8_t byte) noexcept;
