@@ -3,9 +3,11 @@
 
 #include <array>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <mutex>
 #include <optional>
+#include <stop_token>
 
 namespace blofeld::vi {
 // Functional low-byte Port Q/Port C exchange. Each producer owns its GPIO state;
@@ -18,9 +20,19 @@ public:
     bool operator==(const Sample &) const = default;
   };
 
-  void mcu_data(Sample value) noexcept;
+  // MCU owner publishes ordered data/direction changes; full transport waits
+  // for actual space without advancing device time. Equal states need no slot.
+  [[nodiscard]] bool mcu_data(Sample value, std::uint64_t ticks, const std::stop_token &stop = {});
   void dsp_data(Sample value) noexcept;
   [[nodiscard]] Sample mcu_data() const noexcept;
+  // DSP owner applies only changes at or before its actual instrument time.
+  // Repeated reads retain the same sample; reading never consumes future data.
+  [[nodiscard]] Sample sample_mcu_data(std::uint64_t ticks) noexcept;
+  // MCU owner: coalesce inputs while reset is asserted, then publish the retained
+  // value at release. DSP owner retires the old prefix before acknowledging reset.
+  void hold_mcu_data() noexcept;
+  [[nodiscard]] bool release_mcu_data(std::uint64_t ticks, const std::stop_token &stop);
+  void retire_mcu_data() noexcept;
   [[nodiscard]] Sample dsp_data() const noexcept;
   // Actual PDRC data writes, distinct from direction/mux/latch publication.
   [[nodiscard]] bool dsp_write(Sample value) noexcept;
@@ -46,6 +58,29 @@ public:
   void reset_dsp() noexcept;
 
 private:
+  struct Input {
+    std::uint64_t ticks = 0;
+    Sample data;
+  };
+
+  struct Inputs {
+    static constexpr std::size_t capacity = 256;
+    std::array<Input, capacity> entries{};
+    alignas(128) std::atomic<std::uint64_t> published{0};
+    std::uint64_t last_tick = 0; // MCU owner.
+    bool held = false;
+    std::atomic<std::uint64_t> reset_through{0};
+    alignas(128) std::atomic<std::uint64_t> consumed{0};
+    Sample sample; // DSP owner; retained through DSP reset.
+    std::atomic<bool> waiting{false};
+    std::atomic<std::uint64_t> changed{0};
+  };
+
+  [[nodiscard]] bool wait_input_space(std::uint64_t published, const std::stop_token &stop);
+  [[nodiscard]] bool
+  append_mcu_data(Sample value, std::uint64_t ticks, const std::stop_token &stop);
+  void release_input_space(std::uint64_t consumed) noexcept;
+
   struct Reply {
     std::mutex mutex;
     std::array<Sample, 16> bytes{};
@@ -64,6 +99,7 @@ private:
     [[nodiscard]] bool acknowledge(std::uint64_t observed) noexcept;
   };
 
+  Inputs inputs_;
   std::atomic<std::uint32_t> mcu_{0}, dsp_{0};
   Request to_dsp_, to_mcu_;
   std::atomic<std::uint64_t> mcu_admission_{0};

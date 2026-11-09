@@ -61,6 +61,7 @@ public:
   [[nodiscard]] std::array<ExecutionReport, 2> run();
 
 private:
+  PeerPort peer_;
   std::unique_ptr<FlashImage> image_;
   std::vector<dsp56300::Word> boot_;
   std::unique_ptr<MediaImage> media_;
@@ -69,7 +70,6 @@ private:
   DisplayState display_;
   PcmOutput output_;
   Shi shi_;
-  PeerPort peer_;
   ExecutionTime time_;
   DspReset reset_;
   std::array<ExecutionReport, 2> reports_;
