@@ -17,6 +17,7 @@ public:
     std::uint32_t controls = 0;
     std::uint8_t value = 0;
     bool known = false;
+    bool driven = true;
   };
 
   explicit MemoryController(MediaImage *image = nullptr) : image_(image) { reset(); }

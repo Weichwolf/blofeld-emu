@@ -194,7 +194,10 @@ bool MemoryController::write(const Write access) noexcept {
   // The firmware's neutral shared-port phase is inactive, not two strobes.
   if ((controls & strobes) == 0) { controls |= strobes; }
   const auto previous = controls_;
-  if ((previous & write_strobe) == 0 && (controls & write_strobe) != 0) {
+  // Shared control setup also occurs while Port F is an input. Only an actual
+  // data producer can submit a command/address/payload transfer; an unknown
+  // byte from an enabled producer must still fail.
+  if ((previous & write_strobe) == 0 && (controls & write_strobe) != 0 && access.driven) {
     if (!access.known) { return fail("Unknown media command/address/data byte"); }
     if (!latch({.controls = controls, .value = access.value, .known = access.known})) {
       return false;

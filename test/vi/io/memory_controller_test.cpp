@@ -27,12 +27,18 @@ constexpr std::uint8_t reset_command = 0xff;
 constexpr std::uint32_t idle = 0x300, command = 0x400, address = 0x800, read_active = 0x200;
 
 bool transfer(MemoryController &controller, const MemoryController::Write access) {
-  return controller.write(
-             {.controls = access.controls | idle, .value = access.value, .known = access.known}) &&
-         controller.write(
-             {.controls = access.controls | 0x100, .value = access.value, .known = access.known}) &&
-         controller.write(
-             {.controls = access.controls | idle, .value = access.value, .known = access.known});
+  return controller.write({.controls = access.controls | idle,
+                           .value = access.value,
+                           .known = access.known,
+                           .driven = access.driven}) &&
+         controller.write({.controls = access.controls | 0x100,
+                           .value = access.value,
+                           .known = access.known,
+                           .driven = access.driven}) &&
+         controller.write({.controls = access.controls | idle,
+                           .value = access.value,
+                           .known = access.known,
+                           .driven = access.driven});
 }
 
 void pulse(MemoryController &controller, MemoryController::Write access) {
@@ -103,6 +109,26 @@ void inactive_read_strobes(MemoryController &controller) {
           "A premature read strobe cannot complete or acknowledge the pending operation");
   require(controller.complete() && read(controller) == 0,
           "Actual completion and a fresh strobe still return the original first byte");
+}
+
+void input_mode_setup(MemoryController &controller) {
+  controller.reset();
+  const auto epoch = controller.epoch();
+  require(transfer(controller, {.controls = command, .driven = false}) && !controller.pending() &&
+              controller.epoch() == epoch && !controller.output(),
+          "Control setup with an input-only data port submits no unknown command");
+  pulse(controller, {.controls = command});
+  pulse(controller, {.controls = address});
+  require(transfer(controller, {.controls = address, .driven = false}),
+          "An input-only setup pulse cannot consume an address byte");
+  for (unsigned index = 0; index < 3; ++index) { pulse(controller, {.controls = address}); }
+  require(controller.pending() && controller.complete() && controller.write({.controls = idle}) &&
+              read(controller) == 0 &&
+              transfer(controller, {.controls = command, .driven = false}) &&
+              controller.write({.controls = idle}) && read(controller) == 1,
+          "Only actual address bytes start the read; input-mode setup retains its cursor");
+  require(!transfer(controller, {.controls = command}) && controller.error() != nullptr,
+          "Enabling a producer does not make its unknown command byte valid");
 }
 
 void errors(MemoryController &controller) {
@@ -399,6 +425,7 @@ int main(const int argc, char **argv) try {
   MemoryController controller(&image);
   reads(controller);
   inactive_read_strobes(controller);
+  input_mode_setup(controller);
   cancel_and_reset(controller);
   errors(controller);
   invalid_confirm(controller);

@@ -576,7 +576,8 @@ private:
     if ((controls.mask & controls.known & control_mask) == control_mask &&
         !controller_.write({.controls = controls.value & control_mask,
                             .value = static_cast<std::uint8_t>(data.value & data_mask),
-                            .known = (data.mask & data.known & data_mask) == data_mask})) {
+                            .known = (data.mask & data.known & data_mask) == data_mask,
+                            .driven = (data.mask & data_mask) != 0})) {
       return false;
     }
     const auto output = controller_.output();
