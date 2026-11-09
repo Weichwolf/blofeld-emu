@@ -86,6 +86,19 @@ Live operation must deliver every audio buffer on time without host-induced gaps
 lost or repeated frames, including first use of firmware paths and JIT translation.
 Average throughput or offline reserve cannot compensate for a missed live deadline.
 
+Prioritize native execution speed over first-time translation latency. Analyze and
+precompile executable firmware before live readiness, including interrupt entries,
+indirect targets and runtime-loaded executable regions as they become available.
+Do not decode arbitrary data or unknown memory as established executable code.
+Persist reusable native code locally, keyed by executable-input hashes, exact JIT
+revision, host architecture/features, code-generation options and binding ABI.
+Relocate instance-specific addresses when loading; never restore device state from
+the code cache. Reject incompatible or damaged entries and rebuild before playback.
+Report first preparation, cache loading, original boot and warm execution separately,
+including total time to readiness. First preparation may take substantially longer
+than ordinary startup; this does not extend the original-firmware execution probes
+below. A cache is not a substitute for removing measured runtime overhead.
+
 Live key-to-sound latency targets 2-5 ms, with a hard upper bound of 10 ms,
 on both macOS ARM64 and Linux x86-64. Measure from physical keyboard actuation
 to the synthesized sound at the analog audio output, including keyboard scan,

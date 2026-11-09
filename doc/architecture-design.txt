@@ -71,6 +71,28 @@ https://docs.wasmtime.dev/contributing-architecture.html
 https://docs.wasmtime.dev/api/wasmtime/struct.Config.html
 https://docs.wasmtime.dev/examples-fast-execution.html
 
+Prepare native code before declaring the instrument live-ready. Analyze executable
+regions and control-flow entries, including vectors and resolved indirect targets;
+prepare runtime-loaded code when its actual bytes become available. Keep data and
+unknown memory distinct from code. Favor runtime optimization over first-compile
+latency, and report preparation separately from original boot and warm execution.
+Native successors remain linked within a core instance; typed I/O boundaries keep
+precise state and device effects without generic argument-array dispatch.
+
+Persist native code locally with relocations and binding metadata, never raw
+process pointers or device-state snapshots. Key it by executable-input hashes,
+exact JIT revision, host architecture/CPU features, generation options and binding
+ABI. Resolve memory, context and typed I/O addresses for the new instance before
+making code executable; preserve W^X and validate cache sizes, integrity and
+compatibility. Rebuild rejected entries before playback. Runtime-loaded executable
+images need their own validated identity. Verify uninterrupted first use of every
+qualified live feature; compilation coverage is not proved by one warm session.
+WAVM's typed native calling conventions and cached entry thunks inform integration;
+LLVM ORC's materialization and object caching inform preparation. Neither runtime
+is a required dependency or a reason to replace a fast measured core.
+https://github.com/WAVM/WAVM
+https://llvm.org/devmtg/2024-04/slides/TechnicalTalks/Bock-Experiences-Building-a-JVM-withLLVMOrc.pdf
+
 Implement device transactions and completion semantics: command/data FIFOs,
 readiness, interrupts, USB endpoints, SCI bytes, storage reads/writes and resets.
 Decode firmware bit-banging locally into transactions. Do not replay electrical
@@ -267,6 +289,27 @@ cancellation and failures. A separate output consumer drains actual SCI replies
 while the input producer waits for whole-packet credit from both independent
 MCU/DSP cursors. Live input retains its existing contract; bounded streaming is
 explicitly selected when constructing VM.
+
+The macOS host input requests MIDI 1.0 universal packets from one selected native
+source identifier and group. Convert channel/system/SysEx7 framing into exact DIN
+bytes, retaining message boundaries and native timestamps. A split SysEx remains
+open across callbacks; only realtime bytes may interleave. Unsupported protocol,
+malformed data, backwards/missing timestamps and full queues fail explicitly.
+The receive callback only decodes and publishes fixed-size queue slots; no
+allocation, waiting, file access or exceptions occur there. One consumer converts
+Mach timestamps to monotonic nanoseconds; the queried host time uses the same epoch.
+
+Keep the MIDI runtime's first client on an owned CFRunLoop until process exit.
+CoreMIDI may stop its server when the final process client closes. Dispose input
+callbacks before destroying their decoder and queue. Notification delivery may
+belong to a different library's first client/runloop; a bounded-rate identity
+query also detects the selected source's disappearance. Resolve the selected ID
+directly, independently of other endpoints being added/removed. Discovery retries
+an unstable snapshot a bounded number of times. Native transport is separate from
+application audio/MIDI clock alignment; receiving packets alone does not schedule
+notes or establish keyboard-to-sound latency. Primary API contracts:
+https://developer.apple.com/documentation/coremidi/midireceiveblock
+https://developer.apple.com/documentation/coremidi/midiclientdispose(_:)
 
 The app file adapter maps all selected tracks into one explicit DIN destination.
 It preserves channel/SysEx/escape bytes, keeps meta payloads off the wire and

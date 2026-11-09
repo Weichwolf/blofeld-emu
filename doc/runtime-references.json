@@ -1,5 +1,5 @@
 {
-  "scope": "Primary runtime architecture references; designs to adapt and measure, not runtime dependencies or instrument qualification. Local HTML snapshots are untracked.",
+  "scope": "Primary runtime architecture references; designs to adapt and measure, not runtime dependencies or instrument qualification. Local reference snapshots are untracked.",
   "retrieved_utc": "2026-11-09T13:15:39.245874+00:00",
   "references": [
     {
@@ -22,6 +22,93 @@
       "resolved_url": "https://docs.wasmtime.dev/examples-fast-execution.html",
       "bytes": 28074,
       "sha256": "7869d3341622ef2cee85401ca92f24b853f63a1f5514bd436321eb929629a69c"
+    },
+    {
+      "name": "WAVM README.md",
+      "url": "https://github.com/WAVM/WAVM/blob/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/README.md",
+      "download_url": "https://raw.githubusercontent.com/WAVM/WAVM/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/README.md",
+      "revision": "4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09",
+      "bytes": 3126,
+      "sha256": "3b3baf7845804477b166e19f739dfdcbf400382d8283142f3a31c2eac135fc5d"
+    },
+    {
+      "name": "WAVM Lib/LLVMJIT/EmitContext.h",
+      "url": "https://github.com/WAVM/WAVM/blob/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/Lib/LLVMJIT/EmitContext.h",
+      "download_url": "https://raw.githubusercontent.com/WAVM/WAVM/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/Lib/LLVMJIT/EmitContext.h",
+      "revision": "4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09",
+      "bytes": 14240,
+      "sha256": "842456383fbf2ec86a5b1330c68cd8225ce6bb972aee485adbf508478f83d145"
+    },
+    {
+      "name": "WAVM Lib/LLVMJIT/LLVMModule.cpp",
+      "url": "https://github.com/WAVM/WAVM/blob/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/Lib/LLVMJIT/LLVMModule.cpp",
+      "download_url": "https://raw.githubusercontent.com/WAVM/WAVM/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/Lib/LLVMJIT/LLVMModule.cpp",
+      "revision": "4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09",
+      "bytes": 13822,
+      "sha256": "52dd28227591eb9057ebc6a1ec36471871546ac5a88b4093c98fe2a01ee4b182"
+    },
+    {
+      "name": "WAVM Lib/Runtime/Context.cpp",
+      "url": "https://github.com/WAVM/WAVM/blob/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/Lib/Runtime/Context.cpp",
+      "download_url": "https://raw.githubusercontent.com/WAVM/WAVM/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/Lib/Runtime/Context.cpp",
+      "revision": "4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09",
+      "bytes": 2441,
+      "sha256": "05da0867abcc4f31d46c2703d3433cf6caeea4c24fb48c03ec27d5d38b99763a"
+    },
+    {
+      "name": "WAVM Lib/Runtime/Invoke.cpp",
+      "url": "https://github.com/WAVM/WAVM/blob/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/Lib/Runtime/Invoke.cpp",
+      "download_url": "https://raw.githubusercontent.com/WAVM/WAVM/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/Lib/Runtime/Invoke.cpp",
+      "revision": "4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09",
+      "bytes": 3540,
+      "sha256": "e473965657c4de267b25e36a0c63d8f4e7ddf0dc0d94d9f268866d78644352b0"
+    },
+    {
+      "name": "WAVM Lib/Runtime/Memory.cpp",
+      "url": "https://github.com/WAVM/WAVM/blob/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/Lib/Runtime/Memory.cpp",
+      "download_url": "https://raw.githubusercontent.com/WAVM/WAVM/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/Lib/Runtime/Memory.cpp",
+      "revision": "4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09",
+      "bytes": 14741,
+      "sha256": "92868e185da3306a8c89b4d69a41840b7419f9e49ef7cae8ffe527f4ee31d68d"
+    },
+    {
+      "name": "WAVM Lib/Runtime/RuntimePrivate.h",
+      "url": "https://github.com/WAVM/WAVM/blob/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/Lib/Runtime/RuntimePrivate.h",
+      "download_url": "https://raw.githubusercontent.com/WAVM/WAVM/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/Lib/Runtime/RuntimePrivate.h",
+      "revision": "4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09",
+      "bytes": 11798,
+      "sha256": "e1b1683da02e9f0f770248d029b88bfe86995720d776331337a9b9fe00466b5a"
+    },
+    {
+      "name": "WAVM Lib/LLVMJIT/EmitMem.cpp",
+      "url": "https://github.com/WAVM/WAVM/blob/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/Lib/LLVMJIT/EmitMem.cpp",
+      "download_url": "https://raw.githubusercontent.com/WAVM/WAVM/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/Lib/LLVMJIT/EmitMem.cpp",
+      "revision": "4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09",
+      "bytes": 45980,
+      "sha256": "5c6f61d7d45248a4fdfd43f4a0b5d37b10dde2c161c4e4ff71460d12e303bbec"
+    },
+    {
+      "name": "WAVM Lib/LLVMJIT/EmitCore.cpp",
+      "url": "https://github.com/WAVM/WAVM/blob/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/Lib/LLVMJIT/EmitCore.cpp",
+      "download_url": "https://raw.githubusercontent.com/WAVM/WAVM/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/Lib/LLVMJIT/EmitCore.cpp",
+      "revision": "4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09",
+      "bytes": 17057,
+      "sha256": "ee3952e3144c9f04d564c743576ceab2214ffed2a5801d91b166371884208338"
+    },
+    {
+      "name": "WAVM Lib/LLVMJIT/LLVMCompile.cpp",
+      "url": "https://github.com/WAVM/WAVM/blob/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/Lib/LLVMJIT/LLVMCompile.cpp",
+      "download_url": "https://raw.githubusercontent.com/WAVM/WAVM/4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09/Lib/LLVMJIT/LLVMCompile.cpp",
+      "revision": "4e82bb9fecf9c1bdb4d00f96fa89063ee4382d09",
+      "bytes": 7798,
+      "sha256": "492c7a7af0f175c4d8ede2eea94409d619019bf00ee661268f5adf89b35d58bb"
+    },
+    {
+      "name": "JLLVM experiences with LLVM ORC, EuroLLVM 2024",
+      "url": "https://llvm.org/devmtg/2024-04/slides/TechnicalTalks/Bock-Experiences-Building-a-JVM-withLLVMOrc.pdf",
+      "resolved_url": "https://llvm.org/devmtg/2024-04/slides/TechnicalTalks/Bock-Experiences-Building-a-JVM-withLLVMOrc.pdf",
+      "bytes": 457935,
+      "sha256": "1f68c4903fbd3ef7ded49acebb5145af31c2f665984700df49a2cbfce0ac824d"
     }
   ]
 }
