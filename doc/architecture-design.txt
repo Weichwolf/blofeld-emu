@@ -27,8 +27,11 @@ ExecutionTime publishes completed MCU progress in nominal 60 MHz units. DSP nati
 execution uses that frontier as a conservative grant; local MCU progress does not
 wait. Actual shared-port accesses and completed SPI words rendezvous before their
 effects commit, keeping short producer phases observable without adding read/pop
-effects. DSP time follows the programmed PLL with retained fractional phase;
-reset release establishes a fresh local epoch at the MCU's instrument timestamp.
+effects. DSP time follows the programmed PLL with retained fractional phase.
+Q/J direction-register reads, output-latch reads, unchanged drive states and
+undriven data-latch writes stay local. They perform their real register effects
+without a DSP rendezvous. Always-input Port Q reads retain their shared boundary.
+Reset release establishes a fresh local epoch at the MCU's instrument timestamp.
 Stop and reset cancel grant waits. This temporal contract does not itself prove
 complete startup, instrument behavior or real-time performance.
 

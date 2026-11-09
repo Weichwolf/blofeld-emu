@@ -4,6 +4,7 @@
 #include "execution.hpp"
 #include "io/controls.hpp"
 #include "io/dsp_reset.hpp"
+#include "io/execution_time.hpp"
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
 #include "isa.hpp"
@@ -13,10 +14,12 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cpu12/memory.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <future>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -305,6 +308,52 @@ void native_pedal_input() {
             "Native MCU reads sample the external pedal while retaining raw 0/8 levels");
   }
 }
+
+void native_local_port_access() {
+  namespace isa = cpu12::isa;
+  constexpr cpu12::Byte datum = 0x90;
+  constexpr cpu12::Address marker = 0x3000;
+  constexpr auto program = isa::program(isa::opcode<isa::Opcode::ldab_immediate>(),
+                                        std::array<cpu12::Byte, 1>{1},
+                                        isa::opcode<isa::Opcode::stab_extended>(),
+                                        std::array<cpu12::Byte, 2>{2, 0x50},
+                                        isa::opcode<isa::Opcode::clr_extended>(),
+                                        std::array<cpu12::Byte, 2>{2, 0x62},
+                                        isa::opcode<isa::Opcode::ldab_immediate>(),
+                                        std::array{datum},
+                                        isa::opcode<isa::Opcode::stab_extended>(),
+                                        std::array<cpu12::Byte, 2>{2, 0x60},
+                                        isa::opcode<isa::Opcode::stab_extended>(),
+                                        std::array<cpu12::Byte, 2>{2, 0x61},
+                                        isa::opcode<isa::Opcode::ldab_extended>(),
+                                        std::array<cpu12::Byte, 2>{2, 0x52},
+                                        isa::opcode<isa::Opcode::ldab_extended>(),
+                                        std::array<cpu12::Byte, 2>{2, 0x62},
+                                        isa::opcode<isa::Opcode::stab_extended>(),
+                                        std::array<cpu12::Byte, 2>{0x30, 0});
+  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  image->known.fill(1);
+  std::ranges::copy(program, image->bytes.begin());
+  image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
+  image->bytes.back() = 0;
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  blofeld::vi::PeerPort peer;
+  blofeld::vi::ExecutionTime time;
+  const std::stop_source stop;
+  auto worker = std::async(std::launch::async, [&] {
+    return blofeld::vi::mcu::execute(
+        *image, shi, reset, stop.get_token(), nullptr, nullptr, &peer, &time);
+  });
+  const auto completed = worker.wait_for(std::chrono::seconds(1));
+  if (completed != std::future_status::ready) { stop.request_stop(); }
+  const auto report = worker.get();
+  require(completed == std::future_status::ready && report.failure &&
+              report.failure->address == marker && report.failure->value == 0 &&
+              peer.mcu_data().mask == 0 && peer.mcu_data().value == datum &&
+              !peer.dsp_interrupt(true),
+          "Local register reads, ignored writes and undriven latches need no DSP owner");
+}
 }
 
 int main() try {
@@ -314,6 +363,7 @@ int main() try {
   native_package_and_peer();
   native_peer_xirq();
   native_pedal_input();
+  native_local_port_access();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';
