@@ -371,6 +371,7 @@ Playback::Playback(const unsigned rate, const std::string_view name)
 Playback::~Playback() = default;
 
 Playback::Producer Playback::producer() const {
+  check();
   return Producer(std::chrono::nanoseconds::zero());
 }
 
