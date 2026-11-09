@@ -125,4 +125,8 @@ void WavConsumer::finish() {
 std::uint64_t WavConsumer::frames() const noexcept {
   return wav_.frames();
 }
+
+std::uint64_t WavConsumer::source_frames() const noexcept {
+  return input_frames_;
+}
 }

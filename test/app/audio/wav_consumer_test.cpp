@@ -93,6 +93,8 @@ void selected_window(const std::filesystem::path &root) {
   require(output.write(output.owner, block, {}) && consumer.frames() == 1,
           "Shutdown work never duplicates or appends post-boundary frames");
   output.close(output.owner);
+  require(consumer.source_frames() == frames.size() * 3 && consumer.frames() == 1,
+          "Source totals include validated discarded frames without counting them as WAV output");
   consumer.finish();
   const auto data = blofeld::host::read_file(path, header_bytes + 6);
   constexpr std::array<std::uint8_t, 6> expected{0xff, 0xff, 0xff, 1, 0, 0};

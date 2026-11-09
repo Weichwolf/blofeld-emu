@@ -24,6 +24,8 @@ public:
   [[nodiscard]] vi::PcmOutput output() noexcept;
   void finish();
   [[nodiscard]] std::uint64_t frames() const noexcept;
+  // Validated source frames, including discarded startup and post-window PCM.
+  [[nodiscard]] std::uint64_t source_frames() const noexcept;
 
 private:
   enum class Phase : std::uint8_t { writing, closed, failed, finished };

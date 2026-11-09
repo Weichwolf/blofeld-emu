@@ -144,6 +144,7 @@ int OfflineRender::run(vi::VmContext &vm,
     vm.request_stop();
     const auto reports = vm.wait();
     publish_display(vm, display);
+    startup_statistics();
     return report_execution(reports) ? 2 : 1;
   }
   ready_ = std::chrono::steady_clock::now();
@@ -187,6 +188,17 @@ int OfflineRender::run(vi::VmContext &vm,
   wav_.finish();
   statistics();
   return 0;
+}
+
+void OfflineRender::startup_statistics() const {
+  const auto frames = wav_.source_frames();
+  const double seconds =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - started_).count();
+  std::cerr << std::fixed << std::setprecision(3) << "Startup PCM prefix: " << frames
+            << " validated stereo frames at " << rate << "Hz; host=" << seconds
+            << "s frames/s=" << static_cast<double>(frames) / seconds
+            << " startup-prefix-RTF=" << static_cast<double>(frames) / (rate * seconds)
+            << "x; instrument not ready; no WAV published.\n";
 }
 
 void OfflineRender::statistics() const {
