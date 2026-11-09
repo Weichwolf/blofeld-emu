@@ -3,6 +3,7 @@
 #include "audio/device_buffer.hpp"
 #include "audio/playback.hpp"
 #include "audio/render_buffer.hpp"
+#include "audio/render_timeline.hpp"
 
 #include <AudioToolbox/AUComponent.h>
 #include <AudioToolbox/AudioComponent.h>
@@ -23,11 +24,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <iomanip>
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <semaphore>
 #include <span>
+#include <sstream>
 #include <stdexcept>
 #include <stop_token>
 #include <string>
@@ -42,6 +46,29 @@ constexpr std::int64_t us_per_second = 1000000;
 constexpr std::chrono::milliseconds device_check_period{100};
 static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
 static_assert(std::atomic<OSStatus>::is_always_lock_free);
+
+const char *timing_error(const RenderTimeline::Error error) {
+  switch (error) {
+    case RenderTimeline::Error::sample_time: return "invalid sample time";
+    case RenderTimeline::Error::host_time: return "invalid host time";
+    case RenderTimeline::Error::frame_count: return "empty interval";
+    case RenderTimeline::Error::discontinuity: return "discontinuous sample time";
+    case RenderTimeline::Error::exhausted: return "sample precision exhausted";
+    default: return "unknown timing error";
+  }
+}
+
+std::string timing_failure(const RenderTimeline::Fault &fault) {
+  std::ostringstream message;
+  message << std::setprecision(std::numeric_limits<double>::max_digits10)
+          << "Native audio timeline failure: " << timing_error(fault.error)
+          << "; frames=" << fault.request.frames;
+  if (fault.expected) { message << " expected-sample=" << *fault.expected; }
+  if (fault.request.sample) { message << " actual-sample=" << *fault.request.sample; }
+  if (fault.previous_host) { message << " previous-host-ticks=" << *fault.previous_host; }
+  if (fault.request.host) { message << " actual-host-ticks=" << *fault.request.host; }
+  return message.str();
+}
 
 void require(const OSStatus status, const std::string_view operation) {
   if (status != noErr) {
@@ -152,6 +179,8 @@ struct Playback::Impl {
   std::chrono::nanoseconds producer_poll{0};
   std::chrono::nanoseconds device_period{0};
   std::unique_ptr<RenderBuffer> buffer;
+  RenderTimeline timeline;
+  std::optional<RenderTimeline::Fault> timing_fault;
   std::exception_ptr error;
   std::atomic<Phase> phase{Phase::opening};
   std::atomic<OSStatus> render_error{noErr};
@@ -195,6 +224,8 @@ struct Playback::Impl {
     auto &self = *static_cast<Impl *>(context);
     const auto current = self.phase.load(std::memory_order_acquire);
     if (frames == 0) { return noErr; }
+    const auto error = self.render_error.load(std::memory_order_acquire);
+    if (error != noErr) { return error; }
     if (bus != 0 || time == nullptr || data == nullptr || data->mNumberBuffers != 1 ||
         data->mBuffers[0].mNumberChannels != channels || data->mBuffers[0].mData == nullptr ||
         frames > self.maximum_slice ||
@@ -207,6 +238,18 @@ struct Playback::Impl {
       std::ranges::fill(output, FloatFrame{});
       if (flags != nullptr) { *flags |= kAudioUnitRenderAction_OutputIsSilence; }
       return noErr;
+    }
+    const auto sample = (time->mFlags & kAudioTimeStampSampleTimeValid) != 0
+                            ? std::optional<double>{time->mSampleTime}
+                            : std::nullopt;
+    const auto host = (time->mFlags & kAudioTimeStampHostTimeValid) != 0
+                          ? std::optional<std::uint64_t>{time->mHostTime}
+                          : std::nullopt;
+    if (const auto fault =
+            self.timeline.advance({.sample = sample, .host = host, .frames = frames})) {
+      self.timing_fault = fault;
+      self.render_error.store(kAudio_ParamError, std::memory_order_release);
+      return kAudio_ParamError;
     }
     const auto supplied = self.buffer->render(output);
     self.submitted.fetch_add(supplied, std::memory_order_relaxed);
@@ -338,7 +381,11 @@ struct Playback::Impl {
   void reset() {
     phase.store(Phase::priming, std::memory_order_release);
     require(AudioOutputUnitStop(unit), "Stop old audio epoch");
+    // Transfer the stopped callback's timeline through its final publication.
+    static_cast<void>(renders.load(std::memory_order_acquire));
+    check_render();
     require(AudioUnitReset(unit, kAudioUnitScope_Global, 0), "Flush old audio epoch");
+    timeline.reset();
     buffer->discard();
     reset_done.release();
   }
@@ -390,7 +437,11 @@ struct Playback::Impl {
   }
 
   void check_render() const {
-    require(render_error.load(std::memory_order_acquire), "Native render format changed");
+    const auto render = render_error.load(std::memory_order_acquire);
+    if (render != noErr && timing_fault) {
+      throw std::runtime_error(timing_failure(*timing_fault));
+    }
+    require(render, "Native render format changed");
     if (underruns.load(std::memory_order_acquire) != 0) {
       const auto frames = underrun_frames.load(std::memory_order_relaxed);
       throw std::runtime_error(
@@ -416,6 +467,8 @@ struct Playback::Impl {
     }
     if (unit != nullptr) {
       AudioOutputUnitStop(unit);
+      static_cast<void>(renders.load(std::memory_order_acquire));
+      static_cast<void>(render_error.load(std::memory_order_acquire));
       AudioUnitUninitialize(unit);
       AudioComponentInstanceDispose(unit);
     }

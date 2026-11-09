@@ -42,7 +42,9 @@ its dedicated DSP producer uses a Mach deadline and an asynchronous audio workgr
 The output owner sizes bounded queues from actual device quanta, including variable
 buffer bounds. Host backpressure paces the DSP owner. Reset stops and flushes the old
 stream epoch before accepting new frames. Disconnects, endpoint changes and host
-underruns stop execution with an error. Reported output latency combines queued
+underruns stop execution with an error. macOS also rejects missing, invalid or
+discontinuous native render timestamps before consuming more queued frames.
+Reported output latency combines queued
 frames and native device, stream and output-unit latency information; it is not a physical
 keyboard-to-sound measurement.
 DAX register access and DMA writes retain the distinct XADR/channel buffers,

@@ -332,6 +332,18 @@ latency and underruns; endpoint changes/disconnects stop with context. The contr
 thread consumes blocked termination signals and requests a shared VM stop.
 Live producer-reserve estimates exclude consumer blocking and are not offline RTF.
 
+Darwin validates native sample/host timestamp flags and each representable client
+render interval. Adjacent sample positions meet exactly even when rate conversion
+varies callback frame counts; host ticks advance monotonically. Missing, invalid,
+repeated or discontinuous timestamps latch failure before consuming queued PCM.
+Diagnostics retain the expected sample position and actual request. After stopping
+callbacks, acquire their final publication before transferring timeline ownership
+for an epoch reset or resource teardown. An ordinary reset establishes a fresh
+timing origin; a failed native stream must be reopened. These HAL timestamps do
+not establish analog presentation or physical key-to-sound latency. Primary contracts:
+https://developer.apple.com/documentation/audiotoolbox/aurendercallback
+https://developer.apple.com/documentation/audiotoolbox/audiounitrender(_:_:_:_:_:_:)
+
 Each PCM frame carries its completion edge in the common 60 MHz instrument clock.
 Project the actual scheduled native edge through the canonical DSP clock state,
 retaining the preceding PLL segment for pending older edges. Same-ratio control
