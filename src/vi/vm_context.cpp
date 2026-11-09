@@ -51,7 +51,8 @@ void VmContext::start() {
   dsp_ = std::jthread([this] {
     const auto stop = stop_.get_token();
     try {
-      reports_[1] = dsp::execute(boot_, shi_, reset_, stop, media_.get(), output_, &peer_, &time_);
+      reports_[1] =
+          dsp::execute(boot_, shi_, reset_, stop, media_.get(), output_, &peer_, &time_, &midi_);
     } catch (...) { reports_[1].exception = std::current_exception(); }
     completed_.fetch_add(1, std::memory_order_release);
     completed_.notify_one();

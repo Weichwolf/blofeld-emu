@@ -9,10 +9,13 @@
 #include <span>
 
 namespace blofeld::vi {
-// One host owner and one MCU owner. DIN character starts use the common 60 MHz
-// timeline; the receiver still applies its genuine SCI format/status/IRQ effects.
+// One host owner; MCU SCI and DSP Timer0 observe the same DIN input independently.
+// Input slots remain immutable until both observers retire them. Only SCI sends
+// DIN output. Character starts use the common 60 MHz instrument timeline.
 class MidiPort {
 public:
+  enum class Receiver : std::uint8_t { mcu, dsp };
+
   struct Event {
     std::uint64_t ticks = 0;
     std::uint8_t byte = 0;
@@ -30,9 +33,10 @@ public:
     return time_.load(std::memory_order_acquire);
   }
 
+  // Each receiver owner retires only its own input observations.
+  [[nodiscard]] std::optional<Event> peek_input(Receiver receiver = Receiver::mcu) const noexcept;
+  void pop_input(Receiver receiver = Receiver::mcu) noexcept;
   // MCU owner: only actual SCI character completions publish output.
-  [[nodiscard]] std::optional<Event> peek_input() const noexcept;
-  void pop_input() noexcept;
   [[nodiscard]] bool write_output(Event event) noexcept;
 
   void publish_time(std::uint64_t ticks) noexcept { time_.store(ticks, std::memory_order_release); }
@@ -42,6 +46,13 @@ public:
   }
 
 private:
+  struct Input {
+    std::array<Event, capacity> events{};
+    std::atomic<std::uint64_t> mcu{0}, dsp{0}, written{0};
+    [[nodiscard]] std::optional<Event> peek(Receiver receiver) const noexcept;
+    void pop(Receiver receiver) noexcept;
+  };
+
   struct Queue {
     std::array<Event, capacity> events{};
     std::atomic<std::uint64_t> read{0}, written{0};
@@ -50,7 +61,8 @@ private:
   };
 
   [[nodiscard]] bool fail(const char *message) noexcept;
-  Queue input_, output_;
+  Input input_;
+  Queue output_;
   std::uint64_t next_input_ = 0, last_input_ = 0, last_output_ = 0;
   std::atomic<std::uint64_t> time_{0};
   std::atomic<const char *> error_{nullptr};

@@ -88,7 +88,7 @@ add_library(blofeld_vi_execution
   src/vi/display/port.cpp
   src/vi/io/memory_controller.cpp src/vi/io/dsp_reset.cpp src/vi/io/shi.cpp src/vi/io/sci.cpp src/vi/io/usb.cpp src/vi/io/mcu_flash.cpp
   src/vi/mcu/boot_port.cpp src/vi/mcu/ports.cpp src/vi/mcu/timer.cpp src/vi/mcu/clock.cpp
-  src/vi/mcu/execute.cpp src/vi/dsp/audio.cpp src/vi/dsp/clock.cpp src/vi/dsp/dax.cpp src/vi/dsp/dma.cpp src/vi/dsp/esai.cpp src/vi/dsp/interrupts.cpp src/vi/dsp/memory.cpp src/vi/dsp/ports.cpp src/vi/dsp/timers.cpp src/vi/dsp/execute.cpp src/vi/vm_context.cpp)
+  src/vi/mcu/execute.cpp src/vi/dsp/audio.cpp src/vi/dsp/clock.cpp src/vi/dsp/dax.cpp src/vi/dsp/dma.cpp src/vi/dsp/esai.cpp src/vi/dsp/interrupts.cpp src/vi/dsp/memory.cpp src/vi/dsp/midi.cpp src/vi/dsp/ports.cpp src/vi/dsp/timers.cpp src/vi/dsp/execute.cpp src/vi/vm_context.cpp)
 target_include_directories(blofeld_vi_execution PUBLIC src/vi)
 target_link_libraries(blofeld_vi_execution PUBLIC
   blofeld_vi_mcu_memory blofeld_vi_display blofeld_vi_peer blofeld_vi_midi dsp56300::core Threads::Threads)
@@ -140,6 +140,7 @@ if(BUILD_TESTING)
     set_property(GLOBAL APPEND PROPERTY BLOFELD_UNIT_TARGETS ${name})
   endfunction()
   blofeld_unit(host-audio-buffer-test test/host/audio/buffer_test.cpp blofeld_host_audio)
+  blofeld_unit(vi-dsp-midi-test test/vi/dsp/midi_test.cpp blofeld_vi_execution)
   blofeld_unit(app-boot-test test/app/boot_rom_test.cpp blofeld_app_boot)
   blofeld_unit(host-audio-render-test test/host/audio/render_buffer_test.cpp blofeld_host_audio)
   blofeld_unit(host-audio-wav-test test/host/audio/wav_test.cpp "blofeld_host_wav;blofeld_host_files")

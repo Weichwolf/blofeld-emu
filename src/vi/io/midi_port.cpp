@@ -17,6 +17,17 @@ static_assert((MidiPort::capacity & index_mask) == 0);
 static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
 }
 
+std::optional<MidiPort::Event> MidiPort::Input::peek(const Receiver receiver) const noexcept {
+  const auto at = (receiver == Receiver::mcu ? mcu : dsp).load(std::memory_order_relaxed);
+  if (at == written.load(std::memory_order_acquire)) { return {}; }
+  return events[at & index_mask];
+}
+
+void MidiPort::Input::pop(const Receiver receiver) noexcept {
+  auto &cursor = receiver == Receiver::mcu ? mcu : dsp;
+  cursor.store(cursor.load(std::memory_order_relaxed) + 1, std::memory_order_release);
+}
+
 std::optional<MidiPort::Event> MidiPort::Queue::peek() const noexcept {
   const auto at = read.load(std::memory_order_relaxed);
   if (at == written.load(std::memory_order_acquire)) { return {}; }
@@ -39,9 +50,13 @@ bool MidiPort::write_input(const std::span<const std::uint8_t> bytes,
   if (bytes.empty()) { return true; }
   if (ticks < last_input_) { return fail("MIDI input timestamps moved backwards"); }
   const auto at = input_.written.load(std::memory_order_relaxed);
-  const auto used = at - input_.read.load(std::memory_order_acquire);
+  const auto used = at - std::min(input_.mcu.load(std::memory_order_acquire),
+                                  input_.dsp.load(std::memory_order_acquire));
   if (bytes.size() > capacity - used) { return fail("MIDI input queue is full"); }
   const auto first = std::max(ticks, next_input_);
+  if (first < time_.load(std::memory_order_acquire)) {
+    return fail("MIDI character starts before published instrument time");
+  }
   if (bytes.size() > maximum - at || bytes.size() > (maximum - first) / byte_ticks) {
     return fail("MIDI input timeline or queue sequence is not representable");
   }
@@ -55,12 +70,12 @@ bool MidiPort::write_input(const std::span<const std::uint8_t> bytes,
   return true;
 }
 
-std::optional<MidiPort::Event> MidiPort::peek_input() const noexcept {
-  return input_.peek();
+std::optional<MidiPort::Event> MidiPort::peek_input(const Receiver receiver) const noexcept {
+  return input_.peek(receiver);
 }
 
-void MidiPort::pop_input() noexcept {
-  input_.pop();
+void MidiPort::pop_input(const Receiver receiver) noexcept {
+  input_.pop(receiver);
 }
 
 bool MidiPort::write_output(const Event event) noexcept {

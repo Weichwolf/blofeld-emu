@@ -2,6 +2,7 @@
 #include "io/midi_port.hpp"
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <exception>
 #include <iostream>
@@ -34,6 +35,9 @@ void ordered_packets() {
     require(port.peek_input() == wanted && port.peek_input() == wanted,
             "Packet bytes retain order and DIN spacing; lookahead does not consume them");
     port.pop_input();
+    require(port.peek_input(MidiPort::Receiver::dsp) == wanted,
+            "MCU consumption cannot erase the DSP's observation of the same input");
+    port.pop_input(MidiPort::Receiver::dsp);
     require(port.write_output(wanted) && port.read_output() == wanted && !port.read_output(),
             "Actual output is transferred exactly once with its completion timestamp");
   }
@@ -50,7 +54,10 @@ void wrap_and_overload() {
     bytes[index] = static_cast<std::uint8_t>(index & byte_mask);
   }
   require(port.write_input(bytes, 0), "Fill the entire bounded input");
-  for (unsigned index = 0; index < bytes.size() / 2; ++index) { port.pop_input(); }
+  for (unsigned index = 0; index < bytes.size() / 2; ++index) {
+    port.pop_input();
+    port.pop_input(MidiPort::Receiver::dsp);
+  }
   require(port.write_input(std::span(bytes).first(bytes.size() / 2), 0),
           "Released slots can be reused across the ring boundary");
   for (unsigned index = 0; index < bytes.size(); ++index) {
@@ -60,12 +67,19 @@ void wrap_and_overload() {
                                 .byte = static_cast<std::uint8_t>(sequence & byte_mask)},
             "Wrapped input retains exact data and timestamps");
     port.pop_input();
+    port.pop_input(MidiPort::Receiver::dsp);
   }
   require(!port.peek_input(), "All wrapped input was consumed");
   MidiPort full;
   require(full.write_input(bytes, 0) && !full.write_input(message, 0) && full.error() != nullptr &&
               full.peek_input() == MidiPort::Event{},
           "Input overflow is visible and cannot overwrite previously accepted data");
+  MidiPort slow;
+  require(slow.write_input(bytes, 0), "Fill both observers' shared immutable input");
+  for (unsigned index = 0; index < bytes.size(); ++index) { slow.pop_input(); }
+  require(!slow.write_input(message, 0) &&
+              slow.peek_input(MidiPort::Receiver::dsp) == MidiPort::Event{},
+          "A slow DSP observer prevents slot reuse even after the MCU has consumed every byte");
   MidiPort output;
   for (unsigned index = 0; index < MidiPort::capacity; ++index) {
     require(output.write_output({.ticks = index, .byte = note_on}), "Fill bounded output");
@@ -77,6 +91,12 @@ void wrap_and_overload() {
 }
 
 void invalid_times() {
+  MidiPort late;
+  constexpr std::uint64_t published = 100;
+  late.publish_time(published);
+  require(!late.write_input(message, 0) && !late.peek_input() &&
+              !late.peek_input(MidiPort::Receiver::dsp) && late.error() != nullptr,
+          "New input cannot be admitted behind either executing owner's published frontier");
   MidiPort backwards;
   require(backwards.write_input(message, 1) && !backwards.write_input(message, 0) &&
               backwards.error() != nullptr,
@@ -91,11 +111,35 @@ void invalid_times() {
           "Firmware output cannot reverse the common device timeline");
 }
 
+bool observe_dsp(MidiPort &port,
+                 const unsigned bytes,
+                 std::atomic<unsigned> &observed,
+                 const std::stop_token &stop) {
+  bool coherent = true;
+  for (unsigned index = 0; index < bytes; ++index) {
+    std::optional<MidiPort::Event> event;
+    while (!(event = port.peek_input(MidiPort::Receiver::dsp))) {
+      if (stop.stop_requested()) { return false; }
+      std::this_thread::yield();
+    }
+    coherent = coherent && event == MidiPort::Event{.ticks = index * MidiPort::byte_ticks,
+                                                    .byte = message[index % message.size()]};
+    port.pop_input(MidiPort::Receiver::dsp);
+    observed.store(index + 1, std::memory_order_release);
+  }
+  return coherent;
+}
+
 void concurrent_exchange() {
   MidiPort port;
   constexpr unsigned rounds = 1024;
   constexpr unsigned bytes = rounds * message.size();
   bool coherent = true;
+  bool dsp_coherent = true;
+  std::atomic<unsigned> observed{0};
+  std::jthread dsp([&](const std::stop_token &stop) {
+    dsp_coherent = observe_dsp(port, bytes, observed, stop);
+  });
   std::jthread mcu([&](const std::stop_token &stop) {
     for (unsigned index = 0; index < bytes; ++index) {
       while (!port.peek_input()) {
@@ -125,10 +169,15 @@ void concurrent_exchange() {
                                        .byte = message[index]},
               "The host observes coherent output slots through concurrent ring reuse");
     }
+    while (observed.load(std::memory_order_acquire) < (round + 1) * message.size()) {
+      std::this_thread::yield();
+    }
   }
   mcu.join();
-  require(coherent && !port.peek_input() && !port.read_output() && port.error() == nullptr &&
-              port.time() == (bytes - 1) * MidiPort::byte_ticks,
+  dsp.join();
+  require(coherent && dsp_coherent && !port.peek_input() &&
+              !port.peek_input(MidiPort::Receiver::dsp) && !port.read_output() &&
+              port.error() == nullptr && port.time() == (bytes - 1) * MidiPort::byte_ticks,
           "Both owners finish with exact data, device time and empty queues");
 }
 }

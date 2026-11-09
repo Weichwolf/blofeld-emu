@@ -8,12 +8,14 @@
 #include "dsp/esai.hpp"
 #include "dsp/interrupts.hpp"
 #include "dsp/memory.hpp"
+#include "dsp/midi.hpp"
 #include "dsp/ports.hpp"
 #include "dsp/timers.hpp"
 #include "execution.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/execution_time.hpp"
 #include "io/memory_controller.hpp"
+#include "io/midi_port.hpp"
 #include "io/pcm_output.hpp"
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
@@ -69,7 +71,8 @@ public:
      MediaImage *image,
      const PcmOutput output,
      PeerPort *peer,
-     ExecutionTime *time)
+     ExecutionTime *time,
+     MidiPort *midi)
       : boot_(boot),
         shi_(shi),
         reset_(reset),
@@ -77,7 +80,8 @@ public:
         audio_(esai_1_, dax_, output, stop),
         controller_(image),
         peer_(peer),
-        time_(time) {}
+        time_(time),
+        midi_(midi) {}
 
   void bind(dsp56300::Core &core, const std::uint64_t epoch) noexcept {
     core_ = &core;
@@ -100,6 +104,9 @@ public:
     audio_.reset(epoch);
     audio_dirty_ = true;
     timers_.reset();
+    midi_.reset(origin_);
+    midi_deadline_.reset();
+    if (midi_.connected()) { static_cast<void>(timers_.input(0, midi_.level())); }
     memory_.configure(0);
     ports_.reset();
     if (peer_ != nullptr) { peer_->reset_dsp(); }
@@ -124,11 +131,9 @@ public:
       }
       media_deadline_.reset();
     }
-    if (!synchronize_timers()) {
-      report.failure = Failure{.pc = core_->registers().pc,
-                               .address = timer0_control,
-                               .space = 'X',
-                               .reason = timers_.error()};
+    if (!synchronize_timers() || !synchronize_midi()) {
+      report.failure = Failure{
+          .pc = core_->registers().pc, .address = timer0_control, .space = 'X', .reason = error()};
       return false;
     }
     if (audio_dirty_) {
@@ -184,6 +189,7 @@ public:
     if (peer_ != nullptr && peer_->error() != nullptr) { return peer_->error(); }
     if (audio_.error() != nullptr) { return audio_.error(); }
     if (media_error_ != nullptr) { return media_error_; }
+    if (midi_.error() != nullptr) { return midi_.error(); }
     if (timers_.error() != nullptr) { return timers_.error(); }
     return esai_1_.error() != nullptr ? esai_1_.error() : controller_.error();
   }
@@ -201,12 +207,8 @@ public:
       stopped.yielded = true;
       return stopped;
     }
-    if (waiting_ && !interrupts_.select(interrupt_sources(), core_->registers().sr)) {
-      if (const auto next = deadline()) {
-        idle_ = *next - core_->progress().estimated_cycles;
-        if (!synchronize_timers()) { throw std::runtime_error(timers_.error()); }
-      }
-    }
+    if (!synchronize_midi()) { throw std::runtime_error(error()); }
+    advance_waiting();
     const auto sources = interrupt_sources();
     if (interrupts_.select(sources, 0)) {
       const auto state = core_->registers();
@@ -360,6 +362,33 @@ public:
   }
 
 private:
+  void advance_waiting() {
+    if (!waiting_ || interrupts_.select(interrupt_sources(), core_->registers().sr)) { return; }
+    if (const auto next = deadline()) {
+      idle_ = *next - core_->progress().estimated_cycles;
+      if (!synchronize_timers() || !synchronize_midi()) { throw std::runtime_error(error()); }
+    }
+  }
+
+  bool synchronize_midi() {
+    if (!midi_.connected()) { return true; }
+    if (!clock_.advance(device_cycles()) ||
+        clock_.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_) {
+      throw std::overflow_error("DSP DIN-MIDI time is not representable");
+    }
+    if (!midi_.advance(origin_ + clock_.ticks()) || !timers_.input(0, midi_.level())) {
+      return false;
+    }
+    midi_deadline_.reset();
+    if (const auto next = midi_.deadline()) {
+      midi_deadline_ = clock_.deadline(*next - origin_);
+      if (!midi_deadline_) {
+        throw std::overflow_error("DSP DIN-MIDI deadline is not representable");
+      }
+    }
+    return true;
+  }
+
   bool audio_failure(ExecutionReport &report) const {
     if (!stop_.stop_requested() && !report.failure) {
       report.failure = Failure{.operation = Access::execute,
@@ -422,7 +451,7 @@ private:
 
   [[nodiscard]] std::optional<std::uint64_t> deadline() const noexcept {
     auto result = timers_.deadline();
-    for (const auto next : {media_deadline_, audio_.deadline()}) {
+    for (const auto next : {media_deadline_, audio_.deadline(), midi_deadline_}) {
       if (next && (!result || *next < *result)) { result = next; }
     }
     if (peer_deadline_ && (!result || *peer_deadline_ < *result)) { result = peer_deadline_; }
@@ -664,6 +693,8 @@ private:
   MemoryController controller_;
   PeerPort *peer_;
   ExecutionTime *time_;
+  MidiInput midi_;
+  std::optional<std::uint64_t> midi_deadline_;
   std::uint64_t origin_ = 0;
   std::optional<std::uint64_t> peer_deadline_;
   Failure completion_failure_;
@@ -750,12 +781,13 @@ ExecutionReport execute(const std::span<const dsp56300::Word> boot,
                         MediaImage *image,
                         const PcmOutput output,
                         PeerPort *peer,
-                        ExecutionTime *time) {
+                        ExecutionTime *time,
+                        MidiPort *midi) {
   if (boot.empty() || boot.size() > dsp56300::address_words - boot_first) {
     throw std::invalid_argument("DSP boot ROM has invalid bounds");
   }
   const OutputOwner owner{output};
-  Io io(boot, shi, reset, stop, image, output, peer, time);
+  Io io(boot, shi, reset, stop, image, output, peer, time, midi);
   ExecutionReport report;
   std::uint64_t applied = 0;
   while (!stop.stop_requested()) {

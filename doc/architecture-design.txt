@@ -167,7 +167,12 @@ frequency, physical lock or host pacing from those fields. Device deadlines use
 this ratio when converting local core progress to instrument time.
 
 SCI exchanges decoded characters with explicit start/completion times, baud and
-format, without pad sampling or serial line replay. Preserve its status/data clear
+format. DIN input has two independent cursors over shared immutable events: SCI
+supplies the MCU's activity latch, while Timer0 supplies the DSP's actual MIDI
+decoder. Feed Timer0 scheduled 8N1 input-level boundaries, not decoded ring writes;
+the original compare/overflow handlers sample and assemble every byte. Keep reset
+phase, back-to-back characters and receiver backpressure explicit, without voltage
+or per-clock work. Preserve SCI's status/data clear
 sequences, preamble and transmit-buffer handoff, receive overrun and wakeup effects.
 Bound completed output and report an undrained consumer instead of losing data.
 
