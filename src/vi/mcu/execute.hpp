@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "display/state.hpp"
 #include "execution.hpp"
 #include "io/controls.hpp"
 #include "io/dsp_reset.hpp"
@@ -14,5 +15,6 @@ namespace blofeld::vi::mcu {
                                       Shi &shi,
                                       DspReset &reset,
                                       const std::stop_token &stop,
-                                      const Controls *controls = nullptr);
+                                      const Controls *controls = nullptr,
+                                      DisplayState *display = nullptr);
 }

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "display/st7565.hpp"
 #include "dsp/execute.hpp"
 #include "execution.hpp"
 #include "io/dsp_reset.hpp"
@@ -471,11 +472,16 @@ int main() try {
   require(!dsp.failure && dsp.instructions == 2, "DSP owner executes its native ROM instructions");
   {
     blofeld::vi::VmContext context(image(), boot);
+    require(!context.take_display(), "No display snapshot precedes device initialization");
+    context.request_display();
     context.request_stop();
     context.start();
     const auto reports = context.wait();
     require(context.finished() && reports[0].instructions == 0 && reports[1].instructions == 0,
             "A pre-start stop is race-free and reaches both independent owners");
+    const auto snapshot = context.take_display();
+    require(snapshot && !snapshot->state().display_on && snapshot->ram(0, 0).known == 0,
+            "The MCU owner publishes its actual reset display before joining");
   }
   for (unsigned iteration = 0; iteration < 8; ++iteration) {
     blofeld::vi::VmContext context(image(), boot);

@@ -18,7 +18,8 @@ namespace blofeld::app {
 class DisplayPublication {
 public:
   explicit DisplayPublication(const std::filesystem::path &directory);
-  // PBM/text are individually atomic; unknown pixels reject publication.
+  // PBM/text are individually atomic. Unknown pixels remain explicit in text;
+  // the bitmap is removed instead of retaining a misleading previous image.
   // Unchanged images perform no I/O; errors invalidate that comparison.
   bool publish(const vi::LcdImage &image);
 

@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "audio/consumer.hpp"
 #include "audio/playback.hpp"
+#include "display/lcd_image.hpp"
+#include "display/publication.hpp"
 #include "execution.hpp"
 #include "files/read.hpp"
+#include "process/configuration.hpp"
 #include "process/signals.hpp"
 #include "profile.hpp"
 #include "storage/flash_image.hpp"
@@ -84,10 +87,19 @@ void status(const blofeld::host::audio::Playback &audio,
   if (!terminal) { std::cerr << '\n'; }
 }
 
+void publish_display(blofeld::vi::VmContext &vm, blofeld::app::DisplayPublication &publication) {
+  if (const auto controller = vm.take_display()) {
+    // Firmware addresses columns 0..127 and page 7 bit 7 for its logical top row.
+    constexpr blofeld::vi::LcdPanel panel{.width = 128, .reverse_commons = true};
+    static_cast<void>(publication.publish(blofeld::vi::capture_lcd(*controller, panel)));
+  }
+}
+
 void drive(blofeld::vi::VmContext &vm,
            blofeld::host::audio::Playback &audio,
            const blofeld::app::AudioConsumer &consumer,
-           const blofeld::host::Signals &signals) {
+           const blofeld::host::Signals &signals,
+           blofeld::app::DisplayPublication &display) {
   const bool terminal = ::isatty(STDERR_FILENO) != 0;
   constexpr std::chrono::milliseconds control_interval{100};
   constexpr std::chrono::milliseconds terminal_interval{250};
@@ -95,6 +107,8 @@ void drive(blofeld::vi::VmContext &vm,
   vm.start();
   auto next = std::chrono::steady_clock::now();
   while (!vm.finished()) {
+    publish_display(vm, display);
+    vm.request_display();
     if (signals.wait(control_interval) || audio.status().failed) {
       vm.request_stop();
       break;
@@ -113,6 +127,11 @@ void drive(blofeld::vi::VmContext &vm,
 int main(const int argc, char **argv) try {
   const blofeld::host::Signals signals;
   const auto profile = blofeld::app::load_profile(selected_profile(argc, argv));
+  const auto display_path =
+      profile.display.empty() ? blofeld::host::runtime_home() / "blofeld-emu" : profile.display;
+  std::filesystem::create_directories(display_path);
+  blofeld::app::DisplayPublication display(display_path);
+  std::cerr << "Display: " << display_path << '\n';
   auto image = std::make_unique<blofeld::vi::FlashImage>(blofeld::vi::FlashImage::decode(
       blofeld::host::read_file(profile.device_state, blofeld::vi::FlashImage::file_bytes)));
   auto media = std::make_unique<blofeld::vi::MediaImage>(
@@ -129,8 +148,9 @@ int main(const int argc, char **argv) try {
   blofeld::app::AudioConsumer consumer(audio);
   blofeld::vi::VmContext vm(
       std::move(image), boot_rom(profile.boot_rom), std::move(media), consumer.output());
-  drive(vm, audio, consumer, signals);
+  drive(vm, audio, consumer, signals, display);
   const auto reports = vm.wait();
+  publish_display(vm, display);
   audio.stop();
   status(audio, consumer, false);
   for (std::size_t index = 0; index < reports.size(); ++index) {

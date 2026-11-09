@@ -57,9 +57,12 @@ DisplayPublication::DisplayPublication(const std::filesystem::path &directory)
 bool DisplayPublication::publish(const vi::LcdImage &image) {
   if (previous_ == image) { return false; }
   previous_.reset();
-  const auto bitmap = encode_pbm(image);
   const auto text = encode_text(image);
-  directory_.replace("display.pbm", bitmap);
+  if (text.contains('?')) {
+    directory_.remove("display.pbm");
+  } else {
+    directory_.replace("display.pbm", encode_pbm(image));
+  }
   directory_.replace("display.txt",
                      {reinterpret_cast<const std::uint8_t *>(text.data()), text.size()});
   previous_ = image;

@@ -53,6 +53,13 @@ int main(const int argc, char **argv) try {
     std::ifstream text(root / "display.txt");
     const std::string data{std::istreambuf_iterator<char>(text), std::istreambuf_iterator<char>()};
     require(data.front() == '#' && data.back() == '\n', "Complete text publication");
+    require(publication.publish(unknown) && !publication.publish(unknown) &&
+                !std::filesystem::exists(root / "display.pbm"),
+            "Unknown LCD contents remove a stale bitmap and remain a coalesced text frame");
+    std::ifstream uncertain(root / "display.txt");
+    require(uncertain.get() == '?', "Unknown display cells remain explicit");
+    require(publication.publish(full) && std::filesystem::exists(root / "display.pbm"),
+            "A subsequent known frame restores the actual bitmap");
   }
   std::filesystem::remove_all(root);
 } catch (const std::exception &error) {

@@ -2,6 +2,7 @@
 #include "mcu/execute.hpp"
 
 #include "display/port.hpp"
+#include "display/state.hpp"
 #include "execution.hpp"
 #include "io/controls.hpp"
 #include "io/dsp_reset.hpp"
@@ -97,14 +98,16 @@ public:
      Shi &shi,
      DspReset &reset,
      const std::stop_token &stop,
-     const Controls *controls)
+     const Controls *controls,
+     DisplayState *display)
       : memory_(memory),
         flash_(image),
         ports_(shi),
         devices_(devices),
         reset_(reset),
         stop_(stop),
-        controls_(controls) {
+        controls_(controls),
+        display_state_(display) {
     // B3/B5..B7 are passive controls, with no input producer in the firmware
     // contract. Use an inactive sample while they are inputs, not a device reply.
     constexpr std::uint8_t passive_controls = 0xe8;
@@ -121,7 +124,12 @@ public:
 
   cpu12::Io callbacks() noexcept;
 
+  void capture_display() const {
+    if (display_state_ != nullptr) { display_state_->capture(display_.controller()); }
+  }
+
   bool complete_events() {
+    capture_display();
     if (release_reset_) {
       if (!reset_.release(stop_)) { return false; }
       release_reset_ = false;
@@ -342,6 +350,7 @@ private:
   bool release_reset_ = false;
   const std::stop_token &stop_;
   const Controls *controls_;
+  DisplayState *display_state_;
   cpu12::Core *core_ = nullptr;
 };
 
@@ -450,14 +459,16 @@ ExecutionReport execute(FlashImage &image,
                         Shi &shi,
                         DspReset &reset,
                         const std::stop_token &stop,
-                        const Controls *controls) {
+                        const Controls *controls,
+                        DisplayState *display) {
   Memory memory(image);
   Devices devices;
   auto grants = regions(memory, devices.usb);
-  Io io(memory, image, devices, shi, reset, stop, controls);
+  Io io(memory, image, devices, shi, reset, stop, controls, display);
   auto callbacks = io.callbacks();
   cpu12::Core core(cpu12::Memory::mapped(grants), &callbacks);
   io.bind(core);
+  io.capture_display();
   ExecutionReport report;
   const auto initial = core.reset(reset_vector);
   if (!initial.accepted) {
@@ -502,6 +513,8 @@ ExecutionReport execute(FlashImage &image,
     devices.activity(result.state);
   }
 
+  if (display != nullptr) { display->request(); }
+  io.capture_display();
   return report;
 }
 }

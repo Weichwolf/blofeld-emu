@@ -7,4 +7,5 @@ namespace blofeld::host {
 // Resolve the process's inherited configuration root during single-threaded
 // startup, before creating workers or changing environment entries.
 [[nodiscard]] std::filesystem::path configuration_home();
+[[nodiscard]] std::filesystem::path runtime_home();
 }

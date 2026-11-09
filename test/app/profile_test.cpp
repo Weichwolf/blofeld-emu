@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "process/configuration.hpp"
 #include "profile.hpp"
 
 #include <exception>
@@ -41,6 +42,7 @@ int main(const int argc, char **argv) try {
     require(rejected, "Duplicate, unknown and empty profiles fail explicitly");
   }
   require(blofeld::app::default_profile().filename() == "default.profile", "Default profile name");
+  require(blofeld::host::runtime_home().is_absolute(), "Display runtime root is absolute");
   std::filesystem::remove_all(root);
 } catch (const std::exception &error) {
 

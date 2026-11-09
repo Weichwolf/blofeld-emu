@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "display/st7565.hpp"
+#include "display/state.hpp"
 #include "execution.hpp"
 #include "io/controls.hpp"
 #include "io/dsp_reset.hpp"
@@ -164,10 +166,14 @@ void native_display_status() {
   image->bytes.back() = 0;
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::mcu::execute(*image, shi, reset, {});
+  blofeld::vi::DisplayState display;
+  const auto report = blofeld::vi::mcu::execute(*image, shi, reset, {}, nullptr, &display);
   constexpr cpu12::Address marker = 0x3000;
   require(report.failure && report.failure->address == marker && report.failure->value == 0x40,
           "Native MCU stores and reads observe the LCD's actual command-derived status");
+  const auto snapshot = display.take();
+  require(snapshot && snapshot->state().display_on && snapshot->ram(0, 0).known == 0,
+          "The final owner snapshot retains the actual LCD command and unknown RAM");
 }
 
 void native_pedal_input() {

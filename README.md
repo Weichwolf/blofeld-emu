@@ -103,9 +103,12 @@ The DSP boot input contains 192 big-endian 24-bit words. The MCU image uses
 the versioned `.bfnvm` format with explicit known-byte and erase metadata.
 Images must already exist; startup does not provision or modify files.
 The media image uses the checksummed `.bfnand` format with explicit known bits.
-Optional `firmware` and `display` paths are parsed but not yet connected
-to execution. Startup currently exits unsuccessfully because the instrument
-is incomplete; successful execution of a short program is not instrument readiness.
+The optional `display` directory overrides `$XDG_RUNTIME_DIR/blofeld-emu`
+(default runtime root: `/run/user/UID`). The MCU owner supplies controller snapshots;
+the app publishes atomic `display.pbm` and `display.txt` files. Unknown pixels remain
+explicit in text and remove the bitmap until a known frame is available.
+The optional `firmware` path is parsed but not yet connected to execution. Startup
+currently exits unsuccessfully because the instrument is incomplete; successful execution of a short program is not instrument readiness.
 SIGINT/SIGTERM request coordinated shutdown. Live status reports server-submitted
 frames, local queue occupancy, server buffer grants, measured latency and host/device
 underruns. The approximate producer reserve excludes blocking in the host consumer;
@@ -118,8 +121,9 @@ tools/blofeld-display
 ```
 
 It watches `$XDG_RUNTIME_DIR/blofeld-emu/display.pbm`, follows directory
-recreation and can save a PNG screenshot. PBM and text publication consume
-independent LCD images outside core execution and audio callbacks.
+recreation. Its header button saves a PNG to the user's Pictures directory.
+For an explicit path without a window, use `tools/blofeld-display --screenshot FILE.png`. PBM and text publication
+consume independent LCD images outside core execution and audio callbacks.
 
 Firmware, samples, manuals and populated images remain local and are not
 redistributed. [Reference manifests](doc/README.txt) retain their identities.

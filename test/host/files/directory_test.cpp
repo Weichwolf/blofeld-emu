@@ -49,6 +49,14 @@ int main(const int argc, char **argv) try {
       const blofeld::host::Directory competitor(root);
     } catch (const std::system_error &) { rejected = true; }
     require(rejected, "Only one writer owns a directory");
+    directory.remove("frame");
+    directory.remove("frame");
+    require(!std::filesystem::exists(root / "frame"), "Removal is confined and idempotent");
+    rejected = false;
+    try {
+      directory.remove("../outside");
+    } catch (const std::invalid_argument &) { rejected = true; }
+    require(rejected, "Removal cannot leave its directory");
     std::filesystem::rename(root, root.string() + ".moved");
     std::filesystem::create_directory(root);
     directory.replace("frame", first);

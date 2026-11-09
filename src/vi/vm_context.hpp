@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "display/st7565.hpp"
+#include "display/state.hpp"
 #include "execution.hpp"
 #include "io/controls.hpp"
 #include "io/dsp_reset.hpp"
@@ -13,6 +15,7 @@
 #include <atomic>
 #include <dsp56300/memory.hpp>
 #include <memory>
+#include <optional>
 #include <stop_token>
 #include <thread>
 #include <vector>
@@ -33,6 +36,10 @@ public:
 
   void pedal(const bool level) noexcept { controls_.pedal(level); }
 
+  void request_display() noexcept { display_.request(); }
+
+  [[nodiscard]] std::optional<St7565> take_display() { return display_.take(); }
+
   void start();
 
   [[nodiscard]] bool finished() const noexcept {
@@ -47,6 +54,7 @@ private:
   std::vector<dsp56300::Word> boot_;
   std::unique_ptr<MediaImage> media_;
   Controls controls_;
+  DisplayState display_;
   PcmOutput output_;
   Shi shi_;
   DspReset reset_;

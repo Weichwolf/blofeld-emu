@@ -3,6 +3,7 @@
 
 #include <filesystem>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <unistd.h>
 
@@ -28,6 +29,15 @@ std::filesystem::path configuration_home() {
   const auto root = configured.empty() ? std::filesystem::path(home) / ".config"
                                        : std::filesystem::path(configured);
   if (!root.is_absolute()) { throw std::runtime_error("Configuration home must be absolute"); }
+  return root;
+}
+
+std::filesystem::path runtime_home() {
+  const auto configured = inherited("XDG_RUNTIME_DIR");
+  const auto root = configured.empty()
+                        ? std::filesystem::path("/run/user") / std::to_string(::getuid())
+                        : std::filesystem::path(configured);
+  if (!root.is_absolute()) { throw std::runtime_error("Runtime home must be absolute"); }
   return root;
 }
 }

@@ -58,6 +58,11 @@ binding, not a recovered physical enable route. B7/B6 select, B5 selects reading
 and B0 data. Status reflects completed LCD state; dummy reads retain the actual
 holder, RAM reads advance once per completed transaction, and unknown RAM fails.
 Peripheral reset is supplied by VM lifecycle; no PCB reset net is assumed.
+The MCU owner captures requested LCD snapshots outside native execution. A bounded
+latest-state mailbox transfers the complete controller, including unknown cells,
+to the app. Rendering and atomic PBM/text publication run on the control thread;
+they never access the live controller or execute inside audio callbacks. Map the
+firmware's columns 0..127 and page-7/bit-7 logical top row to the visible panel.
 
 A selected boot transaction whose SHI receive mode is not published yields its
 MCU owner. Outside the native callback, wait for the DSP's actual HCSR write or

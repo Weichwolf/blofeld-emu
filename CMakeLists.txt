@@ -33,9 +33,9 @@ find_program(BLOFELD_PATCH NAMES patch REQUIRED)
 include(cmake/PulseAudio.cmake)
 set(CMAKE_CXX_CLANG_TIDY "${BLOFELD_CLANG_TIDY};--warnings-as-errors=*")
 
-add_library(blofeld_vi_display src/vi/display/st7565.cpp src/vi/display/lcd_image.cpp)
+add_library(blofeld_vi_display src/vi/display/st7565.cpp src/vi/display/lcd_image.cpp src/vi/display/state.cpp)
 target_include_directories(blofeld_vi_display PUBLIC src/vi)
-target_link_libraries(blofeld_vi_display PUBLIC blofeld_quality)
+target_link_libraries(blofeld_vi_display PUBLIC blofeld_quality Threads::Threads)
 add_library(blofeld_host_files src/host/files/directory.cpp src/host/files/read.cpp)
 target_include_directories(blofeld_host_files PUBLIC src/host)
 target_link_libraries(blofeld_host_files PUBLIC blofeld_quality)
@@ -81,7 +81,7 @@ target_include_directories(blofeld_app_audio PUBLIC src/app)
 target_link_libraries(blofeld_app_audio PUBLIC blofeld_host_audio blofeld_vi_execution)
 add_executable(blofeld-headless src/app/main.cpp)
 target_include_directories(blofeld-headless PRIVATE src/app)
-target_link_libraries(blofeld-headless PRIVATE blofeld_vi_execution blofeld_app_profile blofeld_app_audio)
+target_link_libraries(blofeld-headless PRIVATE blofeld_vi_execution blofeld_app_profile blofeld_app_audio blofeld_app_display)
 
 file(GLOB_RECURSE BLOFELD_FORMAT_SOURCES CONFIGURE_DEPENDS
   "src/*.hpp" "src/*.cpp" "test/*.hpp" "test/*.cpp")
@@ -103,6 +103,7 @@ if(BUILD_TESTING)
   blofeld_unit(host-signals-test test/host/process/signals_test.cpp blofeld_host_process)
   blofeld_unit(vi-display-test test/vi/display/st7565_test.cpp blofeld_vi_display)
   blofeld_unit(vi-display-port-test test/vi/display/port_test.cpp blofeld_vi_execution)
+  blofeld_unit(vi-display-state-test test/vi/display/state_test.cpp blofeld_vi_display)
   blofeld_unit(vi-lcd-image-test test/vi/display/lcd_image_test.cpp blofeld_vi_display)
   blofeld_unit(host-directory-test test/host/files/directory_test.cpp blofeld_host_files)
   blofeld_unit(app-display-test test/app/display/publication_test.cpp blofeld_app_display)
@@ -169,6 +170,9 @@ if(BUILD_TESTING)
   add_test(NAME app-ui-frame-test COMMAND "${Python3_EXECUTABLE}" -B
     "${CMAKE_CURRENT_SOURCE_DIR}/test/app/ui/frame_test.py" "${CMAKE_CURRENT_BINARY_DIR}/Testing")
   set_tests_properties(app-ui-frame-test PROPERTIES TIMEOUT 10)
+  add_test(NAME app-ui-display-test COMMAND "${Python3_EXECUTABLE}" -B
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/app/ui/display_test.py" "${CMAKE_CURRENT_BINARY_DIR}/Testing")
+  set_tests_properties(app-ui-display-test PROPERTIES TIMEOUT 10)
   get_property(blofeld_unit_targets GLOBAL PROPERTY BLOFELD_UNIT_TARGETS)
   add_custom_target(quality
     COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure

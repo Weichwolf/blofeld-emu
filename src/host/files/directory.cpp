@@ -26,6 +26,13 @@ namespace {
       error, std::generic_category(), std::string(operation) + ": " + std::string(path));
 }
 
+std::string entry_name(const std::string_view name) {
+  if (name.empty() || name == "." || name == ".." || name.contains('/') || name.contains('\0')) {
+    throw std::invalid_argument("Publication requires a single filename");
+  }
+  return std::string(name);
+}
+
 void write_all(const int descriptor, std::span<const std::uint8_t> bytes) {
   while (!bytes.empty()) {
     const auto count =
@@ -57,10 +64,7 @@ Directory::~Directory() {
 
 void Directory::replace(const std::string_view name,
                         const std::span<const std::uint8_t> bytes) const {
-  if (name.empty() || name == "." || name == ".." || name.contains('/') || name.contains('\0')) {
-    throw std::invalid_argument("Publication requires a single filename");
-  }
-  const std::string filename(name);
+  const auto filename = entry_name(name);
   const auto staging = "." + filename + ".tmp";
   if (::unlinkat(descriptor_, staging.c_str(), 0) != 0 && errno != ENOENT) {
     fail("Remove stale publication", staging);
@@ -84,6 +88,13 @@ void Directory::replace(const std::string_view name,
     const auto error = errno;
     ::unlinkat(descriptor_, staging.c_str(), 0);
     throw std::system_error(error, std::generic_category(), "Replace publication " + filename);
+  }
+}
+
+void Directory::remove(const std::string_view name) const {
+  const auto filename = entry_name(name);
+  if (::unlinkat(descriptor_, filename.c_str(), 0) != 0 && errno != ENOENT) {
+    fail("Remove publication", filename);
   }
 }
 }
