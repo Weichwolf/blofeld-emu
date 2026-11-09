@@ -28,6 +28,14 @@ namespace {
 constexpr unsigned rate = 44100;
 constexpr std::chrono::seconds startup_limit{10};
 constexpr std::chrono::milliseconds startup_poll{1}, control_poll{10};
+constexpr std::chrono::milliseconds display_interval{100};
+
+void publish_display(vi::VmContext &vm, DisplayPublication &display) {
+  if (const auto controller = vm.take_display()) {
+    constexpr vi::LcdPanel panel{.width = 128, .reverse_commons = true};
+    static_cast<void>(display.publish(vi::capture_lcd(*controller, panel)));
+  }
+}
 
 const std::filesystem::path &required_path(const std::optional<std::filesystem::path> &path) {
   if (!path) { throw std::invalid_argument("Offline render requires MIDI and WAV paths"); }
@@ -77,12 +85,21 @@ vi::PcmOutput OfflineRender::output() noexcept {
 }
 
 std::optional<std::uint64_t> OfflineRender::startup(vi::VmContext &vm,
-                                                    const host::Signals &signals) {
+                                                    const host::Signals &signals,
+                                                    DisplayPublication &display) {
   MidiStartup startup;
   static_cast<void>(startup.poll(vm.midi(), false));
+  vm.request_display();
   vm.start();
+  auto next_display = std::chrono::steady_clock::now();
   while (!vm.finished()) {
     if (signals.wait(startup_poll)) { break; }
+    const auto now = std::chrono::steady_clock::now();
+    if (now >= next_display) {
+      publish_display(vm, display);
+      vm.request_display();
+      next_display = now + display_interval;
+    }
     if (const auto origin = startup.poll(vm.midi(), wav_.has_pcm())) { return origin; }
     if (std::chrono::steady_clock::now() - started_ >= startup_limit) {
       std::cerr
@@ -119,10 +136,12 @@ int OfflineRender::run(vi::VmContext &vm,
   vm_ = &vm;
   launched_ = launched;
   started_ = std::chrono::steady_clock::now();
-  const auto origin = startup(vm, signals);
+  const auto origin = startup(vm, signals, display);
   if (!origin) {
     vm.request_stop();
-    return report_execution(vm.wait()) ? 2 : 1;
+    const auto reports = vm.wait();
+    publish_display(vm, display);
+    return report_execution(reports) ? 2 : 1;
   }
   ready_ = std::chrono::steady_clock::now();
   wav_.begin_at(*origin);
@@ -145,13 +164,9 @@ int OfflineRender::run(vi::VmContext &vm,
     while (vm.midi().read_output()) {} // Drain ordinary firmware replies, never synthesize them.
     const auto now = std::chrono::steady_clock::now();
     if (now >= next_display) {
-      if (const auto controller = vm.take_display()) {
-        constexpr vi::LcdPanel panel{.width = 128, .reverse_commons = true};
-        static_cast<void>(display.publish(vi::capture_lcd(*controller, panel)));
-      }
+      publish_display(vm, display);
       vm.request_display();
-      constexpr std::chrono::milliseconds interval{100};
-      next_display = now + interval;
+      next_display = now + display_interval;
     }
   }
   input.request_stop();
