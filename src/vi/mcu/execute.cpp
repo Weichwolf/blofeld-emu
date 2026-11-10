@@ -20,6 +20,8 @@
 #include "storage/flash_image.hpp"
 
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <cpu12/core.hpp>
 #include <cpu12/memory.hpp>
 #include <cstdint>
@@ -703,7 +705,31 @@ std::vector<cpu12::Ram> regions(Memory &memory, Usb &usb) {
 
 enum class Dispatch : std::uint8_t { run, again, done };
 
-void bind_memory(cpu12::Core &core, Memory &memory, Usb &usb, std::vector<cpu12::Ram> &grants) {
+void prepare_code(cpu12::Core &core, ExecutionReport &report) {
+  const std::array entries{core.registers().pc};
+  const auto begun = std::chrono::steady_clock::now();
+  const auto prepared = core.prepare(entries);
+  const auto elapsed =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - begun)
+          .count();
+  report.preparation_nanoseconds += static_cast<std::uint64_t>(elapsed);
+  report.prepared_native_bytes += prepared.native_bytes;
+  if (prepared.failure.fault != cpu12::Fault::none) {
+    report.preparation_diagnostic = Failure{
+        .operation = operation(prepared.failure.fault),
+        .pc = prepared.failure.pc,
+        .address = prepared.failure.address,
+        .value = prepared.failure.value,
+        .code = static_cast<std::uint32_t>(prepared.failure.fault),
+        .reason = "MCU preparation incomplete; remaining entries use retained native execution"};
+  }
+}
+
+void bind_memory(cpu12::Core &core,
+                 Memory &memory,
+                 Usb &usb,
+                 std::vector<cpu12::Ram> &grants,
+                 ExecutionReport &report) {
   const bool mapping_changed = memory.commit_mapping();
   const bool buffers_changed = usb.commit_mapping();
   const bool program_changed = memory.bind_program(core.registers().pc);
@@ -711,6 +737,7 @@ void bind_memory(cpu12::Core &core, Memory &memory, Usb &usb, std::vector<cpu12:
   auto next_grants = regions(memory, usb);
   core.set_memory(cpu12::Memory::mapped(next_grants));
   grants.swap(next_grants);
+  prepare_code(core, report);
 }
 
 Dispatch prepare(cpu12::Core &core, Devices &devices, ExecutionReport &report) {
@@ -770,8 +797,9 @@ ExecutionReport execute(FlashImage &image,
                              .reason = "MCU reset vector access failed"};
     return report;
   }
+  prepare_code(core, report);
   while (!stop.stop_requested()) {
-    bind_memory(core, memory, devices.usb, grants);
+    bind_memory(core, memory, devices.usb, grants, report);
     const auto dispatch = prepare(core, devices, report);
     if (dispatch == Dispatch::done) { break; }
     if (dispatch == Dispatch::again) { continue; }

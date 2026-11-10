@@ -26,5 +26,7 @@ struct ExecutionReport {
   std::exception_ptr exception;
   std::optional<std::uint32_t> stopped_pc;
   std::uint64_t instructions = 0;
+  std::uint64_t preparation_nanoseconds = 0, prepared_native_bytes = 0;
+  std::optional<Failure> preparation_diagnostic;
 };
 }

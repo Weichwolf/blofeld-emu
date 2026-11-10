@@ -7,6 +7,13 @@ Independent CPU12 runtime core:
   GPL-3.0-only; corresponding source and notices remain in the pinned checkout.
   The source subproject uses its strict diagnostics and matching sanitizers.
 
+LLVM 19 compiler/runtime libraries:
+  LLVM Project contributors, Apache-2.0 WITH LLVM-exception.
+  https://llvm.org/
+  Used privately by the cores for semantic IR optimization and native JIT code.
+  Linked from the installed development package; no foreign source build or
+  sanitizer instrumentation. Complete notices accompany the core dependency.
+
 zlib:
   Jean-loup Gailly and Mark Adler, zlib license (LICENSES/Zlib.txt).
   https://zlib.net/zlib_license.html
