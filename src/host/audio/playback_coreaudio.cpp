@@ -408,6 +408,7 @@ struct Playback::Impl {
                .maximum_frames = capacity,
                .minimum_request_frames = {},
                .position_history_frames = position_history_intervals * capacity,
+               .maximum_position_uncertainty_ns = 0,
                .sink = text_property(device, kAudioObjectPropertyName),
                .sink_format = "CoreAudio " + std::to_string(hardware.mBitsPerChannel) + "bit/" +
                               std::to_string(hardware.mChannelsPerFrame) + "ch PCM"};

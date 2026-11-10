@@ -45,8 +45,9 @@ std::size_t queue_grant(const host::audio::Grants &grants) {
   std::cerr << "Audio: s24-in-32 stereo " << grants.rate << "Hz -> " << grants.sink_format << ' '
             << grants.sink_rate << "Hz on " << grants.sink << "; buffer=" << grants.target_frames
             << " max=" << grants.maximum_frames << '\n';
-  if (!grants.position_history_frames || *grants.position_history_frames == 0) {
-    throw std::runtime_error("Live MIDI requires qualified native audio positions/history grants");
+  if (!grants.position_history_frames || *grants.position_history_frames == 0 ||
+      !grants.maximum_position_uncertainty_ns) {
+    throw std::runtime_error("Live MIDI requires native positions, history and uncertainty grants");
   }
   return grants.maximum_frames;
 }
@@ -56,7 +57,9 @@ Live::Live(host::audio::Playback &audio, DisplayPublication &display, const Opti
     : audio_(audio),
       display_(display),
       consumer_(audio, true),
-      clock_(audio.grants().rate, queue_grant(audio.grants())),
+      clock_({.rate = audio.grants().rate,
+              .queue_frames = queue_grant(audio.grants()),
+              .uncertainty_ns = audio.grants().maximum_position_uncertainty_ns.value_or(0)}),
       source_id_(options.midi_source),
       group_(options.midi_group) {
   const auto lead = std::chrono::duration<double>(static_cast<double>(clock_.lead_ticks()) /

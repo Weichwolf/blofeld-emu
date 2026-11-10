@@ -16,10 +16,14 @@ public:
     bool operator==(const Window &) const = default;
   };
 
-  static constexpr std::uint64_t delivery_ns = 1000000, maximum_gap_ns = 10000000;
-  static constexpr std::uint64_t maximum_uncertainty_ns = delivery_ns / 4;
+  struct Grant {
+    unsigned rate = 0;
+    std::size_t queue_frames = 0;
+    std::uint64_t uncertainty_ns = 0;
+  };
 
-  LiveClock(unsigned rate, std::size_t queue_frames);
+  static constexpr std::uint64_t delivery_ns = 1000000, maximum_gap_ns = 10000000;
+  explicit LiveClock(Grant grant);
 
   [[nodiscard]] std::uint64_t prime_ticks() const noexcept { return prime_; }
 
@@ -38,7 +42,8 @@ private:
   static constexpr std::size_t capacity = 64;
   std::array<PcmClock::Point, capacity> points_{};
   std::size_t head_ = 0, size_ = 0;
-  std::uint64_t prime_ = 0, lead_ = 0, uncertainty_ = 0;
+  std::uint64_t prime_ = 0, lead_ = 0;
+  const std::uint64_t uncertainty_;
   std::optional<std::uint64_t> committed_, previous_event_, previous_poll_;
 };
 }

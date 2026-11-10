@@ -20,6 +20,7 @@ struct Grants {
   std::size_t target_frames = 0, maximum_frames = 0;
   std::optional<std::size_t> minimum_request_frames;
   std::optional<std::size_t> position_history_frames;
+  std::optional<std::uint64_t> maximum_position_uncertainty_ns;
   std::string sink, sink_format;
 };
 

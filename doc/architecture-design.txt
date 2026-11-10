@@ -440,11 +440,12 @@ native maximum and the 32-frame local queue. Retain 3*C source frames for
 correlation and require reopen when native buffer grants change. Requested
 sizes are preferences, not guaranteed native grants or latency measurements.
 Additional correlation uncertainty is published atomically and retained unchanged
-in PCM clock points. Live admission fixes a session budget at its first point:
-zero for exact native timestamps, or 250 microseconds for bounded estimates.
-Delay silence commitments by that additional budget and add it to MIDI lead;
-never retime queued input when later uncertainty decreases. Reject estimates
-outside the budget or an exact session becoming uncertain. These bounds describe
+in PCM clock points. Grant an immutable maximum correlation uncertainty before
+priming: CoreAudio zero; PulseAudio the ceiling half-width of its bounded query.
+Live admission delays silence commitments by the complete grant and adds its
+ceiling-rounded value to MIDI lead. The chosen window includes both uncertainty
+margins and must fit within 10 ms. Never retime queued input when observations
+become more precise; reject every estimate outside the original native grant. These bounds describe
 backend observations; physical key-to-analog latency remains a separate gate.
 Native contract and implementation references (dependency version is pinned):
 https://www.freedesktop.org/software/pulseaudio/doxygen/structpa__timing__info.html

@@ -71,6 +71,7 @@ struct Playback::Impl {
                 .maximum_frames = 16,
                 .minimum_request_frames = 4,
                 .position_history_frames = history,
+                .maximum_position_uncertainty_ns = 0,
                 .sink = "test",
                 .sink_format = "s24"};
 };

@@ -20,7 +20,8 @@ legacy sources expose group 0. Both paths share MIDI 1.0 validation.
 Live routing selects one source/group and waits for original application WAI,
 MIDI identity and valid PCM before priming native output. A bounded history of
 native audio observations maps input timestamps into original musical time with
-an explicit finite delivery allowance and a fixed session correlation budget.
+an explicit finite delivery allowance and a fixed native correlation-uncertainty
+grant. The software window includes the complete grant and must fit within 10 ms.
 Estimates beyond that budget are rejected. Late input and missing clock contracts fail;
 the MCU clock is not a host timestamp anchor. Live deadline qualification is incomplete.
 The host SMF reader streams timestamped events with tempo/SMPTE handling and

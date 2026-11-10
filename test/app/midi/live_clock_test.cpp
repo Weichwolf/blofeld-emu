@@ -40,7 +40,7 @@ LiveClock::Window required_window(LiveClock &clock, const std::uint64_t now) {
 }
 
 void actual_intervals() {
-  LiveClock clock(rate, queue);
+  LiveClock clock({.rate = rate, .queue_frames = queue, .uncertainty_ns = 0});
   constexpr std::uint64_t expected_prime = 348300;
   constexpr std::uint64_t expected_lead = 408300;
   constexpr std::uint64_t last_delta = 31;
@@ -83,7 +83,7 @@ void actual_intervals() {
 }
 
 void retention_and_limits() {
-  LiveClock clock(rate, queue);
+  LiveClock clock({.rate = rate, .queue_frames = queue, .uncertainty_ns = 0});
   constexpr std::uint64_t points = 100;
   for (std::uint64_t index = 0; index < points; ++index) {
     clock.observe(point(host + (index * interval), tick + (index * 3)));
@@ -99,25 +99,25 @@ void retention_and_limits() {
   constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
   constexpr auto large_host = maximum - (4 * interval);
   const auto large_tick = maximum - clock.lead_ticks() - interval;
-  LiveClock wide(rate, queue);
+  LiveClock wide({.rate = rate, .queue_frames = queue, .uncertainty_ns = 0});
   wide.observe(point(large_host, large_tick));
   wide.observe(point(large_host + interval, large_tick + 3));
   require(wide.event(large_host + (interval / 2)) == large_tick + wide.lead_ticks() + 2,
           "Large absolute guest and host epochs keep every integer bit");
-  LiveClock exhausted(rate, queue);
+  LiveClock exhausted({.rate = rate, .queue_frames = queue, .uncertainty_ns = 0});
   exhausted.observe(point(host, maximum));
   rejects([&] { static_cast<void>(exhausted.event(host)); });
-  LiveClock product(rate, queue);
+  LiveClock product({.rate = rate, .queue_frames = queue, .uncertainty_ns = 0});
   product.observe(point(host, 0));
   product.observe(point(host + interval, maximum));
   rejects([&] { static_cast<void>(product.event(host + (interval / 2))); });
 }
 
 void faults() {
-  rejects([] { const LiveClock clock(0, queue); });
-  rejects([] { const LiveClock clock(rate, 0); });
-  rejects([] { const LiveClock clock(rate, rate); });
-  LiveClock clock(rate, queue);
+  rejects([] { const LiveClock clock({.rate = 0, .queue_frames = queue, .uncertainty_ns = 0}); });
+  rejects([] { const LiveClock clock({.rate = rate, .queue_frames = 0, .uncertainty_ns = 0}); });
+  rejects([] { const LiveClock clock({.rate = rate, .queue_frames = rate, .uncertainty_ns = 0}); });
+  LiveClock clock({.rate = rate, .queue_frames = queue, .uncertainty_ns = 0});
   clock.observe(point(host, tick));
   for (const auto invalid : {point(0, tick + 1),
                              point(host - 1, tick + 1),
@@ -137,41 +137,49 @@ void faults() {
 }
 
 void bounded_uncertainty() {
-  LiveClock clock(rate, queue);
-  const auto base = clock.lead_ticks();
-  auto first = point(host, tick);
-  first.uncertainty_ns = 1;
-  clock.observe(first);
-  constexpr std::uint64_t reserve_ticks = 15000;
-  require(clock.uncertainty_ns() == LiveClock::maximum_uncertainty_ns &&
-              clock.lead_ticks() == base + reserve_ticks,
-          "An estimated native observation reserves a fixed session-wide correlation bound");
+  constexpr std::uint64_t granted = 362812;
+  constexpr std::uint64_t reserve_ticks = 21769;
+  constexpr std::size_t native_queue = 160;
+  LiveClock clock({.rate = rate, .queue_frames = native_queue, .uncertainty_ns = granted});
+  const auto base = LiveClock({.rate = rate, .queue_frames = native_queue}).lead_ticks();
+  require(clock.uncertainty_ns() == granted && clock.lead_ticks() == base + reserve_ticks,
+          "Immutable native grants reserve a ceiling-rounded lead before any observation");
+  clock.observe(point(host, tick));
   auto next = point(host + interval, tick + 11);
-  next.uncertainty_ns = LiveClock::maximum_uncertainty_ns;
+  next.uncertainty_ns = granted;
   clock.observe(next);
-  const auto observed =
-      required_window(clock, host + LiveClock::delivery_ns + LiveClock::maximum_uncertainty_ns);
+  const auto observed = required_window(clock, host + LiveClock::delivery_ns + granted);
   require(observed.host_ns == host && observed.ticks == tick + base + reserve_ticks,
-          "Silence waits for the additional uncertainty while MIDI keeps its conservative lead");
+          "Silence includes the full granted uncertainty even after an exact first point");
   clock.commit(observed);
   require(clock.event(host) == tick + base + reserve_ticks,
-          "Exact boundary MIDI remains ordered behind the same bounded native observation");
+          "Exact boundary MIDI retains the same conservative correlation lead");
   auto later = point(host + (2 * interval), tick + 16);
   clock.observe(later);
-  require(clock.uncertainty_ns() == LiveClock::maximum_uncertainty_ns &&
-              clock.lead_ticks() == base + reserve_ticks,
-          "A later exact observation never retimes earlier commitments or queued notes");
+  require(clock.uncertainty_ns() == granted && clock.lead_ticks() == base + reserve_ticks,
+          "Later exact observations never retime earlier commitments or queued notes");
   constexpr std::uint64_t terminal_delta = 17;
   later = point(host + (3 * interval), tick + terminal_delta);
-  later.uncertainty_ns = LiveClock::maximum_uncertainty_ns + 1;
+  later.uncertainty_ns = granted + 1;
   rejects([&] { clock.observe(later); });
-  LiveClock exact(rate, queue);
+  LiveClock exact({.rate = rate, .queue_frames = queue, .uncertainty_ns = 0});
   exact.observe(point(host, tick));
   rejects([&] { exact.observe(next); });
   constexpr std::size_t large_queue = 188;
-  LiveClock narrow(rate, large_queue);
-  rejects([&] { narrow.observe(first); });
+  rejects([] {
+    const LiveClock narrow({.rate = rate, .queue_frames = large_queue, .uncertainty_ns = granted});
+  });
+  rejects([] {
+    const LiveClock excessive(
+        {.rate = rate, .queue_frames = queue, .uncertainty_ns = LiveClock::maximum_gap_ns});
+  });
+  rejects([] {
+    const LiveClock exhausted({.rate = rate,
+                               .queue_frames = queue,
+                               .uncertainty_ns = std::numeric_limits<std::uint64_t>::max()});
+  });
 }
+
 }
 
 int main() try {

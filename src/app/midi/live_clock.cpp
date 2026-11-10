@@ -23,7 +23,8 @@ std::uint64_t add(const std::uint64_t a, const std::uint64_t b) {
 }
 }
 
-LiveClock::LiveClock(const unsigned rate, const std::size_t queue_frames) {
+LiveClock::LiveClock(const Grant grant) : uncertainty_(grant.uncertainty_ns) {
+  const auto [rate, queue_frames, uncertainty_ns] = grant;
   if (rate == 0 || queue_frames == 0 || queue_frames > rate) {
     throw std::invalid_argument("Live MIDI requires bounded actual audio queue grants");
   }
@@ -31,12 +32,15 @@ LiveClock::LiveClock(const unsigned rate, const std::size_t queue_frames) {
   constexpr std::uint64_t block_frames = 16;
   const auto frames = (std::uint64_t{queue_frames} * 2) + block_frames;
   const auto duration = (frames * ns_per_second + rate - 1) / rate;
-  if (duration > maximum_gap_ns - delivery_ns) {
+  if (uncertainty_ns > (maximum_gap_ns - delivery_ns) / 2 ||
+      duration > maximum_gap_ns - delivery_ns - (2 * uncertainty_ns)) {
     throw std::runtime_error("Chosen live MIDI admission exceeds 10 ms: queue-frames=" +
                              std::to_string(queue_frames) + " rate=" + std::to_string(rate));
   }
   prime_ = (frames * vi::MidiPort::reference_hz + rate - 1) / rate;
-  lead_ = prime_ + delivery_ns * vi::MidiPort::reference_hz / ns_per_second;
+  lead_ =
+      prime_ + ((delivery_ns + uncertainty_ns) * vi::MidiPort::reference_hz + ns_per_second - 1) /
+                   ns_per_second;
 }
 
 const PcmClock::Point &LiveClock::point(const std::size_t index) const noexcept {
@@ -45,14 +49,11 @@ const PcmClock::Point &LiveClock::point(const std::size_t index) const noexcept 
 
 void LiveClock::observe(const PcmClock::Point next) {
   if (next.host_ns == 0) { throw std::runtime_error("Live audio host timestamp is missing"); }
-  if (next.uncertainty_ns > maximum_uncertainty_ns || next.uncertainty_ns >= next.host_ns ||
+  if (next.uncertainty_ns > uncertainty_ || next.uncertainty_ns >= next.host_ns ||
       next.uncertainty_ns > maximum - next.host_ns) {
     throw std::runtime_error("Native audio correlation exceeds the live uncertainty bound");
   }
   if (size_ != 0) {
-    if (next.uncertainty_ns > uncertainty_) {
-      throw std::runtime_error("Native audio uncertainty requires a new readiness handshake");
-    }
     const auto &previous = point(size_ - 1);
     if (next == previous) { return; }
     if (next.epoch != previous.epoch || next.audio_epoch != previous.audio_epoch) {
@@ -62,14 +63,6 @@ void LiveClock::observe(const PcmClock::Point next) {
         next.host_ns - previous.host_ns > maximum_gap_ns) {
       throw std::runtime_error("Live audio correlation moved backwards or missed its deadline");
     }
-  } else if (next.uncertainty_ns != 0) {
-    constexpr auto reserve = maximum_uncertainty_ns * vi::MidiPort::reference_hz / ns_per_second;
-    constexpr auto bound = maximum_gap_ns * vi::MidiPort::reference_hz / ns_per_second;
-    if (lead_ > bound - (2 * reserve)) {
-      throw std::runtime_error("Native audio uncertainty exceeds the live admission window");
-    }
-    uncertainty_ = maximum_uncertainty_ns;
-    lead_ += reserve;
   }
   if (size_ == capacity) {
     head_ = (head_ + 1) % capacity;

@@ -235,6 +235,7 @@ struct Playback::Impl {
     constexpr unsigned history_queues = 3;
     granted.position_history_frames = history_queues * granted.maximum_frames;
     query_bound_ns = std::uint64_t{limits.minreq / frame_bytes} * ns_per_second / rate;
+    granted.maximum_position_uncertainty_ns = (query_bound_ns / 2) + (query_bound_ns % 2);
     const auto *device = pa_stream_get_device_name(stream.get());
     if (device == nullptr) { fail("Read audio endpoint"); }
     granted.sink = device;
