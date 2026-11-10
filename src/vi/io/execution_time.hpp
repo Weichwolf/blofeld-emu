@@ -30,9 +30,15 @@ private:
   template <typename Ready>
   [[nodiscard]] bool await(std::atomic<bool> &waiting, const std::stop_token &stop, Ready ready);
 
-  std::atomic<std::uint64_t> mcu_{0}, first_wait_{0};
+  // The MCU frontier and transaction handshake are genuinely shared. Keep
+  // the DSP owner's progress writes and read-mostly reset state off their line.
+  alignas(128) std::atomic<std::uint64_t> mcu_{0};
+  std::atomic<std::uint64_t> first_wait_{0};
   std::atomic<bool> waited_{false};
-  std::atomic<std::uint64_t> dsp_{0}, origin_{0}, transaction_{0}, changed_{0};
-  std::atomic<bool> waiting_mcu_{false}, waiting_dsp_{false}, held_{false};
+  std::atomic<std::uint64_t> transaction_{0}, changed_{0};
+  std::atomic<bool> waiting_mcu_{false}, waiting_dsp_{false};
+  alignas(128) std::atomic<std::uint64_t> dsp_{0};
+  alignas(128) std::atomic<std::uint64_t> origin_{0};
+  std::atomic<bool> held_{false};
 };
 }
