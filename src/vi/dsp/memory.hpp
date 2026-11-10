@@ -58,6 +58,7 @@ private:
   Block<high_x_words> high_x_;
   Block<high_y_words> high_y_;
   bool initialized_x_ = false, initialized_y_ = false;
+  dsp56300::Word mapping_ = dsp56300::word_mask;
   std::array<dsp56300::MemoryWindow, 3> program_windows_, x_windows_, y_windows_;
 };
 }

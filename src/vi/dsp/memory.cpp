@@ -14,6 +14,7 @@ namespace {
 constexpr dsp56300::Word rom_first = 0x4000, high_first = 0xc000;
 constexpr dsp56300::Word boot_first = 0xff0000;
 constexpr dsp56300::Word memory_switch = 0x80;
+constexpr dsp56300::Word mapping_mask = memory_switch | (3U << 21);
 constexpr std::size_t switched_x_words = 0x4000;
 constexpr dsp56300::Word y_program_first = 0x3000;
 constexpr dsp56300::Word reserved_y_last = 0xffffff;
@@ -34,6 +35,9 @@ Memory::Memory(const Rom rom) : rom_(rom) {
 
 void Memory::configure(const dsp56300::Word omr) noexcept {
   const bool switched = (omr & memory_switch) != 0;
+  const auto mapping = switched ? omr & mapping_mask : 0U;
+  if (mapping == mapping_) { return; }
+  mapping_ = mapping;
   constexpr std::array<std::size_t, 4> y_sizes{0x2000, 0x4000, 0x8000, 0xa000};
   const auto x_size = switched ? switched_x_words : high_x_.words.size();
   const auto y_size = switched ? y_sizes[(omr >> 21U) & 3] : high_y_.words.size();

@@ -135,24 +135,27 @@ void switched_maps() {
       Map{.mode = 0x600080, .program_end = 0x3000, .x_end = 0x10000, .y_end = 0x16000}};
   constexpr std::size_t physical_words = std::size_t{88} * 1024;
   Memory memory;
+  constexpr Word unrelated_mode_bits = 0x9fff7f;
   for (const auto map : maps) {
-    memory.configure(map.mode);
-    const auto x = memory.windows(Space::x);
-    const auto y = memory.windows(Space::y);
-    require(x[1].address + x[1].words.size() == map.x_end &&
-                y[1].address + y[1].words.size() == map.y_end &&
-                map.program_end + x[0].words.size() + x[1].words.size() + y[0].words.size() +
-                        y[1].words.size() ==
-                    physical_words,
-            "Each table 3-6 mode partitions exactly the same 88K physical RAM words");
-    require(memory.write({.space = Space::program, .address = map.program_end - 1, .value = 1}) &&
-                !memory.write({.space = Space::program, .address = map.program_end, .value = 1}),
-            "The program limit follows the selected banks");
-    Word value = 0;
-    require(memory.write({.space = Space::x, .address = map.x_end - 1, .value = 2}) &&
-                memory.read(Space::x, map.x_end - 1, value) && value == 2 &&
-                !memory.read(Space::x, map.x_end, value),
-            "Data RAM ends at its actual bank limit, not at an allocation size");
+    for (const Word extra : {0U, unrelated_mode_bits}) {
+      memory.configure(map.mode | extra);
+      const auto x = memory.windows(Space::x);
+      const auto y = memory.windows(Space::y);
+      require(x[1].address + x[1].words.size() == map.x_end &&
+                  y[1].address + y[1].words.size() == map.y_end &&
+                  map.program_end + x[0].words.size() + x[1].words.size() + y[0].words.size() +
+                          y[1].words.size() ==
+                      physical_words,
+              "Each table 3-6 mode partitions exactly the same 88K physical RAM words");
+      require(memory.write({.space = Space::program, .address = map.program_end - 1, .value = 1}) &&
+                  !memory.write({.space = Space::program, .address = map.program_end, .value = 1}),
+              "The program limit follows the selected banks");
+      Word value = 0;
+      require(memory.write({.space = Space::x, .address = map.x_end - 1, .value = 2}) &&
+                  memory.read(Space::x, map.x_end - 1, value) && value == 2 &&
+                  !memory.read(Space::x, map.x_end, value),
+              "Data RAM ends at its actual bank limit, not at an allocation size");
+    }
   }
 }
 
