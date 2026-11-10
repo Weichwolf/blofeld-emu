@@ -52,7 +52,7 @@
   },
   "independent_cpu12": {
     "source": "https://github.com/Weichwolf/cpu12",
-    "revision": "c4c715a22de1539e679276cb2793e181511481af",
+    "revision": "b44bd2ce0a014054f3f2b1baf10ea3961d3f2913",
     "license": "GPL-3.0-only"
   }
 }
