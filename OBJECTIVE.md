@@ -94,12 +94,12 @@ this specification.
 
 ## Performance and operation
 
-Require >=4x sustainable offline throughput under representative high polyphony,
-effects and sample use on this host. Pursue 10x as the optimization target;
-reaching 4x does not end performance work. Quantify the remaining gap and
-limiting costs with reproducible instrument measurements. Keep instrument
-behavior, guest time, complete audio and bounded live latency. Change the >=4x
-target only with quantitative reproducible feasibility evidence.
+Target >=10x sustained offline throughput under representative high polyphony,
+effects and sample use on this host. Treat >=4x as an intermediate milestone.
+Design compilation, generated code, host integration and core coupling for the
+10x target. Quantify remaining costs with reproducible complete-instrument
+measurements while preserving behavior, guest time, complete audio and bounded
+live latency. Change the target only with quantitative feasibility evidence.
 
 The combined load includes Multi mode with sixteen simultaneously active parts
 and up to twenty-five total voices, with distinct programs, oscillators,
@@ -170,16 +170,18 @@ invalidation and optimized retranslation. Preparation performs no guest
 execution, real I/O or device-time advance. Measure coverage and first use,
 including interrupt entries, indirect targets and runtime-loaded code. Report
 preparation separately from original boot, warm execution and total readiness.
-It does not extend a failed firmware probe. A persistent native-code cache may
-amortize validated preparation; it never substitutes for optimized execution.
+It does not extend a failed firmware probe. For deployment, persist validated AOT artifacts to amortize compilation across
+starts. Development always runs complete AOT and optimization; a cache hit must
+not hide translation or coverage defects. Implement and qualify the cache for
+operation after the complete AOT path, preserving the same code-quality contract.
 
 Use heterogeneous host cores deliberately: prioritize MCU/DSP execution on
 performance resources and place preparation/background work on efficiency
 resources using supported host scheduling contracts. Query actual topology and
 verify placement behavior; a successful QoS request alone is not proof of core
 assignment. Keep host scheduling out of guest ISA and device-time semantics. Do
-not decode arbitrary data or unknown memory as established executable code. If
-caching is needed, key it by executable-input hashes, exact JIT revision, host
+not decode arbitrary data or unknown memory as established executable code. Key persistent artifacts by executable-input hashes, exact core/LLVM pipeline
+revision, host
 architecture/features, code-generation options and binding ABI. Relocate
 instance addresses on load; never restore device state from a code cache. Reject
 damaged or incompatible entries and rebuild before playback. Preparation and
@@ -206,8 +208,8 @@ shares are not instrument throughput. The cores' >=70% matched host-ASM target
 does not gate integration.
 
 Milestones remain 1x/99%, 10x/99.9% and 100x/99.99% playable-instrument
-coverage; these do not replace complete acceptance or the >=4x sustained
-requirement. Choose explicit probe guards for the stated diagnostic or
+coverage; these do not replace complete acceptance or the >=10x sustained
+target. Choose explicit probe guards for the stated diagnostic or
 qualification purpose; allow the original startup to complete. A probe fails
 unless playable; no unchanged failed repetition without new evidence. Qualify
 MIDI-triggered original sound and at least ten seconds of audio at >=44100

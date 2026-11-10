@@ -16,6 +16,10 @@ controls, display, persistent images, updates and recovery. Retain original load
 and observable program-write effects while selecting prepared native variants.
 Mutable instrument data resides in host RAM; fixed tables use validated constants.
 Firmware-derived artifacts remain local and untracked under `build/`.
+Development always runs complete AOT and optimization. For operation, reuse a
+validated persistent artifact cache; compile it from exact firmware/code variants,
+core/LLVM pipeline, host features and binding identity. Rebuild rejected entries
+before playback and preserve original boot rather than caching device snapshots.
 
 Live mode uses an external MIDI keyboard, the normal host audio output and a
 separate display viewer. Query actual audio/MIDI grants and keep bounded queues,
@@ -24,9 +28,9 @@ latency is 2-5 ms with a 10 ms maximum on the qualified complete device chain.
 Deliver every audio buffer on time, including first use of every firmware path.
 
 Offline MIDI-to-WAV runs at maximum throughput, without host audio or a viewer.
-Require at least four times real time under the combined sixteen-part,
-up-to-twenty-five-voice effects/sample workload; pursue ten times real time.
-At 44.1 kHz, four times real time means 176400 valid original stereo frames/s.
+Target at least ten times real time under the combined sixteen-part,
+up-to-twenty-five-voice effects/sample workload; four times is intermediate.
+At 44.1 kHz, ten times means 10 * 44100 = 441000 valid original stereo frames/s.
 Report compilation, original boot/readiness and warm rendering separately.
 
 The [objective](OBJECTIVE.md), [acceptance catalogue](ACCEPTANCE.tsv) and

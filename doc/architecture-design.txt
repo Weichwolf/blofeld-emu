@@ -32,8 +32,9 @@ Prefer startup loading of the selected firmware followed by complete AOT and
 joint host-code optimization before playback. Keep the same code-quality and
 coverage requirements as build-time AOT. Measure compilation/startup and
 compiler memory separately from warm execution; runtime loading does not permit
-lazy translation during playing. A validated code cache is optional for measured
-gain.
+lazy translation during playing. For deployment, reuse validated persistent AOT artifacts. Development always
+runs complete AOT and optimization; implement the operating cache after the
+complete translation path.
 
 Build-time AOT may alternatively generate firmware LLVM IR locally, then compile
 and link it with the host application into the final native executable.
@@ -238,7 +239,8 @@ immutable across compiler workers; mutable core/device state keeps one owner.
 https://developer.apple.com/documentation/apple-silicon/tuning-your-code-s-performance-for-apple-silicon
 https://developer.apple.com/documentation/audiotoolbox/understanding-audio-workgroups
 
-Add a persistent local code cache only if measurements justify it. Store
+Provide a persistent validated AOT cache for operation. Development always
+executes the complete compilation pipeline and bypasses persistent cache hits. Store
 relocations
 and binding metadata, never raw process pointers or device-state snapshots. Key it
 by executable-input hashes, exact JIT revision, host architecture/CPU features,
@@ -742,9 +744,10 @@ Host knows no instrument registers; vi/ knows no host API handles.
 app/ connects data/buffer contracts without reverse dependencies.
 test/ mirrors src/ with simple unit tests; integration uses the normal emulator.
 
-Use optimized Release and profile the complete instrument. Require >=4x offline
-throughput, design for 10x; see OBJECTIVE.md for measurement and full
-acceptance. Threads, a short synthetic kernel or lower callback counts are not
+Use optimized Release and profile the complete instrument. Target >=10x sustained
+offline throughput, with >=4x as an intermediate milestone; design compilation,
+native code, host integration and core coupling for 10x. See OBJECTIVE.md for
+measurement and full acceptance. Threads, a short synthetic kernel or lower callback counts are not
 success proofs.
 
 Architecture reference: Gearmulator's independent core execution and coupling
