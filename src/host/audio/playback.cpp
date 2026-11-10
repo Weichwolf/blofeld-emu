@@ -169,14 +169,14 @@ struct Playback::Impl {
         .format = PA_SAMPLE_S24_32NE, .rate = rate, .channels = stereo_channels};
     stream.reset(pa_stream_new(context.get(), "PCM output", &specification, nullptr));
     if (!stream) { fail("Create audio stream"); }
-    constexpr std::uint32_t target = 512;
-    constexpr std::uint32_t minimum = 128;
-    const pa_buffer_attr requested{
-        .maxlength = static_cast<std::uint32_t>(std::size_t{2} * target * frame_bytes),
-        .tlength = static_cast<std::uint32_t>(target * frame_bytes),
-        .prebuf = 0,
-        .minreq = static_cast<std::uint32_t>(minimum * frame_bytes),
-        .fragsize = std::numeric_limits<std::uint32_t>::max()};
+    constexpr std::uint32_t target = 96;
+    constexpr std::uint32_t minimum = 32;
+    constexpr std::uint32_t maximum = 128;
+    const pa_buffer_attr requested{.maxlength = static_cast<std::uint32_t>(maximum * frame_bytes),
+                                   .tlength = static_cast<std::uint32_t>(target * frame_bytes),
+                                   .prebuf = 0,
+                                   .minreq = static_cast<std::uint32_t>(minimum * frame_bytes),
+                                   .fragsize = std::numeric_limits<std::uint32_t>::max()};
     constexpr auto flags =
         std::bit_cast<pa_stream_flags_t>(PA_STREAM_START_CORKED | PA_STREAM_ADJUST_LATENCY);
     if (pa_stream_connect_playback(stream.get(), nullptr, &requested, flags, nullptr, nullptr) <

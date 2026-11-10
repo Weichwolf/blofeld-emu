@@ -15,7 +15,7 @@ using Frame = std::array<std::int32_t, 2>; // Signed 24-bit PCM in native 32-bit
 // consumer until consume(); no allocation, locks, or per-frame notifications.
 class Buffer {
 public:
-  static constexpr std::size_t capacity = 256;
+  static constexpr std::size_t capacity = 32;
   [[nodiscard]] std::size_t produce(std::span<const Frame> frames) noexcept;
   [[nodiscard]] std::span<const Frame> readable() const noexcept;
   [[nodiscard]] bool consume(std::size_t frames) noexcept;

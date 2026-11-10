@@ -434,10 +434,11 @@ the source rate; this is an explicit validity policy, not a server scheduling
 guarantee. A fresh corked timing reply after flush supplies the next absolute
 write origin. Reset, failure and stop revoke previous observations.
 
-The requested server maximum is twice the 512-frame target, replacing an
-unnecessary half-second request. Read actual grants; total source queue bound C
-includes the native maximum and the 256-frame local queue. Retain 3*C source
-frames for correlation and require reopen when native buffer grants change.
+Request a 96-frame server target, a 32-frame minimum request and a 128-frame
+server maximum. Read actual grants; total source queue bound C includes the
+native maximum and the 32-frame local queue. Retain 3*C source frames for
+correlation and require reopen when native buffer grants change. Requested
+sizes are preferences, not guaranteed native grants or latency measurements.
 Additional correlation uncertainty is published atomically and retained unchanged
 in PCM clock points. Live admission fixes a session budget at its first point:
 zero for exact native timestamps, or 250 microseconds for bounded estimates.
