@@ -131,7 +131,11 @@ int OfflineRender::run(vi::VmContext &vm,
   }
   ready_ = std::chrono::steady_clock::now();
   wav_.begin_at(*origin);
-  std::cerr << "Ready: original MIDI identity and PCM; musical origin=" << *origin << " ticks\n";
+  std::cerr << "Ready: original MIDI identity and PCM; musical origin=" << *origin << " ticks";
+  if (const auto application = vm.mcu_wait_time()) {
+    std::cerr << "; first MCU WAI=" << *application << " ticks";
+  }
+  std::cerr << '\n';
   std::exception_ptr input_failure;
   std::jthread input([&](const std::stop_token &stop) {
     try {
