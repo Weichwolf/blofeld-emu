@@ -1,121 +1,42 @@
 # blofeld-emu
 
-Blofeld firmware VM project using the independent
+Standalone Blofeld Desktop SL instrument for macOS ARM64 and Linux x86-64,
+executing unchanged original firmware through the independent
 [cpu12](https://github.com/Weichwolf/cpu12) and
-[dsp56300](https://github.com/Weichwolf/dsp56300) JIT cores.
+[dsp56300](https://github.com/Weichwolf/dsp56300) translators.
 
-The current source contains the LCD register/data contract and MCU port binding, image capture,
-atomic PBM publication, GTK viewer, 1.25 update-container loader, MCU
-image codec, direct MCU memory mapping, GPIO, Flash reset/protection/error registers,
-free-running timer capture/compare, CRG/USB clock selection, periodic interrupts
-and interrupt wakeup, SCI character/register handling, USB configuration and direct
-endpoint-buffer windows, and independent
-MCU/DSP execution threads and DSP56371 PLL register/nominal ratio handling.
-The VM exposes bounded, timed DIN input shared by MCU SCI and DSP Timer0,
-with genuine SCI output. Native MIDI input uses CoreMIDI on macOS and the ALSA
-sequencer on Linux, with selected source identifiers and bounded queues. Linux
-records monotonic receipt points in a dedicated native input owner, rather than
-claiming hardware arrival precision. It reads the granted UMP/legacy protocol;
-legacy sources expose group 0. Both paths share MIDI 1.0 validation.
-Live routing selects one source/group and waits for original application WAI,
-MIDI identity and valid PCM before priming native output. A bounded history of
-native audio observations maps input timestamps into original musical time with
-an explicit finite delivery allowance and a fixed native correlation-uncertainty
-grant. The software window includes the complete grant and must fit within 10 ms.
-Estimates beyond that budget are rejected. Late input and missing clock contracts fail;
-the MCU clock is not a host timestamp anchor. Normal live output currently fails audio
-deadlines on both supported hosts; sustained external-keyboard use is not qualified.
-The host SMF reader streams timestamped events with tempo/SMPTE handling and
-separate metadata; independent patterns require explicit selection. An offline
-PCM consumer writes signed 24-bit stereo WAV, rejecting underruns, frame/time
-discontinuities and drift. Original PCM carries per-frame completion points in
-the common instrument clock. The file adapter feeds the VM through a bounded input frontier;
-producer delays suspend native execution without advancing device time. The offline
-command observes the original MCU application WAI before sending identity queries,
-then requires the original reply and valid PCM, selects a musical origin, streams
-the file and retains its EOF barrier until the output boundary is
-published. Only the musical interval and selected tail enter the WAV; startup
-PCM is validated and discarded. Failed or interrupted renders stay unpublished.
-Normal file rendering uses this original-firmware readiness handshake.
-With one connected native MIDI source, live mode selects it automatically. With
-several sources, the diagnostic lists their IDs; select one using `--midi-source ID`
-and optionally `--midi-group 0..15`. Native routing options apply only to live mode.
-Without the selected source, firmware and display start while the control owner
-waits for a connection. Source discovery does not block the live input pacer.
-Events timestamped before the native audio clock becomes ready are discarded.
-Start playing after `Live MIDI input active`; late events, queue overflow and
-disconnects stop the session explicitly.
-The display viewer is used in live mode. Offline rendering reports statistics
-in the terminal and does not publish display snapshots.
-Complete instrument acceptance and sustained real-time operation remain unverified.
-DSP interrupt arbitration uses configured priorities, SR masks and source ordering.
-Timer, DMA and DAX requests enter native vectors with VBA/REP/RTI handling;
-timer and DMA acknowledgements occur on accepted admission. SHI and ESAI
-interrupt delivery remains incomplete.
-DMA registers, A–E counters and address modes handle requested transfers and software blocks.
-ESAI_1 transmit registers bind DMA writes to actual words; explicit slot events
-preserve masks, word precision, empty requests and retained-data underruns.
-ESAI_1 and DAX run from nominal VM clock deadlines, including PLL conversion.
-ESAI_1 supplies signed stereo PCM blocks to an application consumer with positions
-and explicit underrun bits. Its receive path remains incomplete.
-The application connects those blocks to a bounded host queue. Linux uses a dedicated
-PulseAudio client owner; macOS uses a CoreAudio output unit. The producer supplies
-stereo 24-bit PCM in 32-bit containers. Linux correlates fresh server consumption
-indices with bounded monotonic request/reply intervals, preserving their timing
-uncertainty through PCM correlation. It does not use smoothed playback time or
-claim hardware presentation timestamps. CoreAudio consumes prepared frames through
-a lock-free render buffer and converts them exactly to float32; the output unit
-handles the granted device format/rate. Actual device formats and buffer grants
-are queried. macOS requests a small hardware buffer within its reported range;
-its dedicated DSP producer uses a Mach deadline and an asynchronous audio workgroup.
-The output owner sizes bounded queues from actual device quanta, including variable
-buffer bounds. Host backpressure paces the DSP owner. Reset stops and flushes the old
-stream epoch before accepting new frames. Disconnects, endpoint changes and host
-underruns stop execution with an error. macOS also rejects missing, invalid or
-discontinuous native render timestamps before consuming more queued frames.
-Reported output latency combines queued
-frames and native device, stream and output-unit latency information; it is not a physical
-keyboard-to-sound measurement.
-DAX register access and DMA writes retain the distinct XADR/channel buffers,
-non-audio metadata, block position, refill requests and observed-underrun clearing.
-Its output does not create a second host PCM stream.
-DSP timer registers, CLK/2 and shared prescaling implement GPIO timer, event-counter
-and capture modes with deadlines, W1C flags and compare DMA requests. The other
-timer modes remain incomplete. WAIT advances device time to the next timer event.
-The MCU samples a VM-owned pedal input; firmware retains its polarity/change handling.
-Low/high X/Y RAM uses direct native grants with initialization tracking and
-OMR-selected program-bank sharing. Optional data-ROM views borrow local contents.
-DSP GPIO and decoded page-read transactions use the profile's validated media
-image directly. Read/reset operations complete at their own virtual deadlines;
-PLL configuration converts nominal reference periods to DSP cycles. Confirmed block erases
-update the actual image at completion, respecting stored validity/protection. Status reads
-retain busy/pass/fail state; interrupted erase contents become unknown and can be recovered
-by another complete erase. Serialization refreshes the encoded image checksum on demand.
-Page program stages bounded actual bytes, preserves existing zero bits and tracks
-independent main/spare program allowances. Area pointers follow 00h/01h/50h semantics;
-interrupted writes retain known zeros and mark possibly changed bits unknown.
-Unknown protection/history or exceeded qualified allowances stop execution.
-Identification and automatic page continuation remain incomplete. The application
-does not yet persist changed images to disk.
-The SHI receive FIFO connects MCU port writes to DSP program loading; HTX and
-IOSR retain actual full-duplex words, with phase-dependent loading and underrun handling.
-Completed bootstrap words use bounded FIFO admission outside native callbacks;
-a full queue applies VM backpressure, and stop/reset cancel pending admission. MCU U0
-assertions retire the previous DSP Core before peripheral reset and ROM restart.
-`blofeld-headless` loads local images and executes their native JIT paths;
-unimplemented device accesses stop with context. Flash program/erase and interrupts,
-watchdog reset/recovery, USB transactions, MCU MISO sampling and SHI interrupt delivery,
-the remaining device contracts, native MIDI output and host-visible USB transport
-are incomplete. Complete playable-instrument acceptance remains open. Complete requirements are in
-[OBJECTIVE.md](OBJECTIVE.md) and [ACCEPTANCE.tsv](ACCEPTANCE.tsv).
+Load the selected firmware at startup. Complete Ahead-of-Time Binary Translation
+of all known executable code and variants, combine it with eligible host LLVM IR
+and optimize it before playback. Incomplete translation fails with code identity,
+address and reason. Both cores also support build-time export of linkable LLVM
+bitcode or relocatable objects through the same semantic pipeline.
+
+Preserve original boot, synthesis, samples, effects, voice allocation, MIDI/SysEx,
+controls, display, persistent images, updates and recovery. Retain original loader
+and observable program-write effects while selecting prepared native variants.
+Mutable instrument data resides in host RAM; fixed tables use validated constants.
+Firmware-derived artifacts remain local and untracked under `build/`.
+
+Live mode uses an external MIDI keyboard, the normal host audio output and a
+separate display viewer. Query actual audio/MIDI grants and keep bounded queues,
+ordering, musical time, reset and cancellation. Target physical key-to-analog-sound
+latency is 2-5 ms with a 10 ms maximum on the qualified complete device chain.
+Deliver every audio buffer on time, including first use of every firmware path.
+
+Offline MIDI-to-WAV runs at maximum throughput, without host audio or a viewer.
+Require at least four times real time under the combined sixteen-part,
+up-to-twenty-five-voice effects/sample workload; pursue ten times real time.
+At 44.1 kHz, four times real time means 176400 valid original stereo frames/s.
+Report compilation, original boot/readiness and warm rendering separately.
+
+The [objective](OBJECTIVE.md), [acceptance catalogue](ACCEPTANCE.tsv) and
+[target architecture](doc/architecture-design.txt) define the required behavior
+and qualification. Acceptance results remain in the catalogue.
 
 - `src/vi/`: instrument behavior and firmware device contracts.
-- `src/host/`: reusable operating-system and transport backends.
+- `src/host/`: reusable operating-system and transport bindings.
 - `src/app/`: composition, publication and UI.
-- `test/`: simple unit tests mirroring `src/`; instrument acceptance uses the emulator.
-
-See the [target architecture](doc/architecture-design.txt) for independent core
-execution, bounded channels and audio-driven consumption.
+- `test/`: unit tests mirroring `src/`; instrument acceptance uses the emulator.
 
 Generate deterministic MIDI workload inputs with
 `python3 tools/midi_bench_inputs.py --output build/local/bench-midi`.
@@ -178,8 +99,8 @@ build/release/blofeld-headless --profile /path/to/instrument.profile \
 `--tail` selects whole seconds after the final serialized MIDI event/track end;
 it defaults to five seconds. Choose sufficient release/effect time for the programs.
 Successful renders report valid frame totals, startup/active host time and throughput.
-MIDI deadline deviation remains unmeasured. Startup fails after one host minute
-without both original identity and PCM. Existing output files are never replaced.
+Report MIDI deadline deviation separately. Require original identity and valid PCM
+before accepting playback. Existing output files are never replaced.
 
 With no arguments it reads `$XDG_CONFIG_HOME/blofeld-emu/default.profile`,
 falling back to `$HOME/.config/blofeld-emu/default.profile`. Profiles contain
@@ -223,8 +144,9 @@ pixels revoke the bitmap until a known frame is available. A live-only
 `display.live` pipe stays open for the publisher lifetime. The viewer checks it
 once per second and clears stale images when the emulator exits or crashes;
 this requires no heartbeat writes or firmware/audio work.
-The optional `firmware` path is parsed but not yet connected to execution. Startup
-currently exits unsuccessfully because the instrument is incomplete; successful execution of a short program is not instrument readiness.
+The optional `firmware` path selects the original update container. Preserve the
+complete original boot and require MIDI identity, valid PCM and playable sound
+before admitting instrument operation.
 SIGINT/SIGTERM request coordinated shutdown. Live status reports server-submitted
 frames, local queue occupancy, native buffer grants, estimated output latency and host/device
 underruns. The approximate producer reserve excludes blocking in the host consumer;

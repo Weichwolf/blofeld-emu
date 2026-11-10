@@ -4,6 +4,14 @@
   Execute original firmware; preserve its quirks. No firmware patches, skipped
   routines, invented replies or host synthesis. Unknown accesses fail with
   address, operation, PC and context.
+- Target Ahead-of-Time Binary Translation. Prepare all
+  known firmware code and executable variants before playback; incomplete
+  translation is an error. Fuse firmware IR with eligible host IR before LLVM
+  O3. Mutable data stays in host RAM; preserve observable program reads/writes
+  and select prepared variants without replaying a simulated processor.
+  Prefer startup firmware loading and full AOT before playback; build-time
+  translation/linking is allowed. Keep derived source/IR/objects/executables
+  untracked in build/. Both placements require the same native code quality.
 - Each core has its own execution owner and runs natively at maximum throughput.
   Couple through audioframes, bounded buffers and actual device transactions.
   Never synchronize the DSP merely because an MCU instruction or local I/O ran.
@@ -38,8 +46,10 @@
   explicit timeout guards and prompt fault shutdown. A run fails unless playable;
   do not repeat unchanged failed probes without new evidence.
 - Telemetry is runtime-selectable and off by default; no hot-path statistics.
-- README describes implemented use; OBJECTIVE defines acceptance; doc/ contains
-  one target architecture and primary references. No diaries or result archives.
+- Documentation describes the required target, not implementation status. README
+  defines intended use, OBJECTIVE acceptance, doc/ the architecture and primary
+  references. Keep actual qualification results in the acceptance catalogue.
+  No diaries or result archives.
 - Keep firmware, samples, manuals, disassemblies and private analysis untracked.
   Reference inputs: ignored build/local/; artifacts: build/. Preserve inputs and
   source/size/hash manifests. Original source is GPL-3.0-only with SPDX notices.

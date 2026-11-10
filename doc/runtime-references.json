@@ -109,6 +109,76 @@
       "resolved_url": "https://llvm.org/devmtg/2024-04/slides/TechnicalTalks/Bock-Experiences-Building-a-JVM-withLLVMOrc.pdf",
       "bytes": 457935,
       "sha256": "1f68c4903fbd3ef7ded49acebb5145af31c2f665984700df49a2cbfce0ac824d"
+    },
+    {
+      "name": "N64Recomp/N64Recomp README.md",
+      "url": "https://github.com/N64Recomp/N64Recomp/blob/598ce2080004a5672d604dceadbda436045307b7/README.md",
+      "download_url": "https://raw.githubusercontent.com/N64Recomp/N64Recomp/598ce2080004a5672d604dceadbda436045307b7/README.md",
+      "revision": "598ce2080004a5672d604dceadbda436045307b7",
+      "retrieved_utc": "2026-11-10T18:55:05.779060+00:00",
+      "bytes": 9145,
+      "sha256": "001ef14790d6bd3d4b5a01588ce58107fd82b8bccafd78eac3dae19092d95d85",
+      "scope": "Static recompilation and known overlays; requires code metadata and a native runtime."
+    },
+    {
+      "name": "Zelda64Recomp/Zelda64Recomp README.md",
+      "url": "https://github.com/Zelda64Recomp/Zelda64Recomp/blob/b65c482ed672258eb684ab94a4e8c8aa662615ee/README.md",
+      "download_url": "https://raw.githubusercontent.com/Zelda64Recomp/Zelda64Recomp/b65c482ed672258eb684ab94a4e8c8aa662615ee/README.md",
+      "revision": "b65c482ed672258eb684ab94a4e8c8aa662615ee",
+      "retrieved_utc": "2026-11-10T18:55:05.777250+00:00",
+      "bytes": 13585,
+      "sha256": "07b8d8b9151ec01a5f4c0d185fe68a03496a976b0b27e2ee650bf273a23a9337",
+      "scope": "Working native game using static recompilation; no Blofeld performance claim."
+    },
+    {
+      "name": "hedge-dev/XenonRecomp README.md",
+      "url": "https://github.com/hedge-dev/XenonRecomp/blob/ddd128bcca99fe8bfbb99bea583c972351fa6ace/README.md",
+      "download_url": "https://raw.githubusercontent.com/hedge-dev/XenonRecomp/ddd128bcca99fe8bfbb99bea583c972351fa6ace/README.md",
+      "revision": "ddd128bcca99fe8bfbb99bea583c972351fa6ace",
+      "retrieved_utc": "2026-11-10T18:55:05.783705+00:00",
+      "bytes": 17607,
+      "sha256": "b72d34f82f796e4c84f0f622fad8fb720b64607b842de31b70596d35157a68ff",
+      "scope": "PowerPC to C++; consumer runtime and program analysis remain necessary."
+    },
+    {
+      "name": "hedge-dev/UnleashedRecomp README.md",
+      "url": "https://github.com/hedge-dev/UnleashedRecomp/blob/cf829a9eca8fb680fba4b0409ddeb6ca92f22e3c/README.md",
+      "download_url": "https://raw.githubusercontent.com/hedge-dev/UnleashedRecomp/cf829a9eca8fb680fba4b0409ddeb6ca92f22e3c/README.md",
+      "revision": "cf829a9eca8fb680fba4b0409ddeb6ca92f22e3c",
+      "retrieved_utc": "2026-11-10T18:55:05.798548+00:00",
+      "bytes": 38331,
+      "sha256": "2f67af787a595778f1c6723714615110b060f1cd6e387eadd2066ee167144754",
+      "scope": "Working native game integrating recompiled C++ and a host runtime."
+    },
+    {
+      "name": "lifting-bits/remill docs/DESIGN.md",
+      "url": "https://github.com/lifting-bits/remill/blob/918e0bccd890188e2eddd8ce0bb8a8cd4058158b/docs/DESIGN.md",
+      "download_url": "https://raw.githubusercontent.com/lifting-bits/remill/918e0bccd890188e2eddd8ce0bb8a8cd4058158b/docs/DESIGN.md",
+      "revision": "918e0bccd890188e2eddd8ce0bb8a8cd4058158b",
+      "retrieved_utc": "2026-11-10T18:55:06.299104+00:00",
+      "bytes": 3081,
+      "sha256": "315749b962581d9032807ef781042e47eb5ea7e090b9fe5dde1ad50e106fed1e",
+      "scope": "C++ ISA semantics lifted to LLVM; consumer-owned memory and runtime bindings."
+    },
+    {
+      "name": "lifting-bits/remill docs/LIFE_OF_AN_INSTRUCTION.md",
+      "url": "https://github.com/lifting-bits/remill/blob/918e0bccd890188e2eddd8ce0bb8a8cd4058158b/docs/LIFE_OF_AN_INSTRUCTION.md",
+      "download_url": "https://raw.githubusercontent.com/lifting-bits/remill/918e0bccd890188e2eddd8ce0bb8a8cd4058158b/docs/LIFE_OF_AN_INSTRUCTION.md",
+      "revision": "918e0bccd890188e2eddd8ce0bb8a8cd4058158b",
+      "retrieved_utc": "2026-11-10T18:55:06.275545+00:00",
+      "bytes": 12080,
+      "sha256": "a88c0f7948dbbaeef149a8ccc8a3317851f5c1dbdad073ee0f142b29cc935d25",
+      "scope": "Inlining semantic functions and implementing memory intrinsics as concrete LLVM accesses."
+    },
+    {
+      "name": "dsp56300/gearmulator README.md",
+      "url": "https://github.com/dsp56300/gearmulator/blob/83480f3cf64390524cbbfad40bd7575c2bb017b4/README.md",
+      "download_url": "https://raw.githubusercontent.com/dsp56300/gearmulator/83480f3cf64390524cbbfad40bd7575c2bb017b4/README.md",
+      "revision": "83480f3cf64390524cbbfad40bd7575c2bb017b4",
+      "retrieved_utc": "2026-11-10T18:55:06.255771+00:00",
+      "bytes": 2835,
+      "sha256": "4e6ebb64f77229fb08832c42102d25c0c0be878b5c2582eae6cb12bcac577a13",
+      "scope": "Original synthesizer firmware as x86-64/ARM64 audio plugins; not complete AOT."
     }
   ]
 }
