@@ -72,9 +72,11 @@ identified in doc/function-references.json. OBJECTIVE cites this specification.
 ## Performance and operation
 
 Require >=4x sustainable offline throughput under representative high polyphony,
-effects and sample use on this host; design for 10x. Keep instrument behavior,
-guest time, complete audio and bounded live latency. Change the >=4x target only
-with quantitative reproducible feasibility evidence.
+effects and sample use on this host. Pursue 10x as the optimization target;
+reaching 4x does not end performance work. Quantify the remaining gap and limiting
+costs with reproducible instrument measurements. Keep instrument behavior, guest
+time, complete audio and bounded live latency. Change the >=4x target only with
+quantitative reproducible feasibility evidence.
 
 The combined load includes Multi mode with sixteen simultaneously active parts
 and up to twenty-five total voices, with distinct programs, oscillators, filters,
