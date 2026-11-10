@@ -41,6 +41,10 @@ constexpr std::chrono::milliseconds startup_poll{1}, control_poll{10};
 constexpr std::chrono::microseconds input_poll{250};
 constexpr std::size_t packet_batch = 1024;
 
+constexpr const char *yes_no(const bool value) noexcept {
+  return value ? "yes" : "no";
+}
+
 std::size_t queue_grant(const host::audio::Grants &grants) {
   std::cerr << "Audio: s24-in-32 stereo " << grants.rate << "Hz -> " << grants.sink_format << ' '
             << grants.sink_rate << "Hz on " << grants.sink << "; buffer=" << grants.target_frames
@@ -274,7 +278,7 @@ void Live::status(const bool terminal) const {
     std::cerr << '?';
   }
   std::cerr << " underruns=" << host.underruns << '/' << source.device_underruns
-            << " playing=" << (host.started ? "yes" : "no");
+            << " playing=" << yes_no(host.started);
   if (!terminal) { std::cerr << '\n'; }
 }
 
@@ -330,8 +334,12 @@ int Live::run(vi::VmContext &vm, const host::Signals &signals) {
   publish_display();
   if (terminal) { std::cerr << '\n'; }
   status(false);
-  const bool playing = phase_.exchange(Phase::closed) == Phase::playing;
-  std::cerr << "Live MIDI bytes admitted=" << received_ << " pre-live=" << ignored_ << '\n';
+  const auto final_phase = phase_.exchange(Phase::closed);
+  const bool playing = final_phase == Phase::playing;
+  const bool clock_ready = playing || final_phase == Phase::audio_ready;
+  std::cerr << "Live MIDI bytes admitted=" << received_ << " pre-live=" << ignored_
+            << " clock-ready=" << yes_no(clock_ready) << " input-active=" << yes_no(playing)
+            << '\n';
   if (!report_execution(reports)) { return 1; }
   if (failure) { std::rethrow_exception(failure); }
   audio_.check();
