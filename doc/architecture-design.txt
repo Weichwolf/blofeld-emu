@@ -1,7 +1,19 @@
-Blofeld instrument VM — target architecture
+Blofeld userspace firmware driver — target architecture
 
 This is the agreed target. Source under reconstruction is not evidence that the
 complete instrument or its performance has been achieved.
+
+The instrument is a userspace Blofeld driver executing the unmodified original
+firmware through the cpu12 and dsp56300 JITs. Firmware owns instrument behavior;
+the driver binds concrete memory, registers, FIFOs, DMA, IRQs and host transports.
+Use direct typed bindings, bounded queues and OS wakeups. Do not add a generic
+device bus, kernel component or electrical simulation layer. VmContext composes
+the driver instance; it does not duplicate core state or interpret instructions.
+
+Optimize firmware and eligible driver bindings as one host-code execution path.
+Near-host throughput in authored JIT benchmarks establishes feasibility for those
+programs, not equivalent coverage or throughput of the complete firmware. Attribute
+the instrument gap to measured generated-code, device or coupling costs.
 
   app: profile, lifecycle, display UI, live or offline consumer
                            |
@@ -25,6 +37,13 @@ thread. Audioframes and bounded queues govern progress and backpressure.
 Synchronize for real command/data ownership, readiness/IRQ transitions, audio,
 reset or faults; local MCU memory/register accesses do not advance the DSP.
 There is no global per-instruction/per-clock coordinator.
+
+An IRQ is a timed device event. Its source publishes the actual assertion/release
+and generation; the receiving core owns mask, priority and architectural entry.
+Preserve event time independently of host thread scheduling. A receiver must not
+execute beyond a possible earlier input without a proven producer horizon.
+Timestamping an event after the receiver passed it cannot repair causality.
+This requirement does not justify instruction stepping or arbitrary time slices.
 
 ExecutionTime publishes completed MCU progress in nominal 60 MHz units. DSP native
 execution uses that frontier as a conservative grant; local MCU progress does not
@@ -93,6 +112,14 @@ elimination, load forwarding, register value propagation, loop induction/invaria
 strength reduction, unrolling and legal vectorization. Keep precise state maps at
 actual callback, fault, interrupt, code-mutation and partial-grant boundaries.
 A C++ compiler optimizing the emitter does not optimize its emitted guest program.
+
+Prepare the complete established executable program before playback, including
+functions, loops and known indirect targets; do not restrict optimization to a
+sampled hot subset. Unknown input values remain runtime values in optimized code.
+Unresolved indirect targets retain a correct dynamic path. Runtime-loaded or
+modified executable regions require their own preparation and invalidation;
+these cases do not prevent ahead-of-time optimization of known code. Optimize
+multiple functions/regions rather than requiring one monolithic LLVM function.
 
 Keep device implementations consumer-owned. Selected typed leaf bindings can
 provide LLVM 19 bitcode from the same own-code implementation; link them into the
