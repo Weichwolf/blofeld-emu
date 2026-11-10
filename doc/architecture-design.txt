@@ -94,6 +94,23 @@ strength reduction, unrolling and legal vectorization. Keep precise state maps a
 actual callback, fault, interrupt, code-mutation and partial-grant boundaries.
 A C++ compiler optimizing the emitter does not optimize its emitted guest program.
 
+Keep device implementations consumer-owned. Selected typed leaf bindings can
+provide LLVM 19 bitcode from the same own-code implementation; link them into the
+guest module before O3 instead of hiding their bodies behind native symbols.
+Keep LLVM ownership and handles inside the core. Validate the binding revision,
+context lifetime, ABI/layout, target triple and required CPU features before use.
+Caller attributes must satisfy the callee's target requirements for inlining;
+creating a native target machine alone does not establish that IR contract.
+Never propagate unsupported target requirements into a caller.
+Specialize stable binding/configuration identities, not mutable device values.
+Preserve ordered effects, atomics, unknown accesses, cancellation, backpressure,
+IRQ/yield decisions and complete guest state at actual observation boundaries.
+Reject incompatible inputs before execution; never retry a device operation after
+it has already produced an effect. Callable bindings must not outlive their
+contexts or survive incompatible mapping/device revisions; cached code requires
+validated rebinding. A linked leaf-value experiment does not qualify complete
+ISA transactions or establish instrument throughput.
+
 Preparation is side-effect-free with respect to core/device state and musical time.
 It uses an immutable program/mapping view, established entries and binding identity;
 its output is immutable native code with validated bindings. The owner installs
