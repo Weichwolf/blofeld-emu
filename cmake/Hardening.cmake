@@ -44,12 +44,3 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   target_link_options(blofeld_hardening INTERFACE
     -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack)
 endif()
-
-# Static dependencies keep their upstream exports independent of project targets.
-function(blofeld_harden_native target)
-  target_compile_options(${target} PRIVATE
-    "$<TARGET_GENEX_EVAL:${target},$<TARGET_PROPERTY:blofeld_hardening,INTERFACE_COMPILE_OPTIONS>>")
-  target_compile_definitions(${target} PRIVATE
-    "$<TARGET_GENEX_EVAL:${target},$<TARGET_PROPERTY:blofeld_hardening,INTERFACE_COMPILE_DEFINITIONS>>")
-  set_target_properties(${target} PROPERTIES POSITION_INDEPENDENT_CODE ON)
-endfunction()

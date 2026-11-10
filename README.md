@@ -137,15 +137,13 @@ Python 3.11+ and Git. Core checkouts must match
 On Linux:
 
 ```sh
-python3 tools/dependencies.py --fetch --component pulseaudio
-python3 tools/dependencies.py --fetch --component libsndfile
-python3 tools/dependencies.py --fetch --component meson
+sudo apt install clang-19 clang-tidy-19 clang-format-19 llvm-19-dev cmake ninja-build ccache python3-dev libpulse-dev zlib1g-dev
 cmake --preset release
 cmake --build --preset release --target quality
 ```
 
-On macOS, use the Homebrew tools and native CoreAudio backend; PulseAudio,
-libsndfile and Meson are not needed for this backend:
+On macOS, use the Homebrew tools and native CoreAudio backend; PulseAudio is not
+needed for this backend:
 
 ```sh
 brew install llvm@19 llvm ninja ccache python@3.14 gtk4 pygobject3 py3cairo
@@ -153,8 +151,8 @@ cmake --preset release
 cmake --build --preset release --target quality --parallel 2
 ```
 
-Presets discover LLVM 19 without replacing system compilers. macOS uses packaged
-third-party libraries without foreign source builds or sanitizer instrumentation.
+Presets discover LLVM 19 without replacing system compilers. Both platforms use
+packaged third-party libraries without foreign source builds or sanitizer instrumentation.
 On current macOS, select the packaged current Clang sanitizer runtime
 while retaining the LLVM 19 compiler:
 

@@ -4,15 +4,6 @@
     "revision": "21d602882ad29606a091591e15498f349b0bc6a3",
     "license": "GPL-3.0-only"
   },
-  "zlib": {
-    "version": "1.3.2",
-    "file": "zlib-1.3.2.tar.gz",
-    "source": "https://zlib.net/zlib-1.3.2.tar.gz",
-    "bytes": 1502830,
-    "sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
-    "license": "Zlib",
-    "download": "https://zlib.net/fossils/zlib-1.3.2.tar.gz"
-  },
   "dsp56300_assembly_tool": {
     "source": "https://github.com/xemu-project/dsp56300",
     "version": "1.0.0",
@@ -21,34 +12,6 @@
     "sha256": "e16ef45da9572815d43ab89d030029b898e71226a265468a22591e0171df4b60",
     "license": "MIT",
     "source_revision": "aab3649fc452daf03da8b5e36fdc0c308d874101"
-  },
-  "pulseaudio": {
-    "version": "17.0",
-    "file": "pulseaudio-17.0.tar.xz",
-    "source": "https://freedesktop.org/software/pulseaudio/releases/pulseaudio-17.0.tar.xz",
-    "bytes": 1566556,
-    "sha256": "053794d6671a3e397d849e478a80b82a63cb9d8ca296bd35b73317bb5ceb87b5",
-    "license": "LGPL-2.1-or-later (client); see upstream LICENSE for individual file notices",
-    "patches": [
-      "patches/pulseaudio-callback-types.patch",
-      "patches/pulseaudio-timing-index.patch"
-    ]
-  },
-  "libsndfile": {
-    "version": "1.2.2",
-    "file": "libsndfile-1.2.2.tar.xz",
-    "source": "https://github.com/libsndfile/libsndfile/releases/download/1.2.2/libsndfile-1.2.2.tar.xz",
-    "bytes": 730760,
-    "sha256": "3799ca9924d3125038880367bf1468e53a1b7e3686a934f098b7e1d286cdb80e",
-    "license": "LGPL-2.1-or-later"
-  },
-  "meson": {
-    "version": "1.5.2",
-    "file": "meson-1.5.2-py3-none-any.whl",
-    "source": "https://files.pythonhosted.org/packages/55/a6/47b9353c331318a13eb050887eacfd61eb075746285f9baf7ef7de6ae235/meson-1.5.2-py3-none-any.whl",
-    "bytes": 968744,
-    "sha256": "77706e2368a00d789c097632ccf4fc39251fba56d03e1e1b262559a3c7a08f5b",
-    "license": "Apache-2.0"
   },
   "independent_cpu12": {
     "source": "https://github.com/Weichwolf/cpu12",

@@ -1,7 +1,0 @@
-# SPDX-License-Identifier: LGPL-2.1-or-later
-# Normalize the first correction index as well as subsequent ring iterations.
---- a/src/pulse/stream.c
-+++ b/src/pulse/stream.c
-@@ -1918 +1918 @@
--            for (n = 0, j = o->stream->current_write_index_correction+1;
-+            for (n = 0, j = (o->stream->current_write_index_correction+1) % PA_MAX_WRITE_INDEX_CORRECTIONS;
