@@ -164,7 +164,7 @@ std::optional<std::uint64_t> Live::startup(const host::Signals &signals) {
   const auto started = std::chrono::steady_clock::now();
   vm_->start();
   while (!vm_->finished()) {
-    if (signals.wait(startup_poll)) { return {}; }
+    if (signals.wait(startup_poll)) { break; }
     audio_.check();
     discard(host::midi::Input::now());
     control();
@@ -177,6 +177,11 @@ std::optional<std::uint64_t> Live::startup(const host::Signals &signals) {
           "Live startup requires original MIDI identity and PCM within one minute");
     }
   }
+  const auto observed = startup.observations();
+  std::cerr << "Live startup incomplete: application=" << yes_no(vm_->mcu_wait_time().has_value())
+            << " pcm=" << yes_no(consumer_.has_pcm())
+            << " identity-seen=" << yes_no(observed.identity) << " queries=" << observed.queries
+            << " output-bytes=" << observed.output_bytes << '\n';
   return {};
 }
 
@@ -290,8 +295,6 @@ int Live::run(vi::VmContext &vm, const host::Signals &signals) {
     vm.request_stop();
     const auto reports = vm.wait();
     publish_display();
-    std::cerr
-        << "Live startup incomplete: original MIDI identity/application/PCM not established.\n";
     return report_execution(reports) ? 2 : 1;
   }
   consumer_.begin_at(*origin);
