@@ -16,15 +16,16 @@ constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
 constexpr auto index_mask = MidiPort::capacity - 1;
 static_assert((MidiPort::capacity & index_mask) == 0);
 static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
+static_assert(std::atomic<unsigned>::is_always_lock_free);
 
 struct Waiting {
-  std::atomic<bool> &flag;
+  std::atomic<unsigned> &waiters;
 
-  explicit Waiting(std::atomic<bool> &value) : flag(value) {
-    flag.store(true, std::memory_order_seq_cst);
+  explicit Waiting(std::atomic<unsigned> &value) : waiters(value) {
+    waiters.fetch_add(1, std::memory_order_seq_cst);
   }
 
-  ~Waiting() { flag.store(false, std::memory_order_seq_cst); }
+  ~Waiting() { waiters.fetch_sub(1, std::memory_order_seq_cst); }
 };
 }
 
@@ -55,20 +56,21 @@ void MidiPort::signal() noexcept {
 }
 
 void MidiPort::notify() noexcept {
-  if (input_waiting_.load(std::memory_order_seq_cst) ||
-      space_waiting_.load(std::memory_order_seq_cst) ||
-      output_waiting_.load(std::memory_order_seq_cst)) {
+  if (input_waiters_.load(std::memory_order_seq_cst) != 0 ||
+      space_waiters_.load(std::memory_order_seq_cst) != 0 ||
+      output_waiters_.load(std::memory_order_seq_cst) != 0) {
     signal();
   }
 }
 
 template <typename Ready>
-bool MidiPort::await(std::atomic<bool> &waiting,
+bool MidiPort::await(std::atomic<unsigned> &waiters,
                      const std::stop_token &stop,
                      Ready ready) noexcept {
   if (stop.stop_requested() || error() != nullptr) { return false; }
   if (ready()) { return true; }
-  const Waiting registered{waiting};
+  // Each blocked owner retains its registration until its own exit.
+  const Waiting registered{waiters};
   const std::stop_callback cancelled(stop, [this] { signal(); });
   for (;;) {
     const auto observed = changed_.load(std::memory_order_seq_cst);
@@ -124,7 +126,7 @@ bool MidiPort::admit(const std::span<const std::uint8_t> bytes,
     return bytes.size() <= capacity - (at - retired);
   };
   if (stop != nullptr) {
-    if (!await(space_waiting_, *stop, room)) { return false; }
+    if (!await(space_waiters_, *stop, room)) { return false; }
   } else if (!room()) {
     return fail("MIDI input queue is full");
   }
@@ -181,7 +183,7 @@ void MidiPort::abort_input() noexcept {
 
 bool MidiPort::await_input(const std::uint64_t ticks, const std::stop_token &stop) noexcept {
   if (input_mode_ == InputMode::live) { return !stop.stop_requested() && error() == nullptr; }
-  return await(input_waiting_, stop, [&] {
+  return await(input_waiters_, stop, [&] {
     return phase_.load(std::memory_order_seq_cst) == Phase::ended ||
            input_until_.load(std::memory_order_seq_cst) > ticks;
   });
@@ -218,7 +220,7 @@ std::optional<MidiPort::Event> MidiPort::read_output() noexcept {
 }
 
 bool MidiPort::await_output(const std::stop_token &stop) noexcept {
-  return await(output_waiting_, stop, [this] {
+  return await(output_waiters_, stop, [this] {
     return output_.written.load(std::memory_order_seq_cst) !=
            output_.read.load(std::memory_order_relaxed);
   });

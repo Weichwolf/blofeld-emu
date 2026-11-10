@@ -81,7 +81,7 @@ private:
 
   template <typename Ready>
   [[nodiscard]] bool
-  await(std::atomic<bool> &waiting, const std::stop_token &stop, Ready ready) noexcept;
+  await(std::atomic<unsigned> &waiters, const std::stop_token &stop, Ready ready) noexcept;
   void signal() noexcept;
   void notify() noexcept;
   [[nodiscard]] bool admit(std::span<const std::uint8_t> bytes,
@@ -94,7 +94,7 @@ private:
   Queue output_;
   std::uint64_t next_input_ = 0, last_input_ = 0, last_output_ = 0;
   std::atomic<std::uint64_t> input_until_{0}, changed_{0};
-  std::atomic<bool> input_waiting_{false}, space_waiting_{false}, output_waiting_{false};
+  std::atomic<unsigned> input_waiters_{0}, space_waiters_{0}, output_waiters_{0};
   std::atomic<std::uint64_t> time_{0};
   std::atomic<const char *> error_{nullptr};
 };
