@@ -6,6 +6,7 @@
 #include <dsp56300/memory.hpp>
 #include <optional>
 #include <span>
+#include <vector>
 
 namespace blofeld::vi::dsp {
 namespace {
@@ -44,6 +45,16 @@ unsigned Interrupts::priority(const Word vector) const noexcept {
     shift = 6;
   }
   return (peripheral_ >> shift) & 3;
+}
+
+std::vector<Word> Interrupts::entries(const Word vba) const {
+  constexpr Word base_mask = 0xffff00;
+  std::vector<Word> result;
+  result.reserve(order.size());
+  for (const auto vector : order) {
+    if (priority(vector) != 0) { result.push_back((vba & base_mask) | vector); }
+  }
+  return result;
 }
 
 std::optional<Interrupts::Request> Interrupts::select(const std::span<const Word> vectors,

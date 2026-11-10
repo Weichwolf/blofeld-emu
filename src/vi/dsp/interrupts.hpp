@@ -4,6 +4,7 @@
 #include <dsp56300/memory.hpp>
 #include <optional>
 #include <span>
+#include <vector>
 
 namespace blofeld::vi::dsp {
 // DSP56371UM 4.4: configured priorities and arbitration of actual device requests.
@@ -21,6 +22,9 @@ public:
 
   [[nodiscard]] std::optional<Request> select(std::span<const dsp56300::Word> vectors,
                                               dsp56300::Word status) const noexcept;
+
+  // Configured vectors establish code independently of pending requests and SR.
+  [[nodiscard]] std::vector<dsp56300::Word> entries(dsp56300::Word vba) const;
 
   static constexpr dsp56300::Word core_address = 0xffffff;
   static constexpr dsp56300::Word peripheral_address = 0xfffffe;

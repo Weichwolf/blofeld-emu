@@ -364,7 +364,7 @@ void native_timer_events() {
           "Native execution reaches a real timer compare deadline and reads its sticky TCF");
 }
 
-void native_timer_interrupt(const bool waiting) {
+void native_timer_interrupt(const bool waiting, const bool late_vba = false) {
   namespace isa = dsp56300::isa;
   using dsp56300::Word;
   constexpr Word immediate = 0x34;
@@ -407,18 +407,23 @@ void native_timer_interrupt(const bool waiting) {
   for (unsigned index = 0; index < interrupt_handler.size(); ++index) {
     put_code(handler + index, interrupt_handler[index]);
   }
-  const std::array setup{
-      literal,
-      vba,
-      isa::opcode<isa::Opcode::movec_register>()[0] | (x0 << 8U) | write | vba_selector,
-      isa::opcode<isa::Opcode::movep_memory_high>()[0] | (immediate << 8U) | write | priority_port,
-      priority,
-      port | load_port,
-      Word{0},
-      port | compare_port,
-      waiting ? sleeping_compare : Word{16},
-      port | timer_port,
-      timer_enable};
+  const std::array set_base{literal,
+                            vba,
+                            isa::opcode<isa::Opcode::movec_register>()[0] | (x0 << 8U) | write |
+                                vba_selector};
+  const std::array set_priority{isa::opcode<isa::Opcode::movep_memory_high>()[0] |
+                                    (immediate << 8U) | write | priority_port,
+                                priority};
+  const auto base = [&] { program.insert(program.end(), set_base.begin(), set_base.end()); };
+  if (!late_vba) { base(); }
+  program.insert(program.end(), set_priority.begin(), set_priority.end());
+  if (late_vba) { base(); }
+  const std::array setup{port | load_port,
+                         Word{0},
+                         port | compare_port,
+                         waiting ? sleeping_compare : Word{16},
+                         port | timer_port,
+                         timer_enable};
   program.insert(program.end(), setup.begin(), setup.end());
   if (waiting) {
     program.push_back(unmask);
@@ -445,6 +450,72 @@ void native_timer_interrupt(const bool waiting) {
               report.failure->pc == boot + program.size() - 2,
           "A real timer IRQ observes masks/REP or wakes WAIT, uses VBA, acknowledges TCF and "
           "returns via RTI");
+}
+
+void configured_vector_preparation() {
+  namespace isa = dsp56300::isa;
+  using dsp56300::Word;
+  constexpr Word immediate = 0x34;
+  constexpr Word absolute = 0x30;
+  constexpr Word write = 0x8000;
+  constexpr Word x0 = 4;
+  constexpr Word a1 = 12;
+  constexpr Word vba_selector = 0x10;
+  constexpr Word vba = 0x200;
+  constexpr Word vector = vba + 0x54;
+  constexpr Word handler = 0x300;
+  constexpr Word finish = 0x350;
+  constexpr Word priority_port = 0x3e;
+  constexpr Word priority = 0x100;
+  constexpr Word marker = 0xc000;
+  constexpr unsigned expected_instructions =
+      15; // Six code-word transfers and three setup instructions.
+  constexpr auto literal =
+      isa::opcode<isa::Opcode::move_x_effective>()[0] | (immediate << 8U) | write;
+  constexpr auto store = isa::opcode<isa::Opcode::movem_effective>()[0] | (absolute << 8U) | x0;
+  constexpr auto jump = isa::opcode<isa::Opcode::jmp_absolute_short>()[0];
+  for (const bool enabled : {false, true}) {
+    std::vector<Word> program;
+    const auto put = [&](const Word address, const Word value) {
+      const std::array words{literal, value, store, address};
+      program.insert(program.end(), words.begin(), words.end());
+    };
+    put(vector, jump | handler);
+    // Uninitialized X:(R0) proves preparation never reads guest data or executes the handler.
+    put(handler, isa::opcode<isa::Opcode::move_x_effective>()[0] | (4U << 11) | write);
+    put(handler + 1, isa::opcode<isa::Opcode::asr_immediate>()[0] | (3U << 1) | 1U);
+    put(handler + 2, isa::opcode<isa::Opcode::add_x0_a>()[0]);
+    put(handler + 3, jump | finish);
+    put(finish, isa::rti[0]);
+    const std::array setup{literal,
+                           vba,
+                           isa::opcode<isa::Opcode::movec_register>()[0] | (x0 << 8U) | write |
+                               vba_selector,
+                           isa::opcode<isa::Opcode::movep_memory_high>()[0] | (immediate << 8U) |
+                               write | priority_port,
+                           enabled ? priority : Word{0},
+                           isa::opcode<isa::Opcode::movem_effective>()[0] | (absolute << 8U) | a1,
+                           marker};
+    program.insert(program.end(), setup.begin(), setup.end());
+    blofeld::vi::Shi shi;
+    blofeld::vi::DspReset reset;
+    const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+    const bool correct = report.failure && report.failure->space == 'P' &&
+                         report.failure->address == marker && report.failure->value == 0 &&
+                         report.instructions == expected_instructions &&
+                         ((report.prepared_native_bytes != 0) == enabled);
+    if (!correct) {
+      std::cerr << "Configured code: enabled=" << enabled << " retired=" << report.instructions
+                << " native-bytes=" << report.prepared_native_bytes;
+      if (report.failure) {
+        std::cerr << " failure=" << report.failure->space << ':' << std::hex
+                  << report.failure->address << " value=" << report.failure->value << std::dec;
+      }
+      std::cerr << '\n';
+    }
+    require(correct,
+            "Configured vector code prepares before any request without executing its handler");
+  }
 }
 
 void native_audio_dma(const bool throwing) {
@@ -914,6 +985,9 @@ int main(const int argc, char **argv) try {
   native_timer_events();
   native_timer_interrupt(false);
   native_timer_interrupt(true);
+  native_timer_interrupt(false, true);
+  native_timer_interrupt(true, true);
+  configured_vector_preparation();
   consecutive_receive_registers();
   reset_running_core();
 } catch (const std::exception &error) {

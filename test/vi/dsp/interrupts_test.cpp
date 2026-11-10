@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dsp/interrupts.hpp"
 
+#include <algorithm>
 #include <array>
 #include <dsp56300/memory.hpp>
 #include <exception>
 #include <iostream>
 #include <stdexcept>
+#include <vector>
 
 namespace {
 using blofeld::vi::dsp::Interrupts;
@@ -104,12 +106,58 @@ void priority_and_order() {
   require(!controller.select(std::array<Word, 1>{timer0_vector}, 0),
           "Reset restores disabled priority fields");
 }
+
+void executable_entries() {
+  constexpr Word vba = 0x1234ab;
+  constexpr Word base = 0x123400;
+  constexpr Word external_vector = 0x12;
+  Interrupts controller;
+  require(controller.entries(vba).empty(), "Reset establishes no interrupt code entries");
+  constexpr Word external_and_dma = (2U << 3) | (1U << 18);
+  constexpr Word timers_and_dax = (2U << 8) | (1U << 6);
+  require(
+      controller.write({.address = Interrupts::core_address, .value = external_and_dma}) &&
+          controller.write({.address = Interrupts::peripheral_address, .value = timers_and_dax}),
+      "Configure actual external, DMA, timer and DAX priorities");
+  const std::vector<Word> expected{base | 0x12,
+                                   base | 0x1e,
+                                   base | 0x28,
+                                   base | 0x2a,
+                                   base | 0x2e,
+                                   base | 0x56,
+                                   base | 0x54,
+                                   base | 0x5a,
+                                   base | 0x58,
+                                   base | 0x5e,
+                                   base | 0x5c};
+  require(controller.entries(vba) == expected && !controller.select({}, 0) &&
+              !controller.select(std::array<Word, 2>{external_vector, timer0_vector}, masked),
+          "Configured entries retain architectural order and VBA alignment without IRQs or SR");
+  Word core = 0;
+  Word peripheral = 0;
+  require(controller.read(Interrupts::core_address, core) && core == external_and_dma &&
+              controller.read(Interrupts::peripheral_address, peripheral) &&
+              peripheral == timers_and_dax,
+          "Collecting executable roots never changes priorities or request state");
+  require(controller.write({.address = Interrupts::core_address, .value = dsp56300::word_mask}) &&
+              controller.write(
+                  {.address = Interrupts::peripheral_address, .value = dsp56300::word_mask}),
+          "Enable all architectural vector groups");
+  auto all = controller.entries(0);
+  constexpr unsigned vector_count = 43;
+  std::ranges::sort(all);
+  require(all.size() == vector_count && std::ranges::adjacent_find(all) == all.end(),
+          "Every configured architectural vector appears exactly once");
+  controller.reset();
+  require(controller.entries(vba).empty(), "Reset revokes all configured executable roots");
+}
 }
 
 int main() try {
   mappings_and_masks();
   external_modes();
   priority_and_order();
+  executable_entries();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

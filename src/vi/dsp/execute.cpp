@@ -31,6 +31,7 @@
 #include <span>
 #include <stdexcept>
 #include <stop_token>
+#include <vector>
 
 namespace blofeld::vi::dsp {
 namespace {
@@ -220,6 +221,12 @@ public:
       const auto state = core_->registers();
       const auto request = interrupts_.select(sources, state.sr);
       if (request) {
+        if ((state.vba & vector_base_mask) != prepared_vba_) {
+          preparation_requested_ = true;
+          dsp56300::RunResult pending;
+          pending.yielded = true;
+          return pending;
+        }
         if (core_->interrupt_ready()) {
           const auto external = peer_ != nullptr && request->vector == 0x10
                                     ? peer_->dsp_interrupt(interrupts_.external_edge(0x10))
@@ -519,7 +526,12 @@ private:
   }
 
   bool write_priority(const Interrupts::Write access) noexcept {
+    dsp56300::Word previous = 0;
+    static_cast<void>(interrupts_.read(access.address, previous));
     if (!interrupts_.write(access)) { return false; }
+    dsp56300::Word current = 0;
+    static_cast<void>(interrupts_.read(access.address, current));
+    preparation_requested_ |= previous != current;
     core_->request_yield();
     return true;
   }
@@ -692,6 +704,7 @@ private:
   bool audio_dirty_ = true;
   bool preparation_requested_ = true;
   dsp56300::Word prepared_mode_ = 0;
+  dsp56300::Word prepared_vba_ = 0;
   bool waiting_ = false;
   std::uint64_t idle_ = 0;
   std::uint64_t media_epoch_ = 0;
@@ -741,8 +754,9 @@ Access operation(const dsp56300::FaultKind fault) {
 void Io::prepare_code(ExecutionReport &report) {
   if (!preparation_requested_) { return; }
   const auto registers = core_->registers();
-  // Architectural reset and the actually reached PC establish code, not a ROM scan.
-  const std::array<dsp56300::Word, 3> entries{0, boot_first, registers.pc};
+  // Reset, reached code and configured vectors establish entries, not a ROM scan.
+  auto entries = interrupts_.entries(registers.vba);
+  entries.insert(entries.end(), {0, boot_first, registers.pc});
   const auto begun = std::chrono::steady_clock::now();
   const auto prepared = core_->prepare(entries);
   const auto elapsed =
@@ -751,6 +765,7 @@ void Io::prepare_code(ExecutionReport &report) {
   report.preparation_nanoseconds += static_cast<std::uint64_t>(elapsed);
   report.prepared_native_bytes += prepared.native_bytes;
   prepared_mode_ = registers.omr;
+  prepared_vba_ = registers.vba & vector_base_mask;
   preparation_requested_ = false;
   if (prepared.failure.kind != dsp56300::FaultKind::none) {
     const auto &fault = prepared.failure;
