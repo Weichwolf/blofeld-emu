@@ -22,6 +22,7 @@
 #include "storage/media_image.hpp"
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
@@ -88,6 +89,7 @@ public:
     epoch_ = epoch;
     reset_interrupted_ = false;
     program_changed_ = false;
+    preparation_requested_ = true;
     waiting_ = false;
     idle_ = 0;
     media_epoch_ = 0;
@@ -121,6 +123,8 @@ public:
     report.stopped_pc = core_->registers().pc;
     core_ = nullptr;
   }
+
+  void prepare_code(ExecutionReport &report);
 
   bool complete_events(ExecutionReport &report) {
     if (media_deadline_ && device_cycles() >= *media_deadline_) {
@@ -175,6 +179,7 @@ public:
     if (program_changed_) {
       static_cast<void>(memory_.promote_initialized());
       revision_ ^= 1U;
+      preparation_requested_ = true;
       program_changed_ = false;
     }
     return true;
@@ -252,7 +257,11 @@ public:
 
   std::span<const dsp56300::MemoryWindow>
   memory_windows(const dsp56300::Space space) noexcept override {
-    if (core_ != nullptr) { memory_.configure(core_->registers().omr); }
+    if (core_ != nullptr) {
+      const auto mode = core_->registers().omr;
+      memory_.configure(mode);
+      preparation_requested_ |= mode != prepared_mode_;
+    }
     return memory_.windows(space);
   }
 
@@ -422,7 +431,10 @@ private:
 
   bool write_clock(const dsp56300::Word value) noexcept {
     if (!clock_.advance(device_cycles()) || !clock_.write(value)) { return false; }
-    if (memory_.promote_initialized()) { revision_ ^= 1U; }
+    if (memory_.promote_initialized()) {
+      revision_ ^= 1U;
+      preparation_requested_ = true;
+    }
     audio_changed();
     return true;
   }
@@ -678,6 +690,8 @@ private:
   bool reset_interrupted_ = false;
   bool program_changed_ = false;
   bool audio_dirty_ = true;
+  bool preparation_requested_ = true;
+  dsp56300::Word prepared_mode_ = 0;
   bool waiting_ = false;
   std::uint64_t idle_ = 0;
   std::uint64_t media_epoch_ = 0;
@@ -724,6 +738,36 @@ Access operation(const dsp56300::FaultKind fault) {
   }
 }
 
+void Io::prepare_code(ExecutionReport &report) {
+  if (!preparation_requested_) { return; }
+  const auto registers = core_->registers();
+  // Architectural reset and the actually reached PC establish code, not a ROM scan.
+  const std::array<dsp56300::Word, 3> entries{0, boot_first, registers.pc};
+  const auto begun = std::chrono::steady_clock::now();
+  const auto prepared = core_->prepare(entries);
+  const auto elapsed =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - begun)
+          .count();
+  report.preparation_nanoseconds += static_cast<std::uint64_t>(elapsed);
+  report.prepared_native_bytes += prepared.native_bytes;
+  prepared_mode_ = registers.omr;
+  preparation_requested_ = false;
+  if (prepared.failure.kind != dsp56300::FaultKind::none) {
+    const auto &fault = prepared.failure;
+    char space = 'P';
+    if (fault.space == dsp56300::Space::x) { space = 'X'; }
+    if (fault.space == dsp56300::Space::y) { space = 'Y'; }
+    report.preparation_diagnostic = Failure{
+        .operation = operation(fault.kind),
+        .pc = fault.pc,
+        .address = fault.address,
+        .value = fault.value,
+        .code = static_cast<std::uint32_t>(fault.kind),
+        .space = space,
+        .reason = "DSP preparation incomplete; remaining entries use retained native execution"};
+  }
+}
+
 bool run_instance(Io &io,
                   DspReset &reset,
                   const std::uint64_t epoch,
@@ -743,6 +787,7 @@ bool run_instance(Io &io,
       restart = true;
       break;
     }
+    io.prepare_code(report);
     const auto result = io.run();
     report.instructions += result.retired;
     if (stop.stop_requested()) { break; }
