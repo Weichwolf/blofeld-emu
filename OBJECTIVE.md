@@ -88,13 +88,29 @@ Live operation must deliver every audio buffer on time without host-induced gaps
 lost or repeated frames, including first use of firmware paths and JIT translation.
 Average throughput or offline reserve cannot compensate for a missed live deadline.
 
-Prioritize low ongoing execution cost and fast on-demand JIT translation. Measure
-first-use translation within actual live deadlines, including interrupt entries,
-indirect targets and runtime-loaded executable regions. Use selective or complete
-precompilation and a persistent native-code cache only where measurements establish
-that on-demand translation cannot meet those deadlines. First preparation may take
-substantially longer than ordinary startup; report it separately from original boot,
-warm execution and total readiness. It does not extend firmware execution probes.
+Prioritize optimized host execution over translation speed. Both cpu12 and
+dsp56300 require an explicit preparation/optimization phase before run: analyze
+the loaded executable program, build semantic data/control flow and optimize it
+across instructions and blocks before native lowering. Apply constant/range
+propagation, redundant computation/load/store elimination, register value
+propagation and appropriate loop/vector optimization with exact guest semantics.
+Host C++ -O3 alone does not optimize machine code emitted at runtime.
+
+Allow substantial startup preparation without a fixed time budget; the suggested
+one second is not a limit. Prepare the established executable working set before
+playback, and support subsequently loaded/modified code with exact invalidation
+and optimized retranslation. Preparation performs no guest execution, real I/O
+or device-time advance. Measure coverage and first use, including interrupt
+entries, indirect targets and runtime-loaded code. Report preparation separately
+from original boot, warm execution and total readiness. It does not extend a
+failed firmware probe. A persistent native-code cache may amortize validated
+preparation; it never substitutes for optimized execution.
+
+Use heterogeneous host cores deliberately: prioritize MCU/DSP execution on
+performance resources and place preparation/background work on efficiency
+resources using supported host scheduling contracts. Query actual topology and
+verify placement behavior; a successful QoS request alone is not proof of core
+assignment. Keep host scheduling out of guest ISA and device-time semantics.
 Do not decode arbitrary data or unknown memory as established executable code.
 If caching is needed, key it by executable-input hashes, exact JIT revision, host
 architecture/features, code-generation options and binding ABI. Relocate instance

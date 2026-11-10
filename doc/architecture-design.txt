@@ -83,14 +83,42 @@ https://docs.wasmtime.dev/contributing-architecture.html
 https://docs.wasmtime.dev/api/wasmtime/struct.Config.html
 https://docs.wasmtime.dev/examples-fast-execution.html
 
-Prioritize low ongoing execution cost and a fast on-demand JIT. Measure first use
-of executable paths, including vectors, indirect targets and runtime-loaded code,
-against live deadlines. Keep native successors linked within a core instance;
-typed I/O boundaries retain precise state and effects without generic argument
-arrays. Keep data and unknown memory distinct from established executable code.
-Only if measured translation misses live deadlines, prepare selected regions or
-the complete executable scope before playback. Its first preparation time may be
-substantial; report it separately from original boot and warm execution.
+Each core exposes an explicit preparation/optimization phase before run. Treat
+firmware machine code as the input program: decode established executable entries,
+build a semantic CFG/SSA with ordered memory/device effects and optimize across
+instruction/block boundaries before x86-64 or ARM64 lowering. Carry fixed-width
+wrap, carry/sticky flags, DSP rounding/saturation, parallel old operands and exact
+retirement into the IR. Use constant/range propagation, CSE, dead code/store
+elimination, load forwarding, register value propagation, loop induction/invariants,
+strength reduction, unrolling and legal vectorization. Keep precise state maps at
+actual callback, fault, interrupt, code-mutation and partial-grant boundaries.
+A C++ compiler optimizing the emitter does not optimize its emitted guest program.
+
+Preparation is side-effect-free with respect to core/device state and musical time.
+It uses an immutable program/mapping view, established entries and binding identity;
+its output is immutable native code with validated bindings. The owner installs
+results only against the matching revision at a stopped execution boundary.
+Support whole established executable regions plus subsequently loaded/modified
+code. Indirect targets remain conservative until established. Never decode padding
+or unknown data as code, execute fake warm-up firmware or restore a device snapshot.
+Keep native successors linked and guest values live across safe control-flow edges.
+Preparation and execution have separate lifecycle/status contracts in both cores.
+
+Optimize generated-code quality even if preparation takes substantially longer.
+There is no fixed one-second or other startup compilation budget. Measure
+preparation, original boot, warm execution, readiness and first-use coverage
+separately. Runtime-created executable code still needs correct revisioned
+invalidation and retranslation, with live deadlines qualified explicitly.
+
+Host composition requests performance-oriented scheduling for both execution
+owners and efficiency-oriented scheduling for bounded preparation workers and
+background work. Query actual topology; do not hardcode core IDs or claim hard
+P/E affinity from QoS. On macOS use supported QoS/audio-workgroup contracts and
+observe CPU placement separately. Scheduling belongs in host/app, not guest ISA,
+firmware replies or device-time coordination. A prepared executable/code view is
+immutable across compiler workers; mutable core/device state keeps one owner.
+https://developer.apple.com/documentation/apple-silicon/tuning-your-code-s-performance-for-apple-silicon
+https://developer.apple.com/documentation/audiotoolbox/understanding-audio-workgroups
 
 Add a persistent local code cache only if measurements justify it. Store relocations
 and binding metadata, never raw process pointers or device-state snapshots. Key it
