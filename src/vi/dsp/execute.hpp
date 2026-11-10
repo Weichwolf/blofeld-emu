@@ -8,6 +8,7 @@
 #include "io/pcm_output.hpp"
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
+#include "preparation_clock.hpp"
 #include "storage/media_image.hpp"
 
 #include <dsp56300/memory.hpp>
@@ -23,5 +24,6 @@ namespace blofeld::vi::dsp {
                                       PcmOutput output = {},
                                       PeerPort *peer = nullptr,
                                       ExecutionTime *time = nullptr,
-                                      MidiPort *midi = nullptr);
+                                      MidiPort *midi = nullptr,
+                                      PreparationClock *preparation = nullptr);
 }

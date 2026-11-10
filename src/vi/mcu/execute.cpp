@@ -17,6 +17,7 @@
 #include "mcu/memory.hpp"
 #include "mcu/ports.hpp"
 #include "mcu/timer.hpp"
+#include "preparation_clock.hpp"
 #include "storage/flash_image.hpp"
 
 #include <algorithm>
@@ -705,8 +706,9 @@ std::vector<cpu12::Ram> regions(Memory &memory, Usb &usb) {
 
 enum class Dispatch : std::uint8_t { run, again, done };
 
-void prepare_code(cpu12::Core &core, ExecutionReport &report) {
+void prepare_code(cpu12::Core &core, ExecutionReport &report, PreparationClock *preparation) {
   const std::array entries{core.registers().pc};
+  const PreparationClock::Scope phase(preparation);
   const auto begun = std::chrono::steady_clock::now();
   const auto prepared = core.prepare(entries);
   const auto elapsed =
@@ -729,7 +731,8 @@ void bind_memory(cpu12::Core &core,
                  Memory &memory,
                  Usb &usb,
                  std::vector<cpu12::Ram> &grants,
-                 ExecutionReport &report) {
+                 ExecutionReport &report,
+                 PreparationClock *preparation) {
   const bool mapping_changed = memory.commit_mapping();
   const bool buffers_changed = usb.commit_mapping();
   const bool program_changed = memory.bind_program(core.registers().pc);
@@ -737,7 +740,7 @@ void bind_memory(cpu12::Core &core,
   auto next_grants = regions(memory, usb);
   core.set_memory(cpu12::Memory::mapped(next_grants));
   grants.swap(next_grants);
-  prepare_code(core, report);
+  prepare_code(core, report, preparation);
 }
 
 Dispatch prepare(cpu12::Core &core, Devices &devices, ExecutionReport &report) {
@@ -770,7 +773,8 @@ ExecutionReport execute(FlashImage &image,
                         DisplayState *display,
                         PeerPort *peer,
                         ExecutionTime *time,
-                        MidiPort *midi) {
+                        MidiPort *midi,
+                        PreparationClock *preparation) {
   const PeerAdmission admission{peer};
   if (peer != nullptr && !peer->mcu_interrupt_ready(false)) {
     throw std::overflow_error(peer->error());
@@ -797,9 +801,9 @@ ExecutionReport execute(FlashImage &image,
                              .reason = "MCU reset vector access failed"};
     return report;
   }
-  prepare_code(core, report);
+  prepare_code(core, report, preparation);
   while (!stop.stop_requested()) {
-    bind_memory(core, memory, devices.usb, grants, report);
+    bind_memory(core, memory, devices.usb, grants, report, preparation);
     const auto dispatch = prepare(core, devices, report);
     if (dispatch == Dispatch::done) { break; }
     if (dispatch == Dispatch::again) { continue; }

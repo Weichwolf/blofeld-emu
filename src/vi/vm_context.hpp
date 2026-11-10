@@ -11,6 +11,7 @@
 #include "io/pcm_output.hpp"
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
+#include "preparation_clock.hpp"
 #include "storage/flash_image.hpp"
 #include "storage/media_image.hpp"
 
@@ -47,6 +48,10 @@ public:
     return time_.mcu_wait_time();
   }
 
+  [[nodiscard]] PreparationClock::Clock::duration execution_elapsed() const {
+    return preparation_.elapsed();
+  }
+
   void request_display() noexcept { display_.request(); }
 
   [[nodiscard]] std::optional<St7565> take_display() { return display_.take(); }
@@ -61,6 +66,7 @@ public:
   [[nodiscard]] std::array<ExecutionReport, 2> run();
 
 private:
+  PreparationClock preparation_;
   ExecutionTime time_;
   PeerPort peer_;
   std::unique_ptr<FlashImage> image_;

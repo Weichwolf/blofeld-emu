@@ -78,6 +78,7 @@ std::optional<std::uint64_t> OfflineRender::startup(vi::VmContext &vm,
                                                     const host::Signals &signals) {
   MidiStartup startup;
   static_cast<void>(startup.poll(vm.midi(), {}));
+  const auto begun = vm.execution_elapsed();
   vm.start();
   while (!vm.finished()) {
     if (signals.wait(startup_poll)) { break; }
@@ -86,13 +87,15 @@ std::optional<std::uint64_t> OfflineRender::startup(vi::VmContext &vm,
       return MidiStartup::Readiness{.application = render.vm_->mcu_wait_time().has_value(),
                                     .pcm = render.wav_.has_pcm()};
     });
+    startup_execution_ = vm.execution_elapsed() - begun;
     if (origin) { return origin; }
-    if (std::chrono::steady_clock::now() - started_ >= startup_limit) {
-      std::cerr
-          << "Startup failed: no original MIDI identity and valid PCM within one host minute.\n";
+    if (startup_execution_ >= startup_limit) {
+      std::cerr << "Startup failed: no original MIDI identity and valid PCM within one host minute "
+                   "excluding AOT.\n";
       break;
     }
   }
+  startup_execution_ = vm.execution_elapsed() - begun;
   const auto observed = startup.observations();
   std::cerr << "Startup incomplete: queries=" << observed.queries
             << " MIDI-out-bytes=" << observed.output_bytes
@@ -185,11 +188,13 @@ void OfflineRender::statistics() const {
   const double audio = static_cast<double>(frames) / rate;
   const double preparation = std::chrono::duration<double>(started_ - launched_).count();
   const double startup = std::chrono::duration<double>(ready_ - started_).count();
+  const double startup_execution = std::chrono::duration<double>(startup_execution_).count();
   const double active = std::chrono::duration<double>(finished_ - ready_).count();
   const double total = std::chrono::duration<double>(finished_ - launched_).count();
   std::cerr << std::fixed << std::setprecision(3) << "Rendered: " << frames << " stereo frames, "
             << audio << "s at " << rate << "Hz; preparation=" << preparation
-            << "s startup=" << startup << "s active=" << active << "s total=" << total
+            << "s startup=" << startup << "s startup-execution=" << startup_execution
+            << "s active=" << active << "s total=" << total
             << "s; frames/s=" << static_cast<double>(frames) / active << " RTF=" << audio / active
             << "x total-RTF=" << audio / total
             << "x; device-underruns=0; MIDI deadline deviation=unmeasured\n";

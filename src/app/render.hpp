@@ -35,5 +35,6 @@ private:
   std::uint64_t tail_;
   vi::VmContext *vm_ = nullptr;
   std::chrono::steady_clock::time_point launched_, started_, ready_, finished_;
+  std::chrono::steady_clock::duration startup_execution_{};
 };
 }

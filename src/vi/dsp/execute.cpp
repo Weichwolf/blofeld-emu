@@ -19,6 +19,7 @@
 #include "io/pcm_output.hpp"
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
+#include "preparation_clock.hpp"
 #include "storage/media_image.hpp"
 
 #include <array>
@@ -74,7 +75,8 @@ public:
      const PcmOutput output,
      PeerPort *peer,
      ExecutionTime *time,
-     MidiPort *midi)
+     MidiPort *midi,
+     PreparationClock *preparation)
       : boot_(boot),
         shi_(shi),
         reset_(reset),
@@ -83,7 +85,8 @@ public:
         controller_(image),
         peer_(peer),
         time_(time),
-        midi_(midi) {}
+        midi_(midi),
+        preparation_(preparation) {}
 
   void bind(dsp56300::Core &core, const std::uint64_t epoch) noexcept {
     core_ = &core;
@@ -728,6 +731,7 @@ private:
   PeerPort *peer_;
   ExecutionTime *time_;
   MidiInput midi_;
+  PreparationClock *preparation_;
   std::optional<std::uint64_t> midi_deadline_;
   std::uint64_t origin_ = 0;
   std::optional<std::uint64_t> peer_deadline_;
@@ -757,6 +761,7 @@ void Io::prepare_code(ExecutionReport &report) {
   // Reset, reached code and configured vectors establish entries, not a ROM scan.
   auto entries = interrupts_.entries(registers.vba);
   entries.insert(entries.end(), {0, boot_first, registers.pc});
+  const PreparationClock::Scope phase(preparation_);
   const auto begun = std::chrono::steady_clock::now();
   const auto prepared = core_->prepare(entries);
   const auto elapsed =
@@ -849,12 +854,13 @@ ExecutionReport execute(const std::span<const dsp56300::Word> boot,
                         const PcmOutput output,
                         PeerPort *peer,
                         ExecutionTime *time,
-                        MidiPort *midi) {
+                        MidiPort *midi,
+                        PreparationClock *preparation) {
   if (boot.empty() || boot.size() > dsp56300::address_words - boot_first) {
     throw std::invalid_argument("DSP boot ROM has invalid bounds");
   }
   const OutputOwner owner{output};
-  Io io(boot, shi, reset, stop, image, output, peer, time, midi);
+  Io io(boot, shi, reset, stop, image, output, peer, time, midi, preparation);
   ExecutionReport report;
   std::uint64_t applied = 0;
   while (!stop.stop_requested()) {

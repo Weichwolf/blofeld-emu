@@ -196,6 +196,12 @@ restore a device snapshot. Keep native successors linked and guest values live
 across safe control-flow edges. Preparation and execution have separate
 lifecycle/status contracts in both cores.
 
+Declare executable ranges and valid instruction boundaries separately from
+inline tables and constants. A saved return address can be a data pointer;
+the address following a call alone does not establish executable continuation.
+Establish the real case/return destinations while preserving original stack
+effects and readable program data.
+
 Preparation is a mandatory gate for the complete established executable version.
 An incomplete translation fails with code identity, address and reason before
 execution; optimizing a subset does not qualify total translation coverage.
@@ -228,6 +234,9 @@ There is no fixed one-second or other startup compilation budget. Measure
 preparation, original boot, warm execution, readiness and first-use coverage
 separately. Runtime-created executable code still needs correct revisioned
 invalidation and retranslation, with live deadlines qualified explicitly.
+Keep firmware-execution readiness budgets separate from compiler time. Exclude
+the union of overlapping preparation intervals once; retain finite external
+probe guards chosen for their stated purpose.
 
 Host composition requests performance-oriented scheduling for both execution
 owners and efficiency-oriented scheduling for bounded preparation workers and

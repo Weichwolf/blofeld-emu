@@ -9,6 +9,7 @@
 #include "io/midi_port.hpp"
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
+#include "preparation_clock.hpp"
 #include "storage/flash_image.hpp"
 
 #include <stop_token>
@@ -22,5 +23,6 @@ namespace blofeld::vi::mcu {
                                       DisplayState *display = nullptr,
                                       PeerPort *peer = nullptr,
                                       ExecutionTime *time = nullptr,
-                                      MidiPort *midi = nullptr);
+                                      MidiPort *midi = nullptr,
+                                      PreparationClock *preparation = nullptr);
 }
