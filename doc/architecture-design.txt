@@ -1,29 +1,28 @@
 Ahead-of-Time Binary Translation — target architecture
 
 Execute the unmodified original firmware as native code compiled through cpu12
-and dsp56300. Firmware owns instrument behavior;
-the application binds concrete memory, registers, FIFOs, DMA, IRQs and host
-transports.
-The application orchestrates Ahead-of-Time Binary Translation of the complete
-known
-firmware and its executable variants. The core libraries supply semantic ISA
-translation; their names do not require lazy compilation during playback.
-Both core projects must support startup native installation and exportable LLVM
-bitcode or relocatable objects through the same semantic optimization pipeline.
-The application consumes those artifacts and owns linking/bindings; it does not
-copy
-ISA lowering internals. Keep LLVM handles private and artifact identity explicit.
-Use direct typed bindings, bounded queues and OS wakeups. Do not add a generic
-device bus, kernel component or electrical simulation layer. VmContext composes
-the application instance; it does not duplicate core state or interpret
+and dsp56300. Firmware owns instrument behavior; the application binds concrete
+memory, registers, FIFOs, DMA, IRQs and host transports. The application
+orchestrates Ahead-of-Time Binary Translation of the complete known firmware and
+its executable variants. The core libraries supply semantic ISA translation;
+their names do not require lazy compilation during playback. Both core projects
+must support startup native installation and exportable LLVM bitcode or
+relocatable objects through the same semantic optimization pipeline. The
+application consumes those artifacts and owns linking/bindings; it does not copy
+ISA lowering internals. Keep LLVM handles private and artifact identity
+explicit. Use direct typed bindings, bounded queues and OS wakeups. Do not add a
+generic device bus, kernel component or electrical simulation layer. VmContext
+composes the application instance; it does not duplicate core state or interpret
 instructions.
 
 Optimize firmware and eligible host bindings as one host-code execution path.
 Fuse their LLVM IR before O3 so inlining and value/memory optimization cross the
-firmware/host boundary. The resulting instrument executes native host functions
-over host RAM. Preserve program words only where firmware observes their values
-or writes them; no separate processor instruction-memory execution layer is
-needed.
+firmware/host boundary. Treat translated code and host functions as one native
+path: remove avoidable calls, dispatch, state copies, register spills and
+repeated validation. Qualify remaining costs in emitted code and connected
+profiles. The resulting instrument executes native host functions over host RAM.
+Preserve program words only where firmware observes their values or writes them;
+no separate processor instruction-memory execution layer is needed.
 
   known MCU/DSP code + variants -> core semantic LLVM IR --+
                                                          +-> LLVM O3 -> native instrument
@@ -31,23 +30,24 @@ needed.
 
 Prefer startup loading of the selected firmware followed by complete AOT and
 joint host-code optimization before playback. Keep the same code-quality and
-coverage requirements as build-time AOT. Measure compilation/startup and compiler
-memory separately from warm execution; runtime loading does not permit lazy
-translation during playing. A validated code cache is optional for measured gain.
+coverage requirements as build-time AOT. Measure compilation/startup and
+compiler memory separately from warm execution; runtime loading does not permit
+lazy translation during playing. A validated code cache is optional for measured
+gain.
 
 Build-time AOT may alternatively generate firmware LLVM IR locally, then compile
-and link
-it with the host application into the final native executable. Translation does
-not have to occur at application startup. Both placements satisfy the same
-complete-coverage gate; build-time failure prevents a qualified instrument build.
-Keep generated firmware-derived IR/source/objects and executables under ignored
-build/. Retain code/input hashes and binding/host identities; reject incompatible
-profile inputs. Preserve original boot and loading effects after compilation.
+and link it with the host application into the final native executable.
+Translation does not have to occur at application startup. Both placements
+satisfy the same complete-coverage gate; build-time failure prevents a qualified
+instrument build. Keep generated firmware-derived IR/source/objects and
+executables under ignored build/. Retain code/input hashes and binding/host
+identities; reject incompatible profile inputs. Preserve original boot and
+loading effects after compilation.
 
-Near-host throughput in authored JIT benchmarks establishes feasibility for those
-programs, not equivalent coverage or throughput of the complete firmware.
-Attribute
-the instrument gap to measured generated-code, device or coupling costs.
+Near-host throughput in authored JIT benchmarks establishes feasibility for
+those programs, not equivalent coverage or throughput of the complete firmware.
+Attribute the instrument gap to measured generated-code, device or coupling
+costs.
 
   app: profile, lifecycle, display UI, live or offline consumer
                            |
@@ -72,12 +72,13 @@ Synchronize for real command/data ownership, readiness/IRQ transitions, audio,
 reset or faults; local MCU memory/register accesses do not advance the DSP.
 There is no global per-instruction/per-clock coordinator.
 
-An IRQ is a timed device event. Its source publishes the actual assertion/release
-and generation; the receiving core owns mask, priority and architectural entry.
-Preserve event time independently of host thread scheduling. A receiver must not
-execute beyond a possible earlier input without a proven producer horizon.
-Timestamping an event after the receiver passed it cannot repair causality.
-This requirement does not justify instruction stepping or arbitrary time slices.
+An IRQ is a timed device event. Its source publishes the actual
+assertion/release and generation; the receiving core owns mask, priority and
+architectural entry. Preserve event time independently of host thread
+scheduling. A receiver must not execute beyond a possible earlier input without
+a proven producer horizon. Timestamping an event after the receiver passed it
+cannot repair causality. This requirement does not justify instruction stepping
+or arbitrary time slices.
 
 ExecutionTime publishes completed owner progress and grants only causally safe
 execution in nominal 60 MHz units. Account for possible earlier events from both
@@ -87,42 +88,42 @@ Register waiters and recheck predicates to prevent lost wakeups. Stop and reset
 cancel waits without advancing device clocks. Preserve event time independently
 of host scheduling, including DSP-to-MCU IRQ arrival.
 
-MCU data/direction changes use a bounded single-producer/single-consumer timeline.
-The MCU commits its actual register effects and timestamps without a DSP
-rendezvous.
-The DSP applies only entries at or before its completed instruction-prefix time,
-both on data reads and before a grant wait. Repeated reads retain the sampled
-value;
-future entries stay queued. Full transport waits for actual space and honors stop.
-Unchanged states need no entry. Preserve unknown bits and ownership changes.
-Actual J0 request transitions, response reads and completed SPI words keep their
-ordered shared boundaries. Inactive request-direction changes remain local.
+MCU data/direction changes use a bounded single-producer/single-consumer
+timeline. The MCU commits its actual register effects and timestamps without a
+DSP rendezvous. The DSP applies only entries at or before its completed
+instruction-prefix time, both on data reads and before a grant wait. Repeated
+reads retain the sampled value; future entries stay queued. Full transport waits
+for actual space and honors stop. Unchanged states need no entry. Preserve
+unknown bits and ownership changes. Actual J0 request transitions, response
+reads and completed SPI words keep their ordered shared boundaries. Inactive
+request-direction changes remain local.
 
-During asserted reset, coalesce MCU-owned input changes into their retained latch.
-Capture the old published prefix before asserting reset; the DSP retires that
-prefix
-after disposing of its Core and before acknowledging reset. Publish the retained
-input at release; old-prefix retirement must never discard that newer entry.
-Reset release establishes a fresh DSP epoch at the MCU's instrument timestamp.
-DSP time follows the programmed PLL with retained fractional phase. Stop and reset
-cancel grant waits without changing guest clocks. These contracts alone do not
-establish complete startup, instrument behavior or real-time performance.
-Shared access uses atomic request/grant generations, including repeated accesses
-at one device timestamp; the DSP grants only at the published frontier. Short
-host-side adaptive spins precede atomic waits. Registered waiters recheck the
-predicate and a wake generation; cancellation wakes them without a device-time
-change. Reset origin and progress remain atomic; no handoff mutex is required.
-With a local input bank selected by S7/S6, Q inputs and inactive J0, the first
-sample admits the peer frontier. Once the DSP has released its data byte, further
-panel reads use the actual GPIO inputs/pulls without another DSP rendezvous.
-Every read still executes. Timed I/O, GPIO writes, owner returns, DSP drive or a
-peer request end this local sampling phase; no device clock is advanced or scaled.
+During asserted reset, coalesce MCU-owned input changes into their retained
+latch. Capture the old published prefix before asserting reset; the DSP retires
+that prefix after disposing of its Core and before acknowledging reset. Publish
+the retained input at release; old-prefix retirement must never discard that
+newer entry. Reset release establishes a fresh DSP epoch at the MCU's instrument
+timestamp. DSP time follows the programmed PLL with retained fractional phase.
+Stop and reset cancel grant waits without changing guest clocks. These contracts
+alone do not establish complete startup, instrument behavior or real-time
+performance. Shared access uses atomic request/grant generations, including
+repeated accesses at one device timestamp; the DSP grants only at the published
+frontier. Short host-side adaptive spins precede atomic waits. Registered
+waiters recheck the predicate and a wake generation; cancellation wakes them
+without a device-time change. Reset origin and progress remain atomic; no
+handoff mutex is required. With a local input bank selected by S7/S6, Q inputs
+and inactive J0, the first sample admits the peer frontier. Once the DSP has
+released its data byte, further panel reads use the actual GPIO inputs/pulls
+without another DSP rendezvous. Every read still executes. Timed I/O, GPIO
+writes, owner returns, DSP drive or a peer request end this local sampling
+phase; no device clock is advanced or scaled.
 
 VmContext owns concrete bindings, stable memory, channel lifetimes and shutdown.
 Each worker exclusively mutates its core and local device state. Transfer actual
-firmware-produced words/messages through bounded channels with explicit ordering,
-timestamps and ownership. Other threads do not inspect mutable core state.
-Keep native calls typed and direct; no common runtime core hierarchy or mirrors.
+firmware-produced words/messages through bounded channels with explicit
+ordering, timestamps and ownership. Other threads do not inspect mutable core
+state. Keep native calls typed and direct; no common runtime core hierarchy or
+mirrors.
 
 Apply Wasmtime's specialized VMContext and stable-memory principles to these
 native execution owners. Keep context/base pointers and guest values in host
@@ -142,60 +143,57 @@ https://docs.wasmtime.dev/api/wasmtime/struct.Config.html
 https://docs.wasmtime.dev/examples-fast-execution.html
 
 Each core exposes an explicit preparation/optimization phase before run. Treat
-firmware machine code as the input program: decode established executable entries,
-build a semantic CFG/SSA with ordered memory/device effects and optimize across
-instruction/block boundaries before x86-64 or ARM64 lowering. Carry fixed-width
-wrap, carry/sticky flags, DSP rounding/saturation, parallel old operands and exact
-retirement into the IR. Use constant/range propagation, CSE, dead code/store
-elimination, load forwarding, register value propagation, loop
-induction/invariants,
-strength reduction, unrolling and legal vectorization. Keep precise state maps at
-actual callback, fault, interrupt, code-mutation and partial-grant boundaries.
-A C++ compiler optimizing the emitter does not optimize its emitted guest program.
+firmware machine code as the input program: decode established executable
+entries, build a semantic CFG/SSA with ordered memory/device effects and
+optimize across instruction/block boundaries before x86-64 or ARM64 lowering.
+Carry fixed-width wrap, carry/sticky flags, DSP rounding/saturation, parallel
+old operands and exact retirement into the IR. Use constant/range propagation,
+CSE, dead code/store elimination, load forwarding, register value propagation,
+loop induction/invariants, strength reduction, unrolling and legal
+vectorization. Keep precise state maps at actual callback, fault, interrupt,
+code-mutation and partial-grant boundaries. A C++ compiler optimizing the
+emitter does not optimize its emitted guest program.
 
 Prepare the complete known executable program and variants before playback,
-including
-functions, loops and known indirect targets; do not restrict optimization to a
-sampled hot subset. Unknown input values remain runtime values in optimized code.
-Unresolved indirect targets retain a correct dynamic path. Runtime-loaded or
-modified executable regions require their own preparation and invalidation;
-these cases do not prevent ahead-of-time optimization of known code. Optimize
-multiple functions/regions rather than requiring one monolithic LLVM function.
-Known loader output and finite instruction templates belong to this prepared
-set. Preserve original loading and program writes, then select the corresponding
-validated native variant. Loading into RAM does not require first-use translation.
-Do not assume arbitrary new executable code during playing without evidence.
+including functions, loops and known indirect targets; do not restrict
+optimization to a sampled hot subset. Unknown input values remain runtime values
+in optimized code. Unresolved indirect targets retain a correct dynamic path.
+Runtime-loaded or modified executable regions require their own preparation and
+invalidation; these cases do not prevent ahead-of-time optimization of known
+code. Optimize multiple functions/regions rather than requiring one monolithic
+LLVM function. Known loader output and finite instruction templates belong to
+this prepared set. Preserve original loading and program writes, then select the
+corresponding validated native variant. Loading into RAM does not require
+first-use translation. Do not assume arbitrary new executable code during
+playing without evidence.
 
-Keep device implementations consumer-owned. Eligible typed bindings provide
-LLVM 19 bitcode from the same own-code implementation; link them into the
-guest module before O3 instead of hiding their bodies behind native symbols.
-Keep LLVM ownership and handles inside the core. Validate the binding revision,
-context lifetime, ABI/layout, target triple and required CPU features before use.
-Caller attributes must satisfy the callee's target requirements for inlining;
-creating a native target machine alone does not establish that IR contract.
-Never propagate unsupported target requirements into a caller.
-Specialize stable binding/configuration identities, not mutable device values.
-Preserve ordered effects, atomics, unknown accesses, cancellation, backpressure,
-IRQ/yield decisions and complete guest state at actual observation boundaries.
-Reject incompatible inputs before execution; never retry a device operation after
-it has already produced an effect. Callable bindings must not outlive their
+Keep device implementations consumer-owned. Eligible typed bindings provide LLVM
+19 bitcode from the same own-code implementation; link them into the guest
+module before O3 instead of hiding their bodies behind native symbols. Keep LLVM
+ownership and handles inside the core. Validate the binding revision, context
+lifetime, ABI/layout, target triple and required CPU features before use. Caller
+attributes must satisfy the callee's target requirements for inlining; creating
+a native target machine alone does not establish that IR contract. Never
+propagate unsupported target requirements into a caller. Specialize stable
+binding/configuration identities, not mutable device values. Preserve ordered
+effects, atomics, unknown accesses, cancellation, backpressure, IRQ/yield
+decisions and complete guest state at actual observation boundaries. Reject
+incompatible inputs before execution; never retry a device operation after it
+has already produced an effect. Callable bindings must not outlive their
 contexts or survive incompatible mapping/device revisions; cached code requires
 validated rebinding. A linked leaf-value experiment does not qualify complete
 ISA transactions or establish instrument throughput.
 
 Preparation is side-effect-free with respect to core/device state and musical
-time.
-It uses an immutable program/mapping view, established entries and binding
-identity;
-its output is immutable native code with validated bindings. The owner installs
-results only against the matching revision at a stopped execution boundary.
-Support whole established executable regions plus subsequently loaded/modified
-code. Indirect targets remain conservative until established. Never decode padding
-or unknown data as code, execute fake warm-up firmware or restore a device
-snapshot.
-Keep native successors linked and guest values live across safe control-flow
-edges.
-Preparation and execution have separate lifecycle/status contracts in both cores.
+time. It uses an immutable program/mapping view, established entries and binding
+identity; its output is immutable native code with validated bindings. The owner
+installs results only against the matching revision at a stopped execution
+boundary. Support whole established executable regions plus subsequently
+loaded/modified code. Indirect targets remain conservative until established.
+Never decode padding or unknown data as code, execute fake warm-up firmware or
+restore a device snapshot. Keep native successors linked and guest values live
+across safe control-flow edges. Preparation and execution have separate
+lifecycle/status contracts in both cores.
 
 Preparation is a mandatory gate for the complete established executable version.
 An incomplete translation fails with code identity, address and reason before
@@ -208,21 +206,21 @@ fixed code into RAM does not itself establish runtime instruction mutation.
 
 Qualification compares authored guest ASM translated through LLVM O3 with an
 independent equivalent portable C++ algorithm compiled by Clang 19 O3 for the
-same CPU/features. Target parity; report every ratio and remaining boundary cost.
-Match fixed-width arithmetic and observable effects, verify complete results and
-prevent dead-code removal. Keep preparation outside warm timing and retain ASM
-and SIMD references separately. Report actual lowering and complete preparation
-coverage; ordinary native code alone is not an LLVM-O3/AOT result.
+same CPU/features. Target parity; report every ratio and remaining boundary
+cost. Match fixed-width arithmetic and observable effects, verify complete
+results and prevent dead-code removal. Keep preparation outside warm timing and
+retain ASM and SIMD references separately. Report actual lowering and complete
+preparation coverage; ordinary native code alone is not an LLVM-O3/AOT result.
 
-Primary precedents, not drop-in core dependencies:
-N64Recomp emits C functions plus a native runtime and handles known overlays;
-Zelda64Recomp demonstrates the resulting native game. XenonRecomp emits C++;
-UnleashedRecomp demonstrates its integration with a working native runtime.
-These projects require program analysis/metadata and do not prove Blofeld speed.
-Remill describes exact ISA semantics in C++ and lifts them to LLVM bitcode,
-leaving concrete memory/runtime bindings to its consumer. Gearmulator demonstrates
-original synthesizer firmware as native-host audio plugins, not complete AOT.
-Reference identities and primary documents are in runtime-references.json.
+Primary precedents, not drop-in core dependencies: N64Recomp emits C functions
+plus a native runtime and handles known overlays; Zelda64Recomp demonstrates the
+resulting native game. XenonRecomp emits C++; UnleashedRecomp demonstrates its
+integration with a working native runtime. These projects require program
+analysis/metadata and do not prove Blofeld speed. Remill describes exact ISA
+semantics in C++ and lifts them to LLVM bitcode, leaving concrete memory/runtime
+bindings to its consumer. Gearmulator demonstrates original synthesizer firmware
+as native-host audio plugins, not complete AOT. Reference identities and primary
+documents are in runtime-references.json.
 
 Optimize generated-code quality even if preparation takes substantially longer.
 There is no fixed one-second or other startup compilation budget. Measure
@@ -261,86 +259,86 @@ https://github.com/WAVM/WAVM
 https://llvm.org/devmtg/2024-04/slides/TechnicalTalks/Bock-Experiences-Building-a-JVM-withLLVMOrc.pdf
 
 Implement device transactions and completion semantics: command/data FIFOs,
-readiness, interrupts, USB endpoints, SCI bytes, storage reads/writes and resets.
-Decode firmware bit-banging locally into transactions. Do not replay electrical
-lines or resolve voltage networks. Never manufacture acknowledgements or data.
-MCU U0 controls the active-low DSP reset. A reset epoch stops the previous native
-instance before the DSP owner resets SHI and acknowledges it. The MCU releases
-reset outside its JIT callback after that acknowledgement; stop cancels either
-wait. Restart creates a fresh Core/JIT and retains SRAM. The U0 assignment is
-inferred from the firmware hold/release sequence and the documented RESET pull-up.
+readiness, interrupts, USB endpoints, SCI bytes, storage reads/writes and
+resets. Decode firmware bit-banging locally into transactions. Do not replay
+electrical lines or resolve voltage networks. Never manufacture acknowledgements
+or data. MCU U0 controls the active-low DSP reset. A reset epoch stops the
+previous native instance before the DSP owner resets SHI and acknowledges it.
+The MCU releases reset outside its JIT callback after that acknowledgement; stop
+cancels either wait. Restart creates a fresh Core/JIT and retains SRAM. The U0
+assignment is inferred from the firmware hold/release sequence and the
+documented RESET pull-up.
 
 Port B3/B5..B7 have no input producer in the instrument contract. Their
 input-mode samples are inactive low; output-mode reads still use the MCU latch.
-This deterministic VM choice for passive controls is not a claim about PCB pulls.
-Active data/status inputs must come from their devices, never from this policy.
-The attached SHI SS/SCK/MOSI pull-ups supply released B1/B2/B4 input samples.
+This deterministic VM choice for passive controls is not a claim about PCB
+pulls. Active data/status inputs must come from their devices, never from this
+policy. The attached SHI SS/SCK/MOSI pull-ups supply released B1/B2/B4 input
+samples.
 
 The runtime peer interface shares the actual low-byte MCU Port Q and DSP Port C
-register views, including direction and unknown bits. Raw reads retain the current
-value. Active-low MCU J0 posts DSP IRQA using its configured edge/level mode;
-DSP E9 asserts MCU XIRQ, which is level-sensitive (9S12UF32DGV1 section 2.4.24).
-An ended ordinary E9 pulse is not retained behind the MCU X mask. The MCU
-owner publishes interrupt eligibility at native mask/return boundaries. An actual
-producer notification made in an eligible window remains pending until accepted,
-so a complete DSP batch cannot erase it merely because the host MCU thread did
-not run between assertion and release. A mask transition revokes this transport
-notification; a generation-checked publication cannot cross a mask/unmask cycle.
-Raw GPIO reads still expose the current level and data. DSP56371UM Table2-8
-specifies internal pull-downs on PortC, including reset-disconnected pins.
-The attached peer supplies this released-input bias to MCU PortQ only where no
-local output, configured pull or external data determines the value. It cannot
-make an active unknown driver or unknown output latch known. The original MCU
-XIRQ handler disables its own PortQ pulls before sampling this released bus;
-the idle value is not a response payload or acknowledgement. This is a functional
-mailbox notification contract, not a fabricated hardware edge latch or an
-acknowledgement of firmware work. No instruction-level synchronization is added.
-Only accepted native
-interrupt entry acknowledges an IRQA edge, and an older acknowledgement cannot
-discard a newer request. Admission does not clear an asserted level. DSP reset
-releases
-its own outputs and cancels stale requests without resetting generation counters.
-The firmware package probe selects the 100-pin route when E3 follows driven E2;
-the VM supplies that profile input because runtime Port Q requires this route.
-This is a functional inference, not a recovered PCB connection. Raw register
-sharing alone does not establish cross-core transaction timing: short handshake
-phases must also remain observable on the common instrument timeline.
-Report commands 13/14 announce a fixed 16-byte response. Their notification
-remains
-pending while the actual command stays driven and unchanged, until the MCU strobe
+register views, including direction and unknown bits. Raw reads retain the
+current value. Active-low MCU J0 posts DSP IRQA using its configured edge/level
+mode; DSP E9 asserts MCU XIRQ, which is level-sensitive (9S12UF32DGV1 section
+2.4.24). An ended ordinary E9 pulse is not retained behind the MCU X mask. The
+MCU owner publishes interrupt eligibility at native mask/return boundaries. An
+actual producer notification made in an eligible window remains pending until
+accepted, so a complete DSP batch cannot erase it merely because the host MCU
+thread did not run between assertion and release. A mask transition revokes this
+transport notification; a generation-checked publication cannot cross a
+mask/unmask cycle. Raw GPIO reads still expose the current level and data.
+DSP56371UM Table2-8 specifies internal pull-downs on PortC, including
+reset-disconnected pins. The attached peer supplies this released-input bias to
+MCU PortQ only where no local output, configured pull or external data
+determines the value. It cannot make an active unknown driver or unknown output
+latch known. The original MCU XIRQ handler disables its own PortQ pulls before
+sampling this released bus; the idle value is not a response payload or
+acknowledgement. This is a functional mailbox notification contract, not a
+fabricated hardware edge latch or an acknowledgement of firmware work. No
+instruction-level synchronization is added. Only accepted native interrupt entry
+acknowledges an IRQA edge, and an older acknowledgement cannot discard a newer
+request. Admission does not clear an asserted level. DSP reset releases its own
+outputs and cancels stale requests without resetting generation counters. The
+firmware package probe selects the 100-pin route when E3 follows driven E2; the
+VM supplies that profile input because runtime Port Q requires this route. This
+is a functional inference, not a recovered PCB connection. Raw register sharing
+alone does not establish cross-core transaction timing: short handshake phases
+must also remain observable on the common instrument timeline. Report commands
+13/14 announce a fixed 16-byte response. Their notification remains pending
+while the actual command stays driven and unchanged, until the MCU strobe
 accepts the transaction. Interrupt entry alone does not consume the command; DSP
 withdrawal or reset cancels it without retaining released GPIO data. The
-following MCU request
-opens one bounded transfer of actual DSP PDRC data writes; repeated bytes remain
-distinct writes. Full-byte Port Q input reads consume that decoded transfer in
-order, including after GPIO turnaround. Other reads retain raw register behavior.
-Both original transfer routines still execute in full. Incomplete or excessive
-producer writes, missing consumer bytes and unknown bits remain explicit errors;
-no ready byte, payload or interrupt acknowledgement is synthesized. This is a
-functional instrument protocol adapter, not a claim of GPIO cycle accuracy.
+following MCU request opens one bounded transfer of actual DSP PDRC data writes;
+repeated bytes remain distinct writes. Full-byte Port Q input reads consume that
+decoded transfer in order, including after GPIO turnaround. Other reads retain
+raw register behavior. Both original transfer routines still execute in full.
+Incomplete or excessive producer writes, missing consumer bytes and unknown bits
+remain explicit errors; no ready byte, payload or interrupt acknowledgement is
+synthesized. This is a functional instrument protocol adapter, not a claim of
+GPIO cycle accuracy.
 
 PM3 samples an external pedal level, initially inactive in the VM. The MCU sends
-its raw 0/8 change event; the DSP's class-3 handler normalizes sustain and applies
-GDATA60 pedal polarity. This software contract follows both firmware paths;
-it assumes no PCB pull or physical contact type. The host must not duplicate
-the pedal event as MIDI. Controls are sampled by the MCU owner, never by mutating
-its live Core or GPIO registers from another thread.
+its raw 0/8 change event; the DSP's class-3 handler normalizes sustain and
+applies GDATA60 pedal polarity. This software contract follows both firmware
+paths; it assumes no PCB pull or physical contact type. The host must not
+duplicate the pedal event as MIDI. Controls are sampled by the MCU owner, never
+by mutating its live Core or GPIO registers from another thread.
 
 Display A/B/E writes decode complete controller transactions. The E4 latch
 delimits accesses even after firmware releases DDRE: this is a functional VM
 binding, not a recovered physical enable route. B7/B6 select, B5 selects reading
 and B0 data. Status reflects completed LCD state; dummy reads retain the actual
 holder, RAM reads advance once per completed transaction, and unknown RAM fails.
-Peripheral reset is supplied by VM lifecycle; no PCB reset net is assumed.
-The MCU owner captures requested LCD snapshots outside native execution. A bounded
+Peripheral reset is supplied by VM lifecycle; no PCB reset net is assumed. The
+MCU owner captures requested LCD snapshots outside native execution. A bounded
 latest-state mailbox transfers the complete controller, including unknown cells,
-to the app. Rendering and atomic PBM publication run on the control thread;
-they never access the live controller or execute inside audio callbacks. Map the
+to the app. Rendering and atomic PBM publication run on the control thread; they
+never access the live controller or execute inside audio callbacks. Map the
 firmware's columns 0..127 and page-7/bit-7 logical top row to the visible panel.
-Only live composition owns this publisher. Its display.live FIFO keeps one
-write descriptor open without transmitting data. The viewer opens a nonblocking
-reader once per second: EAGAIN means a publisher exists; EOF means it exited,
-including an abrupt kill. No heartbeat writes, image timestamp guesses or guest
+Only live composition owns this publisher. Its display.live FIFO keeps one write
+descriptor open without transmitting data. The viewer opens a nonblocking reader
+once per second: EAGAIN means a publisher exists; EOF means it exited, including
+an abrupt kill. No heartbeat writes, image timestamp guesses or guest
 transactions are needed. A new publisher revokes old PBM/text artifacts before
 opening a new presence session. Unknown snapshots revoke PBM publication.
 
@@ -363,100 +361,99 @@ while deselected, CPHA=1 can load between words. Unpolled writes overwrite HTX,
 never the active shift word. Underflow output remains unknown and HCSR/HTX clear
 the observed error; no idle word or peer response is manufactured by the host.
 
-Local ISA timing remains correct; cross-core coupling serves observable instrument
-behavior rather than hypothetical silicon phases. Qualify ordering, IRQ delivery,
-partial transactions and musical latency against firmware and independent tests.
+Local ISA timing remains correct; cross-core coupling serves observable
+instrument behavior rather than hypothetical silicon phases. Qualify ordering,
+IRQ delivery, partial transactions and musical latency against firmware and
+independent tests.
 
 Use documented nominal device clocks and analytical divider/deadline arithmetic.
 MCU OC7M/OC7D retain their actual values for input-capture channels, including
 firmware use as scratch storage. Unsupported compare-output activation fails
-regardless of whether the mask or channel selection is written first.
-Fully initialized resident MCU RAM overlays receive read-only executable grants
-at owner boundaries before pending interrupt entry. A changed byte or word write
-completes through the owner,
-releases that grant and forces rebinding before the next instruction. Exact cold
-image comparisons select stable identities, allowing identical loaded contents
-to reuse native translations without per-instruction code scanning. Adjacent RAM
-and unknown bytes retain their ordinary contracts.
-The UF32 uses its 12 MHz reference and nominal 60 MHz PHY output; qualify clock
-availability through the documented detector window, without analog PLL or
-external waveform models. Keep oscillator-driven RTI independent of CPU clock
-selection. Convert device deadlines to Core progress without counting idle time
-twice, and arbitrate actual pending interrupt vectors before resuming native work.
+regardless of whether the mask or channel selection is written first. Fully
+initialized resident MCU RAM overlays receive read-only executable grants at
+owner boundaries before pending interrupt entry. A changed byte or word write
+completes through the owner, releases that grant and forces rebinding before the
+next instruction. Exact cold image comparisons select stable identities,
+allowing identical loaded contents to reuse native translations without
+per-instruction code scanning. Adjacent RAM and unknown bytes retain their
+ordinary contracts. The UF32 uses its 12 MHz reference and nominal 60 MHz PHY
+output; qualify clock availability through the documented detector window,
+without analog PLL or external waveform models. Keep oscillator-driven RTI
+independent of CPU clock selection. Convert device deadlines to Core progress
+without counting idle time twice, and arbitrate actual pending interrupt vectors
+before resuming native work.
 
 DSP56371 RAM banks are shared physical storage. MS/MSW changes rebind native
 windows at the Core's existing OMR boundary; no state mirror or payload copy.
-Switched physical tails map in ascending address order into program RAM. Firmware
-must obey the documented three-cycle exclusion for affected bank accesses.
-Known reserved data writes are discarded, inferred from the original overbroad
-clear. This is a VM contract, not measured silicon behavior. Missing ROM and
-unknown I/O still fail; supplied immutable ROM is borrowed. Reserved Y:$16000
-and Y:$FFFFFF reads complete as zero, matching authored instruction execution
-on the unchanged TASKING DSP56371 simulator. Voice selection discards the latter
-value. Delay's staged clear leaves its first ready read at $16000; preserve that
-access and subsequent modulo update instead of moving the firmware cursor.
-These VM values establish no physical register/bus data and create no RAM window
-or writable latch. Other unqualified reserved reads still fail.
+Switched physical tails map in ascending address order into program RAM.
+Firmware must obey the documented three-cycle exclusion for affected bank
+accesses. Known reserved data writes are discarded, inferred from the original
+overbroad clear. This is a VM contract, not measured silicon behavior. Missing
+ROM and unknown I/O still fail; supplied immutable ROM is borrowed. Reserved
+Y:$16000 and Y:$FFFFFF reads complete as zero, matching authored instruction
+execution on the unchanged TASKING DSP56371 simulator. Voice selection discards
+the latter value. Delay's staged clear leaves its first ready read at $16000;
+preserve that access and subsequent modulo update instead of moving the firmware
+cursor. These VM values establish no physical register/bus data and create no
+RAM window or writable latch. Other unqualified reserved reads still fail.
 
-DSP56371 PCTL selects an exact nominal Fosc/EXTAL ratio using its own raw factors
-and dividers. The reset clock profile uses PINIT=1. Do not infer a fitted
-oscillator
-frequency, physical lock or host pacing from those fields. Device deadlines use
-this ratio when converting local core progress to instrument time.
+DSP56371 PCTL selects an exact nominal Fosc/EXTAL ratio using its own raw
+factors and dividers. The reset clock profile uses PINIT=1. Do not infer a
+fitted oscillator frequency, physical lock or host pacing from those fields.
+Device deadlines use this ratio when converting local core progress to
+instrument time.
 
 SCI exchanges decoded characters with explicit start/completion times, baud and
 format. DIN input has two independent cursors over shared immutable events: SCI
 supplies the MCU's activity latch, while Timer0 supplies the DSP's actual MIDI
 decoder. Feed Timer0 scheduled 8N1 input-level boundaries, not decoded ring
-writes;
-the original compare/overflow handlers sample and assemble every byte. Keep reset
-phase, back-to-back characters and receiver backpressure explicit, without voltage
-or per-clock work. Preserve SCI's status/data clear
-sequences, preamble and transmit-buffer handoff, receive overrun and wakeup
-effects.
-Bound completed output and report an undrained consumer instead of losing data.
+writes; the original compare/overflow handlers sample and assemble every byte.
+Keep reset phase, back-to-back characters and receiver backpressure explicit,
+without voltage or per-clock work. Preserve SCI's status/data clear sequences,
+preamble and transmit-buffer handoff, receive overrun and wakeup effects. Bound
+completed output and report an undrained consumer instead of losing data.
 
 USB local endpoint windows borrow the selected RAM and byte-knowledge arrays.
 Bank changes publish new native memory grants after the complete selecting
 instruction; never copy buffer payloads or remap for unrelated register writes.
-Preserve ordered high/low word commits and firmware-written configuration quirks.
-Enumeration, SOF and transfer completions come only from actual host transactions.
+Preserve ordered high/low word commits and firmware-written configuration
+quirks. Enumeration, SOF and transfer completions come only from actual host
+transactions.
 
 Audio comes from the final original DSP output buffer. Publish complete ordered
 frames/blocks, preserving DMA/FIFO status and sample times. Split processing at
 relevant MIDI/device events. Live consumption bounds lookahead and paces output;
-offline draining runs as fast as possible. No wall-clock substitution for musical
-time, missing frames, duplicate frames or serial-PCM bit decoding.
+offline draining runs as fast as possible. No wall-clock substitution for
+musical time, missing frames, duplicate frames or serial-PCM bit decoding.
 
-DMA consumes real requests or a software DE trigger. Arbitrate pending
-channels by priority and word ownership, using native memory accesses and typed
-data-register transactions. Advance addresses/counters and signal completion only
-after the destination accepts the word. Preserve counter reloads and circular
-buffer positions; configuration alone does not produce audio. Program writes
-publish one changed code revision before native execution resumes.
+DMA consumes real requests or a software DE trigger. Arbitrate pending channels
+by priority and word ownership, using native memory accesses and typed
+data-register transactions. Advance addresses/counters and signal completion
+only after the destination accepts the word. Preserve counter reloads and
+circular buffer positions; configuration alone does not produce audio. Program
+writes publish one changed code revision before native execution resumes.
 
 ESAI_1 consumes complete slot events from its clock source, not individual audio
 bits. Its format determines HCKT ticks per slot and slots per frame. Each event
 consumes actual transmit-register words and requests DMA refill; unknown data
 cannot become valid PCM. Port assignment and personal reset govern activity.
-Bind the clock source separately; register initialization alone advances no time.
+Bind the clock source separately; register initialization alone advances no
+time.
 
-The VM binding shares a nominal 11.2896 MHz reference between EXTAL,
-HCKT_1 and ACI. PLL and serial-receive divisors are consistent with this
-hypothesis;
-it remains unmeasured. Audio deadlines retain fractional phase and advance only
-at complete word/subframe events. DMA empty requests remain asserted until refill,
-including when a channel is enabled after transmission has started.
-ESAI TX0 slots form signed stereo blocks with explicit hardware underrun flags.
-The app consumer receives bounded borrowed spans outside native callbacks and
-owns pacing/backpressure. DAX retains its own device effects without duplicating
-the host stream.
+The VM binding shares a nominal 11.2896 MHz reference between EXTAL, HCKT_1 and
+ACI. PLL and serial-receive divisors are consistent with this hypothesis; it
+remains unmeasured. Audio deadlines retain fractional phase and advance only at
+complete word/subframe events. DMA empty requests remain asserted until refill,
+including when a channel is enabled after transmission has started. ESAI TX0
+slots form signed stereo blocks with explicit hardware underrun flags. The app
+consumer receives bounded borrowed spans outside native callbacks and owns
+pacing/backpressure. DAX retains its own device effects without duplicating the
+host stream.
 
 Boot input knowledge is explicit: a boot-rom image supplies 192 known words; the
-declared
-document-derived SPI prefix has exactly 55. Neither form invents trailing words.
-Only supplied words enter the immutable code view. An owned read outside that
-view fails with its actual program-space address and PC.
+declared document-derived SPI prefix has exactly 55. Neither form invents
+trailing words. Only supplied words enter the immutable code view. An owned read
+outside that view fails with its actual program-space address and PC.
 
 Host audio scheduling belongs to the dedicated execution owner, never the render
 callback. On Darwin, the producer uses a granted hardware quantum as its Mach
@@ -467,16 +464,14 @@ thread exits. Darwin's QoS opt-out persists until thread exit; do not configure
 arbitrary application threads. Linux retains its native scheduling policy.
 
 VmContext owns one bounded, bidirectional DIN MIDI port. One host input owner
-submits
-ordered packets in nominal 60 MHz device time; complete 8N1 characters retain
-31,250-baud spacing. The MCU owner admits input at character starts and lets SCI
-produce its actual data/status/interrupt effects. Output carries genuine SCI
-character-completion timestamps. Clock transitions are event boundaries;
-conversion
-does not assume a constant MCU bus frequency. Overflow and unsupported output
-formats are explicit errors. Host port routing still needs its application
-binding;
-USB endpoint transactions remain separate from this DIN input.
+submits ordered packets in nominal 60 MHz device time; complete 8N1 characters
+retain 31,250-baud spacing. The MCU owner admits input at character starts and
+lets SCI produce its actual data/status/interrupt effects. Output carries
+genuine SCI character-completion timestamps. Clock transitions are event
+boundaries; conversion does not assume a constant MCU bus frequency. Overflow
+and unsupported output formats are explicit errors. Host port routing still
+needs its application binding; USB endpoint transactions remain separate from
+this DIN input.
 
 Streaming input has an exclusive known-until frontier. Accepted bytes extend it
 through their actual DIN character intervals; explicit known silence emits no
@@ -484,22 +479,22 @@ character. The MCU stops at the earliest input or frontier boundary, including
 native loops without local I/O. An exclusive frontier between MCU bus edges
 holds at the last authorized edge until further input is known; rounding the
 frontier up must not make the next actual character late. Before waiting, it
-publishes its attained frontier so the DSP cannot deadlock behind stale progress.
-Source delay adds no device time. Admission, source waits and output waits honor
-cancellation and failures. A separate output consumer drains actual SCI replies
-while the input producer waits for whole-packet credit from both independent
-MCU/DSP cursors. Live input retains its existing contract; bounded streaming is
-explicitly selected when constructing VM.
+publishes its attained frontier so the DSP cannot deadlock behind stale
+progress. Source delay adds no device time. Admission, source waits and output
+waits honor cancellation and failures. A separate output consumer drains actual
+SCI replies while the input producer waits for whole-packet credit from both
+independent MCU/DSP cursors. Live input retains its existing contract; bounded
+streaming is explicitly selected when constructing VM.
 
-The macOS host input requests MIDI 1.0 universal packets from one selected native
-source identifier and group. Convert channel/system/SysEx7 framing into exact DIN
-bytes, retaining message boundaries and native timestamps. A split SysEx remains
-open across callbacks; only realtime bytes may interleave. Unsupported protocol,
-malformed data, backwards/missing timestamps and full queues fail explicitly.
-The receive callback only decodes and publishes fixed-size queue slots; no
-allocation, waiting, file access or exceptions occur there. One consumer converts
-Mach timestamps to monotonic nanoseconds; the queried host time uses the same
-epoch.
+The macOS host input requests MIDI 1.0 universal packets from one selected
+native source identifier and group. Convert channel/system/SysEx7 framing into
+exact DIN bytes, retaining message boundaries and native timestamps. A split
+SysEx remains open across callbacks; only realtime bytes may interleave.
+Unsupported protocol, malformed data, backwards/missing timestamps and full
+queues fail explicitly. The receive callback only decodes and publishes
+fixed-size queue slots; no allocation, waiting, file access or exceptions occur
+there. One consumer converts Mach timestamps to monotonic nanoseconds; the
+queried host time uses the same epoch.
 
 Keep the MIDI runtime's first client on an owned CFRunLoop until process exit.
 CoreMIDI may stop its server when the final process client closes. Dispose input
@@ -545,22 +540,22 @@ then prime a fresh native output epoch with subsequent original frames. The
 control owner publishes display state and discovers the selected MIDI source;
 firmware can boot without it. Publish one stable native input to the independent
 pacer and retain it until that owner joins. Before accepting external events,
-require native audio correlation and discard input predating that readiness.
-Map timestamps only inside retained original audio intervals. Commit bounded
-silence after the delivery cutoff, retain DIN serialization and never acknowledge
-live EOF. Missing clocks, late input, native faults and underruns stop the
-session.
+require native audio correlation and discard input predating that readiness. Map
+timestamps only inside retained original audio intervals. Commit bounded silence
+after the delivery cutoff, retain DIN serialization and never acknowledge live
+EOF. Missing clocks, late input, native faults and underruns stop the session.
 Offline rendering constructs none of these live display/audio/MIDI bindings.
 
 The app connects ordered PCM blocks to a bounded SPSC host queue. A separate
 PulseAudio I/O owner pushes available frames and dispatches server events; there
-is no application data audio callback. Query actual stream/sink format and buffer
-grants; preserve the original frame rate and report any server conversion. Prime
-the granted target before uncorking, and cork/flush on a new reset epoch. Host
-backpressure reaches the DSP only outside native callbacks. Report queue, server
-latency and underruns; endpoint changes/disconnects stop with context. The control
-thread consumes blocked termination signals and requests a shared VM stop.
-Live producer-reserve estimates exclude consumer blocking and are not offline RTF.
+is no application data audio callback. Query actual stream/sink format and
+buffer grants; preserve the original frame rate and report any server
+conversion. Prime the granted target before uncorking, and cork/flush on a new
+reset epoch. Host backpressure reaches the DSP only outside native callbacks.
+Report queue, server latency and underruns; endpoint changes/disconnects stop
+with context. The control thread consumes blocked termination signals and
+requests a shared VM stop. Live producer-reserve estimates exclude consumer
+blocking and are not offline RTF.
 
 Darwin validates native sample/host timestamp flags and each representable client
 render interval. Adjacent sample positions meet exactly even when rate conversion
@@ -591,17 +586,17 @@ belong in application composition. Native timestamp definition:
 https://developer.apple.com/documentation/coreaudiotypes/audiotimestamp
 
 PulseAudio uses explicit asynchronous raw timing requests, with at most one in
-flight; automatic timing updates and smoothed/interpolated playback time are off.
-The server's atomic read-index snapshot occurs within the monotonic send/receipt
-interval. Publish the last completely consumed source-frame index, the interval
-midpoint and its conservative half-width as uncertainty_ns. This describes a
-bounded server-consumption observation, not a HAL render interval, hardware sample
-edge or DAC presentation time. Repeated indices publish no new point. Reject
-corrupt, unaligned, backwards or unsubmitted indices and stopped consumption.
-Reject query intervals exceeding the granted minimum request frames divided by
-the source rate; this is an explicit validity policy, not a server scheduling
-guarantee. A fresh corked timing reply after flush supplies the next absolute
-write origin. Reset, failure and stop revoke previous observations.
+flight; automatic timing updates and smoothed/interpolated playback time are
+off. The server's atomic read-index snapshot occurs within the monotonic
+send/receipt interval. Publish the last completely consumed source-frame index,
+the interval midpoint and its conservative half-width as uncertainty_ns. This
+describes a bounded server-consumption observation, not a HAL render interval,
+hardware sample edge or DAC presentation time. Repeated indices publish no new
+point. Reject corrupt, unaligned, backwards or unsubmitted indices and stopped
+consumption. Reject query intervals exceeding the granted minimum request frames
+divided by the source rate; this is an explicit validity policy, not a server
+scheduling guarantee. A fresh corked timing reply after flush supplies the next
+absolute write origin. Reset, failure and stop revoke previous observations.
 
 Request a 96-frame server target, a 32-frame minimum request and a 128-frame
 server maximum. Read actual grants; total source queue bound C includes the
@@ -625,35 +620,35 @@ The backend grants a maximum source-frame lookback for this correlation. Darwin
 uses 3*C for queue capacity C: one published interval, one consumed but not yet
 published interval, and one full producer queue. After each accepted complete
 PCM write, the app retains its actual completion ticks in that bounded history.
-Map a native interval only when its entire source range is accepted and retained;
-copy the first frame's actual tick without nominal-rate interpolation. Keep VI
-and native audio epoch IDs distinct. Revoke the mapping before host reset and at
-owner shutdown. Bad ranges, epochs or chronology latch failure until explicit
-reset. Concurrent reads receive coherent copied points, gated by the current
-native stream, without accessing producer-owned history. An absent retention
-grant disables correlation; no guessed backend bound is substituted. These
-points still need live MIDI admission and an actual readiness boundary.
+Map a native interval only when its entire source range is accepted and
+retained; copy the first frame's actual tick without nominal-rate interpolation.
+Keep VI and native audio epoch IDs distinct. Revoke the mapping before host
+reset and at owner shutdown. Bad ranges, epochs or chronology latch failure
+until explicit reset. Concurrent reads receive coherent copied points, gated by
+the current native stream, without accessing producer-owned history. An absent
+retention grant disables correlation; no guessed backend bound is substituted.
+These points still need live MIDI admission and an actual readiness boundary.
 
-Each PCM frame carries its completion edge in the common 60 MHz instrument clock.
-Project the actual scheduled native edge through the canonical DSP clock state,
-retaining the preceding PLL segment for pending older edges. Same-ratio control
-changes retain their prior projection; a reset supplies its actual common origin.
-The fixed PCM block owns frame/time arrays until its synchronous consumer returns.
-These points are instrument completions, not DAC presentation timestamps. Source
-and host presentation positions must be correlated separately for live MIDI.
+Each PCM frame carries its completion edge in the common 60 MHz instrument
+clock. Project the actual scheduled native edge through the canonical DSP clock
+state, retaining the preceding PLL segment for pending older edges. Same-ratio
+control changes retain their prior projection; a reset supplies its actual
+common origin. The fixed PCM block owns frame/time arrays until its synchronous
+consumer returns. These points are instrument completions, not DAC presentation
+timestamps. Source and host presentation positions must be correlated separately
+for live MIDI.
 
 Offline PCM uses the same execution-owner output contract. The app rejects
 underruns, rate changes, reset epochs, missing/backwards completion points and
-discontinuous frame indices before
-passing signed 24-bit stereo frames to a host WAV writer. Accumulated frame time
-must follow the nominal rate within one half-frame plus integer quantization;
-a gap or drift cannot silently compress the instrument's musical timeline. The
-writer batches
-bounded PCM blocks and publishes a completed RIFF file without replacing an
-existing path. Its size limit is explicit; failed or unfinalized output stays
-unpublished. Finalization follows owner shutdown and successful render validation.
-This output component alone does not establish SMF scheduling, instrument
-readiness or sustained throughput.
+discontinuous frame indices before passing signed 24-bit stereo frames to a host
+WAV writer. Accumulated frame time must follow the nominal rate within one
+half-frame plus integer quantization; a gap or drift cannot silently compress
+the instrument's musical timeline. The writer batches bounded PCM blocks and
+publishes a completed RIFF file without replacing an existing path. Its size
+limit is explicit; failed or unfinalized output stays unpublished. Finalization
+follows owner shutdown and successful render validation. This output component
+alone does not establish SMF scheduling, instrument readiness or sustained
+throughput.
 
 The host SMF reader merges simultaneous tracks by pulse and source-track order,
 with one buffered cursor per track and bounded payload chunks. Format 2 requires
@@ -664,23 +659,23 @@ rounding up to the first tick at or after the event. Keep all meta payloads,
 including routing and SMPTE-offset labels, separate from transmittable bytes.
 Chunk extensions are retained and alien chunks skipped by length. Truncated or
 changed sources cannot finish cleanly. Primary format reference:
-midi-references.json.
-Offline application binding first observes the MCU's actual initial WAI through
-ExecutionTime, without advancing a clock or changing Core state. In original1.25
-the sole WAI follows the startup status checks and hold, at the application loop.
-Do not send early inquiry bytes: startup reads the same peer mailbox that the
-identity command overwrites, and SCI input reloads its shared hold counter.
-After application entry and valid PCM, probe universal identity through actual
-DIN input and consume the original reply. Startup grants bounded MIDI
-windows without advancing guest clocks; their committed frontier selects the
-musical origin. The file producer preserves the exclusive EOF barrier until the
-WAV end point (serialized file end plus selected tail) is published. Only then is
-input released. The PCM owner validates the entire original timeline, discards
-startup frames, clips the selected half-open interval and requests VM stop at its
-end. Join both execution owners and the input producer before checking faults,
-completion and finalizing WAV. Cancellation or incomplete output never publishes.
-Host audio devices are absent from offline composition. Live routing/audio-aligned
-mapping, general metadata routing and full instrument acceptance remain separate.
+midi-references.json. Offline application binding first observes the MCU's
+actual initial WAI through ExecutionTime, without advancing a clock or changing
+Core state. In original1.25 the sole WAI follows the startup status checks and
+hold, at the application loop. Do not send early inquiry bytes: startup reads
+the same peer mailbox that the identity command overwrites, and SCI input
+reloads its shared hold counter. After application entry and valid PCM, probe
+universal identity through actual DIN input and consume the original reply.
+Startup grants bounded MIDI windows without advancing guest clocks; their
+committed frontier selects the musical origin. The file producer preserves the
+exclusive EOF barrier until the WAV end point (serialized file end plus selected
+tail) is published. Only then is input released. The PCM owner validates the
+entire original timeline, discards startup frames, clips the selected half-open
+interval and requests VM stop at its end. Join both execution owners and the
+input producer before checking faults, completion and finalizing WAV.
+Cancellation or incomplete output never publishes. Host audio devices are absent
+from offline composition. Live routing/audio-aligned mapping, general metadata
+routing and full instrument acceptance remain separate.
 
 DAX uploads complete words from XADR and its two channel buffers. Both audio
 addresses share alternating A/B ownership; metadata is captured at frame start.
@@ -708,16 +703,17 @@ complete address publishes an operation; the DSP owner resolves the actual image
 page outside its native callback before publishing ready. Read strobes retain a
 held byte and advance on release. Unknown bytes/pages fail with transaction
 context. Images retain their encoded backing and a direct page index; no cell
-physics, payload mirrors or default successful program/status replies.
-An idle or premature read strobe leaves the output unknown without consuming data;
-an actual data-register read must reject that unknown input.
+physics, payload mirrors or default successful program/status replies. An idle
+or premature read strobe leaves the output unknown without consuming data; an
+actual data-register read must reject that unknown input.
 
 Read/reset completion has a separate virtual deadline. Nominal VM durations are
 64/32 DSP reference periods converted through the programmed PLL ratio at issue;
-these are explicit VM timing choices, not recovered device measurements. R/B stays
-low until the real image operation completes, allowing firmware to arm capture.
-RESET replaces the operation epoch and its deadline; an old read cannot publish
-readiness or payload after cancellation. Polling and IRQ clients share this event.
+these are explicit VM timing choices, not recovered device measurements. R/B
+stays low until the real image operation completes, allowing firmware to arm
+capture. RESET replaces the operation epoch and its deadline; an old read cannot
+publish readiness or payload after cancellation. Polling and IRQ clients share
+this event.
 
 Program/erase completion mutates the actual image before publishing success.
 Staged payloads are bounded; populated pages update in place and only missing
@@ -729,9 +725,10 @@ outside ordinary transfers; host durability remains a separate application
 contract.
 
 Keep persistent images for identity, programs and samples. Preserve genuine
-operation status, interrupted writes and recovery; remove cell physics, synthetic
-pulse profiles and redundant backend wrappers. Reset/update coordinates worker
-stop, channel retirement, image publication and fresh core/code ownership.
+operation status, interrupted writes and recovery; remove cell physics,
+synthetic pulse profiles and redundant backend wrappers. Reset/update
+coordinates worker stop, channel retirement, image publication and fresh
+core/code ownership.
 
 Source ownership:
   src/vi/       VM lifecycle and instrument-specific behavior
@@ -746,8 +743,9 @@ app/ connects data/buffer contracts without reverse dependencies.
 test/ mirrors src/ with simple unit tests; integration uses the normal emulator.
 
 Use optimized Release and profile the complete instrument. Require >=4x offline
-throughput, design for 10x; see OBJECTIVE.md for measurement and full acceptance.
-Threads, a short synthetic kernel or lower callback counts are not success proofs.
+throughput, design for 10x; see OBJECTIVE.md for measurement and full
+acceptance. Threads, a short synthetic kernel or lower callback counts are not
+success proofs.
 
 Architecture reference: Gearmulator's independent core execution and coupling
 through audioframes, buffers and device communication. Consult its local source
