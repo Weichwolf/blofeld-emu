@@ -130,8 +130,11 @@ compatibility. Rebuild rejected entries before playback. Runtime-loaded executab
 images need their own validated identity. Verify uninterrupted first use of every
 qualified live feature; compilation coverage is not proved by one warm session.
 WAVM's typed native calling conventions and cached entry thunks inform integration;
-LLVM ORC's materialization and object caching inform preparation. Neither runtime
-is a required dependency or a reason to replace a fast measured core.
+Use packaged LLVM 19 through its private C API for target-aware semantic IR/O3
+optimization and ORC materialization. Keep LLVM types out of public core APIs.
+Sanitize our code and generated JIT code; foreign libraries remain unmodified
+packages, with no source builds or sanitizer qualification gate. WAVM remains
+a reference rather than a runtime dependency.
 https://github.com/WAVM/WAVM
 https://llvm.org/devmtg/2024-04/slides/TechnicalTalks/Bock-Experiences-Building-a-JVM-withLLVMOrc.pdf
 

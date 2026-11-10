@@ -15,10 +15,10 @@ check_cxx_source_compiles("#include <cstddef>
 int main() { return 0; }" BLOFELD_USE_LIBSTDCXX)
 
 add_library(blofeld_hardening INTERFACE)
-set(LLVM19_RESOURCE_DIR "$ENV{LLVM19_RESOURCE_DIR}" CACHE PATH "Optional LLVM 19 resource directory")
+set(LLVM19_RESOURCE_DIR "$ENV{LLVM19_RESOURCE_DIR}" CACHE PATH "Optional packaged Clang resource directory")
 if(LLVM19_RESOURCE_DIR)
   if(NOT EXISTS "${LLVM19_RESOURCE_DIR}/include/stddef.h")
-    message(FATAL_ERROR "LLVM19_RESOURCE_DIR must contain LLVM 19 headers and runtimes")
+    message(FATAL_ERROR "LLVM19_RESOURCE_DIR must contain packaged Clang headers and runtimes")
   endif()
   target_compile_options(blofeld_hardening INTERFACE "-resource-dir=${LLVM19_RESOURCE_DIR}")
   target_link_options(blofeld_hardening INTERFACE "-resource-dir=${LLVM19_RESOURCE_DIR}")

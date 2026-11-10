@@ -137,7 +137,6 @@ Python 3.11+ and Git. Core checkouts must match
 On Linux:
 
 ```sh
-python3 tools/dependencies.py --fetch --component zlib
 python3 tools/dependencies.py --fetch --component pulseaudio
 python3 tools/dependencies.py --fetch --component libsndfile
 python3 tools/dependencies.py --fetch --component meson
@@ -149,24 +148,25 @@ On macOS, use the Homebrew tools and native CoreAudio backend; PulseAudio,
 libsndfile and Meson are not needed for this backend:
 
 ```sh
-brew install llvm@19 ninja ccache python@3.14 gtk4 pygobject3 py3cairo
-python3.14 tools/dependencies.py --fetch --component zlib
+brew install llvm@19 llvm ninja ccache python@3.14 gtk4 pygobject3 py3cairo
 cmake --preset release
 cmake --build --preset release --target quality --parallel 2
 ```
 
-Presets discover LLVM 19 without replacing system compilers. For macOS 26.4+
-sanitizer builds, use the pinned core's LLVM 19 runtime bootstrap with its
-upstream dyld fixes, then share the generated resource directory:
+Presets discover LLVM 19 without replacing system compilers. macOS uses packaged
+third-party libraries without foreign source builds or sanitizer instrumentation.
+On current macOS, select the packaged current Clang sanitizer runtime
+while retaining the LLVM 19 compiler:
 
 ```sh
-export LLVM19_RESOURCE_DIR="$(python3.14 ../cpu12/tools/darwin_runtime.py --jobs 2)"
+export LLVM19_RESOURCE_DIR="$("$(brew --prefix llvm)/bin/clang" -print-resource-dir)"
 cmake --preset strict
 cmake --build --preset strict --target quality --parallel 2
 cmake --preset thread
 ```
 
-`strict` enables ASan/UBSan; `thread` selects separate TSan. Compiler warnings,
+`strict` enables ASan/UBSan for our code and generated JIT code; `thread`
+selects separate TSan. Packaged third-party libraries remain unmodified. Compiler warnings,
 linker hardening, clang-tidy and clang-format are enforced. Ccache is used when
 available. Core correctness suites run in their own projects.
 
