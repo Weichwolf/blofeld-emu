@@ -98,8 +98,20 @@ propagation, redundant computation/load/store elimination, register value
 propagation and appropriate loop/vector optimization with exact guest semantics.
 Host C++ -O3 alone does not optimize machine code emitted at runtime.
 
+Preparation is mandatory for each executable code version. Translate the complete
+established executable program, including interrupt entries and indirect targets,
+before admitting its execution. An incomplete translation fails with code identity,
+address and reason; a successful optimizing subset or silent lazy translation is
+not complete preparation. Distinguish executable coverage from LLVM optimization
+coverage. Runtime data remains ordinary mutable RAM and does not prevent advance
+translation; immutable tables can be constants under validated image bindings.
+Known loader output may be prepared in advance when its code and mappings are
+established. Loading code into RAM alone is not evidence of self-modification.
+Actual executable changes revoke affected translations and require preparation
+before that changed code executes. Preserve original loader effects and clocks.
+
 Allow substantial startup preparation without a fixed time budget; the suggested
-one second is not a limit. Prepare the established executable working set before
+one second is not a limit. Prepare the complete established executable program before
 playback, and support subsequently loaded/modified code with exact invalidation
 and optimized retranslation. Preparation performs no guest execution, real I/O
 or device-time advance. Measure coverage and first use, including interrupt

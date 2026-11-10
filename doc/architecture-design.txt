@@ -45,11 +45,13 @@ execute beyond a possible earlier input without a proven producer horizon.
 Timestamping an event after the receiver passed it cannot repair causality.
 This requirement does not justify instruction stepping or arbitrary time slices.
 
-ExecutionTime publishes completed MCU progress in nominal 60 MHz units. DSP native
-execution uses that frontier as a conservative grant; local MCU progress does not
-wait. Atomic progress publication wakes only a registered frontier waiter; ordered
+The existing ExecutionTime publishes completed MCU progress in nominal 60 MHz
+units. DSP execution uses that frontier as a conservative grant; local MCU progress
+does not wait. Atomic progress publication wakes only a registered frontier waiter; ordered
 registration and rechecking prevent lost wakeups. Device-clock accesses publish
 elapsed progress inside long native runs, so polling cannot starve the DSP.
+This one-way grant does not establish timely DSP-to-MCU IRQ delivery when the
+MCU runs ahead. Closing that causal gap remains an implementation requirement.
 
 MCU data/direction changes use a bounded single-producer/single-consumer timeline.
 The MCU commits its actual register effects and timestamps without a DSP rendezvous.
@@ -147,6 +149,15 @@ code. Indirect targets remain conservative until established. Never decode paddi
 or unknown data as code, execute fake warm-up firmware or restore a device snapshot.
 Keep native successors linked and guest values live across safe control-flow edges.
 Preparation and execution have separate lifecycle/status contracts in both cores.
+
+Preparation is a mandatory gate for the complete established executable version.
+An incomplete translation fails with code identity, address and reason before
+execution; optimizing a subset does not qualify total translation coverage.
+Ordinary mutable RAM remains runtime storage. Immutable tables may be constants
+only under validated bindings. Preserve original loader effects even when their
+known executable output is prepared ahead. Actual code changes revoke affected
+entries and require preparation before execution of the changed code. Loading
+fixed code into RAM does not itself establish runtime instruction mutation.
 
 Optimize generated-code quality even if preparation takes substantially longer.
 There is no fixed one-second or other startup compilation budget. Measure
