@@ -1,7 +1,7 @@
 {
   "independent_dsp56300": {
     "source": "https://github.com/Weichwolf/dsp56300",
-    "revision": "6d2b7f0227b295c9b38f8bb7bb67c03d1de6a0e7",
+    "revision": "f4b8c0219033320078cb01b34ccc9f597cb2cb44",
     "license": "GPL-3.0-only"
   },
   "dsp56300_assembly_tool": {
@@ -15,7 +15,7 @@
   },
   "independent_cpu12": {
     "source": "https://github.com/Weichwolf/cpu12",
-    "revision": "5de41f888d62d05c52a1a911e164f53a863df3ab",
+    "revision": "f40504de5ac1f6ac1fd0deb3df15b5a8b5864a85",
     "license": "GPL-3.0-only"
   }
 }
