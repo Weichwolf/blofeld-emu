@@ -38,6 +38,15 @@ void MidiStartup::receive(const std::uint8_t byte) noexcept {
 }
 
 std::optional<std::uint64_t> MidiStartup::poll(vi::MidiPort &port, const Readiness readiness) {
+  auto state = readiness;
+  return poll(port, &state, [](void *owner) noexcept { return *static_cast<Readiness *>(owner); });
+}
+
+std::optional<std::uint64_t>
+MidiStartup::poll(vi::MidiPort &port, void *owner, const ReadinessSource source) {
+  // Newer progress must not admit input using an older readiness snapshot.
+  const auto time = port.time();
+  const auto readiness = source(owner);
   while (const auto event = port.read_output()) {
     ++observations_.output_bytes;
     receive(event->byte);
@@ -51,9 +60,6 @@ std::optional<std::uint64_t> MidiStartup::poll(vi::MidiPort &port, const Readine
     origin_ = frontier;
     return origin_;
   }
-  // Publish bounded silence/query windows. No guest clock advances on the host;
-  // both original execution owners must actually reach the admission frontier.
-  const auto time = port.time();
   if (time < *frontier && *frontier - time > vi::MidiPort::byte_ticks) { return {}; }
   if (*frontier > std::numeric_limits<std::uint64_t>::max() - interval) {
     throw std::overflow_error("Startup MIDI timeline is exhausted");

@@ -53,6 +53,35 @@ void startup_silence() {
           "Only actual application entry and PCM enable the ordinary identity query");
 }
 
+struct ConcurrentReadiness {
+  MidiPort &port;
+  bool application = false;
+
+  static MidiStartup::Readiness read(void *owner) noexcept {
+    auto &self = *static_cast<ConcurrentReadiness *>(owner);
+    const MidiStartup::Readiness observed{.application = self.application, .pcm = true};
+    self.application = true;
+    self.port.publish_time(interval);
+    return observed;
+  }
+};
+
+void concurrent_readiness() {
+  MidiPort port(MidiPort::InputMode::stream);
+  MidiStartup startup;
+  require(!startup.poll(port, {}) && port.input_limit() == interval,
+          "Establish the first silent input interval");
+  ConcurrentReadiness source{.port = port};
+  require(!startup.poll(port, &source, ConcurrentReadiness::read) &&
+              port.input_limit() == interval && startup.observations().queries == 0 &&
+              !port.peek_input(),
+          "Progress published after the readiness snapshot cannot authorize another silent window");
+  require(!startup.poll(port, &source, ConcurrentReadiness::read) &&
+              port.input_limit() == interval * 2 && startup.observations().queries == 1 &&
+              port.peek_input() == MidiPort::Event{.ticks = interval, .byte = identity.front()},
+          "The next coherent observation sends the actual query at the original frontier");
+}
+
 void readiness() {
   MidiPort port(MidiPort::InputMode::stream);
   MidiStartup startup;
@@ -116,6 +145,7 @@ void invalid_identity() {
 
 int main() try {
   startup_silence();
+  concurrent_readiness();
   readiness();
   invalid_identity();
   MidiPort live;

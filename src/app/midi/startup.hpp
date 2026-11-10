@@ -16,6 +16,8 @@ public:
     bool application = false, pcm = false;
   };
 
+  using ReadinessSource = Readiness (*)(void *) noexcept;
+
   struct Observations {
     std::uint64_t queries = 0, output_bytes = 0;
     bool identity = false;
@@ -24,6 +26,8 @@ public:
   [[nodiscard]] Observations observations() const noexcept { return observations_; }
 
   [[nodiscard]] std::optional<std::uint64_t> poll(vi::MidiPort &port, Readiness readiness);
+  [[nodiscard]] std::optional<std::uint64_t>
+  poll(vi::MidiPort &port, void *owner, ReadinessSource source);
 
 private:
   void receive(std::uint8_t byte) noexcept;

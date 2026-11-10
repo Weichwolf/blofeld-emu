@@ -168,9 +168,12 @@ std::optional<std::uint64_t> Live::startup(const host::Signals &signals) {
     audio_.check();
     discard(host::midi::Input::now());
     control();
-    const MidiStartup::Readiness readiness{.application = vm_->mcu_wait_time().has_value(),
-                                           .pcm = consumer_.has_pcm()};
-    if (const auto origin = startup.poll(vm_->midi(), readiness)) { return origin; }
+    const auto origin = startup.poll(vm_->midi(), this, [](void *owner) noexcept {
+      const auto &live = *static_cast<Live *>(owner);
+      return MidiStartup::Readiness{.application = live.vm_->mcu_wait_time().has_value(),
+                                    .pcm = live.consumer_.has_pcm()};
+    });
+    if (origin) { return origin; }
     constexpr std::chrono::minutes guard{1};
     if (std::chrono::steady_clock::now() - started >= guard) {
       throw std::runtime_error(

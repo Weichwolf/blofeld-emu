@@ -81,9 +81,12 @@ std::optional<std::uint64_t> OfflineRender::startup(vi::VmContext &vm,
   vm.start();
   while (!vm.finished()) {
     if (signals.wait(startup_poll)) { break; }
-    const MidiStartup::Readiness readiness{.application = vm.mcu_wait_time().has_value(),
-                                           .pcm = wav_.has_pcm()};
-    if (const auto origin = startup.poll(vm.midi(), readiness)) { return origin; }
+    const auto origin = startup.poll(vm.midi(), this, [](void *owner) noexcept {
+      const auto &render = *static_cast<OfflineRender *>(owner);
+      return MidiStartup::Readiness{.application = render.vm_->mcu_wait_time().has_value(),
+                                    .pcm = render.wav_.has_pcm()};
+    });
+    if (origin) { return origin; }
     if (std::chrono::steady_clock::now() - started_ >= startup_limit) {
       std::cerr
           << "Startup failed: no original MIDI identity and valid PCM within one host minute.\n";
