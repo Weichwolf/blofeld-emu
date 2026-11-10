@@ -23,7 +23,8 @@ native audio observations maps input timestamps into original musical time with
 an explicit finite delivery allowance and a fixed native correlation-uncertainty
 grant. The software window includes the complete grant and must fit within 10 ms.
 Estimates beyond that budget are rejected. Late input and missing clock contracts fail;
-the MCU clock is not a host timestamp anchor. Live deadline qualification is incomplete.
+the MCU clock is not a host timestamp anchor. Normal live output currently fails audio
+deadlines on both supported hosts; sustained external-keyboard use is not qualified.
 The host SMF reader streams timestamped events with tempo/SMPTE handling and
 separate metadata; independent patterns require explicit selection. An offline
 PCM consumer writes signed 24-bit stereo WAV, rejecting underruns, frame/time
