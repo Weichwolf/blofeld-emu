@@ -21,7 +21,9 @@ Independent DSP56300 runtime core:
   Configured as a pinned source subproject with matching sanitizers.
   Original source/setup notices remain in that checkout, including its
   THIRD_PARTY.txt attribution. The core has no dependency on another DSP
-  emulator or JIT library. Corresponding source and its notices must accompany
+  emulator. Its private compiler support links packaged LLVM 19.1 (Apache-2.0
+  with LLVM exceptions); the full notice is in the core's LICENSES/LLVM.txt.
+  Corresponding source and its notices must accompany
   redistributable binaries as required by the GPL.
 
 Native session audio client:
