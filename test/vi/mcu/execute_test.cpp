@@ -5,6 +5,7 @@
 #include "io/controls.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/execution_time.hpp"
+#include "io/midi_port.hpp"
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
 #include "isa.hpp"
@@ -597,6 +598,70 @@ void native_panel_sampling(const bool timed_boundary) {
           report.failure->address == marker && report.failure->value == expected,
       "Repeated input-bank reads preserve inactive inputs and actual data across a timer access");
 }
+
+void native_clock_input_frontier() {
+  namespace isa = cpu12::isa;
+  constexpr cpu12::Byte divider = 3;
+  constexpr cpu12::Byte divider_register = 0x35;
+  constexpr cpu12::Address marker = 0x3000;
+  constexpr std::uint64_t initial_credit = 1000;
+  constexpr std::uint64_t next_credit = 10000;
+  constexpr std::uint64_t paused_at = 980;
+  constexpr std::size_t nop_count = 40;
+  constexpr auto padding = [] {
+    std::array<cpu12::Byte, nop_count> bytes{};
+    bytes.fill(isa::nop.front());
+    return bytes;
+  }();
+  constexpr auto program =
+      isa::program(isa::opcode<isa::Opcode::ldaa_immediate>(),
+                   std::array{divider},
+                   isa::opcode<isa::Opcode::staa_direct>(),
+                   std::array{divider_register},
+                   padding,
+                   isa::opcode<isa::Opcode::staa_extended>(),
+                   std::array<cpu12::Byte, 2>{static_cast<cpu12::Byte>(marker >> 8U), 0});
+  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  image->known.fill(1);
+  std::ranges::copy(program, image->bytes.begin());
+  image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
+  image->bytes.back() = 0;
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  blofeld::vi::MidiPort midi(blofeld::vi::MidiPort::InputMode::stream);
+  require(midi.advance_input(initial_credit), "Publish actual empty-input execution credit");
+  std::promise<blofeld::vi::ExecutionReport> completion;
+  auto completed = completion.get_future();
+  std::jthread mcu([&](const std::stop_token &stop) {
+    try {
+      completion.set_value(blofeld::vi::mcu::execute(
+          *image, shi, reset, stop, nullptr, nullptr, nullptr, nullptr, &midi));
+    } catch (...) { completion.set_exception(std::current_exception()); }
+  });
+  const auto timeout = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (midi.time() < paused_at &&
+         completed.wait_for(std::chrono::seconds(0)) != std::future_status::ready &&
+         std::chrono::steady_clock::now() < timeout) {
+    std::this_thread::yield();
+  }
+  const bool paused = midi.time() == paused_at &&
+                      completed.wait_for(std::chrono::seconds(0)) != std::future_status::ready;
+  if (!paused) {
+    mcu.request_stop();
+    mcu.join();
+    static_cast<void>(completed.get());
+    throw std::runtime_error(
+        "A bus-divider change must reproject the exclusive input frontier before later execution");
+  }
+  require(midi.advance_input(next_credit), "Release new input credit without fabricating a byte");
+  const auto ready = completed.wait_for(std::chrono::seconds(2));
+  mcu.request_stop();
+  mcu.join();
+  const auto report = completed.get();
+  require(ready == std::future_status::ready && report.failure &&
+              report.failure->address == marker && report.failure->value == divider,
+          "The same original continuation reaches its marker only after real producer credit");
+}
 }
 
 int main() try {
@@ -612,6 +677,7 @@ int main() try {
   native_polling_progress(true);
   native_panel_sampling(false);
   native_panel_sampling(true);
+  native_clock_input_frontier();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';
