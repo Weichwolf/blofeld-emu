@@ -6,6 +6,7 @@
 #include "io/peer_port.hpp"
 #include "io/sci.hpp"
 #include "io/usb.hpp"
+#include "mcu/channels.hpp"
 #include "mcu/clock.hpp"
 #include "mcu/timer.hpp"
 
@@ -34,25 +35,37 @@ struct Devices {
   Timer::Cycle idle = 0;
   const char *midi_error = nullptr;
 
+  [[nodiscard]] std::optional<std::uint64_t> input_limit() const noexcept {
+    std::uint64_t ticks = 0;
+    if (blofeld_mcu_midi_limit(midi, ticks)) { return ticks; }
+    return {};
+  }
+
+  [[nodiscard]] std::optional<MidiPort::Event> input() const noexcept {
+    MidiPort::Event event;
+    if (blofeld_mcu_midi_peek(midi, event)) { return event; }
+    return {};
+  }
+
   [[nodiscard]] std::optional<std::uint64_t> input_tick() const noexcept {
     if (midi == nullptr) { return {}; }
-    auto next = midi->input_limit();
-    if (const auto input = midi->peek_input(); input && (!next || input->ticks < *next)) {
-      next = input->ticks;
+    auto next = input_limit();
+    if (const auto event = input(); event && (!next || event->ticks < *next)) {
+      next = event->ticks;
     }
     return next;
   }
 
   bool wait_input(const std::uint64_t ticks) noexcept {
-    if (time != nullptr && !time->publish_mcu(clock.ticks())) { return false; }
-    return midi->await_input(ticks, stop);
+    if (time != nullptr && !blofeld_mcu_time_publish(time, clock.ticks())) { return false; }
+    return blofeld_mcu_midi_await(midi, ticks, stop);
   }
 
   bool input_ready() noexcept {
-    if (const auto limit = midi->input_limit(); limit && clock.ticks() >= *limit) {
+    if (const auto limit = input_limit(); limit && clock.ticks() >= *limit) {
       return wait_input(*limit);
     }
-    return midi->await_input(clock.ticks(), stop);
+    return blofeld_mcu_midi_await(midi, clock.ticks(), stop);
   }
 
   bool point(const Timer::Cycle now) noexcept {
@@ -67,25 +80,26 @@ struct Devices {
         midi_error = "SCI MIDI output has an unsupported format or completion time";
         return false;
       }
-      if (!midi->write_output({.ticks = ticks + ((output->cycle - before) * period),
-                               .byte = static_cast<std::uint8_t>(output->word)})) {
+      if (!blofeld_mcu_midi_write(midi,
+                                  {.ticks = ticks + ((output->cycle - before) * period),
+                                   .byte = static_cast<std::uint8_t>(output->word)})) {
         return false;
       }
     }
-    while (const auto input = midi->peek_input()) {
-      if (input->ticks > clock.ticks()) { break; }
-      if (!sci.receive({.word = input->byte})) {
+    while (const auto event = input()) {
+      if (event->ticks > clock.ticks()) { break; }
+      if (!sci.receive({.word = event->byte})) {
         midi_error = "SCI could not accept the scheduled MIDI character";
         return false;
       }
-      midi->pop_input();
+      blofeld_mcu_midi_pop(midi);
     }
     midi->publish_time(clock.ticks());
     return midi->error() == nullptr;
   }
 
   bool input_point(const Timer::Cycle now) noexcept {
-    while (const auto limit = midi->input_limit()) {
+    while (const auto limit = input_limit()) {
       if (*limit <= clock.ticks() || (*limit - clock.ticks()) % clock.bus_period() == 0) { break; }
       const auto boundary = clock.at_ticks(*limit);
       if (!boundary) { return false; }

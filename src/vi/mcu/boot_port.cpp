@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "mcu/boot_port.hpp"
 
+#include "io/shi.hpp"
+#include "mcu/channels.hpp"
+
 #include <cstdint>
+#include <optional>
 #include <stop_token>
 
 namespace blofeld::vi::mcu {
@@ -41,7 +45,8 @@ bool BootPort::write(const Write access) noexcept {
   const bool selected = (access.direction & access.known & transaction_mask) == transaction_mask &&
                         (access.value & select_bit) == 0;
   if (selected != selected_) {
-    mode_ = shi_.select(selected);
+    Shi::Mode mode;
+    mode_ = blofeld_mcu_shi_select(&shi_, selected, mode) ? std::optional{mode} : std::nullopt;
     selected_ = selected;
     bits_ = 0;
     word_ = 0;
