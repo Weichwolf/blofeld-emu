@@ -195,7 +195,11 @@ void imported_channel() {
   using Send = unsigned (*)(void *, unsigned, std::uint64_t) noexcept;
   const auto send = std::bit_cast<Send>(code->address("aot_import_send"));
   blofeld::vi::PeerPort peer;
+#if defined(_LIBCPP_VERSION)
+  std::stop_source stop;
+#else
   const std::stop_source stop;
+#endif
   Channel channel{.peer = peer, .stop = stop.get_token()};
   constexpr unsigned capacity = 256;
   for (unsigned index = 0; index < capacity; ++index) {
