@@ -652,6 +652,7 @@ Access operation(const cpu12::Fault fault) {
     case cpu12::Fault::unsupported_host:
     case cpu12::Fault::reentrant:
     case cpu12::Fault::unsupported_state:
+    case cpu12::Fault::unprepared_execution:
     default: return Access::execute;
   }
 }
