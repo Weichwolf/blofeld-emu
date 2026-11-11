@@ -98,6 +98,7 @@ target_include_directories(blofeld_vi_midi PUBLIC src/vi)
 target_link_libraries(blofeld_vi_midi PUBLIC blofeld_quality Threads::Threads)
 add_library(blofeld_vi_execution
   src/vi/display/port.cpp
+  src/vi/dsp/channels.cpp
   src/vi/io/memory_controller.cpp src/vi/io/dsp_reset.cpp src/vi/io/shi.cpp src/vi/io/sci.cpp src/vi/io/usb.cpp src/vi/io/mcu_flash.cpp
   src/vi/mcu/boot_port.cpp src/vi/mcu/ports.cpp src/vi/mcu/timer.cpp src/vi/mcu/clock.cpp
   src/vi/mcu/execute.cpp src/vi/dsp/audio.cpp src/vi/dsp/clock.cpp src/vi/dsp/dax.cpp src/vi/dsp/dma.cpp src/vi/dsp/esai.cpp src/vi/dsp/interrupts.cpp src/vi/dsp/memory.cpp src/vi/dsp/midi.cpp src/vi/dsp/ports.cpp src/vi/dsp/timers.cpp src/vi/dsp/execute.cpp src/vi/vm_context.cpp)
@@ -310,6 +311,7 @@ if(BUILD_TESTING)
   blofeld_unit(vi-dsp-boot-rom-test test/vi/dsp/boot_rom_test.cpp blofeld_quality)
   target_include_directories(vi-dsp-boot-rom-test PRIVATE src/vi)
   blofeld_unit(vi-dsp-clock-test test/vi/dsp/clock_test.cpp blofeld_vi_execution)
+  blofeld_unit(vi-dsp-channels-test test/vi/dsp/channels_test.cpp blofeld_vi_execution)
   blofeld_unit(vi-dsp-dma-test test/vi/dsp/dma_test.cpp blofeld_vi_execution)
   blofeld_unit(vi-dsp-esai-test test/vi/dsp/esai_test.cpp blofeld_vi_execution)
   blofeld_unit(vi-dsp-audio-test test/vi/dsp/audio_test.cpp blofeld_vi_execution)

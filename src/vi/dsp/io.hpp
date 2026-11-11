@@ -3,6 +3,7 @@
 
 #include "dsp/audio.hpp"
 #include "dsp/boot_rom.hpp"
+#include "dsp/channels.hpp"
 #include "dsp/clock.hpp"
 #include "dsp/dax.hpp"
 #include "dsp/dma.hpp"
@@ -221,9 +222,8 @@ public:
           return pending;
         }
         if (core_->interrupt_ready()) {
-          const auto external = peer_ != nullptr && request->vector == 0x10
-                                    ? peer_->dsp_interrupt(interrupts_.external_edge(0x10))
-                                    : std::nullopt;
+          const auto external =
+              peer_ != nullptr && request->vector == 0x10 ? peer_interrupt() : std::nullopt;
           core_->request_interrupt((state.vba & vector_base_mask) | request->vector,
                                    request->level);
           acknowledge(request->vector);
@@ -304,7 +304,7 @@ public:
       return write_priority({.address = address, .value = value});
     }
     if (address == Clock::address) { return write_clock(value); }
-    if (address != once_data_address) { return shi_.write({.address = address, .value = value}); }
+    if (address != once_data_address) { return blofeld_dsp_shi_write(&shi_, address, value); }
     // DSP56300FM Rev.5, 7.2.4: OGDBR is a 24-bit output latch, readable
     // only through JTAG. A core write also enables the ROM-secured OnCE port.
     once_data_ = value;
@@ -367,7 +367,7 @@ public:
       return write_priority({.address = request.address, .value = value});
     }
     if (request.address == Clock::address) { return write_clock(value); }
-    return shi_.write({.address = request.address, .value = value});
+    return blofeld_dsp_shi_write(&shi_, request.address, value);
   }
 
 private:
@@ -446,7 +446,10 @@ private:
     if (clock_.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_) {
       throw std::overflow_error("DSP reset origin exceeds instrument time");
     }
-    if (peer_ != nullptr) { static_cast<void>(peer_->sample_mcu_data(origin_ + clock_.ticks())); }
+    if (peer_ != nullptr) {
+      PeerPort::Sample sample;
+      blofeld_dsp_peer_sample(peer_, origin_ + clock_.ticks(), sample);
+    }
     const auto limit = time_->dsp_limit(origin_ + clock_.ticks(), stop_);
     if (!limit) { return false; }
     peer_deadline_ = clock_.deadline(*limit - origin_);
@@ -486,6 +489,15 @@ private:
     return true;
   }
 
+  [[nodiscard]] std::optional<std::uint64_t> peer_interrupt() const noexcept {
+    std::uint64_t generation = 0;
+    if (peer_ != nullptr &&
+        blofeld_dsp_peer_interrupt(peer_, interrupts_.external_edge(0x10), generation)) {
+      return generation;
+    }
+    return {};
+  }
+
   [[nodiscard]] std::array<dsp56300::Word, 9> interrupt_sources() const noexcept {
     std::array<dsp56300::Word, 9> sources{};
     const auto pending = dma_.interrupts();
@@ -494,9 +506,7 @@ private:
     }
     sources[6] = timers_.interrupt().value_or(0);
     sources[7] = dax_.interrupt().value_or(0);
-    if (peer_ != nullptr && peer_->dsp_interrupt(interrupts_.external_edge(0x10))) {
-      sources[8] = 0x10;
-    }
+    if (peer_interrupt()) { sources[8] = 0x10; }
     return sources;
   }
 
@@ -560,7 +570,7 @@ private:
     if (memory_.read(access.space, access.address, value)) { return true; }
     constexpr dsp56300::Word shi_receive = 0xffff94;
     if (access.space == dsp56300::Space::x && access.address == shi_receive) {
-      return shi_.read(access.address, value);
+      return blofeld_dsp_shi_read(&shi_, access.address, value);
     }
     if (access.space != dsp56300::Space::program) { return false; }
     const auto word = inspect_program(access.address);
@@ -581,7 +591,7 @@ private:
         return dax_.connected() && dax_.write({.address = access.address, .value = value});
       }
       return access.space == dsp56300::Space::x && access.address == shi_transmit &&
-             shi_.write({.address = access.address, .value = value});
+             blofeld_dsp_shi_write(&shi_, access.address, value);
     }
     if (!memory_.write({.space = access.space, .address = access.address, .value = value})) {
       return false;
@@ -598,9 +608,7 @@ private:
       return false;
     }
     if (!ports_.write(access) || !update_ports()) { return false; }
-    if (peer_write && !peer_->dsp_write(peer_->dsp_data(), origin_ + clock_.ticks())) {
-      return false;
-    }
+    if (peer_write && !blofeld_dsp_peer_write(peer_, origin_ + clock_.ticks())) { return false; }
     if (controller_.pending() && controller_.epoch() != media_epoch_) {
       if (!synchronize_timers(true) || !schedule_media()) { return false; }
       completion_failure_ = {.operation = Access::write,
@@ -619,7 +627,8 @@ private:
           clock_.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_) {
         return false;
       }
-      const auto input = peer_->sample_mcu_data(origin_ + clock_.ticks());
+      PeerPort::Sample input;
+      blofeld_dsp_peer_sample(peer_, origin_ + clock_.ticks(), input);
       ports_.input(Port::c, {.mask = input.mask, .known = input.known, .value = input.value});
     }
     return ports_.read(space, address, value);
@@ -630,12 +639,14 @@ private:
     const auto data = ports_.output(Port::c);
     constexpr dsp56300::Word byte_mask = 0xff;
     constexpr dsp56300::Word ready = 1U << 9U;
-    peer_->dsp_data({.mask = static_cast<std::uint8_t>(data.mask & byte_mask),
-                     .known = static_cast<std::uint8_t>(data.known & byte_mask),
-                     .value = static_cast<std::uint8_t>(data.value & byte_mask)});
+    blofeld_dsp_peer_data(peer_,
+                          static_cast<std::uint8_t>(data.mask & byte_mask),
+                          static_cast<std::uint8_t>(data.known & byte_mask),
+                          static_cast<std::uint8_t>(data.value & byte_mask));
     const auto request = ports_.output(Port::e);
     if ((request.mask & ~request.known & ready) != 0) { return false; }
-    return peer_->dsp_ready((request.mask & ready) != 0 && (request.value & ready) == 0);
+    return blofeld_dsp_peer_ready(peer_,
+                                  (request.mask & ready) != 0 && (request.value & ready) == 0);
   }
 
   bool update_ports() noexcept {
@@ -670,13 +681,13 @@ private:
     if (Dax::contains(address)) { return dax_.read(address, value); }
     if (Dma::contains(address)) { return dma_.read(address, value); }
     if (Interrupts::contains(address)) { return interrupts_.read(address, value); }
-    if (address != Clock::address) { return shi_.read(address, value); }
+    if (address != Clock::address) { return blofeld_dsp_shi_read(&shi_, address, value); }
     value = clock_.read();
     return true;
   }
 
   bool interrupted() noexcept {
-    if (peer_ != nullptr && peer_->dsp_interrupt(interrupts_.external_edge(0x10))) {
+    if (peer_interrupt()) {
       constexpr std::array<dsp56300::Word, 1> source{0x10};
       if (interrupts_.select(source, 0) && interrupts_.select(source, core_->registers().sr)) {
         core_->request_yield();
