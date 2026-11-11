@@ -1,0 +1,734 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#pragma once
+
+#include "dsp/audio.hpp"
+#include "dsp/boot_rom.hpp"
+#include "dsp/clock.hpp"
+#include "dsp/dax.hpp"
+#include "dsp/dma.hpp"
+#include "dsp/esai.hpp"
+#include "dsp/interrupts.hpp"
+#include "dsp/memory.hpp"
+#include "dsp/midi.hpp"
+#include "dsp/ports.hpp"
+#include "dsp/timers.hpp"
+#include "execution.hpp"
+#include "io/dsp_reset.hpp"
+#include "io/execution_time.hpp"
+#include "io/memory_controller.hpp"
+#include "io/midi_port.hpp"
+#include "io/pcm_output.hpp"
+#include "io/peer_port.hpp"
+#include "io/shi.hpp"
+#include "preparation_clock.hpp"
+#include "storage/media_image.hpp"
+
+#include <array>
+#include <cstdint>
+#include <dsp56300/core.hpp>
+#include <dsp56300/memory.hpp>
+#include <limits>
+#include <optional>
+#include <span>
+#include <stdexcept>
+#include <stop_token>
+
+namespace blofeld::vi::dsp {
+// Concrete firmware adapter shared by native execution and host-IR compilation.
+class Io final : public dsp56300::Io {
+  static constexpr dsp56300::Word boot_first = BootRom::main_first;
+  static constexpr dsp56300::Word once_data_address = 0xfffffc;
+  static constexpr dsp56300::Word reserved_x_address = 0xffff80;
+  static constexpr dsp56300::Word audio_data_address = 0xffff80;
+  static constexpr dsp56300::Word peer_data_address = 0xffffbd;
+  static constexpr unsigned esai1_transmit_request = 22;
+  static constexpr unsigned dax_request = 10;
+  static constexpr unsigned timer_request_first = 18;
+  static constexpr dsp56300::Word timer0_control = 0xffff8f;
+  static constexpr dsp56300::Word timer0_compare_vector = 0x54;
+  static constexpr dsp56300::Word timer2_overflow_vector = 0x5e;
+  static constexpr dsp56300::Word dma0_vector = 0x18, dma5_vector = 0x22,
+                                  vector_base_mask = 0xffff00;
+
+  struct BitAccess {
+    dsp56300::Space space;
+    dsp56300::Word address, pc, index;
+    dsp56300::BitAction action;
+  };
+
+public:
+  Io(const BootRom boot,
+     Shi &shi,
+     DspReset &reset,
+     const std::stop_token &stop,
+     MediaImage *image,
+     const PcmOutput output,
+     PeerPort *peer,
+     ExecutionTime *time,
+     MidiPort *midi,
+     PreparationClock *preparation)
+      : boot_(boot),
+        shi_(shi),
+        reset_(reset),
+        stop_(stop),
+        audio_(esai_1_, dax_, output, stop),
+        controller_(image),
+        peer_(peer),
+        time_(time),
+        midi_(midi),
+        preparation_(preparation) {}
+
+  void bind(dsp56300::Core &core, const std::uint64_t epoch) noexcept {
+    core_ = &core;
+    epoch_ = epoch;
+    reset_interrupted_ = false;
+    program_changed_ = false;
+    preparation_requested_ = true;
+    waiting_ = false;
+    idle_ = 0;
+    media_epoch_ = 0;
+    media_deadline_.reset();
+    media_error_ = nullptr;
+    once_data_.reset();
+    clock_.reset(true);
+    origin_ = time_ != nullptr ? time_->dsp_origin() : 0;
+    peer_deadline_.reset();
+    interrupts_.reset();
+    dma_.reset();
+    esai_1_.reset();
+    dax_.reset();
+    audio_.reset({.id = epoch, .origin = origin_});
+    audio_dirty_ = true;
+    timers_.reset();
+    midi_.reset(origin_);
+    midi_deadline_.reset();
+    if (midi_.connected()) { static_cast<void>(timers_.input(0, midi_.level())); }
+    memory_.configure(0);
+    ports_.reset();
+    if (peer_ != nullptr) { peer_->reset_dsp(); }
+    controller_.reset();
+    bool ready = false;
+    if (controller_.ready(ready)) { static_cast<void>(timers_.input(1, ready)); }
+  }
+
+  void finish(ExecutionReport &report) {
+    static_cast<void>(flush_audio(report));
+    if (report.failure) { report.failure->media = media_failure(); }
+    report.stopped_pc = core_->registers().pc;
+    core_ = nullptr;
+  }
+
+  void prepare_code(ExecutionReport &report);
+
+  bool complete_events(ExecutionReport &report) {
+    if (media_deadline_ && device_cycles() >= *media_deadline_) {
+      if (!controller_.complete() || !update_ports()) {
+        report.failure = completion_failure_;
+        report.failure->reason = controller_.error();
+        return false;
+      }
+      media_deadline_.reset();
+    }
+    if (!synchronize_timers() || !synchronize_midi()) {
+      report.failure = Failure{
+          .pc = core_->registers().pc, .address = timer0_control, .space = 'X', .reason = error()};
+      return false;
+    }
+    if (audio_dirty_) {
+      if (!audio_.configure(device_cycles(), clock_)) { return audio_failure(report); }
+      audio_dirty_ = false;
+    }
+    while (const auto next = audio_.deadline()) {
+      if (*next > device_cycles()) { break; }
+      if (!audio_.clock()) { return audio_failure(report); }
+      if (!service_dma(report)) { return false; }
+      if (!audio_.submit()) { return audio_failure(report); }
+    }
+    return service_dma(report);
+  }
+
+  [[nodiscard]] bool flush_audio(ExecutionReport &report) {
+    return audio_.submit(true) || audio_failure(report);
+  }
+
+  bool service_dma(ExecutionReport &report) {
+    trigger_audio_requests();
+    const auto requests = timers_.take_requests();
+    for (unsigned index = 0; index < 3; ++index) {
+      if ((requests & (1U << index)) != 0) {
+        static_cast<void>(dma_.trigger(timer_request_first + index));
+      }
+    }
+    if (!dma_.service(
+            dma_pc_,
+            [this](const Dma::Address access, dsp56300::Word &value) {
+              return dma_read(access, value);
+            },
+            [this](const Dma::Address access, const dsp56300::Word value) {
+              return dma_write(access, value);
+            })) {
+      if (!stop_.stop_requested() && !reset_interrupted_) { report.failure = dma_.failure(); }
+      return false;
+    }
+    if (program_changed_) {
+      static_cast<void>(memory_.promote_initialized());
+      revision_ ^= 1U;
+      preparation_requested_ = true;
+      program_changed_ = false;
+    }
+    return true;
+  }
+
+  [[nodiscard]] std::uint64_t program_revision() const noexcept override { return revision_; }
+
+  [[nodiscard]] bool interrupt_pending(const dsp56300::Word status) const noexcept override {
+    return interrupts_.select(interrupt_sources(), status).has_value();
+  }
+
+  [[nodiscard]] const char *error() const noexcept {
+    if (peer_ != nullptr && peer_->error() != nullptr) { return peer_->error(); }
+    if (audio_.error() != nullptr) { return audio_.error(); }
+    if (media_error_ != nullptr) { return media_error_; }
+    if (midi_.error() != nullptr) { return midi_.error(); }
+    if (timers_.error() != nullptr) { return timers_.error(); }
+    return esai_1_.error() != nullptr ? esai_1_.error() : controller_.error();
+  }
+
+  [[nodiscard]] std::optional<Failure::MediaAddress> media_failure() const noexcept {
+    if (const auto location = controller_.failure_location()) {
+      return Failure::MediaAddress{.page = location->page, .column = location->column};
+    }
+    return {};
+  }
+
+  [[nodiscard]] dsp56300::RunResult run() {
+    if (!synchronize_peer()) {
+      dsp56300::RunResult stopped;
+      stopped.yielded = true;
+      return stopped;
+    }
+    if (!synchronize_midi()) { throw std::runtime_error(error()); }
+    advance_waiting();
+    const auto sources = interrupt_sources();
+    if (interrupts_.select(sources, 0)) {
+      const auto state = core_->registers();
+      const auto request = interrupts_.select(sources, state.sr);
+      if (request) {
+        if ((state.vba & vector_base_mask) != prepared_vba_) {
+          preparation_requested_ = true;
+          dsp56300::RunResult pending;
+          pending.yielded = true;
+          return pending;
+        }
+        if (core_->interrupt_ready()) {
+          const auto external = peer_ != nullptr && request->vector == 0x10
+                                    ? peer_->dsp_interrupt(interrupts_.external_edge(0x10))
+                                    : std::nullopt;
+          core_->request_interrupt((state.vba & vector_base_mask) | request->vector,
+                                   request->level);
+          acknowledge(request->vector);
+          if (external && !peer_->acknowledge_dsp(*external)) {
+            throw std::logic_error("Accepted DSP peer interrupt has an invalid generation");
+          }
+        }
+        // An eligible request still observes REP completion and the interrupt shadow.
+        return completed(core_->step());
+      }
+      // Masked requests do not turn ordinary execution into single stepping.
+      // The Core returns at a real mask change before another instruction runs.
+    }
+    const auto next = deadline();
+    return completed(next ? core_->run_until(*next - idle_) : core_->run());
+  }
+
+  [[nodiscard]] bool waiting_event() const noexcept {
+    return waiting_ && (deadline() || interrupts_.select(interrupt_sources(), 0));
+  }
+
+  [[nodiscard]] bool reset_interrupted() const noexcept { return reset_interrupted_; }
+
+  [[nodiscard]] std::optional<dsp56300::Word>
+  inspect_program(const dsp56300::Word address) const noexcept override {
+    dsp56300::Word value = 0;
+    if (memory_.read(dsp56300::Space::program, address, value)) { return value; }
+    return boot_.read(address);
+  }
+
+  std::span<const dsp56300::MemoryWindow>
+  memory_windows(const dsp56300::Space space) noexcept override {
+    if (core_ != nullptr) {
+      const auto mode = core_->registers().omr;
+      memory_.configure(mode);
+      preparation_requested_ |= mode != prepared_mode_;
+    }
+    return memory_.windows(space);
+  }
+
+  bool read(const dsp56300::Space space,
+            const dsp56300::Word address,
+            dsp56300::Word /*pc*/,
+            dsp56300::Word &value) noexcept override {
+    if (interrupted()) { return false; }
+    if (memory_.read(space, address, value)) { return true; }
+    if (Ports::contains(space, address)) { return read_port(space, address, value); }
+    if (space == dsp56300::Space::y && Esai::contains(address)) {
+      return esai_1_.read(address, value);
+    }
+    if (space == dsp56300::Space::x) { return read_x(address, value); }
+    const auto word = space == dsp56300::Space::program ? inspect_program(address) : std::nullopt;
+    if (!word) { return false; }
+    value = *word;
+    return true;
+  }
+
+  bool write(const dsp56300::Space space,
+             const dsp56300::Word address,
+             const dsp56300::Word pc,
+             const dsp56300::Word value) noexcept override {
+    if (interrupted()) { return false; }
+    if (memory_.write({.space = space, .address = address, .value = value})) { return true; }
+    if (Ports::contains(space, address)) {
+      return write_port({.space = space, .address = address, .value = value}, pc);
+    }
+    if (space == dsp56300::Space::y && Esai::contains(address)) {
+      return write_esai({.address = address, .value = value});
+    }
+    if (space != dsp56300::Space::x) { return false; }
+    // DSP56371UM table 3-7 reserves X:$FFFF80. The original audio
+    // initializer writes it; discard the write without creating a readable latch.
+    if (address == reserved_x_address) { return true; }
+    if (Timers::contains(address)) { return write_timer({.address = address, .value = value}); }
+    if (Dax::contains(address)) { return write_dax({.address = address, .value = value}); }
+    if (Dma::contains(address)) { return write_dma({.address = address, .value = value}, pc); }
+    if (Interrupts::contains(address)) {
+      return write_priority({.address = address, .value = value});
+    }
+    if (address == Clock::address) { return write_clock(value); }
+    if (address != once_data_address) { return shi_.write({.address = address, .value = value}); }
+    // DSP56300FM Rev.5, 7.2.4: OGDBR is a 24-bit output latch, readable
+    // only through JTAG. A core write also enables the ROM-secured OnCE port.
+    once_data_ = value;
+    return true;
+  }
+
+  bool bit(const dsp56300::Space space,
+           const dsp56300::Word address,
+           const dsp56300::Word pc,
+           const dsp56300::Word bit,
+           const dsp56300::BitAction action,
+           bool &previous) noexcept override {
+    const BitAccess request{
+        .space = space, .address = address, .pc = pc, .index = bit, .action = action};
+    constexpr unsigned word_bits = 24;
+    if (interrupted()) { return false; }
+    if (request.index >= word_bits) { return false; }
+    dsp56300::Word value = 0;
+    if (!memory_.read(request.space, request.address, value)) {
+      bool accepted = false;
+      if (Ports::contains(request.space, request.address)) {
+        accepted = read_port(request.space, request.address, value);
+      } else if (request.space == dsp56300::Space::x) {
+        accepted = read_x(request.address, value);
+      } else if (request.space == dsp56300::Space::y) {
+        accepted = esai_1_.read(request.address, value);
+      }
+      if (!accepted) { return false; }
+    }
+    const auto mask = dsp56300::Word{1} << request.index;
+    previous = (value & mask) != 0;
+    switch (request.action) {
+      case dsp56300::BitAction::test: return true;
+      case dsp56300::BitAction::clear: value &= ~mask; break;
+      case dsp56300::BitAction::set: value |= mask; break;
+      case dsp56300::BitAction::change: value ^= mask; break;
+      default: return false;
+    }
+    if (memory_.write({.space = request.space, .address = request.address, .value = value})) {
+      return true;
+    }
+    if (Ports::contains(request.space, request.address)) {
+      return write_port({.space = request.space, .address = request.address, .value = value},
+                        request.pc);
+    }
+    if (request.space == dsp56300::Space::y && Esai::contains(request.address)) {
+      return write_esai({.address = request.address, .value = value});
+    }
+    if (request.space != dsp56300::Space::x) { return false; }
+    if (Timers::contains(request.address)) {
+      return write_timer({.address = request.address, .value = value});
+    }
+    if (Dax::contains(request.address)) {
+      return write_dax({.address = request.address, .value = value});
+    }
+    if (Dma::contains(request.address)) {
+      return write_dma({.address = request.address, .value = value}, request.pc);
+    }
+    if (Interrupts::contains(request.address)) {
+      return write_priority({.address = request.address, .value = value});
+    }
+    if (request.address == Clock::address) { return write_clock(value); }
+    return shi_.write({.address = request.address, .value = value});
+  }
+
+private:
+  void advance_waiting() {
+    if (!waiting_ || interrupts_.select(interrupt_sources(), core_->registers().sr)) { return; }
+    if (const auto next = deadline()) {
+      idle_ = *next - core_->progress().estimated_cycles;
+      if (!synchronize_timers() || !synchronize_midi()) { throw std::runtime_error(error()); }
+    }
+  }
+
+  bool synchronize_midi() {
+    if (!midi_.connected()) { return true; }
+    if (!clock_.advance(device_cycles()) ||
+        clock_.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_) {
+      throw std::overflow_error("DSP DIN-MIDI time is not representable");
+    }
+    if (!midi_.advance(origin_ + clock_.ticks()) || !timers_.input(0, midi_.level())) {
+      return false;
+    }
+    midi_deadline_.reset();
+    if (const auto next = midi_.deadline()) {
+      midi_deadline_ = clock_.deadline(*next - origin_);
+      if (!midi_deadline_) {
+        throw std::overflow_error("DSP DIN-MIDI deadline is not representable");
+      }
+    }
+    return true;
+  }
+
+  bool audio_failure(ExecutionReport &report) const {
+    if (!stop_.stop_requested() && !report.failure) {
+      report.failure = Failure{.operation = Access::execute,
+                               .pc = core_->registers().pc,
+                               .address = audio_data_address,
+                               .space = 'Y',
+                               .reason = audio_.error()};
+    }
+    return false;
+  }
+
+  void audio_changed() noexcept {
+    audio_dirty_ = true;
+    core_->request_yield();
+  }
+
+  bool write_esai(const Esai::Write access) noexcept {
+    if (!esai_1_.write(access)) { return false; }
+    constexpr dsp56300::Word skip = 0xffff92;
+    if (!Esai::data_register(access.address) && access.address != skip) { audio_changed(); }
+    return true;
+  }
+
+  bool write_dax(const Dax::Write access) noexcept {
+    if (!dax_.write(access)) { return false; }
+    constexpr dsp56300::Word control = 0xffffd0;
+    if (access.address == control) { audio_changed(); }
+    return true;
+  }
+
+  bool write_clock(const dsp56300::Word value) noexcept {
+    if (!clock_.advance(device_cycles()) || !clock_.write(value)) { return false; }
+    if (memory_.promote_initialized()) {
+      revision_ ^= 1U;
+      preparation_requested_ = true;
+    }
+    audio_changed();
+    return true;
+  }
+
+  bool synchronize_peer() {
+    if (!clock_.advance(device_cycles())) {
+      throw std::overflow_error("DSP instrument time is not representable or monotonic");
+    }
+    if (time_ == nullptr) { return true; }
+    if (clock_.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_) {
+      throw std::overflow_error("DSP reset origin exceeds instrument time");
+    }
+    if (peer_ != nullptr) { static_cast<void>(peer_->sample_mcu_data(origin_ + clock_.ticks())); }
+    const auto limit = time_->dsp_limit(origin_ + clock_.ticks(), stop_);
+    if (!limit) { return false; }
+    peer_deadline_ = clock_.deadline(*limit - origin_);
+    if (!peer_deadline_) { throw std::overflow_error("DSP peer deadline is not representable"); }
+    return true;
+  }
+
+  void trigger_audio_requests() noexcept {
+    if (esai_1_.request()) { static_cast<void>(dma_.trigger(esai1_transmit_request)); }
+    if (dax_.request()) { static_cast<void>(dma_.trigger(dax_request)); }
+  }
+
+  [[nodiscard]] std::uint64_t device_cycles() const noexcept {
+    return core_->progress().estimated_cycles + idle_;
+  }
+
+  [[nodiscard]] std::optional<std::uint64_t> deadline() const noexcept {
+    auto result = timers_.deadline();
+    for (const auto next : {media_deadline_, audio_.deadline(), midi_deadline_}) {
+      if (next && (!result || *next < *result)) { result = next; }
+    }
+    if (peer_deadline_ && (!result || *peer_deadline_ < *result)) { result = peer_deadline_; }
+    return result;
+  }
+
+  bool schedule_media() noexcept {
+    const auto ratio = clock_.ratio();
+    const auto ticks = std::uint64_t{controller_.reference_ticks()} * ratio.numerator;
+    const auto delay = (ticks + ratio.denominator - 1) / ratio.denominator;
+    const auto now = device_cycles();
+    if (delay > std::numeric_limits<std::uint64_t>::max() - now) {
+      media_error_ = "Media completion deadline is not representable";
+      return false;
+    }
+    media_epoch_ = controller_.epoch();
+    media_deadline_ = now + delay;
+    return true;
+  }
+
+  [[nodiscard]] std::array<dsp56300::Word, 9> interrupt_sources() const noexcept {
+    std::array<dsp56300::Word, 9> sources{};
+    const auto pending = dma_.interrupts();
+    for (unsigned channel = 0; channel < 6; ++channel) {
+      if ((pending & (1U << channel)) != 0) { sources[channel] = dma0_vector + (channel * 2); }
+    }
+    sources[6] = timers_.interrupt().value_or(0);
+    sources[7] = dax_.interrupt().value_or(0);
+    if (peer_ != nullptr && peer_->dsp_interrupt(interrupts_.external_edge(0x10))) {
+      sources[8] = 0x10;
+    }
+    return sources;
+  }
+
+  void acknowledge(const dsp56300::Word vector) {
+    if (vector >= dma0_vector && vector <= dma5_vector &&
+        !dma_.acknowledge((vector - dma0_vector) / 2)) {
+      throw std::logic_error("Admitted DMA interrupt has no actual pending request");
+    }
+    if (vector >= timer0_compare_vector && vector <= timer2_overflow_vector &&
+        !timers_.acknowledge(vector)) {
+      throw std::logic_error("Admitted timer interrupt has no actual pending flag");
+    }
+    // DAX uses level requests: only firmware data writes clear its conditions.
+  }
+
+  dsp56300::RunResult completed(const dsp56300::RunResult result) noexcept {
+    waiting_ = result.state == dsp56300::ExecutionState::waiting;
+    return result;
+  }
+
+  bool write_priority(const Interrupts::Write access) noexcept {
+    dsp56300::Word previous = 0;
+    static_cast<void>(interrupts_.read(access.address, previous));
+    if (!interrupts_.write(access)) { return false; }
+    dsp56300::Word current = 0;
+    static_cast<void>(interrupts_.read(access.address, current));
+    preparation_requested_ |= previous != current;
+    core_->request_yield();
+    return true;
+  }
+
+  bool synchronize_timers(const bool in_callback = false) noexcept {
+    if (!timers_.advance(device_cycles())) { return false; }
+    bool ready = false;
+    if (controller_.ready(ready) && !timers_.input(1, ready)) { return false; }
+    if (in_callback && (timers_.requests() != 0 || timers_.interrupt())) { core_->request_yield(); }
+    return true;
+  }
+
+  bool write_timer(const Timers::Write access) noexcept {
+    if (!synchronize_timers(true)) { return false; }
+    const auto next = timers_.deadline();
+    const auto interrupt = timers_.interrupt();
+    if (!timers_.write(access)) { return false; }
+    if (next != timers_.deadline() || interrupt != timers_.interrupt()) { core_->request_yield(); }
+    return true;
+  }
+
+  bool write_dma(const Dma::Write access, const dsp56300::Word pc) noexcept {
+    if (!dma_.write(access)) { return false; }
+    trigger_audio_requests();
+    if (dma_.pending() || dma_.interrupts() != 0) {
+      dma_pc_ = pc;
+      core_->request_yield();
+    }
+    return true;
+  }
+
+  bool dma_read(const Dma::Address access, dsp56300::Word &value) noexcept {
+    if (interrupted()) { return false; }
+    if (memory_.read(access.space, access.address, value)) { return true; }
+    constexpr dsp56300::Word shi_receive = 0xffff94;
+    if (access.space == dsp56300::Space::x && access.address == shi_receive) {
+      return shi_.read(access.address, value);
+    }
+    if (access.space != dsp56300::Space::program) { return false; }
+    const auto word = inspect_program(access.address);
+    if (!word) { return false; }
+    value = *word;
+    return true;
+  }
+
+  bool dma_write(const Dma::Address access, const dsp56300::Word value) noexcept {
+    if (interrupted()) { return false; }
+    constexpr dsp56300::Word peripheral_first = 0xffff80;
+    constexpr dsp56300::Word shi_transmit = 0xffff93;
+    if (access.space != dsp56300::Space::program && access.address >= peripheral_first) {
+      if (access.space == dsp56300::Space::y && Esai::data_register(access.address)) {
+        return esai_1_.connected() && esai_1_.write({.address = access.address, .value = value});
+      }
+      if (access.space == dsp56300::Space::x && Dax::data_register(access.address)) {
+        return dax_.connected() && dax_.write({.address = access.address, .value = value});
+      }
+      return access.space == dsp56300::Space::x && access.address == shi_transmit &&
+             shi_.write({.address = access.address, .value = value});
+    }
+    if (!memory_.write({.space = access.space, .address = access.address, .value = value})) {
+      return false;
+    }
+    if (access.space == dsp56300::Space::program) { program_changed_ = true; }
+    return true;
+  }
+
+  bool write_port(const Ports::Write access, const dsp56300::Word pc) noexcept {
+    const bool peer_write = peer_ != nullptr && access.space == dsp56300::Space::x &&
+                            access.address == peer_data_address;
+    if (peer_write && (!clock_.advance(device_cycles()) ||
+                       clock_.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_)) {
+      return false;
+    }
+    if (!ports_.write(access) || !update_ports()) { return false; }
+    if (peer_write && !peer_->dsp_write(peer_->dsp_data(), origin_ + clock_.ticks())) {
+      return false;
+    }
+    if (controller_.pending() && controller_.epoch() != media_epoch_) {
+      if (!synchronize_timers(true) || !schedule_media()) { return false; }
+      completion_failure_ = {.operation = Access::write,
+                             .pc = pc,
+                             .address = access.address,
+                             .value = access.value,
+                             .space = access.space == dsp56300::Space::x ? 'X' : 'Y'};
+      core_->request_yield();
+    }
+    return true;
+  }
+
+  bool read_port(const dsp56300::Space space, const dsp56300::Word address, dsp56300::Word &value) {
+    if (peer_ != nullptr && space == dsp56300::Space::x && address == peer_data_address) {
+      if (!clock_.advance(device_cycles()) ||
+          clock_.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_) {
+        return false;
+      }
+      const auto input = peer_->sample_mcu_data(origin_ + clock_.ticks());
+      ports_.input(Port::c, {.mask = input.mask, .known = input.known, .value = input.value});
+    }
+    return ports_.read(space, address, value);
+  }
+
+  [[nodiscard]] bool publish_peer() const {
+    if (peer_ == nullptr) { return true; }
+    const auto data = ports_.output(Port::c);
+    constexpr dsp56300::Word byte_mask = 0xff;
+    constexpr dsp56300::Word ready = 1U << 9U;
+    peer_->dsp_data({.mask = static_cast<std::uint8_t>(data.mask & byte_mask),
+                     .known = static_cast<std::uint8_t>(data.known & byte_mask),
+                     .value = static_cast<std::uint8_t>(data.value & byte_mask)});
+    const auto request = ports_.output(Port::e);
+    if ((request.mask & ~request.known & ready) != 0) { return false; }
+    return peer_->dsp_ready((request.mask & ready) != 0 && (request.value & ready) == 0);
+  }
+
+  bool update_ports() noexcept {
+    const bool esai_connected = esai_1_.connected();
+    const bool dax_connected = dax_.connected();
+    esai_1_.connected(ports_.peripheral(Port::e) != 0);
+    dax_.connected(ports_.peripheral(Port::d) != 0);
+    if (esai_connected != esai_1_.connected() || dax_connected != dax_.connected()) {
+      audio_changed();
+    }
+    constexpr dsp56300::Word control_mask = 0xf00;
+    constexpr dsp56300::Word data_mask = 0xff;
+    const auto controls = ports_.output(Port::c);
+    const auto data = ports_.output(Port::f);
+    if ((controls.mask & controls.known & control_mask) == control_mask &&
+        !controller_.write({.controls = controls.value & control_mask,
+                            .value = static_cast<std::uint8_t>(data.value & data_mask),
+                            .known = (data.mask & data.known & data_mask) == data_mask,
+                            .driven = (data.mask & data_mask) != 0})) {
+      return false;
+    }
+    const auto output = controller_.output();
+    ports_.input(Port::f,
+                 {.mask = data_mask, .known = output ? data_mask : 0, .value = output.value_or(0)});
+    return publish_peer();
+  }
+
+  bool read_x(const dsp56300::Word address, dsp56300::Word &value) noexcept {
+    if (Timers::contains(address)) {
+      return synchronize_timers(true) && timers_.read(address, value);
+    }
+    if (Dax::contains(address)) { return dax_.read(address, value); }
+    if (Dma::contains(address)) { return dma_.read(address, value); }
+    if (Interrupts::contains(address)) { return interrupts_.read(address, value); }
+    if (address != Clock::address) { return shi_.read(address, value); }
+    value = clock_.read();
+    return true;
+  }
+
+  bool interrupted() noexcept {
+    if (peer_ != nullptr && peer_->dsp_interrupt(interrupts_.external_edge(0x10))) {
+      constexpr std::array<dsp56300::Word, 1> source{0x10};
+      if (interrupts_.select(source, 0) && interrupts_.select(source, core_->registers().sr)) {
+        core_->request_yield();
+      }
+    }
+    if (stop_.stop_requested()) {
+      core_->request_yield();
+      return true;
+    }
+    if (!reset_.pending(epoch_)) { return false; }
+    reset_interrupted_ = true;
+    core_->request_yield();
+    return true;
+  }
+
+  BootRom boot_;
+  Shi &shi_;
+  DspReset &reset_;
+  std::uint64_t epoch_ = 0;
+  bool reset_interrupted_ = false;
+  bool program_changed_ = false;
+  bool audio_dirty_ = true;
+  bool preparation_requested_ = true;
+  dsp56300::Word prepared_mode_ = 0;
+  dsp56300::Word prepared_vba_ = 0;
+  bool waiting_ = false;
+  std::uint64_t idle_ = 0;
+  std::uint64_t media_epoch_ = 0;
+  std::optional<std::uint64_t> media_deadline_;
+  const char *media_error_ = nullptr;
+  std::uint64_t revision_ = 0;
+  dsp56300::Word dma_pc_ = 0;
+  const std::stop_token &stop_;
+  dsp56300::Core *core_ = nullptr;
+  std::optional<dsp56300::Word> once_data_;
+  Clock clock_;
+  Interrupts interrupts_;
+  Dma dma_;
+  Esai esai_1_;
+  Dax dax_;
+  Audio audio_;
+  Timers timers_;
+  Memory memory_;
+  Ports ports_;
+  MemoryController controller_;
+  PeerPort *peer_;
+  ExecutionTime *time_;
+  MidiInput midi_;
+  PreparationClock *preparation_;
+  std::optional<std::uint64_t> midi_deadline_;
+  std::uint64_t origin_ = 0;
+  std::optional<std::uint64_t> peer_deadline_;
+  Failure completion_failure_;
+};
+}
