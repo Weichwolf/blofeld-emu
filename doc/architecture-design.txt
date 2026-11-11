@@ -202,6 +202,18 @@ the address following a call alone does not establish executable continuation.
 Establish the real case/return destinations while preserving original stack
 effects and readable program data.
 
+Validate overlapping source words across complete instruction extents, not just
+opcode starts. An ordered write may replace another instruction's operand.
+Prepare coherent code versions; never combine incompatible record contents or
+source labels into one active instruction table.
+
+Prepare architectural IRQ/vector and latched-instruction forms before playback.
+Select their code using the Core's actual fetch/entry state; a foreground PC
+alone does not identify an in-flight vector instruction. Preserve real entry,
+return and partial-retirement effects. Include observable instruction-cache
+views in code identity; no first-use decoding, emitting or legacy execution is
+allowed at an event boundary.
+
 Preparation is a mandatory gate for the complete established executable version.
 An incomplete translation fails with code identity, address and reason before
 execution; optimizing a subset does not qualify total translation coverage.
