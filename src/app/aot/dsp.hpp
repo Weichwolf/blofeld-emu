@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "dsp/program.hpp"
+
 #include <dsp56300/core.hpp>
 #include <span>
 
@@ -12,4 +14,10 @@ prepare_dsp(dsp56300::CodeImage image,
             std::span<const dsp56300::VariantLayout> memory = {},
             std::span<const dsp56300::InterruptRequest> interrupts = {},
             std::span<const dsp56300::CodeTransition> transitions = {});
+[[nodiscard]] vi::dsp::Program
+prepare_dsp_program(dsp56300::CodeImage image,
+                    std::span<const vi::dsp::ProgramChoice> choices,
+                    std::span<const dsp56300::VariantLayout> memory = {},
+                    std::span<const dsp56300::InterruptRequest> interrupts = {},
+                    std::span<const dsp56300::CodeTransition> transitions = {});
 }

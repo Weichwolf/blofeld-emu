@@ -3,6 +3,7 @@
 
 #include "dsp/boot_rom.hpp"
 #include "dsp/execute.hpp"
+#include "dsp/program.hpp"
 #include "execution.hpp"
 #include "io/midi_port.hpp"
 #include "io/pcm_output.hpp"
@@ -26,17 +27,25 @@ VmContext::VmContext(std::unique_ptr<FlashImage> image,
                      std::vector<dsp56300::Word> boot,
                      std::unique_ptr<MediaImage> media,
                      const PcmOutput output,
-                     const MidiPort::InputMode input)
+                     const MidiPort::InputMode input,
+                     std::shared_ptr<const dsp::Program> program)
     : image_(std::move(image)),
-      boot_(std::move(boot)),
       media_(std::move(media)),
-      midi_(input),
-      output_(output) {
+      program_(std::move(program)),
+      boot_(std::move(boot)),
+      output_(output),
+      midi_(input) {
   if (!image_) { throw std::invalid_argument("VM requires a persistent MCU image"); }
 }
 
 VmContext::~VmContext() {
   request_stop();
+  join_owners();
+}
+
+void VmContext::join_owners() {
+  if (mcu_.joinable()) { mcu_.join(); }
+  if (dsp_.joinable()) { dsp_.join(); }
 }
 
 void VmContext::request_stop() noexcept {
@@ -75,7 +84,8 @@ void VmContext::start() {
                                  &peer_,
                                  &time_,
                                  &midi_,
-                                 &preparation_);
+                                 &preparation_,
+                                 program_.get());
     } catch (...) { reports_[1].exception = std::current_exception(); }
     completed_.fetch_add(1, std::memory_order_release);
     completed_.notify_one();
@@ -86,8 +96,7 @@ std::array<ExecutionReport, 2> VmContext::wait() {
   if (!started_) { throw std::logic_error("VM execution has not started"); }
   completed_.wait(0, std::memory_order_acquire);
   request_stop();
-  if (mcu_.joinable()) { mcu_.join(); }
-  if (dsp_.joinable()) { dsp_.join(); }
+  join_owners();
   return reports_;
 }
 

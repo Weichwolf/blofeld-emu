@@ -55,8 +55,21 @@ Access operation(const dsp56300::FaultKind fault) {
 }
 
 void Io::prepare_code(ExecutionReport &report) {
-  if (!preparation_requested_) { return; }
+  if (program_ == nullptr && !preparation_requested_) { return; }
   const auto registers = core_->registers();
+  const bool transfer =
+      program_ != nullptr && installed_program_ &&
+      program_->transition({.variant = *installed_program_, .address = registers.pc});
+  if (!preparation_requested_ && !transfer) { return; }
+  if (program_ != nullptr) {
+    memory_.configure(registers.omr);
+    const PreparationClock::Scope phase(preparation_);
+    installed_program_ = program_->install(*core_, *this);
+    prepared_mode_ = registers.omr;
+    prepared_vba_ = registers.vba & vector_base_mask;
+    preparation_requested_ = false;
+    return;
+  }
   // Reset, reached code and configured vectors establish entries, not a ROM scan.
   auto entries = interrupts_.entries(registers.vba);
   entries.insert(entries.end(), {0, boot_first, registers.pc});
@@ -155,13 +168,15 @@ ExecutionReport execute(const BootRom boot,
                         PeerPort *peer,
                         ExecutionTime *time,
                         MidiPort *midi,
-                        PreparationClock *preparation) {
+                        PreparationClock *preparation,
+                        const Program *program) {
   if (!boot.valid()) {
     throw std::invalid_argument("DSP boot ROM has invalid or overlapping bounds");
   }
   const OutputOwner owner{output};
-  Io io(boot, shi, reset, stop, image, output, peer, time, midi, preparation);
+  Io io(boot, shi, reset, stop, image, output, peer, time, midi, preparation, program);
   ExecutionReport report;
+  if (program != nullptr) { report.prepared_native_bytes = program->report().native_bytes; }
   std::uint64_t applied = 0;
   while (!stop.stop_requested()) {
     const auto state = reset.state();

@@ -2,6 +2,7 @@
 #pragma once
 
 #include "dsp/boot_rom.hpp"
+#include "dsp/program.hpp"
 #include "execution.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/execution_time.hpp"
@@ -24,5 +25,6 @@ namespace blofeld::vi::dsp {
                                       PeerPort *peer = nullptr,
                                       ExecutionTime *time = nullptr,
                                       MidiPort *midi = nullptr,
-                                      PreparationClock *preparation = nullptr);
+                                      PreparationClock *preparation = nullptr,
+                                      const Program *program = nullptr);
 }

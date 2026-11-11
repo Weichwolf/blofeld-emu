@@ -4,6 +4,7 @@
 #include "aot/code.hpp"
 #include "aot/llvm.hpp"
 #include "dsp/channels.hpp"
+#include "dsp/program.hpp"
 #include "dsp_bindings.hpp"
 
 #include "llvm-c/Core.h"
@@ -101,4 +102,13 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
                                .identity = semantic.identity(),
                                .native_bytes = code->native_bytes()});
 }
+
+vi::dsp::Program prepare_dsp_program(const dsp56300::CodeImage image,
+                                     const std::span<const vi::dsp::ProgramChoice> choices,
+                                     const std::span<const dsp56300::VariantLayout> memory,
+                                     const std::span<const dsp56300::InterruptRequest> interrupts,
+                                     const std::span<const dsp56300::CodeTransition> transitions) {
+  return {prepare_dsp(image, memory, interrupts, transitions), image, choices, transitions, memory};
+}
+
 }

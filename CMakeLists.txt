@@ -105,7 +105,7 @@ add_library(blofeld_vi_execution
   src/vi/dsp/channels.cpp
   src/vi/io/memory_controller.cpp src/vi/io/dsp_reset.cpp src/vi/io/shi.cpp src/vi/io/sci.cpp src/vi/io/usb.cpp src/vi/io/mcu_flash.cpp
   src/vi/mcu/boot_port.cpp src/vi/mcu/channels.cpp src/vi/mcu/ports.cpp src/vi/mcu/timer.cpp src/vi/mcu/clock.cpp
-  src/vi/mcu/execute.cpp src/vi/dsp/audio.cpp src/vi/dsp/clock.cpp src/vi/dsp/dax.cpp src/vi/dsp/dma.cpp src/vi/dsp/esai.cpp src/vi/dsp/interrupts.cpp src/vi/dsp/memory.cpp src/vi/dsp/midi.cpp src/vi/dsp/ports.cpp src/vi/dsp/timers.cpp src/vi/dsp/execute.cpp src/vi/vm_context.cpp)
+  src/vi/mcu/execute.cpp src/vi/dsp/audio.cpp src/vi/dsp/clock.cpp src/vi/dsp/dax.cpp src/vi/dsp/dma.cpp src/vi/dsp/esai.cpp src/vi/dsp/interrupts.cpp src/vi/dsp/memory.cpp src/vi/dsp/midi.cpp src/vi/dsp/ports.cpp src/vi/dsp/timers.cpp src/vi/dsp/execute.cpp src/vi/dsp/program.cpp src/vi/vm_context.cpp)
 target_include_directories(blofeld_vi_execution PUBLIC src/vi)
 target_link_libraries(blofeld_vi_execution PUBLIC
   blofeld_vi_mcu_memory blofeld_vi_display blofeld_vi_peer blofeld_vi_midi blofeld_vi_preparation dsp56300::core Threads::Threads)
@@ -226,6 +226,9 @@ if(BUILD_TESTING)
   blofeld_unit(app-aot-dsp-test test/app/aot/dsp_test.cpp
     "blofeld_app_aot;blofeld_vi_execution;blofeld_vi_code_source")
   target_include_directories(app-aot-dsp-test PRIVATE test "${BLOFELD_DSP56300_ROOT}/test/support")
+  blofeld_unit(app-aot-dsp-program-test test/app/aot/dsp_program_test.cpp
+    "blofeld_app_aot;blofeld_vi_execution")
+  target_include_directories(app-aot-dsp-program-test PRIVATE "${BLOFELD_DSP56300_ROOT}/test/support")
   blofeld_unit(host-audio-render-test test/host/audio/render_buffer_test.cpp blofeld_host_audio)
   blofeld_unit(host-audio-timeline-test test/host/audio/render_timeline_test.cpp blofeld_host_audio)
   blofeld_unit(host-audio-position-test test/host/audio/render_position_test.cpp blofeld_host_audio)
@@ -296,6 +299,8 @@ if(BUILD_TESTING)
   blofeld_unit(vi-dsp-records-test test/vi/storage/dsp_records_test.cpp blofeld_vi_firmware)
   target_include_directories(vi-dsp-records-test PRIVATE test)
   blofeld_unit(vi-dsp-code-source-test test/vi/dsp/code_source_test.cpp blofeld_vi_code_source)
+  blofeld_unit(vi-dsp-program-test test/vi/dsp/program_test.cpp blofeld_vi_execution)
+  target_include_directories(vi-dsp-program-test PRIVATE "${BLOFELD_DSP56300_ROOT}/test/support")
   target_include_directories(vi-dsp-code-source-test PRIVATE test)
   blofeld_unit(vi-update-transport-test test/vi/storage/update_transport_test.cpp
     blofeld_vi_firmware "${blofeld_unit_inputs}")

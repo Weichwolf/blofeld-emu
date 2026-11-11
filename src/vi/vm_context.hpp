@@ -3,6 +3,7 @@
 
 #include "display/st7565.hpp"
 #include "display/state.hpp"
+#include "dsp/program.hpp"
 #include "execution.hpp"
 #include "io/controls.hpp"
 #include "io/dsp_reset.hpp"
@@ -34,7 +35,8 @@ public:
             std::vector<dsp56300::Word> boot,
             std::unique_ptr<MediaImage> media = {},
             PcmOutput output = {},
-            MidiPort::InputMode input = MidiPort::InputMode::live);
+            MidiPort::InputMode input = MidiPort::InputMode::live,
+            std::shared_ptr<const dsp::Program> program = {});
   ~VmContext();
   VmContext(const VmContext &) = delete;
   VmContext &operator=(const VmContext &) = delete;
@@ -66,23 +68,25 @@ public:
   [[nodiscard]] std::array<ExecutionReport, 2> run();
 
 private:
-  PreparationClock preparation_;
+  void join_owners();
   ExecutionTime time_;
   PeerPort peer_;
   std::unique_ptr<FlashImage> image_;
-  std::vector<dsp56300::Word> boot_;
   std::unique_ptr<MediaImage> media_;
-  Controls controls_;
-  MidiPort midi_;
-  DisplayState display_;
-  PcmOutput output_;
-  Shi shi_;
-  DspReset reset_;
-  std::array<ExecutionReport, 2> reports_;
-  std::atomic<unsigned> completed_{0};
   std::stop_source stop_;
-  bool started_ = false;
+  std::shared_ptr<const dsp::Program> program_;
   std::jthread mcu_;
   std::jthread dsp_;
+  std::vector<dsp56300::Word> boot_;
+  PcmOutput output_;
+  PreparationClock preparation_;
+  DspReset reset_;
+  Shi shi_;
+  std::array<ExecutionReport, 2> reports_;
+  DisplayState display_;
+  MidiPort midi_;
+  std::atomic<unsigned> completed_{0};
+  Controls controls_;
+  bool started_ = false;
 };
 }

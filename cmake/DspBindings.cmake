@@ -2,7 +2,7 @@
 include("${CMAKE_CURRENT_LIST_DIR}/DeviceBindings.cmake")
 set(blofeld_dsp_exports "blofeld_dsp_read,blofeld_dsp_write,blofeld_dsp_bit,blofeld_dsp_reset,blofeld_dsp_pending,blofeld_dsp_revision")
 blofeld_device_binding(dsp "${blofeld_dsp_exports}"
-  src/vi/dsp/bindings.cpp src/vi/dsp/audio.cpp src/vi/dsp/clock.cpp
+  src/vi/dsp/bindings.cpp src/vi/dsp/program.cpp src/vi/dsp/audio.cpp src/vi/dsp/clock.cpp
   src/vi/dsp/dax.cpp src/vi/dsp/dma.cpp src/vi/dsp/esai.cpp
   src/vi/dsp/interrupts.cpp src/vi/dsp/memory.cpp src/vi/dsp/midi.cpp
   src/vi/dsp/ports.cpp src/vi/dsp/timers.cpp src/vi/io/dsp_reset.cpp

@@ -12,6 +12,7 @@
 #include "dsp/memory.hpp"
 #include "dsp/midi.hpp"
 #include "dsp/ports.hpp"
+#include "dsp/program.hpp"
 #include "dsp/timers.hpp"
 #include "execution.hpp"
 #include "io/dsp_reset.hpp"
@@ -67,8 +68,10 @@ public:
      PeerPort *peer,
      ExecutionTime *time,
      MidiPort *midi,
-     PreparationClock *preparation)
-      : boot_(boot),
+     PreparationClock *preparation,
+     const Program *program = nullptr)
+      : program_(program),
+        boot_(boot),
         shi_(shi),
         reset_(reset),
         stop_(stop),
@@ -85,6 +88,7 @@ public:
     reset_interrupted_ = false;
     program_changed_ = false;
     preparation_requested_ = true;
+    installed_program_.reset();
     waiting_ = false;
     idle_ = 0;
     media_epoch_ = 0;
@@ -215,7 +219,7 @@ public:
       const auto state = core_->registers();
       const auto request = interrupts_.select(sources, state.sr);
       if (request) {
-        if ((state.vba & vector_base_mask) != prepared_vba_) {
+        if (program_ == nullptr && (state.vba & vector_base_mask) != prepared_vba_) {
           preparation_requested_ = true;
           dsp56300::RunResult pending;
           pending.yielded = true;
@@ -286,7 +290,14 @@ public:
              const dsp56300::Word pc,
              const dsp56300::Word value) noexcept override {
     if (interrupted()) { return false; }
-    if (memory_.write({.space = space, .address = address, .value = value})) { return true; }
+    const bool watched = space == dsp56300::Space::program && program_ != nullptr &&
+                         installed_program_ &&
+                         program_->contains({.variant = *installed_program_, .address = address});
+    const auto previous = watched ? inspect_program(address) : std::nullopt;
+    if (memory_.write({.space = space, .address = address, .value = value})) {
+      preparation_requested_ |= watched && previous != value;
+      return true;
+    }
     if (Ports::contains(space, address)) {
       return write_port({.space = space, .address = address, .value = value}, pc);
     }
@@ -533,7 +544,8 @@ private:
     if (!interrupts_.write(access)) { return false; }
     dsp56300::Word current = 0;
     static_cast<void>(interrupts_.read(access.address, current));
-    preparation_requested_ |= previous != current;
+    // Prepared images already contain their declared priority/vector contexts.
+    if (program_ == nullptr) { preparation_requested_ |= previous != current; }
     core_->request_yield();
     return true;
   }
@@ -703,6 +715,8 @@ private:
     return true;
   }
 
+  const Program *program_ = nullptr;
+  std::optional<std::uint64_t> installed_program_;
   BootRom boot_;
   Shi &shi_;
   DspReset &reset_;
