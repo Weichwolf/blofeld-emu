@@ -17,6 +17,7 @@
       "binaryDir": "${sourceDir}/build/release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON",
         "BLOFELD_SANITIZER": "none",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/LLVM19.cmake"
       }
