@@ -58,5 +58,14 @@ private:
   std::size_t position_ = 0;
 };
 
+inline void verify24(const std::span<const std::uint8_t> data) {
+  if (data.size() % 3 != 0) { throw std::runtime_error("Incomplete 24-bit checksum words"); }
+  Reader reader(data);
+  constexpr std::uint32_t word_mask = 0xffffff;
+  std::uint32_t sum = 0;
+  while (!reader.empty()) { sum = (sum + reader.big(3)) & word_mask; }
+  if (sum != 0) { throw std::runtime_error("Firmware object checksum mismatch"); }
+}
+
 std::vector<Bytes> sysex_messages(std::span<const std::uint8_t> input);
 }

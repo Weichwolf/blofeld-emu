@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "aot/dsp.hpp"
 #include "dsp/boot_rom.hpp"
+#include "dsp/code_source.hpp"
 #include "dsp/io.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/pcm_output.hpp"
 #include "io/shi.hpp"
 #include "isa.hpp"
+#include "storage/dsp_records.hpp"
+#include "support/dsp_records.hpp"
 
 #include <array>
 #include <cstdint>
@@ -49,12 +52,18 @@ void require(const bool condition, const char *message) {
 }
 
 NativeImage prepare() {
-  const std::array read_spans{CodeSpan{.address = entry, .words = read_words}};
-  const std::array write_spans{CodeSpan{.address = entry, .words = write_words}};
+  blofeld::test::DspRecords transport;
+  transport.add(0, entry, read_words);
+  transport.add(0, entry, write_words);
+  const auto bytes = transport.finish();
+  const auto records = vi::DspRecords::read(bytes);
+  constexpr std::array ranges{vi::dsp::CodeRange{.address = entry, .words = read_words.size()}};
+  const vi::dsp::CodeSource read(records.records().first(1), ranges);
+  const vi::dsp::CodeSource write(records.records(), ranges);
   constexpr std::array entries{entry};
   const std::array variants{
-      CodeVariant{.id = 0, .code = read_spans, .entries = entries, .failed_fetches = {}},
-      CodeVariant{.id = 1, .code = write_spans, .entries = entries, .failed_fetches = {}}};
+      CodeVariant{.id = 0, .code = read.code(), .entries = entries, .failed_fetches = {}},
+      CodeVariant{.id = 1, .code = write.code(), .entries = entries, .failed_fetches = {}}};
   auto native = blofeld::app::aot::prepare_dsp({.variants = variants});
   require(native.report().prepared_entries == read_words.size() + write_words.size() &&
               native.report().native_bytes != 0 && native.report().failure.kind == FaultKind::none,

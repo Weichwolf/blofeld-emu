@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "storage/firmware.hpp"
 
+#include "storage/dsp_records.hpp"
 #include "storage/update_reader.hpp"
 
 #include <algorithm>
@@ -17,13 +18,13 @@ namespace {
 using update::Bytes;
 using update::input_limit;
 using update::Reader;
+using update::verify24;
 
 constexpr unsigned manufacturer = 0x3e;
 constexpr unsigned device = 0x13;
 constexpr unsigned device_broadcast = 0x7f;
 constexpr unsigned header_command = 0x73;
 constexpr unsigned data_command = 0x74;
-constexpr std::uint32_t dsp_word_mask = 0xffffff;
 constexpr std::uint32_t validation_marker = 0x123123;
 constexpr std::size_t flash_size = 0x8000;
 constexpr std::size_t boot_size = 0x200;
@@ -125,14 +126,6 @@ Bytes decode(const Block &block) {
   return bytes;
 }
 
-void verify24(const std::span<const std::uint8_t> data) {
-  if (data.size() % 3 != 0) { throw std::runtime_error("Incomplete 24-bit checksum words"); }
-  Reader reader(data);
-  std::uint32_t sum = 0;
-  while (!reader.empty()) { sum = (sum + reader.big(3)) & dsp_word_mask; }
-  if (sum != 0) { throw std::runtime_error("Firmware object checksum mismatch"); }
-}
-
 std::size_t helper_end(const std::span<const std::uint8_t> data) {
   Reader reader(data);
   const auto length = static_cast<std::size_t>(reader.big(2));
@@ -175,27 +168,10 @@ std::size_t extract_runtime(FirmwareUpdate &firmware) {
   const auto host = main.subspan(host_begin, flash_size);
   std::ranges::copy(host, firmware.mcu_flash.begin());
   verify_boot_checksum(host);
-  Reader dsp(main.subspan(dsp_begin));
-  std::size_t bytes = 0;
-  while (!dsp.empty()) {
-    const auto space = dsp.big(3);
-    const auto count = dsp.big(3);
-    const auto address = dsp.big(3);
-    bytes += 9;
-    if (space == 0x100 && count == 0x100 && address == 0x100) {
-      dsp.big(3);
-      bytes += 3;
-      verify24(main.subspan(dsp_begin, bytes));
-      verify_dsp_tail(dsp);
-      return dsp_begin;
-    }
-    if (space > 2 || count == 0 || address > dsp_word_mask || count > 0x1000000U - address) {
-      throw std::runtime_error("Invalid DSP memory record");
-    }
-    const auto contents = dsp.take(static_cast<std::size_t>(count) * 3);
-    bytes += contents.size();
-  }
-  throw std::runtime_error("Missing DSP end marker");
+  const auto records = DspRecords::read(main.subspan(dsp_begin));
+  Reader tail(main.subspan(dsp_begin + records.bytes()));
+  verify_dsp_tail(tail);
+  return dsp_begin;
 }
 
 } // namespace
