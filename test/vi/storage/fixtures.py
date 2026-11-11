@@ -91,6 +91,24 @@ damaged[6] ^= 1
 packets[1] = bytes(damaged)
 (root / "bad-packet.mid").write_bytes(midi(packets))
 (root / "bad-app.mid").write_bytes(midi(update(invalid_app=True)))
+transport = list(messages(3, 0x1111, bytes.fromhex("123456fedcba")))
+transport += list(messages(0, 0x2222, bytes.fromhex("89abcdef0123456789")))
+(root / "transport.mid").write_bytes(midi(transport))
+(root / "transport.syx").write_bytes(b"".join(b"\xf0" + part for part in transport))
+bad_length = transport.copy()
+header = bytearray(bad_length[0])
+header[5] = 9
+bad_length[0] = bytes(header)
+(root / "bad-length.mid").write_bytes(midi(bad_length))
+sequenced = list(messages(3, 0x3333, bytes(range(162))))
+(root / "sequenced.mid").write_bytes(midi(sequenced))
+packet = bytearray(sequenced[2])
+packet[4] = 0
+packet[-2] = 0
+for value in packet[:-2]:
+    packet[-2] ^= value
+sequenced[2] = bytes(packet)
+(root / "bad-sequence.mid").write_bytes(midi(sequenced))
 flash = bytearray(32768)
 flash[0], flash[100], flash[101], flash[-1] = 0xa5, 0xff, 0xff, 0x7a
 known = bytearray(4096)

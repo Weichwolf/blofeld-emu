@@ -78,7 +78,7 @@ add_library(blofeld_host_archive src/host/archive/zip.cpp)
 target_include_directories(blofeld_host_archive PUBLIC src/host)
 target_link_libraries(blofeld_host_archive PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB)
 add_library(blofeld_vi_firmware src/vi/storage/firmware.cpp src/vi/storage/update_midi.cpp
-  src/vi/storage/dsp_records.cpp)
+  src/vi/storage/dsp_records.cpp src/vi/storage/update_transport.cpp)
 target_include_directories(blofeld_vi_firmware PUBLIC src/vi)
 target_link_libraries(blofeld_vi_firmware PUBLIC blofeld_quality)
 add_library(blofeld_vi_code_source src/vi/dsp/code_source.cpp)
@@ -296,10 +296,13 @@ if(BUILD_TESTING)
   target_include_directories(vi-dsp-records-test PRIVATE test)
   blofeld_unit(vi-dsp-code-source-test test/vi/dsp/code_source_test.cpp blofeld_vi_code_source)
   target_include_directories(vi-dsp-code-source-test PRIVATE test)
+  blofeld_unit(vi-update-transport-test test/vi/storage/update_transport_test.cpp
+    blofeld_vi_firmware "${blofeld_unit_inputs}")
   blofeld_unit(app-firmware-test test/app/firmware_test.cpp
     blofeld_app_firmware "${blofeld_unit_inputs}")
   add_dependencies(host-zip-test unit-inputs)
   add_dependencies(vi-firmware-test unit-inputs)
+  add_dependencies(vi-update-transport-test unit-inputs)
   add_dependencies(app-firmware-test unit-inputs)
   blofeld_unit(vi-flash-image-test test/vi/storage/flash_image_test.cpp
     blofeld_vi_storage "${blofeld_unit_inputs}")
