@@ -14,7 +14,6 @@
 #include "llvm/Support/Error.h"
 
 #include <bit>
-#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <functional>
