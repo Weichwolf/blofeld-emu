@@ -307,7 +307,8 @@ void report_notifications() {
     require(peer.acknowledge_mcu(1) && peer.mcu_interrupt() == 1,
             "Interrupt admission cannot consume an unaccepted report command");
     peer.dsp_data(driven);
-    require(peer.mcu_interrupt() == 1 && peer.read_dsp_data(byte_mask) == driven,
+    require(peer.mcu_interrupt() == 1 &&
+                peer.read_dsp_data({.mask = byte_mask, .ticks = 0}) == driven,
             "Unchanged GPIO publication retains notification without inventing report bytes");
     require(peer.mcu_strobe(true) && peer.mcu_strobe(false) && !peer.mcu_interrupt() &&
                 peer.dsp_interrupt(true) == 1,
@@ -352,7 +353,8 @@ void fixed_reply() {
   ordinary.dsp_data(raw);
   require(
       ordinary.mcu_strobe(true) && ordinary.mcu_strobe(false) &&
-          ordinary.read_dsp_data(byte_mask) == raw && ordinary.read_dsp_data(byte_mask) == raw,
+          ordinary.read_dsp_data({.mask = byte_mask, .ticks = 0}) == raw &&
+          ordinary.read_dsp_data({.mask = byte_mask, .ticks = 0}) == raw,
       "A command-looking latch without an actual announcement remains an ordinary retained read");
   PeerPort peer;
   begin_reply(peer);
@@ -360,40 +362,43 @@ void fixed_reply() {
   for (unsigned index = 0; index < bytes; ++index) {
     const auto value = reply_byte(index);
     peer.dsp_data(value);
-    require(peer.dsp_write(value), "Capture every actual data write, including equal neighbors");
+    require(peer.dsp_write(value, 0), "Capture every actual data write, including equal neighbors");
   }
   peer.dsp_data({});
-  require(peer.read_dsp_data(1) == PeerPort::Sample{} && peer.dsp_data() == PeerPort::Sample{},
+  require(peer.read_dsp_data({.mask = 1, .ticks = 0}) == PeerPort::Sample{} &&
+              peer.dsp_data() == PeerPort::Sample{},
           "Masked and raw GPIO reads retain the real released input and consume no response");
   for (unsigned index = 0; index < bytes; ++index) {
-    require(peer.read_dsp_data(byte_mask) == reply_byte(index),
+    require(peer.read_dsp_data({.mask = byte_mask, .ticks = 0}) == reply_byte(index),
             "A complete MCU block read receives the exact original DSP write sequence");
   }
-  require(peer.read_dsp_data(byte_mask) == PeerPort::Sample{} && peer.error() == nullptr &&
-              peer.dsp_interrupt(true) == 1 && !peer.mcu_interrupt(),
+  require(peer.read_dsp_data({.mask = byte_mask, .ticks = 0}) == PeerPort::Sample{} &&
+              peer.error() == nullptr && peer.dsp_interrupt(true) == 1 && !peer.mcu_interrupt(),
           "The block ends at its fixed length without manufacturing data or interrupt acceptance");
 }
 
 void reply_errors() {
   PeerPort early;
   begin_reply(early);
-  require(!early.read_dsp_data(byte_mask) && early.error() != nullptr,
+  require(!early.read_dsp_data({.mask = byte_mask, .ticks = 0}) && early.error() != nullptr,
           "A missing producer byte is an explicit underrun, not a repeated or invented sample");
   early.reset_dsp();
-  require(early.error() == nullptr && early.read_dsp_data(byte_mask) == PeerPort::Sample{},
+  require(early.error() == nullptr &&
+              early.read_dsp_data({.mask = byte_mask, .ticks = 0}) == PeerPort::Sample{},
           "Reset cancels an incomplete response before a new epoch");
   PeerPort excess;
   begin_reply(excess);
   constexpr unsigned bytes = 16;
   for (unsigned index = 0; index < bytes; ++index) {
-    require(excess.dsp_write(reply_byte(index)), "Fill precisely one bounded response");
+    require(excess.dsp_write(reply_byte(index), 0), "Fill precisely one bounded response");
   }
-  require(!excess.dsp_write(reply_byte(bytes)) && excess.error() != nullptr,
+  require(!excess.dsp_write(reply_byte(bytes), 0) && excess.error() != nullptr,
           "A seventeenth data write is a visible overflow");
   PeerPort unknown;
   begin_reply(unknown);
   constexpr PeerPort::Sample partial{.mask = 0xff, .known = 0x0f, .value = 0xa5};
-  require(unknown.dsp_write(partial) && unknown.read_dsp_data(byte_mask) == partial,
+  require(unknown.dsp_write(partial, 0) &&
+              unknown.read_dsp_data({.mask = byte_mask, .ticks = 0}) == partial,
           "Response ownership cannot turn unknown producer bits into valid data");
   unknown.dsp_data({});
   require(unknown.error() != nullptr, "Premature producer release reports an incomplete response");
@@ -409,7 +414,7 @@ void concurrent_reply() {
     for (unsigned index = 0; index < bytes; ++index) {
       const auto value = reply_byte(index);
       peer.dsp_data(value);
-      valid = peer.dsp_write(value) && valid;
+      valid = peer.dsp_write(value, 0) && valid;
       published.store(index + 1, std::memory_order_release);
       published.notify_one();
     }
@@ -421,12 +426,56 @@ void concurrent_reply() {
       published.wait(ready, std::memory_order_acquire);
       ready = published.load(std::memory_order_acquire);
     }
-    require(peer.read_dsp_data(byte_mask) == reply_byte(index),
+    require(peer.read_dsp_data({.mask = byte_mask, .ticks = 0}) == reply_byte(index),
             "Concurrent response consumption preserves every produced word and its ownership");
   }
   producer.join();
   require(valid && peer.error() == nullptr,
           "Independent producer and consumer finish one bounded block");
+}
+
+void reply_timing() {
+  PeerPort peer;
+  begin_reply(peer);
+  constexpr unsigned bytes = 16;
+  constexpr std::uint64_t first = 100;
+  constexpr std::uint64_t spacing = 10;
+  for (unsigned index = 0; index < bytes; ++index) {
+    require(peer.dsp_write(reply_byte(index), first + (spacing * index)),
+            "The host producer may finish a block ahead of the receiver's instrument time");
+  }
+  peer.dsp_data({});
+  require(peer.read_dsp_data({.mask = 1, .ticks = 0}) == PeerPort::Sample{},
+          "A masked GPIO read cannot consume a timestamped report byte");
+  for (unsigned index = 0; index < bytes; ++index) {
+    const auto available = first + (spacing * index);
+    require(!peer.read_dsp_data({.mask = byte_mask, .ticks = available - 1}),
+            "A byte remains unavailable before its source instrument time despite host completion");
+    require(peer.read_dsp_data({.mask = byte_mask, .ticks = available}) == reply_byte(index),
+            "Rejecting a future byte preserves ownership, equal neighbors and same-tick delivery");
+  }
+  require(peer.error() != nullptr,
+          "Reading future data remains a visible causal fault after subsequent correct reads");
+  peer.reset_dsp();
+  begin_reply(peer);
+  require(peer.dsp_write(reply_byte(0), 0) &&
+              peer.read_dsp_data({.mask = byte_mask, .ticks = 0}) == reply_byte(0) &&
+              peer.error() == nullptr,
+          "Reset retires old byte times and permits time zero in a new source epoch");
+}
+
+void reply_time_order() {
+  PeerPort peer;
+  begin_reply(peer);
+  constexpr std::uint64_t first = 50;
+  require(peer.dsp_write(reply_byte(0), first) && !peer.dsp_write(reply_byte(1), first - 1) &&
+              peer.error() != nullptr,
+          "A response rejects backwards source time before publishing the invalid byte");
+  require(peer.dsp_write(reply_byte(1), first) &&
+              peer.read_dsp_data({.mask = byte_mask, .ticks = first}) == reply_byte(0) &&
+              peer.read_dsp_data({.mask = byte_mask, .ticks = first}) == reply_byte(1) &&
+              !peer.read_dsp_data({.mask = byte_mask, .ticks = first}),
+          "Same-tick writes retain source order and a rejected write consumes no slot");
 }
 }
 
@@ -446,6 +495,8 @@ int main() try {
   fixed_reply();
   reply_errors();
   concurrent_reply();
+  reply_timing();
+  reply_time_order();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

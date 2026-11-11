@@ -415,7 +415,11 @@ withdrawal or reset cancels it without retaining released GPIO data. The
 following MCU request opens one bounded transfer of actual DSP PDRC data writes;
 repeated bytes remain distinct writes. Full-byte Port Q input reads consume that
 decoded transfer in order, including after GPIO turnaround. Other reads retain
-raw register behavior. Both original transfer routines still execute in full.
+raw register behavior. Each actual response write carries its producer's
+instrument time. A consumer may read that byte only at or after that time;
+host-thread completion never grants access to future data. Reject backwards
+producer time without publishing the invalid byte. Reset retires the old block
+and its timestamps. Both original transfer routines still execute in full.
 Incomplete or excessive producer writes, missing consumer bytes and unknown bits
 remain explicit errors; no ready byte, payload or interrupt acknowledgement is
 synthesized. This is a functional instrument protocol adapter, not a claim of

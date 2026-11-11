@@ -602,9 +602,14 @@ private:
   }
 
   bool write_port(const Ports::Write access, const dsp56300::Word pc) noexcept {
+    const bool peer_write = peer_ != nullptr && access.space == dsp56300::Space::x &&
+                            access.address == peer_data_address;
+    if (peer_write && (!clock_.advance(device_cycles()) ||
+                       clock_.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_)) {
+      return false;
+    }
     if (!ports_.write(access) || !update_ports()) { return false; }
-    if (peer_ != nullptr && access.space == dsp56300::Space::x &&
-        access.address == peer_data_address && !peer_->dsp_write(peer_->dsp_data())) {
+    if (peer_write && !peer_->dsp_write(peer_->dsp_data(), origin_ + clock_.ticks())) {
       return false;
     }
     if (controller_.pending() && controller_.epoch() != media_epoch_) {

@@ -237,6 +237,46 @@ void native_package_and_peer() {
           "Actual package-sense branches select 100-pin routing and PTQ samples the DSP driver");
 }
 
+void native_reply_time() {
+  namespace isa = cpu12::isa;
+  constexpr cpu12::Address input = 0x260;
+  constexpr cpu12::Address marker = 0x3000;
+  constexpr blofeld::vi::PeerPort::Sample command{.mask = 0xff, .known = 0xff, .value = 0x0d};
+  constexpr blofeld::vi::PeerPort::Sample payload{.mask = 0xff, .known = 0xff, .value = 0xa5};
+  constexpr auto program = isa::program(isa::nop,
+                                        isa::opcode<isa::Opcode::ldab_extended>(),
+                                        std::array<cpu12::Byte, 2>{2, 0x60},
+                                        isa::opcode<isa::Opcode::stab_extended>(),
+                                        std::array<cpu12::Byte, 2>{0x30, 0});
+  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  image->known.fill(1);
+  std::ranges::copy(program, image->bytes.begin());
+  image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
+  image->bytes.back() = 0;
+  constexpr std::uint64_t read_time = (std::uint64_t{5} + 1) * 10;
+  for (const auto available : {read_time, read_time + 1}) {
+    blofeld::vi::PeerPort peer;
+    peer.dsp_data(command);
+    require(peer.dsp_ready(true) && peer.dsp_ready(false) && peer.mcu_strobe(true) &&
+                peer.mcu_strobe(false) && peer.dsp_write(payload, available),
+            "An actual report request and timestamped write precede native MCU execution");
+    blofeld::vi::Shi shi;
+    blofeld::vi::DspReset reset;
+    const auto report = blofeld::vi::mcu::execute(*image, shi, reset, {}, nullptr, nullptr, &peer);
+    if (available == read_time) {
+      require(report.failure && report.failure->address == marker &&
+                  report.failure->value == payload.value && peer.error() == nullptr,
+              "The native Port Q callback uses five reset cycles plus one NOP times ten ticks");
+    } else {
+      require(
+          report.failure && report.failure->operation == blofeld::vi::Access::read &&
+              report.failure->address == input && peer.error() != nullptr &&
+              peer.read_dsp_data({.mask = payload.mask, .ticks = available}) == payload,
+          "A native read faults one tick before availability without consuming the future byte");
+    }
+  }
+}
+
 void native_peer_xirq() {
   namespace isa = cpu12::isa;
   constexpr cpu12::Byte datum = 0xb2;
@@ -669,6 +709,7 @@ int main() try {
   firmware_controls_reset();
   native_display_status();
   native_package_and_peer();
+  native_reply_time();
   native_peer_xirq();
   native_pedal_input();
   native_local_port_access();

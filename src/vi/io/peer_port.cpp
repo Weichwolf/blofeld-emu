@@ -161,18 +161,22 @@ bool PeerPort::start_reply() noexcept {
   return true;
 }
 
-bool PeerPort::dsp_write(const Sample value) noexcept {
+bool PeerPort::dsp_write(const Sample value, const std::uint64_t ticks) noexcept {
   if (!reply_.recording.load(std::memory_order_acquire)) { return true; }
   const std::lock_guard lock(reply_.mutex);
   if (!reply_.recording.load(std::memory_order_relaxed)) { return true; }
   if (reply_.written == reply_.bytes.size()) { return fail("DSP peer response block overflow"); }
-  reply_.bytes[reply_.written++] = value;
+  if (reply_.written != 0 && ticks < reply_.bytes[reply_.written - 1].ticks) {
+    return fail("DSP peer response time moved backwards");
+  }
+  reply_.bytes[reply_.written++] = {.ticks = ticks, .data = value};
   return true;
 }
 
-std::optional<PeerPort::Sample> PeerPort::read_dsp_data(const std::uint8_t mask) noexcept {
+std::optional<PeerPort::Sample> PeerPort::read_dsp_data(const Read access) noexcept {
   constexpr std::uint8_t byte_mask = 0xff;
-  if (mask != byte_mask || mcu_data().mask != 0 || !reply_.active.load(std::memory_order_acquire)) {
+  if (access.mask != byte_mask || mcu_data().mask != 0 ||
+      !reply_.active.load(std::memory_order_acquire)) {
     return dsp_data();
   }
   const std::lock_guard lock(reply_.mutex);
@@ -181,7 +185,13 @@ std::optional<PeerPort::Sample> PeerPort::read_dsp_data(const std::uint8_t mask)
     static_cast<void>(fail("MCU read a peer response byte before the DSP produced it"));
     return {};
   }
-  const auto result = reply_.bytes[reply_.read++];
+  const auto &byte = reply_.bytes[reply_.read];
+  if (byte.ticks > access.ticks) {
+    static_cast<void>(fail("MCU read a peer response byte before its DSP instrument time"));
+    return {};
+  }
+  const auto result = byte.data;
+  ++reply_.read;
   if (reply_.read == reply_.bytes.size()) { reply_.active.store(false, std::memory_order_release); }
   return result;
 }

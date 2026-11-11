@@ -20,6 +20,11 @@ public:
     bool operator==(const Sample &) const = default;
   };
 
+  struct Read {
+    std::uint8_t mask = 0;
+    std::uint64_t ticks = 0;
+  };
+
   // MCU owner publishes ordered data/direction changes; full transport waits
   // for actual space without advancing device time. Equal states need no slot.
   [[nodiscard]] bool mcu_data(Sample value, std::uint64_t ticks, const std::stop_token &stop = {});
@@ -35,8 +40,8 @@ public:
   void retire_mcu_data() noexcept;
   [[nodiscard]] Sample dsp_data() const noexcept;
   // Actual PDRC data writes, distinct from direction/mux/latch publication.
-  [[nodiscard]] bool dsp_write(Sample value) noexcept;
-  [[nodiscard]] std::optional<Sample> read_dsp_data(std::uint8_t mask) noexcept;
+  [[nodiscard]] bool dsp_write(Sample value, std::uint64_t ticks) noexcept;
+  [[nodiscard]] std::optional<Sample> read_dsp_data(Read access) noexcept;
 
   [[nodiscard]] const char *error() const noexcept {
     return error_.load(std::memory_order_acquire);
@@ -83,7 +88,7 @@ private:
 
   struct Reply {
     std::mutex mutex;
-    std::array<Sample, 16> bytes{};
+    std::array<Input, 16> bytes{};
     unsigned written = 0, read = 0;
     std::atomic<bool> active{false}, recording{false}, announced{false};
   };

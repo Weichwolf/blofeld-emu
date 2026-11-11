@@ -132,6 +132,14 @@ struct Devices {
     return point(now);
   }
 
+  [[nodiscard]] std::optional<std::uint64_t> timestamp(const cpu12::Core &core) const noexcept {
+    const auto cycles = core.progress().estimated_cycles;
+    if (idle > std::numeric_limits<Timer::Cycle>::max() - cycles) { return {}; }
+    auto projected = clock;
+    if (!projected.advance(cycles + idle)) { return {}; }
+    return projected.ticks();
+  }
+
   bool advance(const cpu12::Core &core) noexcept {
     const auto cycles = core.progress().estimated_cycles;
     if (idle > std::numeric_limits<Timer::Cycle>::max() - cycles) { return false; }
@@ -405,8 +413,11 @@ private:
   bool sample_inputs(const std::uint16_t offset, const std::uint8_t mask) {
     if (peer_ != nullptr && offset == 8) { package_input(); }
     if (peer_ != nullptr && (offset == peer_q_data || offset == peer_q_input)) {
-      const auto sample =
-          offset == peer_q_data ? peer_->read_dsp_data(mask) : std::optional{peer_->dsp_data()};
+      const auto ticks = devices_.timestamp(*core_);
+      if (!ticks) { return false; }
+      const auto sample = offset == peer_q_data
+                              ? peer_->read_dsp_data({.mask = mask, .ticks = *ticks})
+                              : std::optional{peer_->dsp_data()};
       if (!sample) { return false; }
       // DSP56371UM Table 2-8 documents internal pull-downs on PC0..7,
       // including reset-disconnected GPIO. They are not active reply data.

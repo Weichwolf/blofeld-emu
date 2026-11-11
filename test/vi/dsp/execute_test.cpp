@@ -12,12 +12,15 @@
 
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
 #include <exception>
 #include <filesystem>
+#include <future>
 #include <iostream>
+#include <limits>
 #include <span>
 #include <stdexcept>
 #include <stop_token>
@@ -107,6 +110,100 @@ void native_timed_peer_input() {
                 report.failure->space == 'P' && report.failure->address == marker &&
                 report.failure->value == expected,
             "Native Port C reads use their completed prefix time without leaking future data");
+  }
+}
+
+std::vector<dsp56300::Word> peer_reply_program() {
+  namespace isa = dsp56300::isa;
+  using dsp56300::Word;
+  constexpr Word immediate = 0x34;
+  constexpr Word absolute = 0x30;
+  constexpr Word load = 0x8000;
+  constexpr Word x0 = 4;
+  constexpr Word status_port = 0x11;
+  constexpr Word receive_port = 0x14;
+  constexpr Word receive_ready = 17;
+  constexpr Word boot = 0xff0000;
+  constexpr Word data = 0xffffbd;
+  constexpr Word direction = 0xffffbe;
+  constexpr unsigned delay = 64;
+  std::vector<Word> program;
+  const auto put = [&](const blofeld::vi::dsp::Ports::Write access) {
+    const auto operation = access.space == dsp56300::Space::x ? isa::Opcode::move_x_effective
+                                                              : isa::Opcode::move_y_effective;
+    program.insert(program.end(),
+                   {isa::opcode<isa::Opcode::move_x_effective>()[0] | (immediate << 8U) | load,
+                    access.value,
+                    static_cast<Word>(operation) | (absolute << 8U),
+                    access.address});
+  };
+  using Write = blofeld::vi::dsp::Ports::Write;
+  constexpr std::array configuration{
+      Write{.address = 0xffff91, .value = 0x29},
+      Write{.address = data, .value = 0x0d},
+      Write{.address = direction, .value = 0xff},
+      Write{.space = dsp56300::Space::y, .address = 0xffff9d, .value = 0},
+      Write{.space = dsp56300::Space::y, .address = 0xffff9e, .value = 0x200}};
+  for (const auto access : configuration) { put(access); }
+  const auto polling = boot + static_cast<Word>(program.size());
+  program.insert(
+      program.end(),
+      {isa::opcode<isa::Opcode::jclr_port_low>()[0] | (status_port << 8U) | receive_ready,
+       polling,
+       isa::opcode<isa::Opcode::movep_register_low>()[0] | (x0 << 8U) | receive_port});
+  program.insert(program.end(), delay, isa::nop[0]);
+  constexpr Word bytes = 16;
+  for (Word index = 0; index < bytes; ++index) { put({.address = data, .value = index}); }
+  put({.address = direction, .value = 0});
+  program.push_back(isa::stop[0]);
+  return program;
+}
+
+void native_reply_time() {
+  const auto program = peer_reply_program();
+  blofeld::vi::PeerPort peer;
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  std::promise<blofeld::vi::ExecutionReport> promise;
+  auto completed = promise.get_future();
+  std::jthread worker([&](const std::stop_token &stop) {
+    blofeld::vi::ExecutionReport report;
+    try {
+      report = blofeld::vi::dsp::execute(
+          {.main = program, .eeprom = {}}, shi, reset, stop, nullptr, {}, &peer);
+    } catch (...) { report.exception = std::current_exception(); }
+    promise.set_value(report);
+  });
+  const auto guard = std::chrono::steady_clock::now() + std::chrono::seconds{2};
+  while (!peer.mcu_interrupt() &&
+         completed.wait_for(std::chrono::seconds{0}) != std::future_status::ready &&
+         std::chrono::steady_clock::now() < guard) {
+    std::this_thread::yield();
+  }
+  const bool accepted = peer.mcu_interrupt() && peer.mcu_strobe(true) && peer.mcu_strobe(false) &&
+                        shi.select(true) && shi.transfer(0).accepted;
+  const auto status = completed.wait_for(std::chrono::seconds{2});
+  if (status != std::future_status::ready) { worker.request_stop(); }
+  worker.join();
+  const auto report = completed.get();
+  require(
+      accepted && status == std::future_status::ready && !report.exception && !report.failure,
+      "Native DSP code announces a report and waits for the actual host request before writing");
+  constexpr std::uint64_t delay = 64;
+  constexpr std::uint64_t reset_top = 12500;
+  constexpr std::uint64_t reset_bottom = 17052;
+  constexpr auto earliest = (delay * reset_top) / reset_bottom;
+  constexpr std::uint8_t byte_mask = 0xff;
+  require(!peer.read_dsp_data({.mask = byte_mask, .ticks = earliest - 1}) &&
+              peer.error() != nullptr,
+          "Sixty-four native NOPs at the reset PLL forbid reply data before floor(64*12500/17052)");
+  constexpr unsigned bytes = 16;
+  for (unsigned index = 0; index < bytes; ++index) {
+    const auto sample =
+        peer.read_dsp_data({.mask = byte_mask, .ticks = std::numeric_limits<std::uint64_t>::max()});
+    require(sample && sample->mask == byte_mask && sample->known == byte_mask &&
+                sample->value == index,
+            "The real native producer's timestamps preserve all sixteen distinct data writes");
   }
 }
 
@@ -1009,6 +1106,7 @@ int main(const int argc, char **argv) try {
   native_missing_media(argv[2]);
   native_clock_register();
   native_timed_peer_input();
+  native_reply_time();
   unknown_boot_tail();
   sparse_boot_rom();
   constexpr dsp56300::Word delay_boundary = 0x16000;
