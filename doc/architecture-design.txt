@@ -201,6 +201,31 @@ contexts or survive incompatible mapping/device revisions; cached code requires
 validated rebinding. A linked leaf-value experiment does not qualify complete
 ISA transactions or establish instrument throughput.
 
+Support optional consumer-owned semantic translation rules selected by the exact
+firmware SHA-256. Pin each rule additionally to its executable variant, original
+instruction region, entry/exit contract and binding ABI. The core stays firmware
+neutral. Without an applicable rule, use the complete ordinary AOT translation;
+rules never excuse incomplete executable coverage. Link eligible replacement IR
+before final O3 so a host operation can inline into direct memory operations.
+A firmware hash mismatch selects no rule; it does not prevent ordinary AOT.
+
+Preserve the region's complete observable behavior: architectural state and
+flags, stack and memory effects, aliasing and access order, faults, intermediate
+interrupt/deadline boundaries, musical time and real device transactions. A
+matching hash identifies code; it does not prove equivalence. Use the prepared
+original path whenever a replacement cannot honor the actual execution window.
+Reject invalid declared rules during preparation. Never repeat an already
+performed device effect after a guard fails. Scope guards to proven immutable
+bindings or actual runtime values; buffering mode and DSP scale/modifier registers
+are not firmware constants.
+
+Evaluate candidates in firmware-fusion-candidates.json using the referenced
+blofeld-src reconstruction and independent complete-state comparisons. Measure
+actual instrument frequency/cost before choosing implementations. Display work
+serves live interaction; offline rendering binds no viewer. Numeric DSP rules
+implement the original fixed-point algorithms, including their residual state;
+ordinary floating-point filter, copy and synthesis libraries are not equivalent.
+
 Preparation is side-effect-free with respect to core/device state and musical
 time. It uses an immutable program/mapping view, established entries and binding
 identity; its output is immutable native code with validated bindings. The owner

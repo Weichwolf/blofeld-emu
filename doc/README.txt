@@ -1,6 +1,7 @@
 Reference documents
 
 architecture-design.txt        Target runtime architecture and design references
+firmware-fusion-candidates.json Hash-pinned semantic translation candidate index
 hardware/sources.json          Manufacturer hardware specifications and identities
 hardware/board-photos.json     Primary board-photo references
 function-references.json       Manufacturer function documentation identities

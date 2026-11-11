@@ -1,0 +1,141 @@
+{
+  "kind": "semantic_translation_candidate_catalog",
+  "firmware": {
+    "name": "BlofeldV125.mid",
+    "bytes": 169554,
+    "sha256": "447f7ec928b5b4144fad2193351f0604011f2ab8ed9b9dbe3d1bb7c594e813c0"
+  },
+  "source_repository": "Weichwolf/blofeld-src",
+  "source_revision": "eed393beaee844d7263600fdfb501cb06c756350",
+  "identity_reference": "tools/blofeld_image.py",
+  "rule_policy": {
+    "optional": true,
+    "ordinary_aot_required": true,
+    "activation_requires": [
+      "Exact firmware, executable variant, region identity and binding ABI",
+      "Independent complete-state, memory and real-effect equivalence",
+      "Exact partial-grant, fault, interrupt and deadline behavior",
+      "Measured instrument benefit with startup reported separately"
+    ]
+  },
+  "candidates": [
+    {
+      "id": "mcu-compiler-shifts",
+      "core": "cpu12",
+      "entries": ["0xd95e", "0xd966", "0xd96e", "0xd979", "0xd984"],
+      "operation": "Lower the five compiler shift loops to bounded native integer operations",
+      "constraints": "Raw byte counts, zero and oversized counts, carry/flags, A/Y residue, stack and exact interrupted prefixes; avoid C++ oversized-shift undefined behavior",
+      "source": "src/mc9s12uf32/runtime/runtime_helpers.asm"
+    },
+    {
+      "id": "mcu-inline-switches",
+      "core": "cpu12",
+      "entries": ["0xd990", "0xd995", "0xd9a0"],
+      "operation": "Resolve validated immutable inline tables to direct native branches",
+      "constraints": "Consume the real saved return word, preserve default and raw index behavior plus register/stack effects; table data is not executable code",
+      "source": "src/mc9s12uf32/runtime/runtime_helpers.asm"
+    },
+    {
+      "id": "mcu-buffered-display-bytes",
+      "core": "cpu12",
+      "entries": ["0x8a62", "0x8afb", "0x8b60"],
+      "operation": "Fuse buffered display command interpretation, byte reads/writes and address selection into direct owner RAM operations",
+      "constraints": "Guard actual buffering flag at 0x1815; preserve page/column at 0x1849/0x1848, byte wrapping, mode differences, command ordering and architectural residue; physical mode retains real transactions",
+      "sources": ["src/mc9s12uf32/display/write_display_byte.c", "src/mc9s12uf32/display/display_read.asm", "src/mc9s12uf32/display/display_addressing.asm"],
+      "reference": "doc/mc9s12uf32/display/display_address.txt"
+    },
+    {
+      "id": "mcu-buffered-pixels",
+      "core": "cpu12",
+      "entries": ["0x8d9f", "0x8dea"],
+      "operation": "Fuse set/clear/XOR pixel and masked pixel read with the buffered display bindings",
+      "constraints": "128x64 bounds; page=7-(y>>3), bit=0x80>>(y&7); mode 1 clears, 2 toggles, all other writer modes set; return raw masked read, preserve A/X, cursor, flags and actual stack effects",
+      "sources": ["src/mc9s12uf32/display/write_display_pixel.c", "src/mc9s12uf32/display/read_display_pixel.c"]
+    },
+    {
+      "id": "mcu-buffered-region-fill",
+      "core": "cpu12",
+      "entries": ["0x8bfd", "0x8d70"],
+      "operation": "Fuse page-mask rectangle fills and full buffered frame clears into native loops",
+      "constraints": "Guard buffered mode; preserve signed height, right-edge clipping, zero dimensions, mode-dependent cursor effects, per-page ordering and intermediate boundaries; do not apply a generic rectangle API",
+      "sources": ["src/mc9s12uf32/display/display_fill.asm", "src/mc9s12uf32/display/clear_display_frame.asm"]
+    },
+    {
+      "id": "mcu-ram-string-loops",
+      "core": "cpu12",
+      "entries": ["0x8a4e", "0xabba"],
+      "operation": "Lower length and forward zero-terminated copy loops over proven ordinary RAM",
+      "constraints": "Preserve 16-bit wrap, original forward overlap, terminator access, pointer/stack residue and nontermination/fault behavior; no unbounded host strlen/strcpy on guest storage",
+      "sources": ["src/mc9s12uf32/runtime/string_length.c", "src/mc9s12uf32/runtime/copy_c_string.c"]
+    },
+    {
+      "id": "mcu-plot-interpolation",
+      "core": "cpu12",
+      "entries": ["0x95be"],
+      "operation": "Lower byte-sample display interpolation and its shift helpers as a fused integer expression",
+      "constraints": "Byte index wrap, both actual reads, weights summing to 2^count-1, 16-bit product/sum wrap, signed shift and raw oversized counts",
+      "source": "src/mc9s12uf32/display/interpolate_plot_sample.c"
+    },
+    {
+      "id": "dsp-bus-block-copy",
+      "core": "dsp56300",
+      "entries": ["P:0x000298"],
+      "operation": "Lower the 32-word X-to-Y bus pipeline to a specialized native transfer loop",
+      "constraints": "34 real input reads, scale-dependent full accumulator stores, retained final A/B and R0/R5, X/Y alias and modulo behavior; not a generic memcpy",
+      "source": "src/dsp56371/effects/runtime_bus_copy.asm"
+    },
+    {
+      "id": "dsp-stereo-pair-sums",
+      "core": "dsp56300",
+      "entries": ["P:0x002195"],
+      "operation": "Lower adjacent fixed-point pair sums and duplication over 32 in-place words",
+      "constraints": "Full accumulator addition, limited/scaled transfer, original preload/store order, all remaining registers/flags and modifiers; do not average pairs",
+      "source": "src/dsp56371/effects/runtime_bus_kernels.asm"
+    },
+    {
+      "id": "dsp-staged-effect-clear",
+      "core": "dsp56300",
+      "entries": ["P:0x001f2c", "P:0x001f2e"],
+      "operation": "Lower one original effect-clear step to native zeroing loops and callback publication",
+      "constraints": "512 ring plus 32 output words per linear-modifier call, exact advanced cursor and ready callback threshold; preserve Multi staging alias and inter-call live updates; never eagerly clear the whole ring",
+      "source": "src/dsp56371/effects/runtime_effect_ring_clear.asm",
+      "reference": "doc/dsp56371/effects/delay_partial_clear_multi_alias.txt"
+    },
+    {
+      "id": "dsp-biquad-block",
+      "core": "dsp56300",
+      "entries": ["P:0x001337"],
+      "operation": "Lower the sixteen-sample recursive fixed-point filter into an optimized native kernel",
+      "constraints": "Original 56-bit accumulation, 24-bit limiting, SR scale/round modes, aliased in-place operation, seventeenth input prefetch/history repair, exact final AGU/register/flag/loop state and prefixes",
+      "source": "src/dsp56371/filter/runtime_biquad.asm",
+      "reference": "doc/dsp56371/filter/dsp_filter_blocks.txt"
+    },
+    {
+      "id": "dsp-master-output",
+      "core": "dsp56300",
+      "entries": ["P:0x00027b"],
+      "operation": "Lower the gain and recursive stereo output block with native owner RAM and output bindings",
+      "constraints": "Read actual gain at X:0x17, 33 X inputs for 32 outputs, retained Y prefetch, paired histories and integer residual at zero gain; preserve publication boundaries and final full accumulators",
+      "source": "src/dsp56371/effects/runtime_master_output.asm",
+      "reference": "doc/dsp56371/voice/master_output_zero_gain.txt"
+    },
+    {
+      "id": "dsp-wavetable-linear",
+      "core": "dsp56300",
+      "entries": ["P:0x002b31"],
+      "operation": "Fuse shaped resident-frame interpolation, morphing and distinct FM/audio output stores",
+      "constraints": "Exact 128-word modulo state, phase shaping, full interpolants, limited terms, quarter-gain shifts, borrowed modifier restoration and original continuation; no floating-point interpolation substitute",
+      "source": "src/dsp56371/samples/runtime_wavetable_linear.asm",
+      "reference": "doc/dsp56371/samples/wavetable_linear_word_bounds.txt"
+    },
+    {
+      "id": "mcu-peer-response-block",
+      "core": "cpu12",
+      "entries": ["0xbbea"],
+      "operation": "Fuse the sixteen-byte response reader with an equivalent concrete host transaction",
+      "constraints": "Original J0 sequence and sixteen distinct Port Q reads, message order, partial effects, fault position, IRQ/time/backpressure and X/Y residue; a copied cached response is not equivalent",
+      "source": "src/mc9s12uf32/peer/read_peer_response_block.asm",
+      "reference": "doc/mc9s12uf32/peer/read_peer_response_block.txt"
+    }
+  ]
+}
