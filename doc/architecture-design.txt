@@ -158,6 +158,44 @@ Register waiters and recheck predicates to prevent lost wakeups. Stop and reset
 cancel waits without advancing device clocks. Preserve event time independently
 of host scheduling, including DSP-to-MCU IRQ arrival.
 
+Derive channel-specific effect summaries during AOT from the prepared control
+flow and concrete host bindings. Distinguish owner-local work, shared sampling,
+outgoing data/IRQ effects and changes that end a proof's validity. Summarize
+minimum time to each possible outgoing effect across every reachable path;
+unknown addresses or control flow end the guarantee. A local LCD access does
+not end a DSP-channel guarantee merely because it calls host code. Keep these
+summaries in the compiled image; no generic runtime event bus or per-instruction
+effect dispatch is required.
+
+Include interrupt entry and handler paths in each guarantee. A long foreground
+RAM loop alone cannot exclude an earlier outgoing effect from an IRQ handler.
+Use actual mask, priority, shadow, REP/loop and return state, with an explicit
+validity boundary for every assumption. Derive incoming-to-outgoing minimum
+delays as well as autonomous effects. Combine them with established input
+bounds and already queued events to admit independent work. Resolve causal
+cycles using their proven delays and reachable event sources; two completed
+owner frontiers are insufficient. Unknown or zero-delay cycles require an
+explicit joint ordering/progress proof. Never publish a speculative bound that
+must later be revoked when a legal input arrives.
+
+Translate polling loops over proven stable inputs into equivalent native work
+over that stable interval. Preserve every observable read effect, timeout,
+register/flag result, nominal elapsed time and interrupt-admission boundary.
+Pure repeated sampling may be summarized only while all sampled values are
+known stable; clear-on-read/FIFO reads and possible intervening IRQ effects
+require their own exact semantics. Optional firmware-specific recognizers are
+hash-pinned consumer inputs to the core's semantic compilation, not replacement
+device replies. Validate the complete resulting state at every exit.
+
+Batch transport publication without making a batch an atomic guest operation.
+Use bounded producer-owned queue spans and release/acquire committed prefixes;
+retain each actual transaction's time and order within the batch. Never delay
+an earlier-visible write until a later field or block is complete. Wake the
+other owner only when its requested horizon, data availability or queue-space
+condition becomes satisfied. Genuine request/reply dependencies remain serial;
+overlap unrelated work rather than repeatedly waking both owners along them.
+Audio block size alone establishes neither a channel horizon nor IRQ latency.
+
 Primary reference: Misra, Distributed Discrete-Event Simulation (1986),
 sections 3-4, covers channel time bounds, deadlock and demand-driven progress
 messages. Adapt the contracts to the concrete native owners and channels;
