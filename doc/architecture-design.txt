@@ -35,6 +35,9 @@ core supplies its public state/progress observation and synchronous-yield
 implementations as eligible IR when host bindings call them. Consumers neither
 depend on executable symbol exports nor reproduce private object layouts. The
 application supplies both core artifacts and concrete host IR to host/aot/Code.
+Share the concrete MCU/DSP adapters and their local device state between native
+owner composition and binding-IR preparation. Compile the actual definitions;
+do not copy execution sources or maintain parallel device implementations.
 Validate all original module pairs before linking: scalar types, calling
 conventions, ABI attributes, noexcept, parameter guarantees and memory
 effects. Linker attribute merging must not hide an incompatible definition.
