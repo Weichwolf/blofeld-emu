@@ -179,6 +179,15 @@
       "bytes": 2835,
       "sha256": "4e6ebb64f77229fb08832c42102d25c0c0be878b5c2582eae6cb12bcac577a13",
       "scope": "Original synthesizer firmware as x86-64/ARM64 audio plugins; not complete AOT."
+    },
+    {
+      "name": "Misra Distributed Discrete-Event Simulation (1986)",
+      "url": "https://www.cs.utexas.edu/~misra/scannedPdf.dir/DiscreteEventSimulation.pdf",
+      "resolved_url": "https://www.cs.utexas.edu/~misra/scannedPdf.dir/DiscreteEventSimulation.pdf",
+      "sections": "3-4: channel bounds, deadlock and demand-driven progress",
+      "retrieved_utc": "2026-11-11T04:27:50.980449+00:00",
+      "bytes": 2473020,
+      "sha256": "a9a98662578effadc948b118f062947127e36667c5f37af0a7b6f32e97257bbe"
     }
   ]
 }

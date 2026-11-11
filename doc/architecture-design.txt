@@ -85,9 +85,25 @@ ExecutionTime publishes completed owner progress and grants only causally safe
 execution in nominal 60 MHz units. Account for possible earlier events from both
 producers before a receiver advances. Publish at actual device boundaries and
 completed native prefixes; local progress needs no instruction-level rendezvous.
+Keep completed execution time distinct from an exclusive no-input-before bound:
+a bound B guarantees that no unconsumed source event has a timestamp below B.
+Publish source effects before advertising a bound that covers them. Derive
+lookahead from prepared code, real device latency and established waiting states;
+never advance a core clock merely to advertise knowledge about a channel.
+Before sampling a shared input, obtain the relevant producer's bound. Specify
+same-time transaction order and atomic instruction crossings explicitly. Prove
+progress for cyclic dependencies, reset epochs and unequal clock periods;
+mirroring a one-way progress wait can deadlock. Wake a waiting owner for a
+reachable event or requested horizon, rather than every intermediate publication.
 Register waiters and recheck predicates to prevent lost wakeups. Stop and reset
 cancel waits without advancing device clocks. Preserve event time independently
 of host scheduling, including DSP-to-MCU IRQ arrival.
+
+Primary reference: Misra, Distributed Discrete-Event Simulation (1986),
+sections 3-4, covers channel time bounds, deadlock and demand-driven progress
+messages. Adapt the contracts to the concrete native owners and channels;
+the reference is no new runtime dependency or performance proof.
+https://www.cs.utexas.edu/~misra/scannedPdf.dir/DiscreteEventSimulation.pdf
 
 MCU data/direction changes use a bounded single-producer/single-consumer
 timeline. The MCU commits its actual register effects and timestamps without a
