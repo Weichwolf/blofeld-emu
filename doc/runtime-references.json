@@ -188,6 +188,16 @@
       "retrieved_utc": "2026-11-11T04:27:50.980449+00:00",
       "bytes": 2473020,
       "sha256": "a9a98662578effadc948b118f062947127e36667c5f37af0a7b6f32e97257bbe"
+    },
+    {
+      "name": "LLVM19 LLJIT platform lifecycle",
+      "url": "https://github.com/llvm/llvm-project/blob/llvmorg-19.1.7/llvm/lib/ExecutionEngine/Orc/LLJIT.cpp",
+      "download_url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-19.1.7/llvm/lib/ExecutionEngine/Orc/LLJIT.cpp",
+      "revision": "llvmorg-19.1.7",
+      "bytes": 44561,
+      "sha256": "3548da0dfb329d2c7013bffcb0136bd805719b448b134f78217a1f30d6a22624",
+      "scope": "GenericLLVMIRPlatform constructor/destructor scraping and platform-before-process symbol resolution; shared static core target registration stays process-owned.",
+      "retrieved_utc": "2026-11-11T12:43:55.210927+00:00"
     }
   ]
 }

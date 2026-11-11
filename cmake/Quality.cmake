@@ -4,15 +4,17 @@ set(BLOFELD_SANITIZER "address-undefined" CACHE STRING "none, address-undefined,
 set_property(CACHE BLOFELD_SANITIZER PROPERTY STRINGS none address-undefined thread)
 
 include("${CMAKE_CURRENT_LIST_DIR}/Hardening.cmake")
-add_library(blofeld_quality INTERFACE)
-target_link_libraries(blofeld_quality INTERFACE blofeld_hardening)
-target_compile_options(blofeld_quality INTERFACE
+add_library(blofeld_diagnostics INTERFACE)
+target_link_libraries(blofeld_diagnostics INTERFACE blofeld_hardening)
+target_compile_options(blofeld_diagnostics INTERFACE
   -Wall -Wextra -Wpedantic -Werror -pedantic-errors
   -Wconversion -Wsign-conversion -Wshadow -Wundef
   -Wcast-align -Wcast-qual -Wdouble-promotion -Wnull-dereference
   -Wimplicit-fallthrough -Wnon-virtual-dtor -Wold-style-cast
   -Woverloaded-virtual -Wextra-semi -Wvla -Wswitch-enum -Wswitch-default
   -ffp-contract=off -fno-omit-frame-pointer)
+add_library(blofeld_quality INTERFACE)
+target_link_libraries(blofeld_quality INTERFACE blofeld_diagnostics)
 # Contextual control-path exceptions must never cross the audio callback.
 if(APPLE)
   target_link_options(blofeld_quality INTERFACE -Wl,-fatal_warnings)

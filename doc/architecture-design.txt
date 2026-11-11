@@ -28,6 +28,46 @@ no separate processor instruction-memory execution layer is needed.
                                                          +-> LLVM O3 -> native instrument
   concrete host application -> compatible LLVM bitcode ---+
 
+Core::lower returns an immutable semantic image with detached pre-O3 bitcode,
+image-scoped guest/event exports and source/variant/layout/IRQ/binding identity.
+Lowering creates no Core, execution RAM, native TargetMachine or engine. The
+core supplies its public state/progress observation and synchronous-yield
+implementations as eligible IR when host bindings call them. Consumers neither
+depend on executable symbol exports nor reproduce private object layouts. The
+application supplies both core artifacts and concrete host IR to host/aot/Code.
+Validate all original module pairs before linking: scalar types, calling
+conventions, ABI attributes, noexcept, parameter guarantees and memory
+effects. Linker attribute merging must not hide an incompatible definition.
+Compare aggregate ABI attribute types by complete structural shape, including
+nested arrays and packing, rather than module-local nominal type identity.
+Accept an omitted noalias argument guarantee only when LLVM proves its local
+allocation has not escaped before the call and cannot alias the other arguments.
+Escaped function references still require the declared parameter guarantees.
+Retain call-site return contracts; a definition need not repeat inferred return
+attributes when its body implements that contract.
+Validate native target/layout/features and required relocations; reject embedded
+absolute host pointers. Preserve every declared guest/event root. Internalize
+eligible host helpers and run one target-aware LLVM O3 pipeline over the joint
+module. Resolve all roots and complete native initialization before publication.
+
+Use LLVM 19's GenericLLVMIRPlatform for the optimized module's native emission
+and initializer/destructor ownership. Keep its platform-before-process symbol
+search order, including __dso_handle and __cxa_atexit interposition. Never install
+a process resolver ahead of that platform in the main JITDylib. Initialize and
+finalize the actual native resource once; destructors execute before code release.
+Keep runtime-generated platform helpers outside own-code sanitizer insertion.
+Sanitize our host/generated module after fusion; retain all ordinary source
+diagnostics while compiling binding IR. LLVM stays a packaged dependency.
+
+Core::bind receives the component identity, exact filtered export map and the
+same shared native owner for both cores. The core copies its typed guest/event
+maps; the application never calls a private native entry ABI. Discard borrowed
+bitcode, metadata views and compiler inputs after materialization/binding.
+Core instances retain their own state and borrowed RAM. Count the shared native
+text resource once, including materialized platform helpers; do not multiply
+its footprint by component, variant or instance count. No compilation,
+initialization or host-symbol lookup belongs on an admitted execution path.
+
 Prefer startup loading of the selected firmware followed by complete AOT and
 joint host-code optimization before playback. Keep the same code-quality and
 coverage requirements as build-time AOT. Measure compilation/startup and
