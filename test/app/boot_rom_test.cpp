@@ -33,12 +33,14 @@ void write(const std::filesystem::path &path, const std::span<const std::uint8_t
   require(output.good(), "Write owned boot input");
 }
 
-void valid(const std::filesystem::path &path, const BootFormat format) {
+void valid(const std::filesystem::path &path, const BootFormat format, const bool eeprom = false) {
   constexpr std::array<std::uint8_t, 6> head{0x12, 0x34, 0x56, 0xab, 0xcd, 0xef};
   constexpr std::array<std::uint8_t, 3> tail{0x80, 0, 1};
   constexpr std::size_t full_words = 192;
   constexpr std::size_t prefix_words = 55;
-  const auto words = format == BootFormat::rom ? full_words : prefix_words;
+  constexpr std::size_t document_words = 273;
+  auto words = format == BootFormat::rom ? full_words : prefix_words;
+  if (eeprom) { words = document_words; }
   std::vector<std::uint8_t> bytes(words * 3);
   std::ranges::copy(head, bytes.begin());
   std::ranges::copy(tail, bytes.end() - static_cast<std::ptrdiff_t>(tail.size()));
@@ -55,7 +57,7 @@ void valid(const std::filesystem::path &path, const BootFormat format) {
 }
 
 void invalid_lengths(const std::filesystem::path &path, const BootFormat format) {
-  constexpr std::array<std::size_t, 7> lengths{0, 1, 3, 162, 168, 575, 579};
+  constexpr std::array<std::size_t, 11> lengths{0, 1, 3, 162, 168, 575, 579, 816, 818, 820, 822};
   for (const auto length : lengths) {
     write(path, std::vector<std::uint8_t>(length));
     bool rejected = false;
@@ -86,6 +88,12 @@ int main(const int argc, char **argv) try {
   } catch (const std::runtime_error &) { rejected = true; }
   require(rejected, "A raw full-ROM field cannot silently accept the partial SPI prefix");
   invalid_lengths(file, BootFormat::rom);
+  valid(file, BootFormat::rom, true);
+  rejected = false;
+  try {
+    static_cast<void>(load_boot_rom(file, BootFormat::spi_prefix));
+  } catch (const std::runtime_error &) { rejected = true; }
+  require(rejected, "An explicit prefix cannot accept a compact main/EEPROM ROM package");
   std::filesystem::remove_all(root);
 } catch (const std::exception &error) {
 

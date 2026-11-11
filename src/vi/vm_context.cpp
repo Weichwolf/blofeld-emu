@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "vm_context.hpp"
 
+#include "dsp/boot_rom.hpp"
 #include "dsp/execute.hpp"
 #include "execution.hpp"
 #include "io/midi_port.hpp"
@@ -65,8 +66,16 @@ void VmContext::start() {
   dsp_ = std::jthread([this] {
     const auto stop = stop_.get_token();
     try {
-      reports_[1] = dsp::execute(
-          boot_, shi_, reset_, stop, media_.get(), output_, &peer_, &time_, &midi_, &preparation_);
+      reports_[1] = dsp::execute(dsp::BootRom::document(boot_),
+                                 shi_,
+                                 reset_,
+                                 stop,
+                                 media_.get(),
+                                 output_,
+                                 &peer_,
+                                 &time_,
+                                 &midi_,
+                                 &preparation_);
     } catch (...) { reports_[1].exception = std::current_exception(); }
     completed_.fetch_add(1, std::memory_order_release);
     completed_.notify_one();

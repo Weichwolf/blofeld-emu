@@ -52,7 +52,7 @@ void native_clock_register() {
       std::array{configure, control, clear, read, output, ram, zero, load, ram, sink, unmapped});
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
   require(report.failure && report.failure->operation == blofeld::vi::Access::write &&
               report.failure->space == 'P' && report.failure->address == unmapped &&
               report.failure->value == expected,
@@ -100,7 +100,8 @@ void native_timed_peer_input() {
             "Queue two real MCU data states before native DSP execution");
     blofeld::vi::Shi shi;
     blofeld::vi::DspReset reset;
-    const auto report = blofeld::vi::dsp::execute(program, shi, reset, {}, nullptr, {}, &peer);
+    const auto report = blofeld::vi::dsp::execute(
+        {.main = program, .eeprom = {}}, shi, reset, {}, nullptr, {}, &peer);
     const auto expected = second_tick == later ? before : after;
     require(report.failure && report.failure->operation == blofeld::vi::Access::write &&
                 report.failure->space == 'P' && report.failure->address == marker &&
@@ -113,7 +114,8 @@ void unknown_boot_tail() {
   constexpr dsp56300::Word next = 0xff0001;
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute(dsp56300::isa::nop, shi, reset, {});
+  const auto report =
+      blofeld::vi::dsp::execute({.main = dsp56300::isa::nop, .eeprom = {}}, shi, reset, {});
   const bool correct =
       report.instructions == 1 && report.failure &&
       report.failure->operation == blofeld::vi::Access::read && report.failure->space == 'P' &&
@@ -130,6 +132,40 @@ void unknown_boot_tail() {
           "A known boot prefix executes before an unprovided ROM word fails at its actual PC");
 }
 
+void sparse_boot_rom() {
+  namespace isa = dsp56300::isa;
+  using dsp56300::Word;
+  constexpr Word absolute = 0x30;
+  constexpr Word x0 = 4;
+  constexpr Word loading = 0x8000;
+  constexpr Word data_address = 0xff0002;
+  constexpr Word eeprom_address = 0xffff00;
+  constexpr Word marker = 0xc000;
+  constexpr Word value = 0x123456;
+  constexpr auto jump = isa::opcode<isa::Opcode::jmp_effective>()[0] | (absolute << 8U);
+  constexpr auto sink = isa::opcode<isa::Opcode::movem_effective>()[0] | (absolute << 8U) | x0;
+  constexpr auto main = isa::program(std::array{jump, eeprom_address, value});
+  constexpr auto eeprom = isa::program(std::array{sink | loading, data_address, sink, marker});
+  blofeld::vi::Shi shi;
+  blofeld::vi::DspReset reset;
+  const auto report = blofeld::vi::dsp::execute({.main = main, .eeprom = eeprom}, shi, reset, {});
+  const bool correct = report.instructions == 2 && report.failure &&
+                       report.failure->operation == blofeld::vi::Access::write &&
+                       report.failure->space == 'P' && report.failure->address == marker &&
+                       report.failure->pc == eeprom_address + 2 && report.failure->value == value &&
+                       report.stopped_pc == eeprom_address + eeprom.size();
+  if (!correct && report.failure) {
+    std::cerr << "Sparse ROM: retired=" << report.instructions
+              << " operation=" << static_cast<unsigned>(report.failure->operation)
+              << " pc=" << std::hex << report.failure->pc << " address=" << report.failure->address
+              << " value=" << report.failure->value << " code=" << report.failure->code << std::dec
+              << '\n';
+  }
+  require(
+      correct,
+      "Native EEPROM-region code reads original main-ROM data and faults at its actual next write");
+}
+
 template <dsp56300::Word reserved> void native_reserved_y_read() {
   namespace isa = dsp56300::isa;
   constexpr dsp56300::Word absolute = 0x30;
@@ -141,7 +177,7 @@ template <dsp56300::Word reserved> void native_reserved_y_read() {
   constexpr auto program = isa::program(std::array{load, reserved, store, marker});
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
   require(report.failure && report.failure->operation == blofeld::vi::Access::write &&
               report.failure->space == 'P' && report.failure->address == marker &&
               report.failure->value == 0,
@@ -172,7 +208,7 @@ void native_memory_switch() {
                    std::array{jump, destination});
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
   require(!report.failure && report.instructions == 9,
           "Guest OMR remaps retained X RAM into executable P without copying or a new Core");
 }
@@ -231,7 +267,7 @@ void native_dma_program_write() {
                            marker};
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
   if (report.failure && report.failure->address != marker) {
     std::cerr << "DMA native failure pc=" << report.failure->pc
               << " address=" << report.failure->address << " reason=" << report.failure->reason
@@ -281,7 +317,7 @@ void native_dma_esai_write() {
   program.push_back(marker);
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
   require(report.failure && report.failure->space == 'P' && report.failure->address == marker &&
               report.failure->value == all_done,
           "Native software DMA completes only after the connected ESAI TX register accepts data");
@@ -322,7 +358,7 @@ void native_dma_dax_write() {
   program.push_back(marker);
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
   require(report.failure && report.failure->space == 'P' && report.failure->address == marker &&
               report.failure->value == all_done,
           "Native writes bind DAX and Port D, then software DMA transfers an actual XADR word");
@@ -358,7 +394,7 @@ void native_timer_events() {
   program.push_back(marker);
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
   require(report.failure && report.failure->space == 'P' && report.failure->address == marker &&
               report.failure->value == expected,
           "Native execution reaches a real timer compare deadline and reads its sticky TCF");
@@ -443,7 +479,7 @@ void native_timer_interrupt(const bool waiting, const bool late_vba = false) {
   program.push_back(marker);
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
   constexpr Word boot = 0xff0000;
   require(report.failure && report.failure->space == 'P' && report.failure->address == marker &&
               report.failure->value == timer_enable &&
@@ -499,7 +535,7 @@ void configured_vector_preparation() {
     program.insert(program.end(), setup.begin(), setup.end());
     blofeld::vi::Shi shi;
     blofeld::vi::DspReset reset;
-    const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+    const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
     const bool correct = report.failure && report.failure->space == 'P' &&
                          report.failure->address == marker && report.failure->value == 0 &&
                          report.instructions == expected_instructions &&
@@ -606,8 +642,8 @@ void native_audio_dma(const bool throwing) {
   blofeld::vi::ExecutionReport report;
   bool caught = false;
   try {
-    report =
-        blofeld::vi::dsp::execute(program, shi, reset, consumer.stop.get_token(), nullptr, output);
+    report = blofeld::vi::dsp::execute(
+        {.main = program, .eeprom = {}}, shi, reset, consumer.stop.get_token(), nullptr, output);
   } catch (const std::runtime_error &) { caught = true; }
   require(consumer.submitted && caught == throwing && consumer.closed == 1 &&
               consumer.closed_on_owner,
@@ -645,7 +681,7 @@ void native_transmit_registers() {
                                                    sink});
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
   require(report.failure && report.failure->space == 'P' && report.failure->address == sink &&
               report.failure->value == expected_status,
           "Native HTX writes occupy both real transmit stages; HCSR reports HTX full");
@@ -672,13 +708,14 @@ void native_interrupt_priorities() {
         configure | port, dsp56300::word_mask, clear | (port << 8U), read | port, output, sink};
     blofeld::vi::Shi shi;
     blofeld::vi::DspReset reset;
-    const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+    const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
     const auto expected = port == core_port ? core_expected : peripheral_expected;
     require(report.failure && report.failure->space == 'P' && report.failure->address == sink &&
                 report.failure->value == expected,
             "Native priority writes, bit updates and reads retain only implemented fields");
     const std::array reset_program{read | port, output, sink};
-    const auto after_reset = blofeld::vi::dsp::execute(reset_program, shi, reset, {});
+    const auto after_reset =
+        blofeld::vi::dsp::execute({.main = reset_program, .eeprom = {}}, shi, reset, {});
     require(after_reset.failure && after_reset.failure->address == sink &&
                 after_reset.failure->value == 0,
             "A new reset instance starts with every programmable priority disabled");
@@ -830,7 +867,8 @@ void native_media(const std::filesystem::path &root, const MediaCase operation) 
   if (programming) { require(image.erase(0) == true, "Prepare a qualified erased program target"); }
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute(guest.code, shi, reset, {}, &image);
+  const auto report =
+      blofeld::vi::dsp::execute({.main = guest.code, .eeprom = {}}, shi, reset, {}, &image);
   constexpr dsp56300::Word complete_status = 0xc0;
   const auto expected = writing ? complete_status : 1U;
   const bool matched = report.failure && report.failure->space == 'P' &&
@@ -869,7 +907,8 @@ void native_missing_media(const std::filesystem::path &root) {
       blofeld::host::read_file(root / "media.bfnand", blofeld::vi::MediaImage::max_bytes));
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute(guest.code, shi, reset, {}, &image);
+  const auto report =
+      blofeld::vi::dsp::execute({.main = guest.code, .eeprom = {}}, shi, reset, {}, &image);
   require(report.failure && report.failure->operation == blofeld::vi::Access::write &&
               report.failure->space == 'X' && report.failure->address == MediaGuest::c_data &&
               report.failure->media && report.failure->media->page == page &&
@@ -901,7 +940,7 @@ void consecutive_receive_registers() {
   require(shi.transfer(1).accepted && shi.transfer(0).accepted &&
               shi.transfer(isa::stop[0]).accepted,
           "Queue separate length, destination and code words");
-  const auto report = blofeld::vi::dsp::execute(program, shi, reset, {});
+  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
   dsp56300::Word word = 0;
   require(!report.failure && report.instructions == 5 && !shi.read(receive, word),
           "Each native MOVEP consumes exactly one word across A0, R0 and program destinations");
@@ -939,7 +978,7 @@ void reset_running_core() {
   std::atomic<bool> done{false};
   std::jthread worker([&](const std::stop_token &stop) {
     try {
-      report = blofeld::vi::dsp::execute(program, shi, reset, stop);
+      report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, stop);
     } catch (...) { report.exception = std::current_exception(); }
     done.store(true, std::memory_order_release);
   });
@@ -971,6 +1010,7 @@ int main(const int argc, char **argv) try {
   native_clock_register();
   native_timed_peer_input();
   unknown_boot_tail();
+  sparse_boot_rom();
   constexpr dsp56300::Word delay_boundary = 0x16000;
   native_reserved_y_read<delay_boundary>();
   native_reserved_y_read<dsp56300::word_mask>();

@@ -72,10 +72,10 @@ void debug_output() {
   constexpr auto program = isa::program(std::array{load, output}, isa::stop);
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto result = blofeld::vi::dsp::execute(program, shi, reset, {});
+  const auto result = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
   require(!result.failure && result.instructions == 3, "The DSP can write its OnCE output latch");
   constexpr auto reading = isa::program(std::array{input}, isa::stop);
-  const auto refused = blofeld::vi::dsp::execute(reading, shi, reset, {});
+  const auto refused = blofeld::vi::dsp::execute({.main = reading, .eeprom = {}}, shi, reset, {});
   require(refused.failure && refused.failure->operation == blofeld::vi::Access::read &&
               refused.failure->space == 'X' && refused.failure->address == once_address,
           "OnCE data is readable only through JTAG, never a fabricated DSP readback");
@@ -133,12 +133,12 @@ void boot_transfer() {
           "Configure the real receive FIFO");
   const auto sent = blofeld::vi::mcu::execute(*flash, shi, reset, {});
   executed(sent, "Native MCU stores deliver complete boot words");
-  const auto loaded = blofeld::vi::dsp::execute(reader, shi, reset, {});
+  const auto loaded = blofeld::vi::dsp::execute({.main = reader, .eeprom = {}}, shi, reset, {});
   executed(loaded, "Native DSP loads the delivered code");
   require(!loaded.failure && loaded.instructions == 5,
           "Native DSP receives, writes PRAM, jumps and executes the transmitted program");
   constexpr auto jump = dsp::opcode<dsp::Opcode::jmp_absolute_short>();
-  const auto missing = blofeld::vi::dsp::execute(jump, shi, reset, {});
+  const auto missing = blofeld::vi::dsp::execute({.main = jump, .eeprom = {}}, shi, reset, {});
   require(missing.failure && missing.failure->space == 'P' && missing.failure->address == 0,
           "A new DSP cannot execute uninitialized program RAM as zero-filled NOPs");
 }
@@ -470,7 +470,7 @@ int main() try {
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
   const auto mcu = blofeld::vi::mcu::execute(*flash, shi, reset, {});
-  const auto dsp = blofeld::vi::dsp::execute(boot, shi, reset, {});
+  const auto dsp = blofeld::vi::dsp::execute({.main = boot, .eeprom = {}}, shi, reset, {});
   require(!mcu.failure && mcu.instructions == 3, "MCU owner performs real reset and native STOP");
   require(!dsp.failure && dsp.instructions == 2, "DSP owner executes its native ROM instructions");
   {

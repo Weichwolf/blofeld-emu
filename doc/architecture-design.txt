@@ -554,10 +554,13 @@ consumer receives bounded borrowed spans outside native callbacks and owns
 pacing/backpressure. DAX retains its own device effects without duplicating the
 host stream.
 
-Boot input knowledge is explicit: a boot-rom image supplies 192 known words; the
-declared document-derived SPI prefix has exactly 55. Neither form invents
-trailing words. Only supplied words enter the immutable code view. An owned read
-outside that view fails with its actual program-space address and PC.
+Boot input knowledge is explicit: a boot-rom image supplies 192 main words at
+P:FF0000, optionally followed in the file by 81 EEPROM words at P:FFFF00. Borrow
+the two mapped spans directly; never fill the intervening or trailing addresses.
+The document-derived SPI prefix has exactly 55 main words. Instruction views
+exclude the main block's 48 readable data/fill words. An unprovided ROM read
+fails with its actual program-space address and PC. Document-derived contents
+do not establish physical mask-ROM identity.
 
 Host audio scheduling belongs to the dedicated execution owner, never the render
 callback. On Darwin, the producer uses a granted hardware quantum as its Mach

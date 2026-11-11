@@ -116,11 +116,13 @@ device-state "device.bfnvm"
 nand "samples.bfnand"
 ```
 
-The `boot-rom` input contains exactly 192 big-endian 24-bit words. Alternatively,
-`boot-prefix` explicitly selects the 55 known words of the published NXP SPI
-bootstrap. The two fields are mutually exclusive. The prefix is not a complete
-hardware ROM dump; addresses beyond its known words remain unmapped and fail
-on access. Do not pad missing words with invented values.
+The `boot-rom` input contains 192 big-endian 24-bit main-ROM words, optionally
+followed by the 81 EEPROM-boot words. These map separately to P:$FF0000..$FF00BF
+and P:$FFFF00..$FFFF50; the intervening and trailing addresses stay unknown.
+Alternatively, `boot-prefix` explicitly selects the 55 known words of the
+published NXP SPI bootstrap. The two fields are mutually exclusive. These
+document-derived inputs are not physical ROM dumps. Unprovided words fail on
+access; do not pad them with invented values.
 
 The optional offline assembler in `cmake/dependencies.json` can build this prefix
 natively. With that tool and the verified NXP manual available locally:

@@ -2,6 +2,7 @@
 #include "dsp/execute.hpp"
 
 #include "dsp/audio.hpp"
+#include "dsp/boot_rom.hpp"
 #include "dsp/clock.hpp"
 #include "dsp/dax.hpp"
 #include "dsp/dma.hpp"
@@ -36,7 +37,7 @@
 
 namespace blofeld::vi::dsp {
 namespace {
-constexpr dsp56300::Word boot_first = 0xff0000;
+constexpr dsp56300::Word boot_first = BootRom::main_first;
 constexpr dsp56300::Word reset_status = 0xc00300;
 constexpr dsp56300::Word reset_mode = 0x305;
 constexpr dsp56300::Word once_data_address = 0xfffffc;
@@ -67,7 +68,7 @@ struct OutputOwner {
 
 class Io final : public dsp56300::Io {
 public:
-  Io(const std::span<const dsp56300::Word> boot,
+  Io(const BootRom boot,
      Shi &shi,
      DspReset &reset,
      const std::stop_token &stop,
@@ -261,8 +262,7 @@ public:
   inspect_program(const dsp56300::Word address) const noexcept override {
     dsp56300::Word value = 0;
     if (memory_.read(dsp56300::Space::program, address, value)) { return value; }
-    if (address < boot_first || address - boot_first >= boot_.size()) { return {}; }
-    return boot_[address - boot_first];
+    return boot_.read(address);
   }
 
   std::span<const dsp56300::MemoryWindow>
@@ -698,7 +698,7 @@ private:
     return true;
   }
 
-  std::span<const dsp56300::Word> boot_;
+  BootRom boot_;
   Shi &shi_;
   DspReset &reset_;
   std::uint64_t epoch_ = 0;
@@ -847,7 +847,7 @@ bool run_instance(Io &io,
 }
 }
 
-ExecutionReport execute(const std::span<const dsp56300::Word> boot,
+ExecutionReport execute(const BootRom boot,
                         Shi &shi,
                         DspReset &reset,
                         const std::stop_token &stop,
@@ -857,8 +857,8 @@ ExecutionReport execute(const std::span<const dsp56300::Word> boot,
                         ExecutionTime *time,
                         MidiPort *midi,
                         PreparationClock *preparation) {
-  if (boot.empty() || boot.size() > dsp56300::address_words - boot_first) {
-    throw std::invalid_argument("DSP boot ROM has invalid bounds");
+  if (!boot.valid()) {
+    throw std::invalid_argument("DSP boot ROM has invalid or overlapping bounds");
   }
   const OutputOwner owner{output};
   Io io(boot, shi, reset, stop, image, output, peer, time, midi, preparation);
