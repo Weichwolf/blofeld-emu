@@ -751,6 +751,7 @@ Access operation(const dsp56300::FaultKind fault) {
     case dsp56300::FaultKind::stack:
     case dsp56300::FaultKind::invalid_instruction:
     case dsp56300::FaultKind::host_event:
+    case dsp56300::FaultKind::unprepared_execution:
     default: return Access::execute;
   }
 }
