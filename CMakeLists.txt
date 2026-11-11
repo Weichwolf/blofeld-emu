@@ -201,6 +201,10 @@ if(BUILD_TESTING)
   blofeld_unit(host-aot-code-test "test/host/aot/code_test.cpp;test/host/aot/calls.cpp"
     "blofeld_host_aot;LLVM;${CMAKE_DL_LIBS}")
   set_target_properties(host-aot-code-test PROPERTIES ENABLE_EXPORTS ON)
+  if(APPLE)
+    # Darwin LTO cannot infer the hook's reference from separately loaded IR.
+    target_link_options(host-aot-code-test PRIVATE "LINKER:-exported_symbol,_aot_test_event")
+  endif()
   target_include_directories(host-aot-code-test SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
   target_compile_definitions(host-aot-code-test PRIVATE
     BLOFELD_AOT_FIRST="$<TARGET_OBJECTS:blofeld-aot-first-ir>"
