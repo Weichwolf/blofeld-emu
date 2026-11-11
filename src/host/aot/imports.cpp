@@ -29,13 +29,13 @@ void validate_imports(LLVMModuleRef module, const Imports &imports) {
     if (function == nullptr) {
       if (LLVMGetNamedGlobal(module, name.c_str()) != nullptr ||
           LLVMGetNamedGlobalAlias(module, name.data(), name.size()) != nullptr) {
-        throw std::invalid_argument("AOT native import is not a function: " + name);
+        throw std::invalid_argument(std::string("AOT native import is not a function: ") + name);
       }
       continue;
     }
     if (LLVMIsDeclaration(function) == 0 || abi(function) != entry.abi) {
-      throw std::invalid_argument("AOT native import overrides IR or has an incompatible ABI: " +
-                                  name);
+      throw std::invalid_argument(
+          std::string("AOT native import overrides IR or has an incompatible ABI: ") + name);
     }
     validate_import_calls(function);
   }
