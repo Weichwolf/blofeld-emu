@@ -58,7 +58,7 @@ if(NOT LLVM_VERSION_MAJOR EQUAL 19 OR NOT TARGET LLVM)
   message(FATAL_ERROR "The packaged LLVM 19 shared library and headers are required")
 endif()
 add_library(blofeld_host_aot src/host/aot/abi.cpp src/host/aot/code.cpp
-  src/host/aot/contracts.cpp src/host/aot/module.cpp src/host/aot/optimize.cpp
+  src/host/aot/contracts.cpp src/host/aot/imports.cpp src/host/aot/module.cpp src/host/aot/optimize.cpp
   src/host/aot/symbols.cpp src/host/aot/target.cpp)
 target_include_directories(blofeld_host_aot PUBLIC src/host)
 target_include_directories(blofeld_host_aot SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
@@ -192,14 +192,14 @@ if(BUILD_TESTING)
   else()
     set(blofeld_aot_native -march=native)
   endif()
-  foreach(part first second host)
+  foreach(part first second host imports)
     add_library(blofeld-aot-${part}-ir OBJECT test/host/aot/${part}.cpp)
     target_link_libraries(blofeld-aot-${part}-ir PRIVATE blofeld_diagnostics)
     target_compile_options(blofeld-aot-${part}-ir PRIVATE -O3 -emit-llvm ${blofeld_aot_native})
     set_target_properties(blofeld-aot-${part}-ir PROPERTIES INTERPROCEDURAL_OPTIMIZATION_RELEASE OFF)
   endforeach()
   blofeld_unit(host-aot-code-test "test/host/aot/code_test.cpp;test/host/aot/calls.cpp"
-    "blofeld_host_aot;LLVM;${CMAKE_DL_LIBS}")
+    "blofeld_host_aot;blofeld_vi_peer;LLVM;${CMAKE_DL_LIBS}")
   set_target_properties(host-aot-code-test PROPERTIES ENABLE_EXPORTS ON)
   if(APPLE)
     # Darwin LTO cannot infer the hook's reference from separately loaded IR.
@@ -209,8 +209,10 @@ if(BUILD_TESTING)
   target_compile_definitions(host-aot-code-test PRIVATE
     BLOFELD_AOT_FIRST="$<TARGET_OBJECTS:blofeld-aot-first-ir>"
     BLOFELD_AOT_SECOND="$<TARGET_OBJECTS:blofeld-aot-second-ir>"
-    BLOFELD_AOT_HOST="$<TARGET_OBJECTS:blofeld-aot-host-ir>")
-  add_dependencies(host-aot-code-test blofeld-aot-first-ir blofeld-aot-second-ir blofeld-aot-host-ir)
+    BLOFELD_AOT_HOST="$<TARGET_OBJECTS:blofeld-aot-host-ir>"
+    BLOFELD_AOT_IMPORTS="$<TARGET_OBJECTS:blofeld-aot-imports-ir>")
+  add_dependencies(host-aot-code-test blofeld-aot-first-ir blofeld-aot-second-ir blofeld-aot-host-ir
+    blofeld-aot-imports-ir)
   blofeld_unit(host-audio-buffer-test test/host/audio/buffer_test.cpp blofeld_host_audio)
   blofeld_unit(vi-dsp-midi-test test/vi/dsp/midi_test.cpp blofeld_vi_execution)
   blofeld_unit(app-boot-test test/app/boot_rom_test.cpp blofeld_app_boot)

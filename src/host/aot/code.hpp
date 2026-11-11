@@ -17,9 +17,14 @@ struct Module {
   std::span<const Export> exports;
 };
 
+struct Import {
+  std::string_view name, abi;
+  const void *address = nullptr;
+};
+
 class Code {
 public:
-  explicit Code(std::span<const Module> modules);
+  explicit Code(std::span<const Module> modules, std::span<const Import> imports = {});
   ~Code();
   Code(const Code &) = delete;
   Code &operator=(const Code &) = delete;

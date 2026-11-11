@@ -2,6 +2,7 @@
 #include "aot/code.hpp"
 #include "calls.hpp"
 #include "fixture.hpp"
+#include "io/peer_port.hpp"
 
 #include "llvm-c/BitReader.h"
 #include "llvm-c/BitWriter.h"
@@ -12,15 +13,19 @@
 #include <array>
 #include <atomic>
 #include <bit>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <future>
 #include <iostream>
 #include <memory>
 #include <span>
 #include <stdexcept>
+#include <stop_token>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <type_traits>
 #include <vector>
 
@@ -28,6 +33,7 @@ namespace {
 using namespace blofeld::host::aot;
 using blofeld::test::aot::calls;
 std::atomic<unsigned> started{0}, finished{0};
+std::array<std::atomic<unsigned>, 2> native_started{}, native_finished{};
 constexpr std::string_view function_abi = "llvm19;cc=0;type=i32 (i32, ptr)";
 constexpr std::string_view getter_abi = "llvm19;cc=0;type=i32 ()";
 constexpr const char *snapshot = "_Z12aot_snapshotPKj";
@@ -87,6 +93,132 @@ struct Inputs {
              {.bitcode = host, .exports = std::span(exports).subspan(2, 1)}}};
   }
 };
+
+template <unsigned Instance> unsigned native_step(const unsigned value, unsigned *state) noexcept {
+  *state = (*state * 3) ^ value;
+  return *state + 7 + Instance;
+}
+
+template <unsigned Instance> void native_event(const unsigned event) noexcept {
+  if (event == 1) {
+    ++native_started[Instance];
+  } else if (event == 2) {
+    ++native_finished[Instance];
+  } else {
+    std::terminate();
+  }
+}
+
+struct Channel {
+  blofeld::vi::PeerPort &peer;
+  std::stop_token stop;
+};
+
+unsigned native_send(void *owner, const unsigned value, const std::uint64_t ticks) noexcept {
+  auto &channel = *static_cast<Channel *>(owner);
+  constexpr unsigned byte_mask = 0xff;
+  return value <= byte_mask && channel.peer.mcu_data({.mask = byte_mask,
+                                                      .known = byte_mask,
+                                                      .value = static_cast<std::uint8_t>(value)},
+                                                     ticks,
+                                                     channel.stop)
+             ? 1U
+             : 0U;
+}
+
+struct ImportInputs {
+  std::vector<std::byte> bytes = read(BLOFELD_AOT_IMPORTS);
+  std::array<Export, 2> exports{
+      {{.name = "aot_import_step", .abi = function_abi},
+       {.name = "aot_import_send", .abi = "llvm19;cc=0;type=i32 (ptr, i32, i64)"}}};
+  std::array<Import, 3> imports{{{.name = "aot_native_step",
+                                  .abi = function_abi,
+                                  .address = std::bit_cast<const void *>(&native_step<0>)},
+                                 {.name = "aot_native_event",
+                                  .abi = "llvm19;cc=0;type=void (i32)",
+                                  .address = std::bit_cast<const void *>(&native_event<0>)},
+                                 {.name = "aot_native_send",
+                                  .abi = "llvm19;cc=0;type=i32 (ptr, i32, i64)",
+                                  .address = std::bit_cast<const void *>(&native_send)}}};
+
+  [[nodiscard]] std::array<Module, 1> modules() const {
+    return {{{.bitcode = bytes, .exports = exports}}};
+  }
+};
+
+template <unsigned Instance> std::shared_ptr<const Code> imported_code() {
+  ImportInputs inputs;
+  inputs.imports[0].address = std::bit_cast<const void *>(&native_step<Instance>);
+  inputs.imports[1].address = std::bit_cast<const void *>(&native_event<Instance>);
+  return std::make_shared<const Code>(inputs.modules(), inputs.imports);
+}
+
+void native_imports() {
+  const auto first_start = native_started[0].load();
+  const auto second_start = native_started[1].load();
+  const auto first_end = native_finished[0].load();
+  const auto second_end = native_finished[1].load();
+  auto first = imported_code<0>();
+  auto second = imported_code<1>();
+  require(native_started[0].load() == first_start + 1 &&
+              native_started[1].load() == second_start + 1 &&
+              native_finished[0].load() == first_end && native_finished[1].load() == second_end,
+          "Each module's actual constructor resolves its private native import before publication");
+  using Step = unsigned (*)(unsigned, unsigned *) noexcept;
+  auto first_state = 5U;
+  auto second_state = 5U;
+  require(
+      std::bit_cast<Step>(first->address("aot_import_step"))(11, &first_state) == 14 &&
+          first_state == 7 &&
+          std::bit_cast<Step>(second->address("aot_import_step"))(11, &second_state) == 8 &&
+          second_state == 0,
+      "The same import names preserve ordered pointer writes through different native providers");
+  bool rejected = false;
+  try {
+    static_cast<void>(first->address("aot_native_step"));
+  } catch (const std::invalid_argument &) { rejected = true; }
+  require(rejected, "An imported implementation is not a declared instrument export");
+  auto retained = first;
+  first.reset();
+  second.reset();
+  require(native_finished[0].load() == first_end && native_finished[1].load() == second_end + 1 &&
+              retained->native_bytes() != 0,
+          "Independent code owners retain their own imports and finalize only their own module");
+  retained.reset();
+  require(
+      native_finished[0].load() == first_end + 1 && native_finished[1].load() == second_end + 1,
+      "The last binding finalizes through its own import after the other owner has disappeared");
+}
+
+void imported_channel() {
+  const auto code = imported_code<0>();
+  using Send = unsigned (*)(void *, unsigned, std::uint64_t) noexcept;
+  const auto send = std::bit_cast<Send>(code->address("aot_import_send"));
+  blofeld::vi::PeerPort peer;
+  std::stop_source stop;
+  Channel channel{.peer = peer, .stop = stop.get_token()};
+  constexpr unsigned capacity = 256;
+  for (unsigned index = 0; index < capacity; ++index) {
+    require(send(&channel, index, index) == 1,
+            "Fused native execution publishes actual data through the original channel provider");
+  }
+  std::promise<unsigned> promise;
+  auto completed = promise.get_future();
+  std::jthread producer([&] { promise.set_value(send(&channel, 0, capacity)); });
+  const auto blocked = completed.wait_for(std::chrono::milliseconds{16});
+  const auto first = peer.sample_mcu_data(0);
+  const auto ready = completed.wait_for(std::chrono::seconds{2});
+  stop.request_stop();
+  producer.join();
+  require(
+      blocked == std::future_status::timeout && ready == std::future_status::ready &&
+          completed.get() == 1 && first.value == 0 &&
+          peer.sample_mcu_data(capacity - 1).value == capacity - 1 &&
+          peer.sample_mcu_data(capacity).value == 0 && peer.error() == nullptr,
+      "The native receiver wakes a full-queue imported producer through the same wait provider");
+  require(send(&channel, 1, capacity + 1) == 0 && peer.mcu_data().value == 0,
+          "A stopped actual native import cannot fabricate successful channel publication");
+}
 
 std::shared_ptr<const Code> prepare(const bool reverse) {
   const Inputs inputs;
@@ -190,6 +322,32 @@ void return_contract() {
          first_reference);
 }
 
+void import_process_isolation() {
+  const auto initializations = started.load();
+  const auto finalizations = finished.load();
+  const auto private_start = native_started[1].load();
+  const auto private_end = native_finished[1].load();
+  {
+    const Inputs inputs;
+    const std::array imports{Import{.name = "aot_test_event",
+                                    .abi = "llvm19;cc=0;type=void (i32)",
+                                    .address = std::bit_cast<const void *>(&native_event<1>)}};
+    const Code owner(inputs.modules(), imports);
+    require(native_started[1].load() == private_start + 1 && started.load() == initializations,
+            "An explicit owner-local import takes precedence over an existing process symbol");
+  }
+  require(native_finished[1].load() == private_end + 1 && finished.load() == finalizations,
+          "The actual module finalizer uses its owner-local implementation");
+  {
+    const auto owner = prepare(false);
+    require(started.load() == initializations + 1 &&
+                native_started[1].load() == private_start + 1 && owner->native_bytes() != 0,
+            "A later unbound module still resolves the original process function");
+  }
+  require(finished.load() == finalizations + 1 && native_finished[1].load() == private_end + 1,
+          "Explicit native bindings never replace process-wide symbol resolution");
+}
+
 void rejected(const std::span<const Module> modules, const std::string_view reason) {
   const auto before = calls();
   const auto initializations = started.load();
@@ -213,6 +371,106 @@ void attribute(LLVMValueRef function,
       function,
       index,
       LLVMCreateEnumAttribute(LLVMGetModuleContext(LLVMGetGlobalParent(function)), kind, value));
+}
+
+void rejected_imports(const std::span<const Module> modules,
+                      const std::span<const Import> imports,
+                      const std::string_view reason) {
+  const auto before = calls();
+  const auto initializations = native_started[0].load();
+  bool failed = false;
+  try {
+    const Code code(modules, imports);
+  } catch (const std::invalid_argument &error) {
+    failed = std::string_view(error.what()).contains(reason);
+  }
+  require(failed && calls() == before && native_started[0].load() == initializations,
+          "An invalid native import fails before compilation, materialization or module startup");
+}
+
+void import_contracts() {
+  ImportInputs inputs;
+  const auto modules = inputs.modules();
+  rejected_imports(modules, {}, "unresolved native symbol");
+  constexpr std::string_view bad_name{"bad\0name", 8};
+  const std::array invalid{
+      Import{.name = "", .abi = function_abi, .address = inputs.imports[0].address},
+      Import{.name = bad_name, .abi = function_abi, .address = inputs.imports[0].address},
+      Import{.name = "__cxa_atexit", .abi = function_abi, .address = inputs.imports[0].address},
+      Import{.name = "llvm.fake", .abi = function_abi, .address = inputs.imports[0].address},
+      Import{.name = "aot_native_step", .abi = "", .address = inputs.imports[0].address},
+      Import{.name = "aot_native_step", .abi = function_abi, .address = nullptr},
+      Import{.name = "aot_native_step", .abi = getter_abi, .address = inputs.imports[0].address},
+      Import{
+          .name = "absent_native_step", .abi = function_abi, .address = inputs.imports[0].address},
+      Import{.name = "aot_import_step", .abi = function_abi, .address = inputs.imports[0].address}};
+  for (const auto entry : invalid) {
+    auto bindings = inputs.imports;
+    bindings[0] = entry;
+    rejected_imports(modules, bindings, "native import");
+  }
+  const std::array duplicate{
+      inputs.imports[0], inputs.imports[1], inputs.imports[2], inputs.imports[0]};
+  rejected_imports(modules, duplicate, "duplicate native import");
+  inputs.bytes = change(inputs.bytes, [](LLVMModuleRef module) {
+    LLVMAddGlobal(module, LLVMInt32TypeInContext(LLVMGetModuleContext(module)), "aot_data");
+  });
+  inputs.imports[0].name = "aot_data";
+  rejected_imports(inputs.modules(), inputs.imports, "not a function");
+}
+
+void import_call_contracts() {
+  ImportInputs inputs;
+  inputs.bytes = change(inputs.bytes, [](LLVMModuleRef module) {
+    auto *function = LLVMGetNamedFunction(module, "aot_native_step");
+    bool changed = false;
+    for (auto *block = LLVMGetFirstBasicBlock(LLVMGetNamedFunction(module, "aot_import_step"));
+         block != nullptr;
+         block = LLVMGetNextBasicBlock(block)) {
+      for (auto *instruction = LLVMGetFirstInstruction(block); instruction != nullptr;
+           instruction = LLVMGetNextInstruction(instruction)) {
+        if (LLVMIsACallInst(instruction) != nullptr &&
+            LLVMGetCalledValue(instruction) == function) {
+          constexpr std::string_view name = "zeroext";
+          LLVMAddCallSiteAttribute(
+              instruction,
+              LLVMAttributeReturnIndex,
+              LLVMCreateEnumAttribute(LLVMGetModuleContext(module),
+                                      LLVMGetEnumAttributeKindForName(name.data(), name.size()),
+                                      0));
+          changed = true;
+        }
+      }
+    }
+    require(changed, "Mutate an actual native import invocation's ABI attribute");
+  });
+  rejected_imports(inputs.modules(), inputs.imports, "ABI attribute mismatch");
+}
+
+void import_module_contracts() {
+  const ImportInputs inputs;
+  const auto other = change(read(BLOFELD_AOT_FIRST), [](LLVMModuleRef module) {
+    auto *function = LLVMGetNamedFunction(module, "aot_host");
+    constexpr std::string_view name = "aot_native_step";
+    LLVMSetValueName2(function, name.data(), name.size());
+    LLVMSetFunctionCallConv(function, LLVMFastCallConv);
+    for (auto *block = LLVMGetFirstBasicBlock(LLVMGetNamedFunction(module, "aot_first"));
+         block != nullptr;
+         block = LLVMGetNextBasicBlock(block)) {
+      for (auto *instruction = LLVMGetFirstInstruction(block); instruction != nullptr;
+           instruction = LLVMGetNextInstruction(instruction)) {
+        if (LLVMIsACallInst(instruction) != nullptr &&
+            LLVMGetCalledValue(instruction) == function) {
+          LLVMSetInstructionCallConv(instruction, LLVMFastCallConv);
+        }
+      }
+    }
+  });
+  constexpr std::array exports{Export{.name = "aot_first", .abi = function_abi}};
+  std::array modules{inputs.modules()[0], Module{.bitcode = other, .exports = exports}};
+  rejected_imports(modules, inputs.imports, "incompatible ABI");
+  std::ranges::reverse(modules);
+  rejected_imports(modules, inputs.imports, "incompatible ABI");
 }
 
 void contracts() {
@@ -389,6 +647,14 @@ int main() try {
   return_contract();
   contracts();
   aggregate_contracts();
+  import_contracts();
+  import_call_contracts();
+  import_module_contracts();
+  native_imports();
+  import_process_isolation();
+  imported_channel();
+  const ImportInputs unbound;
+  rejected_imports(unbound.modules(), {}, "unresolved native symbol");
   std::cout << "Verified joint native fusion, prelink contracts, actual lifecycle and shared "
                "ownership.\n";
 } catch (const std::exception &error) {

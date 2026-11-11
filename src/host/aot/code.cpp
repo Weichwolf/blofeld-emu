@@ -73,6 +73,24 @@ void platform(LLVMOrcLLJITBuilderRef builder, std::uint64_t &bytes) {
     return llvm::Error::success();
   });
 }
+
+void bind_imports(LLVMOrcLLJITRef jit, const detail::Imports &imports) {
+  if (imports.empty()) { return; }
+  std::vector<LLVMOrcCSymbolMapPair> symbols;
+  symbols.reserve(imports.size());
+  constexpr auto flags = LLVMJITSymbolGenericFlagsExported | LLVMJITSymbolGenericFlagsCallable;
+  for (const auto &[name, entry] : imports) {
+    symbols.push_back({.Name = LLVMOrcLLJITMangleAndIntern(jit, name.c_str()),
+                       .Sym = {.Address = std::bit_cast<LLVMOrcExecutorAddress>(entry.address),
+                               .Flags = {.GenericFlags = flags, .TargetFlags = 0}}});
+  }
+  Owner<LLVMOrcMaterializationUnitRef, LLVMOrcDisposeMaterializationUnit> unit(
+      LLVMOrcAbsoluteSymbols(symbols.data(), symbols.size()));
+  auto *pending = unit.get();
+  auto *error = LLVMOrcJITDylibDefine(LLVMOrcLLJITGetMainJITDylib(jit), unit.release());
+  if (error != nullptr) { unit.reset(pending); }
+  checked(error);
+}
 }
 
 class Code::Impl {
@@ -95,7 +113,9 @@ public:
   Phase phase = Phase::assembling;
 };
 
-Code::Code(const std::span<const Module> modules) : impl_(std::make_unique<Impl>()) {
+Code::Code(const std::span<const Module> modules, const std::span<const Import> imports)
+    : impl_(std::make_unique<Impl>()) {
+  const auto bindings = detail::imports(imports);
   detail::initialize();
   const Owner<LLVMOrcThreadSafeContextRef, LLVMOrcDisposeThreadSafeContext> context(
       LLVMOrcCreateNewThreadSafeContext());
@@ -107,6 +127,7 @@ Code::Code(const std::span<const Module> modules) : impl_(std::make_unique<Impl>
   for (const auto &input : modules) {
     inputs.emplace_back(detail::parse(llvm_context, input, exports));
     detail::validate_target(inputs.back().get());
+    detail::validate_imports(inputs.back().get(), bindings);
   }
   if (exports.empty()) { throw std::invalid_argument("AOT requires declared native exports"); }
   for (const auto &expected : inputs) {
@@ -116,7 +137,8 @@ Code::Code(const std::span<const Module> modules) : impl_(std::make_unique<Impl>
   }
   for (auto &input : inputs) { detail::merge(module.get(), std::move(input)); }
   detail::validate_exports(module.get(), exports);
-  detail::validate_symbols(module.get());
+  detail::validate_imports(module.get(), bindings);
+  detail::validate_symbols(module.get(), bindings);
   Owner<LLVMTargetMachineRef, LLVMDisposeTargetMachine> machine(detail::target(module.get()));
   detail::optimize(module.get(), machine.get(), exports);
   Owner<LLVMOrcLLJITBuilderRef, LLVMOrcDisposeLLJITBuilder> builder(LLVMOrcCreateLLJITBuilder());
@@ -127,6 +149,7 @@ Code::Code(const std::span<const Module> modules) : impl_(std::make_unique<Impl>
   auto *failure = LLVMOrcCreateLLJIT(&raw_jit, builder.release());
   impl_->jit.reset(raw_jit);
   checked(failure);
+  bind_imports(raw_jit, bindings);
   auto *prepared = LLVMOrcCreateNewThreadSafeModule(module.release(), context.get());
   checked(LLVMOrcLLJITAddLLVMIRModule(raw_jit, LLVMOrcLLJITGetMainJITDylib(raw_jit), prepared));
   for (const auto &[name, contract] : exports) {

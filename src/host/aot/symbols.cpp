@@ -13,7 +13,7 @@
 
 namespace blofeld::host::aot::detail {
 namespace {
-void symbol(LLVMValueRef value) {
+void symbol(LLVMValueRef value, const Imports &imports) {
   if (LLVMIsDeclaration(value) == 0 || LLVMGetFirstUse(value) == nullptr ||
       (LLVMIsAFunction(value) != nullptr && LLVMGetIntrinsicID(value) != 0)) {
     return;
@@ -23,17 +23,24 @@ void symbol(LLVMValueRef value) {
   const std::string text(name, size);
   // The native ORC platform owns this DSO handle and its destructor registrations.
   if (text == "__dso_handle") { return; }
+  if (imports.contains(text)) { return; }
   if (LLVMSearchForAddressOfSymbol(text.c_str()) == nullptr) {
     throw std::invalid_argument("AOT unresolved native symbol: " + text);
   }
 }
 }
 
-void validate_symbols(LLVMModuleRef module) {
+void validate_symbols(LLVMModuleRef module, const Imports &imports) {
+  for (const auto &[name, entry] : imports) {
+    static_cast<void>(entry);
+    if (LLVMGetNamedFunction(module, name.c_str()) == nullptr) {
+      throw std::invalid_argument("AOT native import is missing from IR: " + name);
+    }
+  }
   std::vector<LLVMValueRef> pending;
   for (auto *function = LLVMGetFirstFunction(module); function != nullptr;
        function = LLVMGetNextFunction(function)) {
-    symbol(function);
+    symbol(function, imports);
     for (auto *block = LLVMGetFirstBasicBlock(function); block != nullptr;
          block = LLVMGetNextBasicBlock(block)) {
       for (auto *instruction = LLVMGetFirstInstruction(block); instruction != nullptr;
@@ -44,7 +51,7 @@ void validate_symbols(LLVMModuleRef module) {
   }
   for (auto *global = LLVMGetFirstGlobal(module); global != nullptr;
        global = LLVMGetNextGlobal(global)) {
-    symbol(global);
+    symbol(global, imports);
     pending.push_back(global);
   }
   std::set<LLVMValueRef> visited;

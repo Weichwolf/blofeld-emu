@@ -184,6 +184,11 @@ void references(llvm::Function &declaration, const llvm::Function &definition) {
 }
 }
 
+void validate_import_calls(LLVMValueRef function) {
+  auto &declaration = *llvm::cast<llvm::Function>(llvm::unwrap(function));
+  references(declaration, declaration);
+}
+
 void validate_contracts(LLVMModuleRef expected, LLVMModuleRef incoming) {
   auto &source = *llvm::unwrap(expected);
   const auto &definitions = *llvm::unwrap(incoming);

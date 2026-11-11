@@ -50,6 +50,22 @@ absolute host pointers. Preserve every declared guest/event root. Internalize
 eligible host helpers and run one target-aware LLVM O3 pipeline over the joint
 module. Resolve all roots and complete native initialization before publication.
 
+Supply genuine native channel, wake and operating-system boundaries to Code as
+explicit Import entries: symbol name, LLVM19 ABI contract and native function
+address. Match every original declaration and invocation before merging IR;
+reject missing, duplicate, null, reserved, non-function or incompatible imports
+and attempts to override an IR definition. Bind function relocations within each
+Code owner before materialization and initialization. Keep import names private
+to that owner; the public address map contains only declared exports. Independent
+owners may bind the same name to different implementations. Use portable typed
+C ABI adapters where a C++ method has no portable native address. Keep the native
+provider executable through final module destruction and its channel state alive
+through the last native operation. Share the actual native wait/notify provider
+with all execution owners; do not materialize a separate copy of its runtime
+globals. Eligible local memory/register implementations still join the firmware
+IR before O3. Store symbol/ABI identities in persistent artifacts and relocate
+their native addresses at load; do not embed instance or provider addresses in IR.
+
 Use LLVM 19's GenericLLVMIRPlatform for the optimized module's native emission
 and initializer/destructor ownership. Keep its platform-before-process symbol
 search order, including __dso_handle and __cxa_atexit interposition. Never install
