@@ -73,6 +73,89 @@ void mapping() {
           "Flash writes require the flash controller");
 }
 
+void verify_regions(blofeld::vi::mcu::Memory &memory, const blofeld::vi::FlashImage &flash) {
+  using blofeld::vi::mcu::Space;
+  const auto views = memory.regions();
+  std::size_t next = 0;
+  unsigned end = 0;
+  for (const auto &view : views) {
+    require(!view.bytes.empty() && view.first >= end &&
+                view.bytes.size() <= cpu12::address_bytes - view.first,
+            "Direct grants are nonempty, sorted, disjoint and addressable");
+    end = static_cast<unsigned>(view.first + view.bytes.size());
+  }
+  for (unsigned address = 0; address < cpu12::address_bytes; ++address) {
+    const auto at = static_cast<cpu12::Address>(address);
+    const auto location = memory.locate(at);
+    const bool ram = location.space == Space::system_ram || location.space == Space::queue_ram;
+    const bool readable_flash = location.space == Space::flash && flash.known[location.offset] != 0;
+    while (next < views.size() && address >= views[next].first + views[next].bytes.size()) {
+      ++next;
+    }
+    const bool granted = next < views.size() && address >= views[next].first;
+    require(granted == (ram || readable_flash),
+            "Every address agrees with the functional mapping and actual flash knowledge");
+    if (!granted) { continue; }
+    const auto &view = views[next];
+    const auto offset = address - view.first;
+    std::uint8_t value = 0;
+    if (readable_flash) {
+      require(!view.writable && view.known.empty() && view.identity == 0 &&
+                  view.bytes.data() + offset == flash.bytes.data() + location.offset,
+              "Flash grants borrow exact physical bytes, including both aliases and holes");
+    } else {
+      require(view.writable && view.identity == 0 && view.known.size() == view.bytes.size() &&
+                  memory.read(at, value) == (view.known[offset] != 0),
+              "Direct RAM grants preserve writability and every initializedness bit");
+      if (view.known[offset] != 0) {
+        require(view.bytes[offset] == value, "Direct and functional RAM reads agree");
+      }
+    }
+  }
+}
+
+void mapping_regions() {
+  blofeld::vi::FlashImage flash;
+  for (std::size_t index = 0; index < flash.bytes.size(); ++index) {
+    flash.bytes[index] = static_cast<std::uint8_t>(index ^ (index >> 8U));
+  }
+  const auto check = [&flash](const std::array<std::uint8_t, 4> &mapping) {
+    blofeld::vi::mcu::Memory memory(flash);
+    constexpr cpu12::Address mapping_first = 0x10;
+    for (std::size_t index = 0; index < mapping.size(); ++index) {
+      static_cast<void>(
+          memory.write_mapping({.address = static_cast<cpu12::Address>(mapping_first + index),
+                                .value = mapping[index]}));
+    }
+    static_cast<void>(memory.commit_mapping());
+    constexpr unsigned stride = 8;
+    for (unsigned address = 0; address < cpu12::address_bytes; address += stride) {
+      static_cast<void>(
+          memory.write({.address = static_cast<cpu12::Address>(address),
+                        .value = static_cast<std::uint8_t>(address ^ (address >> 8U))}));
+    }
+    verify_regions(memory, flash);
+  };
+  flash.known.fill(1);
+  check({9, 0, 1, 0x0d});
+  flash.known.fill(0);
+  check({9, 0, 1, 0x0d});
+  constexpr unsigned hole_mask = 0x7f;
+  for (std::size_t index = 0; index < flash.known.size(); ++index) {
+    flash.known[index] = (index & hole_mask) == 0 ? 0 : static_cast<std::uint8_t>(index | 1U);
+  }
+  // Every raw byte for each independent map register, including masked bits.
+  for (unsigned value = 0; value <= UINT8_MAX; ++value) {
+    const auto byte = static_cast<std::uint8_t>(value);
+    check({byte, 0, 1, 0x0d});
+    check({9, byte, 1, 0x0d});
+    check({9, 0, byte, 0x0d});
+    check({9, 0, 1, byte});
+    // Intersect all windows, including the last byte of the address space.
+    check({static_cast<std::uint8_t>(byte | 1U), byte, static_cast<std::uint8_t>(byte | 1U), 1});
+  }
+}
+
 void native_memory() {
   namespace isa = cpu12::isa;
   constexpr std::uint16_t program_address = 0x8200;
@@ -325,6 +408,7 @@ void interrupt_program_transition() {
 
 int main() try {
   mapping();
+  mapping_regions();
   native_memory();
   unknown_memory();
   program_bindings();

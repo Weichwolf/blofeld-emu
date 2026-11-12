@@ -9,8 +9,10 @@
 #include <cpu12/memory.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <span>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace blofeld::vi::mcu {
@@ -33,6 +35,76 @@ std::size_t mapping_index(const std::uint16_t offset) {
     throw std::out_of_range("Unknown UF32 memory-mapping register");
   }
   return offset - mapping_first;
+}
+
+std::vector<unsigned> boundaries(const std::array<std::uint8_t, 4> &mapping) {
+  const unsigned registers = (mapping[1] & register_mask) << 8U;
+  const unsigned system =
+      ((mapping[0] & system_mask) << 8U) + ((mapping[0] & 1U) != 0 ? high_align : 0);
+  const unsigned queue = (mapping[2] & queue_mask) << 8U;
+  constexpr unsigned queue_storage = 1536;
+  return {0,
+          cpu12::address_bytes,
+          registers,
+          registers + register_bytes,
+          system,
+          system + system_offset,
+          system + system_window,
+          queue,
+          queue + queue_storage,
+          queue + queue_window,
+          flash_alias,
+          flash_first};
+}
+
+struct Area {
+  unsigned first, bytes;
+  Location location;
+  bool executable;
+};
+
+template <typename Locate, typename Executable>
+std::vector<Area> areas(std::vector<unsigned> points, Locate locate, Executable executable) {
+  std::ranges::sort(points);
+  const auto duplicate = std::ranges::unique(points);
+  points.erase(duplicate.begin(), duplicate.end());
+  std::vector<Area> result;
+  for (std::size_t index = 1; index < points.size(); ++index) {
+    const auto first = points[index - 1];
+    const auto location = locate(static_cast<std::uint16_t>(first));
+    const bool code = executable(location);
+    if (!result.empty()) {
+      auto &previous = result.back();
+      if (previous.location.space == location.space && previous.executable == code &&
+          unsigned{previous.location.offset} + previous.bytes == location.offset) {
+        previous.bytes += points[index] - first;
+        continue;
+      }
+    }
+    result.push_back(
+        {.first = first, .bytes = points[index] - first, .location = location, .executable = code});
+  }
+  return result;
+}
+
+void flash_regions(std::vector<cpu12::Ram> &views, FlashImage &flash, const Area &area) {
+  const auto known = std::span(flash.known).subspan(area.location.offset, area.bytes);
+  std::size_t offset = 0;
+  while (offset < known.size()) {
+    if (known[offset] == 0) {
+      ++offset;
+      continue;
+    }
+    const auto *unknown = static_cast<const std::uint8_t *>(
+        std::memchr(known.data() + offset, 0, known.size() - offset));
+    const auto end =
+        unknown == nullptr ? known.size() : static_cast<std::size_t>(unknown - known.data());
+    views.push_back(
+        {.first = static_cast<std::uint16_t>(area.first + offset),
+         .bytes = std::span(flash.bytes).subspan(area.location.offset + offset, end - offset),
+         .writable = false});
+    offset = end;
+  }
 }
 }
 
@@ -174,35 +246,30 @@ cpu12::Ram Memory::region(const Location start, const std::size_t size) {
 std::vector<cpu12::Ram> Memory::regions() {
   std::vector<cpu12::Ram> views;
   const auto identity = program_ ? *program_ + 1 : 0;
-  constexpr unsigned end = cpu12::address_bytes;
-  const auto grantable = [this](const Location at) {
-    return at.space == Space::system_ram || at.space == Space::queue_ram ||
-           (at.space == Space::flash && flash_.known[at.offset] != 0);
-  };
-  unsigned address = 0;
-  while (address < end) {
-    const auto start = locate(static_cast<std::uint16_t>(address));
-    if (!grantable(start)) {
-      ++address;
+  auto points = boundaries(mapping_);
+  if (program_) {
+    points.push_back(program_first);
+    points.push_back(program_first + program_bytes);
+  }
+  const auto mapped = areas(
+      std::move(points),
+      [this](const auto address) { return locate(address); },
+      [this](const auto location) { return program_contains(location); });
+  for (const auto &area : mapped) {
+    if (area.location.space == Space::flash) {
+      flash_regions(views, flash_, area);
       continue;
     }
-    const auto first = address++;
-    const bool executable = program_contains(start);
-    while (address < end) {
-      const auto next = locate(static_cast<std::uint16_t>(address));
-      if (next.space != start.space || next.offset != start.offset + address - first ||
-          !grantable(next) || program_contains(next) != executable) {
-        break;
-      }
-      ++address;
+    if (area.location.space != Space::system_ram && area.location.space != Space::queue_ram) {
+      continue;
     }
-    auto view = region(start, address - first);
-    if (executable) {
+    auto view = region(area.location, area.bytes);
+    if (area.executable) {
       view.known = {};
       view.writable = false;
       view.identity = identity;
     }
-    view.first = static_cast<std::uint16_t>(first);
+    view.first = static_cast<std::uint16_t>(area.first);
     views.push_back(view);
   }
   return views;
