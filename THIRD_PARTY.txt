@@ -1,6 +1,5 @@
 Original emulator code: GPL-3.0-only (LICENSE).
-These notices include retained optional build/reference inputs. The current
-display libraries do not link the core, compression or session-audio libraries.
+Retain these notices for linked dependencies and optional reference inputs.
 
 Independent CPU12 runtime core:
   https://github.com/Weichwolf/cpu12
@@ -10,7 +9,7 @@ Independent CPU12 runtime core:
 LLVM 19 compiler/runtime libraries:
   LLVM Project contributors, Apache-2.0 WITH LLVM-exception.
   https://llvm.org/
-  Used privately by the cores for semantic IR optimization and native JIT code.
+  Used privately for ISA/host IR composition, optimization and native code.
   Linked from the installed development package; no foreign source build or
   sanitizer instrumentation. Complete notices accompany the core dependency.
 

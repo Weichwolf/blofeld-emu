@@ -1,220 +1,70 @@
 # Objective
 
-A complete standalone Blofeld Desktop SL instrument executing unchanged original
-1.25 firmware from reset, using our independent cpu12 and dsp56300 JITs, on
-macOS ARM64 and Linux x86-64. An external MIDI keyboard supplies live notes;
-emulating the Blofeld Keyboard model and its keybed controller is outside scope.
-Correctness is instrument behavior: sound, musical time and documented
-functions. Electrical wiring, bus phases and cycle-by-cycle lockstep are not
-objectives. Use Ahead-of-Time Binary Translation: translate the known firmware
-and its executable variants, combine their semantic LLVM IR with eligible host
-implementations, and optimize them into a native instrument before playback. The
-core libraries supply ISA translation; the application owns image analysis,
-bindings, preparation orchestration and instrument lifecycle. Prefer loading the
-selected firmware at application startup, completing AOT and joint host-code
-optimization before playback. Translation precedes execution of its code
-version; runtime loading does not mean lazy translation while playing. Require
-the same generated-code quality as a build-time translation and report
-startup/compiler memory separately from warm instrument throughput. Build-time
-AOT is explicitly allowed as an alternative: locally generate a firmware
-translation and compile/link it together with the host application. Translation
-need not run inside the launched instrument. Startup preparation is an
-alternative placement of the same mandatory compilation phase, not a requirement
-to retain a JIT loop. Generated firmware IR/source/objects and firmware-specific
-executables remain untracked build artifacts. Bind them to exact firmware,
-executable-variant, memory/device ABI and target identities; reject incompatible
-profile inputs. Both core projects must support that build-time path through
-exportable linkable LLVM bitcode or relocatable native objects from the same
-semantic pipeline used for startup preparation. The application must not
-duplicate or embed private ISA lowering implementations. Keep LLVM handles
-private and bindings explicit. See [target
-architecture](doc/architecture-design.txt).
+Deliver the complete Blofeld Desktop with active SL on macOS ARM64 and Linux
+x86-64, using unchanged original 1.25 firmware and our cpu12/dsp56300 translators.
+Preserve original sound, quirks, musical time and device effects. No firmware
+patches, skipped routines, invented replies, host synthesis or electrical models.
 
-## Acceptance
+## Instrument
 
-- Original DSP synthesis, all oscillators/wavetables, filters, effects, voices,
-  modulation, multitimbrality, controls, MIDI/SysEx and display functions.
-- Bidirectional classic MIDI and an actual host-visible USB-MIDI device using
-  original descriptors, endpoints, status and IRQ behavior. No duplicate routing
-  or USB Audio. Qualify ordinary MIDI tools, DAW/controller routing and original
-  Spectre under Wine, including sample transfers, cancellation and failures.
-- Persistent unit identity, programs and selectable memory/sample images.
-  Build a local vanilla image from verified device inputs and Waldorf's standard
-  library; original firmware must recognize active SL and play actual samples.
-  Establish required ROM/wavetables from accesses; keep missing inputs explicit.
-- Original boot, reset, valid/damaged firmware updates and recovery, including
-  interrupted transfers and power loss during every erase/program phase, flash
-  protection and security state. Support user firmware through those paths.
-  Reload creates/rebinds core translations; no update logic belongs in the cores.
-- Headless standalone live MIDI/audio with no arguments and a default local
-  profile. Profiles select firmware, persistent images and identity. SMF plus
-  WAV selects streamed offline rendering at maximum speed, preserving tempo,
-  ordering, SysEx, musical timestamps and release/effect tails. No user-facing
-  instruction-budget, wiring or chip-clock options; no separate control CLI.
-- Use the session's normal audio output and actual capability/latency grants.
-  Bounded queues report overload, underruns and disconnects. Audio callbacks
-  never allocate, lock, throw or access files.
-- In live mode, independent GTK display from original LCD state. Atomically publish PBM
-  under $XDG_RUNTIME_DIR/blofeld-emu/; follow directory
-  recreation. Detect publisher exit/crash without periodic emulator writes; never
-  present stale images as live. Unknown display contents remain explicit.
-  Offline MIDI-to-WAV has no viewer binding; report rendering statistics in the console.
-- Simple unit tests mirror src/. The normal emulator provides reset-to-instrument,
-  long-run/load, trace and memory-inspection acceptance runs. Cover every documented
-  Desktop SL function on both host platforms in ACCEPTANCE.tsv, with fixed scope,
-  tolerances and independent references; incomplete scope never counts as passed.
+- Original boot/reset, synthesis, wavetables/samples, filters, effects, modulation,
+  voice allocation, sixteen-part Multi, controls, display and persistent programs.
+- External MIDI keyboard, bidirectional DIN and real host-visible USB-MIDI with
+  original descriptors/endpoints/status/IRQs. Qualify DAWs, controllers, ordinary
+  MIDI tools and Spectre under Wine, including sample transfers and failures.
+  No duplicate routing, USB Audio or Blofeld Keyboard/keybed emulation.
+- Verified local identity/device/sample images with original active SL and
+  authentic Waldorf standard-library playback. Preserve reset, valid/damaged user
+  firmware updates, interruption/power loss, protection/security and recovery.
+  Physical flashing requires established recovery independently of software tests.
+- No-argument headless live mode from the standard profile. SMF plus WAV selects
+  streamed offline rendering with original tempo, ordering, SysEx and tails.
+  Query actual host grants; callbacks never allocate, lock, wait, throw or access files.
+- Live-only independent LCD viewer in the standard runtime directory, explicit
+  unknown state and stale-image removal on exit/crash without emulator heartbeats.
+  Offline opens no viewer or host audio and reports actual render statistics.
 
-No firmware patches, skipped routines, invented success replies or substitute
-host synthesizer. Preserve firmware quirks and distinguish evidence from
-hypotheses. Reconstruct missing contracts independently; physical disassembly or
-hardware access is not a prerequisite. Emulator success does not prove physical
-flashing safety; hardware programming needs established recovery. Manufacturer
-assets remain local, with source URLs, sizes and hashes recorded.
+## Native execution
 
-## Acceptance catalogue
+Follow [doc/architecture.md](doc/architecture.md). Complete known AOT/variants,
+loader outputs and indirect/callback/IRQ entries before playback; fail gaps with
+identity, address and reason. Preserve observable program reads/writes while
+selecting prepared native code. Startup loading and build-time IR/object export
+share one semantic pipeline. No first-use compilation or private-layout copies.
 
-ACCEPTANCE.tsv is the project-owned inventory of required instrument functions,
-host operation and qualification gates, not an executable test or a manufacturer
-certification. Profile D means Desktop with active SL. The macos_arm64 and
-linux_x86_64 columns record separate emulator results; the Linux developer owns
-Linux validation. Grouped rows pass only when their complete stated scope passes
-with identified inputs, independent references and fixed tolerances. Unit tests
-and isolated helpers cannot establish a playable-instrument pass.
+Fuse eligible host IR before LLVM19 O3. Keep registers live, RAM direct and DSP56
+arithmetic/rounding/saturation/flags inline. Validate proved invariants during
+AOT/stopped binding, revalidating relevant revisions. Release omits optional Debug/
+sanitizer work and repeated proved checks; both modes preserve required dynamic
+effects/faults. Development runs full AOT without a fixed preparation budget.
+Operational caches hold validated relocatable code, never device snapshots.
+Keep manufacturer inputs/generated artifacts local with source/size/hash identity.
 
-Status values are pending, failed, passed and not_applicable. Pending is no
-evidence of completion. hardware_reference records optional comparisons with a
-stock Blofeld; it is not an additional completion gate. The physical latency
-measurement required below still belongs in each platform's emulator result.
+## Performance and qualification
 
-Source M cites pages of the German Blofeld manual, version 1.1; S cites the
-German Spectre manual; U cites the firmware-update instructions.
-doc/downloads.json pins their manufacturer URLs, sizes and hashes. F-D cites the
-Desktop FAQ snapshot identified in doc/function-references.json. OBJECTIVE cites
-this specification.
-
-## Performance and operation
-
-Target >=10x sustained offline throughput under representative high polyphony,
-effects and sample use on this host. Treat >=4x as an intermediate milestone.
-Design compilation, generated code, host integration and core coupling for the
-10x target. Quantify remaining costs with reproducible complete-instrument
-measurements while preserving behavior, guest time, complete audio and bounded
-live latency. Change the target only with quantitative feasibility evidence.
-
-The combined load includes Multi mode with sixteen simultaneously active parts
-and up to twenty-five total voices, with distinct programs, oscillators,
-filters, modulation, original effects and authentic SL sample playback together.
-Include programs that attain twenty-five allocated voices and heavier sound
-combinations; record actual voice allocation, release and stealing, preserving
-the firmware's resource-dependent limits. Measure fixed instrument cost and
-added voice/part, effect and sample costs separately before extrapolating
-capacity.
-
-Live operation must deliver every audio buffer on time without host-induced
-gaps, lost or repeated frames, including first use of every prepared firmware
-path. Average throughput or offline reserve cannot compensate for a missed live
-deadline.
-
-Prioritize optimized host execution over translation speed. Both cpu12 and
-dsp56300 require an explicit preparation/optimization phase before run: analyze
-the loaded executable program, build semantic data/control flow and optimize it
-across instructions and blocks before native lowering. Apply constant/range
-propagation, redundant computation/load/store elimination, register value
-propagation and appropriate loop/vector optimization with exact guest semantics.
-Host C++ -O3 alone does not optimize machine code emitted at runtime.
-
-Preparation is mandatory for each executable code version. Translate the
-complete established executable program, including interrupt entries and
-indirect targets, before admitting its execution. Cover the complete known
-firmware and its known executable variants before playback, including fixed
-loader outputs and variants selected by genuine program writes. Resolve those
-writes to prepared native code while retaining their original readable effects.
-An incomplete translation fails with code identity, address and reason; a
-successful optimizing subset or silent lazy translation is not complete
-preparation. Distinguish executable coverage from LLVM optimization coverage.
-Runtime data remains ordinary mutable RAM and does not prevent advance
-translation; immutable tables can be constants under validated image bindings.
-Known loader output may be prepared in advance when its code and mappings are
-established. Loading code into RAM alone is not evidence of self-modification.
-Actual executable changes revoke affected translations and require preparation
-before that changed code executes. Preserve original loader effects and clocks.
-Do not assume arbitrary code generation during ordinary playing. An exception
-needs concrete firmware evidence; known code loaded into RAM remains known code.
-
-Fuse eligible consumer-owned host implementations with lifted firmware IR before
-LLVM 19 O3. Inline and specialize concrete memory/register/FIFO/DMA/IRQ bindings
-while preserving dynamic values and ordered effects. The result executes as
-native host functions over host RAM and typed host transports. Retain original
-program words where firmware observes them; an additional simulated instruction
-memory/execution layer is not a requirement. No ISA dispatch or opaque
-per-opcode helper boundary qualifies as complete optimized native execution.
-Treat translated code and host functions as one optimized native path. Eliminate
-avoidable call/dispatch boundaries, state copies, register spills and repeated
-validation across their interface. Inspect emitted code and connected profiles
-to qualify the remaining costs while preserving required effects.
-
-Compare independently authored MCU/DSP algorithms with equivalent portable C++
-host references compiled by Clang 19 with O3 and the same target CPU/features.
-Target throughput parity. Verify fixed-width arithmetic, rounding, saturation,
-required flags/state and all observable memory effects; prevent dead-code
-removal. Separate preparation from warm execution and expose residual device/API
-costs. Report every workload and the ratio; retain ASM/SIMD references as
-additional comparisons. Identify the actual guest lowering and preparation
-coverage; ordinary native-emitter results do not establish LLVM-O3 or complete
-AOT performance.
-
-Allow substantial startup preparation without a fixed time budget; the suggested
-one second is not a limit. Prepare the complete established executable program
-before playback, and support subsequently loaded/modified code with exact
-invalidation and optimized retranslation. Preparation performs no guest
-execution, real I/O or device-time advance. Measure coverage and first use,
-including interrupt entries, indirect targets and runtime-loaded code. Report
-preparation separately from original boot, warm execution and total readiness.
-It does not extend a failed firmware probe. For deployment, persist validated AOT artifacts to amortize compilation across
-starts. Development always runs complete AOT and optimization; a cache hit must
-not hide translation or coverage defects. Implement and qualify the cache for
-operation after the complete AOT path, preserving the same code-quality contract.
-
-Use heterogeneous host cores deliberately: prioritize MCU/DSP execution on
-performance resources and place preparation/background work on efficiency
-resources using supported host scheduling contracts. Query actual topology and
-verify placement behavior; a successful QoS request alone is not proof of core
-assignment. Keep host scheduling out of guest ISA and device-time semantics. Do
-not decode arbitrary data or unknown memory as established executable code. Key persistent artifacts by executable-input hashes, exact core/LLVM pipeline
-revision, host
-architecture/features, code-generation options and binding ABI. Relocate
-instance addresses on load; never restore device state from a code cache. Reject
-damaged or incompatible entries and rebuild before playback. Preparation and
-caching never substitute for removing measured runtime overhead.
-
-Live key-to-sound latency targets 2-5 ms, with a hard upper bound of 10 ms, on
-both macOS ARM64 and Linux x86-64. Measure from physical keyboard actuation to
-the synthesized sound at the analog audio output, including keyboard scan, MIDI
-transport, original firmware/synthesis, queues, driver and D/A conversion.
-Qualify with a specified immediate-attack original sound and representative
-polyphony, effects and sample load. Identify the keyboard, transport and audio
-device; report the latency distribution, maximum and jitter. Buffer duration,
-MIDI-arrival-to-render timing and driver latency estimates are separate partial
-metrics and cannot establish this end-to-end requirement. No measured response
-in the qualified live load scope may exceed 10 ms; retain underruns and misses
-as failures. Keep startup separate from live response latency.
-
-RTF = valid delivered stereo frames / (44100 * monotonic host seconds). 4x is
-176400 frames/s; 10x is 441000. Count each actual frame once. Report startup,
-warm-up, output rate/conversion, active processing, pacing, underruns and
-MIDI/audio latency separately. Live status is bounded-rate readable text;
-offline completion reports actual totals. Isolated JIT speed and sampled CPU
-shares are not instrument throughput. The cores' >=70% matched host-ASM target
-does not gate integration.
-
-Milestones remain 1x/99%, 10x/99.9% and 100x/99.99% playable-instrument
-coverage; these do not replace complete acceptance or the >=10x sustained
-target. Choose explicit probe guards for the stated diagnostic or
-qualification purpose; allow the original startup to complete. A probe fails
-unless playable; no unchanged failed repetition without new evidence. Qualify
-MIDI-triggered original sound and at least ten seconds of audio at >=44100
-stereo frames per host second. Stop immediately on runtime faults.
-
-Future application: rapid original-synthesis rendering for automatic native
-program design, including acoustic instruments. Preserve musical time and export
-programs usable on hardware; this follows complete instrument acceptance.
+- Sustain **>=10x offline**, >=4x intermediate, with sixteen active parts, up to
+  twenty-five actual voices, distinct programs, original effects and authentic SL
+  samples together. Include heavier combinations and record resource limits,
+  allocation/release/stealing. At 44.1 kHz, 4x = 176400 and 10x = 441000 stereo frames/s.
+- Count valid original frames once against monotonic host processing time. Report
+  compilation, boot/readiness, warm-up, active rendering, pacing and conversion
+  separately. No lost, repeated or retimed frames; core/silent-startup results do
+  not qualify. Compare authored core algorithms with equivalent Clang19 O3 C++.
+- Physical keyboard-actuation-to-analog latency targets **2-5 ms**, maximum **10 ms**,
+  including scan, transport, firmware, queues, driver and DAC. Qualify an immediate-
+  attack original sound under representative load; identify devices and report
+  distribution, maximum/jitter and every underrun/deadline miss.
+- Prove independent owners' bidirectional event horizons, ordering and progress
+  under changed host scheduling. Use queried resources; no arbitrary time slices.
+- ACCEPTANCE.tsv defines complete profile-D scope and separate native-platform
+  results. Pending proves nothing; grouped rows need complete independent evidence
+  and fixed tolerances. Optional stock comparisons are not an extra gate. Source
+  M/S/U/F-D resolves through doc/downloads.json and function-references.json.
+- Use focused independent units and the normal instrument for reset-to-playable,
+  load/long-run and recovery acceptance. Prioritize Release functionality/
+  performance; complete own-code/generated-JIT ASan/UBSan and separate concurrent
+  TSan qualification at the goal, earlier for concrete risks. Never instrument/
+  rebuild foreign libraries or add GitHub workflows. Each developer validates
+  their native host with identical inputs/settings. Probes use purpose-specific
+  finite guards, allow startup, fail unless playable and stop promptly on faults;
+  no unchanged failed repetition without new evidence.
