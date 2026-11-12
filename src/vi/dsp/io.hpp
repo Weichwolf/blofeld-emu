@@ -605,10 +605,16 @@ private:
       return access.space == dsp56300::Space::x && access.address == shi_transmit &&
              blofeld_dsp_shi_write(&shi_, access.address, value);
     }
+    bool changed = access.space == dsp56300::Space::program;
+    if (changed && program_ != nullptr) {
+      changed = installed_program_ &&
+                program_->contains({.variant = *installed_program_, .address = access.address}) &&
+                inspect_program(access.address) != value;
+    }
     if (!memory_.write({.space = access.space, .address = access.address, .value = value})) {
       return false;
     }
-    if (access.space == dsp56300::Space::program) { program_changed_ = true; }
+    program_changed_ |= changed;
     return true;
   }
 

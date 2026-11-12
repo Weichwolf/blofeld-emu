@@ -304,6 +304,8 @@ if(BUILD_TESTING)
   target_include_directories(vi-dsp-records-test PRIVATE test)
   blofeld_unit(vi-dsp-code-source-test test/vi/dsp/code_source_test.cpp blofeld_vi_code_source)
   blofeld_unit(vi-dsp-program-test test/vi/dsp/program_test.cpp blofeld_vi_execution)
+  blofeld_unit(vi-dsp-io-test test/vi/dsp/io_test.cpp "blofeld_app_aot;blofeld_vi_execution")
+  target_include_directories(vi-dsp-io-test PRIVATE "${BLOFELD_DSP56300_ROOT}/test/support")
   target_include_directories(vi-dsp-program-test PRIVATE "${BLOFELD_DSP56300_ROOT}/test/support")
   target_include_directories(vi-dsp-code-source-test PRIVATE test)
   blofeld_unit(vi-update-transport-test test/vi/storage/update_transport_test.cpp
