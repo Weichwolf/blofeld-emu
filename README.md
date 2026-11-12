@@ -111,7 +111,9 @@ falling back to `$HOME/.config/blofeld-emu/default.profile`. Profiles contain
 one field and quoted path per line; paths are relative to the profile file:
 
 ```text
+firmware "original-update.zip"
 boot-rom "boot.bin"
+dsp-catalogue "dsp-code.json"
 device-state "device.bfnvm"
 nand "samples.bfnand"
 ```
@@ -150,8 +152,14 @@ pixels revoke the bitmap until a known frame is available. A live-only
 `display.live` pipe stays open for the publisher lifetime. The viewer checks it
 once per second and clears stale images when the emulator exits or crashes;
 this requires no heartbeat writes or firmware/audio work.
-The optional `firmware` path selects the original update container. Preserve the
-complete original boot and require MIDI identity, valid PCM and playable sound
+The `firmware` path selects the original update container. The local
+`dsp-catalogue` identifies its exact decoded blocks, retained NAND stream and
+separate ROM regions by SHA256, and declares the original code variants,
+instruction contexts, admission points, memory and interrupt contracts.
+Source construction and complete native preparation precede VM execution;
+missing sources, mismatched identities and incomplete translation fail startup.
+Keep this firmware-derived catalogue and generated native artifacts untracked.
+Preserve the complete original boot and require MIDI identity, valid PCM and playable sound
 before admitting instrument operation.
 SIGINT/SIGTERM request coordinated shutdown. Live status reports server-submitted
 frames, local queue occupancy, native buffer grants, estimated output latency and host/device

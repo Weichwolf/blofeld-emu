@@ -7,8 +7,9 @@ blofeld_device_binding(dsp "${blofeld_dsp_exports}"
   src/vi/dsp/interrupts.cpp src/vi/dsp/memory.cpp src/vi/dsp/midi.cpp
   src/vi/dsp/ports.cpp src/vi/dsp/timers.cpp src/vi/io/dsp_reset.cpp
   src/vi/io/memory_controller.cpp src/vi/storage/media_image.cpp)
-add_library(blofeld_app_aot src/app/aot/dsp.cpp "${blofeld_binding_directory}/dsp_bindings.hpp")
+add_library(blofeld_app_aot src/app/aot/dsp.cpp src/app/aot/dsp_catalogue.cpp src/app/aot/dsp_load.cpp
+  "${blofeld_binding_directory}/dsp_bindings.hpp")
 target_include_directories(blofeld_app_aot PUBLIC src/app PRIVATE "${blofeld_binding_directory}")
 target_include_directories(blofeld_app_aot SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
 target_link_libraries(blofeld_app_aot PUBLIC dsp56300::core blofeld_host_aot
-  PRIVATE blofeld_vi_execution LLVM)
+  PRIVATE blofeld_vi_execution blofeld_vi_code_source blofeld_app_firmware LLVM)

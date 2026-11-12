@@ -104,6 +104,31 @@ executables under ignored build/. Retain code/input hashes and binding/host
 identities; reject incompatible profile inputs. Preserve original boot and
 loading effects after compilation.
 
+Local DSP catalogue contract (JSON format 1)
+
+inputs binds all six decoded firmware blocks, the retained NAND program stream,
+and the separate boot-main/boot-eeprom regions by lowercase SHA256. Hash ROM
+words as their original big-endian 24-bit bytes, without filling address gaps.
+Each variant supplies an id, ordered writes, code contexts [P address, word
+count], entries, stopped resumes and guards {address, value}; null means an
+actually unreadable word. Optional mode/mode_mask restrict OMR admission.
+
+Writes name a kind: boot-main/boot-eeprom use word_offset, words and destination
+address; block uses block, byte_offset, words and address; records selects an
+original count prefix and retains only logical P payloads; copy takes words from
+an earlier source at from to address. These construct immutable source views,
+never device state or simulated loading effects. Instruction contexts remain
+separate from readable data and overlapping starts remain independent.
+
+Optional memory lists X/Y regions {space, first, words, writable, tracked,
+aliases_program}. If one variant declares memory, every variant must declare it;
+an explicit empty list requires zero native grants. The defaults are writable,
+untracked and not aliased. Top-level interrupts {vector, level} and transitions
+{from, to, entry} establish prepared entry and transfer contracts. Optional
+failed_fetches declare actual unreadable targets, never missing translations.
+The source owner must establish complete known code, entry and variant coverage;
+matching hashes and a translated subset alone do not prove instrument coverage.
+
 Near-host throughput in authored JIT benchmarks establishes feasibility for
 those programs, not equivalent coverage or throughput of the complete firmware.
 Attribute the instrument gap to measured generated-code, device or coupling

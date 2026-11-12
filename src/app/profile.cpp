@@ -40,6 +40,8 @@ Profile load_profile(const std::filesystem::path &path) {
     const auto file = (base / value).lexically_normal();
     if (key == "firmware") {
       profile.firmware = file;
+    } else if (key == "dsp-catalogue") {
+      profile.dsp_catalogue = file;
     } else if (key == "boot-rom" || key == "boot-prefix") {
       if (!profile.boot_rom.empty()) { throw std::runtime_error("Conflicting DSP boot inputs"); }
       profile.boot_rom = file;
@@ -52,8 +54,10 @@ Profile load_profile(const std::filesystem::path &path) {
       throw std::runtime_error("Unknown instrument profile field: " + key);
     }
   }
-  if (profile.boot_rom.empty() || profile.device_state.empty()) {
-    throw std::runtime_error("Profile requires one DSP boot input and a device-state path");
+  if (profile.firmware.empty() || profile.boot_rom.empty() || profile.dsp_catalogue.empty() ||
+      profile.device_state.empty()) {
+    throw std::runtime_error(
+        "Profile requires firmware, one DSP boot input, dsp-catalogue and device-state paths");
   }
   return profile;
 }

@@ -24,17 +24,21 @@ int main(const int argc, char **argv) try {
   const auto file = root / "default.profile";
   {
     std::ofstream output(file);
-    output << "# Local paths\nboot-rom boot.bin\ndevice-state unit.bfnvm\n"
+    output << "# Local paths\nfirmware original.zip\ndsp-catalogue code.json\n"
+              "boot-rom boot.bin\ndevice-state unit.bfnvm\n"
               "nand \"sample image.bfnand\"\n";
   }
   const auto profile = blofeld::app::load_profile(file);
   require(profile.boot_rom == root / "boot.bin" && profile.device_state == root / "unit.bfnvm" &&
               profile.storage == root / "sample image.bfnand" &&
-              profile.boot_format == blofeld::app::BootFormat::rom,
+              profile.boot_format == blofeld::app::BootFormat::rom &&
+              profile.firmware == root / "original.zip" &&
+              profile.dsp_catalogue == root / "code.json",
           "Relative and quoted paths are resolved against the profile");
   {
     std::ofstream output(file);
-    output << "boot-prefix prefix.bin\ndevice-state unit.bfnvm\nnand unit.bfnand\n";
+    output << "firmware original.zip\ndsp-catalogue code.json\n"
+              "boot-prefix prefix.bin\ndevice-state unit.bfnvm\nnand unit.bfnand\n";
   }
   const auto prefix = blofeld::app::load_profile(file);
   require(prefix.boot_rom == root / "prefix.bin" &&
@@ -45,6 +49,8 @@ int main(const int argc, char **argv) try {
                               "boot-prefix a\nboot-rom b\ndevice-state c\n",
                               "boot-rom a\ndevice-state c\ndisplay elsewhere\n",
                               "instruction-budget 10\n",
+                              "firmware a\nboot-rom b\ndevice-state c\n",
+                              "dsp-catalogue a\nboot-rom b\ndevice-state c\n",
                               ""}) {
     {
       std::ofstream output(file);

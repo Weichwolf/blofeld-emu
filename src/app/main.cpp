@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "aot/dsp.hpp"
 #include "boot_rom.hpp"
+#include "dsp/boot_rom.hpp"
+#include "dsp/program.hpp"
 #include "files/read.hpp"
 #include "io/midi_port.hpp"
 #include "options.hpp"
@@ -37,13 +40,16 @@ int main(const int argc, char **argv) try {
   auto media = std::make_unique<blofeld::vi::MediaImage>(
       blofeld::host::read_file(profile.storage, blofeld::vi::MediaImage::max_bytes));
   auto boot = blofeld::app::load_boot_rom(profile.boot_rom, profile.boot_format);
+  const auto program = std::make_shared<blofeld::vi::dsp::Program>(
+      blofeld::app::aot::load_dsp_program(profile, blofeld::vi::dsp::BootRom::document(boot)));
   if (options.midi && options.wav) {
     blofeld::app::OfflineRender render(options);
     blofeld::vi::VmContext vm(std::move(image),
                               std::move(boot),
                               std::move(media),
                               render.output(),
-                              blofeld::vi::MidiPort::InputMode::stream);
+                              blofeld::vi::MidiPort::InputMode::stream,
+                              program);
     return render.run(vm, signals, launched);
   }
 #if defined(BLOFELD_NATIVE_MIDI)
@@ -58,7 +64,8 @@ int main(const int argc, char **argv) try {
                             std::move(boot),
                             std::move(media),
                             live.output(),
-                            blofeld::vi::MidiPort::InputMode::stream);
+                            blofeld::vi::MidiPort::InputMode::stream,
+                            program);
   return live.run(vm, signals);
 #else
   std::cerr << "Native MIDI input backend is unavailable on this platform.\n";
