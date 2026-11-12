@@ -126,6 +126,11 @@ for nonportable C++ method addresses. Keep the provider and channel state alive
 through the final native operation and module destruction. Share the real native
 wait/notify provider; do not duplicate its globals in generated modules.
 
+Resolve native dependency cycles at symbol granularity without expanding every
+local block's transitive closure. Give promoted local definitions collision-safe
+hidden names and explicit materialization ownership; preserve original weak
+definitions, relocations and strict missing/unexpected-symbol checks.
+
 Resolve relocations and every export before publication. LLVM ORC's
 GenericLLVMIRPlatform owns initialization/finalization; retain platform-before-
 process symbol resolution, including __dso_handle/__cxa_atexit. Initialize/finalize

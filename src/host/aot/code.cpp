@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "aot/code.hpp"
 
+#include "aot/link_graph.hpp"
 #include "aot/llvm.hpp"
 
 #include "llvm-c/Core.h"
@@ -149,6 +150,7 @@ Code::Code(const std::span<const Module> modules, const std::span<const Import> 
   auto *failure = LLVMOrcCreateLLJIT(&raw_jit, builder.release());
   impl_->jit.reset(raw_jit);
   checked(failure);
+  detail::named_dependencies(native(raw_jit));
   bind_imports(raw_jit, bindings);
   auto *prepared = LLVMOrcCreateNewThreadSafeModule(module.release(), context.get());
   checked(LLVMOrcLLJITAddLLVMIRModule(raw_jit, LLVMOrcLLJITGetMainJITDylib(raw_jit), prepared));

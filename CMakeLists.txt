@@ -59,7 +59,8 @@ if(NOT LLVM_VERSION_MAJOR EQUAL 19 OR NOT TARGET LLVM)
   message(FATAL_ERROR "The packaged LLVM 19 shared library and headers are required")
 endif()
 add_library(blofeld_host_aot src/host/aot/abi.cpp src/host/aot/code.cpp
-  src/host/aot/contracts.cpp src/host/aot/imports.cpp src/host/aot/module.cpp src/host/aot/optimize.cpp
+  src/host/aot/contracts.cpp src/host/aot/imports.cpp src/host/aot/link_graph.cpp
+  src/host/aot/module.cpp src/host/aot/optimize.cpp
   src/host/aot/symbols.cpp src/host/aot/target.cpp)
 target_include_directories(blofeld_host_aot PUBLIC src/host)
 target_include_directories(blofeld_host_aot SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
@@ -208,6 +209,8 @@ if(BUILD_TESTING)
   endforeach()
   blofeld_unit(host-aot-code-test "test/host/aot/code_test.cpp;test/host/aot/calls.cpp"
     "blofeld_host_aot;blofeld_vi_peer;LLVM;${CMAKE_DL_LIBS}")
+  blofeld_unit(host-aot-link-graph-test test/host/aot/link_graph_test.cpp "blofeld_host_aot;LLVM")
+  target_include_directories(host-aot-link-graph-test SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
   set_target_properties(host-aot-code-test PROPERTIES ENABLE_EXPORTS ON)
   if(APPLE)
     # Darwin LTO cannot infer the hook's reference from separately loaded IR.

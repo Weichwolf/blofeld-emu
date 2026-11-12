@@ -198,6 +198,26 @@
       "sha256": "3548da0dfb329d2c7013bffcb0136bd805719b448b134f78217a1f30d6a22624",
       "scope": "GenericLLVMIRPlatform constructor/destructor scraping and platform-before-process symbol resolution; shared static core target registration stays process-owned.",
       "retrieved_utc": "2026-11-11T12:43:55.210927+00:00"
+    },
+    {
+      "name": "LLVM19 JITLink dependency graph",
+      "url": "https://github.com/llvm/llvm-project/blob/llvmorg-19.1.7/llvm/lib/ExecutionEngine/Orc/ObjectLinkingLayer.cpp",
+      "download_url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-19.1.7/llvm/lib/ExecutionEngine/Orc/ObjectLinkingLayer.cpp",
+      "revision": "llvmorg-19.1.7",
+      "bytes": 30079,
+      "sha256": "dfdc51c9351682d4229c3010fb0f6879bf1a32a6e05db710ea0361b9c1e9539c",
+      "scope": "Local-block transitive closure, symbol dependency groups and strict materialization ownership checks.",
+      "retrieved_utc": "2026-11-12T16:50:01.743790+00:00"
+    },
+    {
+      "name": "LLVM19 ORC materialization claims",
+      "url": "https://github.com/llvm/llvm-project/blob/llvmorg-19.1.7/llvm/lib/ExecutionEngine/Orc/Core.cpp",
+      "download_url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-19.1.7/llvm/lib/ExecutionEngine/Orc/Core.cpp",
+      "revision": "llvmorg-19.1.7",
+      "bytes": 136156,
+      "sha256": "7f1480806dfef137409884ce020b7b3b76e16a39b6540752429bdf7358b50617",
+      "scope": "defineMaterializing rejects existing strong or weak definitions and rolls back the entire failed claim; successful definitions retain native resource ownership.",
+      "retrieved_utc": "2026-11-12T16:50:01.770300+00:00"
     }
   ]
 }
