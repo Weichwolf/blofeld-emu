@@ -4,6 +4,9 @@ Execute unchanged Blofeld Desktop SL firmware as native host code. Firmware owns
 instrument behavior; cpu12/dsp56300 supply ISA translation. The application owns
 executable-image analysis, concrete device bindings and lifecycle.
 
+Core repositories are organizational boundaries. Choose APIs, state ownership,
+layouts and LLVM composition for complete-instrument throughput and efficiency.
+
 ```text
 known MCU/DSP code + variants -> semantic LLVM IR --+
                                                    +-> joint LLVM 19 O3 -> native instrument

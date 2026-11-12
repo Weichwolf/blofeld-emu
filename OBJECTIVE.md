@@ -4,6 +4,8 @@ Deliver the complete Blofeld Desktop with active SL on macOS ARM64 and Linux
 x86-64, using unchanged original 1.25 firmware and our cpu12/dsp56300 translators.
 Preserve original sound, quirks, musical time and device effects. No firmware
 patches, skipped routines, invented replies, host synthesis or electrical models.
+Optimize all three projects as one instrument. Choose their interfaces, state
+layouts and LLVM composition for maximum end-to-end performance and efficiency.
 
 ## Instrument
 

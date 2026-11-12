@@ -3,6 +3,8 @@
 - Build the complete Desktop SL instrument in OBJECTIVE.md. Execute unchanged
   firmware; preserve quirks. No patches, skipped routines, invented replies or
   host synthesis. Unknown accesses fail with address, operation, PC and context.
+- Core repositories are organizational. Choose APIs, state ownership/layouts and
+  LLVM integration for maximum complete-instrument performance and efficiency.
 - Follow doc/architecture.md: complete known AOT/variants before playback, joint
   host/firmware LLVM19 optimization, direct RAM and typed device contracts.
   Keep proved checks in preparation/binding, Debug instrumentation out of Release,
