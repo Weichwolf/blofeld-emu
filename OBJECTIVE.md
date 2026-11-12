@@ -38,8 +38,9 @@ Fuse eligible host IR before LLVM19 O3. Keep registers live, RAM direct and DSP5
 arithmetic/rounding/saturation/flags inline. Validate proved invariants during
 AOT/stopped binding, revalidating relevant revisions. Release omits optional Debug/
 sanitizer work and repeated proved checks; both modes preserve required dynamic
-effects/faults. Development runs full AOT without a fixed preparation budget.
-Operational caches hold validated relocatable code, never device snapshots.
+effects/faults. Preparation has no fixed budget.
+Caches hold validated relocatable code, never device snapshots, and may be used
+in development and operation.
 Keep manufacturer inputs/generated artifacts local with source/size/hash identity.
 
 ## Performance and qualification
