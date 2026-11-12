@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "io/peer_port.hpp"
 
+#if defined(BLOFELD_CENSUS)
+#include "census.hpp"
+#endif
+
 #include <atomic>
 #include <cstdint>
 #include <limits>
@@ -39,6 +43,9 @@ bool PeerPort::wait_input_space(const std::uint64_t published, const std::stop_t
       available = true;
       break;
     }
+#if defined(BLOFELD_CENSUS)
+    const Census::Wait observed_wait;
+#endif
     inputs_.changed.wait(observed, std::memory_order_acquire);
   }
   inputs_.waiting.store(false, std::memory_order_seq_cst);

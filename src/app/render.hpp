@@ -2,6 +2,9 @@
 #pragma once
 
 #include "audio/wav_consumer.hpp"
+#if defined(BLOFELD_CENSUS)
+#include "census_record.hpp"
+#endif
 #include "execution.hpp"
 #include "io/pcm_output.hpp"
 #include "midi/file.hpp"
@@ -30,6 +33,9 @@ private:
   void feed(vi::MidiPort &port, std::uint64_t origin, const std::stop_token &stop);
   void startup_statistics() const;
   void statistics() const;
+#if defined(BLOFELD_CENSUS)
+  CensusRecord census_;
+#endif
   WavConsumer wav_;
   MidiFile midi_;
   std::uint64_t tail_;

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#if defined(BLOFELD_CENSUS)
+#include "census.hpp"
+#endif
 #include "display/st7565.hpp"
 #include "display/state.hpp"
 #include "dsp/program.hpp"
@@ -58,6 +61,9 @@ public:
 
   [[nodiscard]] std::optional<St7565> take_display() { return display_.take(); }
 
+#if defined(BLOFELD_CENSUS)
+  [[nodiscard]] const Census &census() const noexcept { return census_; }
+#endif
   void start();
 
   [[nodiscard]] bool finished() const noexcept {
@@ -87,6 +93,9 @@ private:
   MidiPort midi_;
   std::atomic<unsigned> completed_{0};
   Controls controls_;
+#if defined(BLOFELD_CENSUS)
+  Census census_;
+#endif
   bool started_ = false;
 };
 }

@@ -218,6 +218,30 @@
       "sha256": "7f1480806dfef137409884ce020b7b3b76e16a39b6540752429bdf7358b50617",
       "scope": "defineMaterializing rejects existing strong or weak definitions and rolls back the entire failed claim; successful definitions retain native resource ownership.",
       "retrieved_utc": "2026-11-12T16:50:01.770300+00:00"
+    },
+    {
+      "name": "Apple XNU proc_info_private.h",
+      "url": "https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/proc_info_private.h",
+      "download_url": "https://raw.githubusercontent.com/apple-oss-distributions/xnu/main/bsd/sys/proc_info_private.h",
+      "bytes": 13801,
+      "sha256": "ccc01e88d5bf47bc9c3f5ba3a25c3e6202bbcd7b86aa967af31d714657571c3b",
+      "scope": "Darwin regular-user per-thread counts ABI, performance-level order and Mach time conversion. Local layout declarations only; no source import."
+    },
+    {
+      "name": "Apple XNU recount.c",
+      "url": "https://github.com/apple-oss-distributions/xnu/blob/main/osfmk/kern/recount.c",
+      "download_url": "https://raw.githubusercontent.com/apple-oss-distributions/xnu/main/osfmk/kern/recount.c",
+      "bytes": 43117,
+      "sha256": "312663003ce4f751846e4307fc62e9b7794d3807e891168466899291204dd2db",
+      "scope": "Darwin regular-user per-thread counts ABI, performance-level order and Mach time conversion. Local layout declarations only; no source import."
+    },
+    {
+      "name": "Apple XNU recount.h",
+      "url": "https://github.com/apple-oss-distributions/xnu/blob/main/osfmk/kern/recount.h",
+      "download_url": "https://raw.githubusercontent.com/apple-oss-distributions/xnu/main/osfmk/kern/recount.h",
+      "bytes": 17376,
+      "sha256": "c3650c0f1ece4595e4ef7b3ec2c39f8ddd03f7bb3e2321f13c7f6e9c63ae6f72",
+      "scope": "Darwin regular-user per-thread counts ABI, performance-level order and Mach time conversion. Local layout declarations only; no source import."
     }
   ]
 }

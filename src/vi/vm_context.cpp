@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "vm_context.hpp"
 
+#if defined(BLOFELD_CENSUS)
+#include "census.hpp"
+#endif
+
 #include "dsp/boot_rom.hpp"
 #include "dsp/execute.hpp"
 #include "dsp/program.hpp"
@@ -58,6 +62,9 @@ void VmContext::start() {
   mcu_ = std::jthread([this] {
     const auto stop = stop_.get_token();
     try {
+#if defined(BLOFELD_CENSUS)
+      const Census::Scope observed(census_, Census::Actor::mcu);
+#endif
       reports_[0] = mcu::execute(*image_,
                                  shi_,
                                  reset_,
@@ -75,6 +82,9 @@ void VmContext::start() {
   dsp_ = std::jthread([this] {
     const auto stop = stop_.get_token();
     try {
+#if defined(BLOFELD_CENSUS)
+      const Census::Scope observed(census_, Census::Actor::dsp);
+#endif
       reports_[1] = dsp::execute(dsp::BootRom::document(boot_),
                                  shi_,
                                  reset_,

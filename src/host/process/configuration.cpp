@@ -13,8 +13,7 @@
 #include <unistd.h>
 
 namespace blofeld::host {
-namespace {
-std::string_view inherited(const std::string_view name) {
+std::string_view inherited_setting(const std::string_view name) {
 #if defined(__APPLE__)
   auto *const environment = *_NSGetEnviron();
 #else
@@ -28,11 +27,10 @@ std::string_view inherited(const std::string_view name) {
   }
   return {};
 }
-}
 
 std::filesystem::path configuration_home() {
-  const auto configured = inherited("XDG_CONFIG_HOME");
-  const auto home = inherited("HOME");
+  const auto configured = inherited_setting("XDG_CONFIG_HOME");
+  const auto home = inherited_setting("HOME");
   if (configured.empty() && home.empty()) {
     throw std::runtime_error("Configuration home is unset");
   }
@@ -43,7 +41,7 @@ std::filesystem::path configuration_home() {
 }
 
 std::filesystem::path runtime_home() {
-  const auto configured = inherited("XDG_RUNTIME_DIR");
+  const auto configured = inherited_setting("XDG_RUNTIME_DIR");
 #if defined(__APPLE__)
   auto root = std::filesystem::path(configured);
   if (root.empty()) {

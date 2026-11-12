@@ -1,6 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "aot/link_graph.hpp"
 
+#if defined(BLOFELD_CENSUS)
+#include "process/configuration.hpp"
+
+#include "llvm/ADT/StringMap.h"
+#include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/JSON.h"
+
+#include <chrono>
+#include <fstream>
+#include <ios>
+#include <mutex>
+#endif
+
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSet.h"
@@ -46,11 +59,63 @@ llvm::StringSet<> graph_names(llvm::jitlink::LinkGraph &graph) {
   return result;
 }
 
+#if defined(BLOFELD_CENSUS)
+using Labels = llvm::StringMap<std::string>;
+
+llvm::Error
+record_symbols(llvm::jitlink::LinkGraph &graph, const Labels &labels, const std::string &path) {
+  static std::mutex mutex;
+  const std::scoped_lock locked(mutex);
+  std::ofstream out(path, std::ios::app);
+  const auto stamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                         std::chrono::steady_clock::now().time_since_epoch())
+                         .count();
+  for (const auto *symbol : graph.defined_symbols()) {
+    if (!symbol->hasName() || !symbol->isCallable() || symbol->getSize() == 0) { continue; }
+    const auto found = labels.find(symbol->getName());
+    const auto original = found == labels.end() ? symbol->getName().str() : found->second;
+    llvm::json::Object record{{.K = "ns", .V = stamp},
+                              {.K = "address", .V = symbol->getAddress().getValue()},
+                              {.K = "size", .V = symbol->getSize()},
+                              {.K = "name", .V = original},
+                              {.K = "linked", .V = symbol->getName().str()}};
+    out << llvm::formatv("{0}", llvm::json::Value(std::move(record))).str() << '\n';
+  }
+  out.flush();
+  if (!out) {
+    return llvm::make_error<llvm::StringError>("Cannot write native census symbols: " + path,
+                                               llvm::inconvertibleErrorCode());
+  }
+  return llvm::Error::success();
+}
+#endif
+
 class Dependencies final : public llvm::orc::ObjectLinkingLayer::Plugin {
 public:
   void modifyPassConfig(Responsibility &owner,
                         llvm::jitlink::LinkGraph & /*graph*/,
                         llvm::jitlink::PassConfiguration &config) override {
+#if defined(BLOFELD_CENSUS)
+    auto path = std::string(host::inherited_setting("BLOFELD_CENSUS_SYMBOLS"));
+    if (!path.empty()) {
+      auto labels = std::make_shared<Labels>();
+      config.PostPrunePasses.emplace_back(
+          [this, &owner, labels](llvm::jitlink::LinkGraph &graph) -> llvm::Error {
+            std::vector<std::pair<Symbol *, std::string>> original;
+            for (auto *symbol : graph.defined_symbols()) {
+              if (symbol->hasName()) { original.emplace_back(symbol, symbol->getName().str()); }
+            }
+            if (auto error = define(owner, graph)) { return error; }
+            for (const auto &[symbol, name] : original) { (*labels)[symbol->getName()] = name; }
+            return llvm::Error::success();
+          });
+      config.PostFixupPasses.emplace_back(
+          [labels, path = std::move(path)](llvm::jitlink::LinkGraph &graph) {
+            return record_symbols(graph, *labels, path);
+          });
+      return;
+    }
+#endif
     config.PostPrunePasses.emplace_back(
         [this, &owner](llvm::jitlink::LinkGraph &graph) { return define(owner, graph); });
   }

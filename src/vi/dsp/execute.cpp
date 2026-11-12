@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dsp/execute.hpp"
+#if defined(BLOFELD_CENSUS)
+#include "census.hpp"
+#endif
 
 #include "dsp/boot_rom.hpp"
 #include "dsp/io.hpp"
@@ -114,6 +117,22 @@ bool run_instance(Io &io,
   registers.sr = reset_status;
   registers.omr = reset_mode;
   core.set_registers(registers);
+#if defined(BLOFELD_CENSUS)
+  struct Sample {
+    dsp56300::Core &core;
+    Io &io;
+  };
+
+  Sample sample{.core = core, .io = io};
+  const Census::GuestScope observed(&sample, [](void *context) noexcept {
+    const auto &value = *static_cast<Sample *>(context);
+    const auto progress = value.core.progress();
+    return Census::Guest{.instructions = progress.instructions,
+                         .cycles = progress.estimated_cycles,
+                         .idle = value.io.idle_cycles(),
+                         .pc = value.core.registers().pc};
+  });
+#endif
   bool restart = false;
   while (!stop.stop_requested()) {
     if (reset.pending(epoch)) {
@@ -121,7 +140,13 @@ bool run_instance(Io &io,
       break;
     }
     io.prepare_code(report);
+#if defined(BLOFELD_CENSUS)
+    const auto observed_session = Census::session_begin();
+#endif
     const auto result = io.run();
+#if defined(BLOFELD_CENSUS)
+    Census::session_end(observed_session, result.retired);
+#endif
     report.instructions += result.retired;
     if (stop.stop_requested()) { break; }
     if (io.reset_interrupted()) {

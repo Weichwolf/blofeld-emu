@@ -123,6 +123,8 @@ public:
     core_ = nullptr;
   }
 
+  [[nodiscard]] std::uint64_t idle_cycles() const noexcept { return idle_; }
+
   void prepare_code(ExecutionReport &report);
 
   bool complete_events(ExecutionReport &report) {

@@ -63,6 +63,9 @@ vi::PcmOutput OfflineRender::output() noexcept {
                 }
                 const auto output = render.wav_.output();
                 const auto accepted = output.write(output.owner, block, stop);
+#if defined(BLOFELD_CENSUS)
+                render.census_.observe(render.vm_->census(), render.wav_);
+#endif
                 if (render.wav_.complete()) { render.vm_->request_stop(); }
                 return accepted;
               },
@@ -169,6 +172,9 @@ int OfflineRender::run(vi::VmContext &vm,
   }
   wav_.finish();
   statistics();
+#if defined(BLOFELD_CENSUS)
+  census_.report(vm.census());
+#endif
   return 0;
 }
 

@@ -13,8 +13,9 @@ keyboard-to-analog latency 2-5 ms, maximum 10 ms. Microbenchmarks do not qualify
 
 Complete known firmware AOT and joint host-code optimization before playback.
 Prefer startup loading; build-time translation uses the same pipeline.
-Development always runs full AOT. Operational caches hold validated code,
-never device snapshots. Manufacturer inputs and derived artifacts stay local.
+Preparation may reuse code artifacts validated against every input and ABI
+identity; device snapshots never replace boot. Manufacturer inputs and derived
+artifacts stay local.
 
 ## Build
 
@@ -58,6 +59,19 @@ build/release/blofeld-headless --profile /path/to/instrument.profile
 build/release/blofeld-headless --profile /path/to/instrument.profile \
   --midi /path/to/score.mid --wav /path/to/render.wav --tail 5
 ```
+
+Owner attribution uses a separate Release build with `-DBLOFELD_CENSUS=ON`.
+Set `BLOFELD_CENSUS=1` for offline rendering. The terminal emits one JSON census
+covering the interval from the first accepted PCM block to completion; exclude
+that first block. Normalize counter deltas against the source-frame delta,
+including the final block beyond the WAV boundary. CPU/PMCs, guest work and WAIT
+advancement are separate. Wait-call duration includes scheduling delay and is
+not a kernel-blocked-time counter. Session histograms include overlapping edge
+sessions. On macOS, PMCs include user and kernel execution per performance level;
+on Linux this reader provides CPU time only. `BLOFELD_CENSUS_SYMBOLS=/absolute/file`
+adds timestamped original-symbol/native-address JSON lines during linking. Match
+sampling addresses against ranges valid at the sample time. Normal builds contain
+none of these probes. Report diagnostic perturbation against the plain build.
 
 No arguments select $XDG_CONFIG_HOME/blofeld-emu/default.profile, falling back
 to $HOME/.config/blofeld-emu/default.profile. Each profile line contains a field

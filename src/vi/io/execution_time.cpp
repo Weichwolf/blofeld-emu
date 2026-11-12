@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "io/execution_time.hpp"
 
+#if defined(BLOFELD_CENSUS)
+#include "census.hpp"
+#endif
+
 #include <atomic>
 #include <cstdint>
 #include <limits>
@@ -62,6 +66,9 @@ bool ExecutionTime::await(std::atomic<bool> &waiting, const std::stop_token &sto
     const auto observed = changed_.load(std::memory_order_seq_cst);
     if (stop.stop_requested()) { return false; }
     if (ready()) { return true; }
+#if defined(BLOFELD_CENSUS)
+    const Census::Wait observed_wait;
+#endif
     changed_.wait(observed, std::memory_order_acquire);
   }
 }

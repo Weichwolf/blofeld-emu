@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "io/midi_port.hpp"
 
+#if defined(BLOFELD_CENSUS)
+#include "census.hpp"
+#endif
+
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
@@ -76,6 +80,9 @@ bool MidiPort::await(std::atomic<unsigned> &waiters,
     const auto observed = changed_.load(std::memory_order_seq_cst);
     if (stop.stop_requested() || error() != nullptr) { return false; }
     if (ready()) { return true; }
+#if defined(BLOFELD_CENSUS)
+    const Census::Wait observed_wait;
+#endif
     changed_.wait(observed, std::memory_order_acquire);
   }
 }
