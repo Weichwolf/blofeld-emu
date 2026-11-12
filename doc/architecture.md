@@ -171,6 +171,9 @@ admitted target only after actual source words/layout match, retaining the
 completed real jump and pending transfer on refusal.
 failed_fetches describe actual unreadability, never translation gaps.
 Installation validates prepared words against actual guest-produced P contents.
+Resume PCs may be explicit entries or starts of nonempty declared code streams;
+operand words are not resume points. Entry hints seed native region optimization,
+not code coverage: every instruction in every declared stream is translated.
 Entry admission must be disjoint: compatible mode/word/memory predicates cannot
 share an installation PC across variants. Reject overlaps with both IDs and the
 PC before lowering.

@@ -19,8 +19,11 @@ namespace blofeld::vi::dsp {
 namespace {
 void validate_choice(const dsp56300::CodeVariant &variant, const ProgramChoice &choice) {
   for (const auto pc : choice.resumes) {
-    if (std::ranges::find(variant.entries, pc) == variant.entries.end()) {
-      throw std::invalid_argument("DSP program installation point is not an established entry");
+    if (std::ranges::find(variant.entries, pc) == variant.entries.end() &&
+        !std::ranges::any_of(variant.code, [pc](const auto &span) {
+          return span.address == pc && !span.words.empty();
+        })) {
+      throw std::invalid_argument("DSP program installation point is not a prepared boundary");
     }
   }
   std::set<dsp56300::Word> addresses;

@@ -2,6 +2,7 @@
 #include "aot/dsp.hpp"
 #include "dsp/boot_rom.hpp"
 #include "dsp/execute.hpp"
+#include "execution.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/shi.hpp"
 #include "isa.hpp"
@@ -17,6 +18,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
 #include <exception>
 #include <iostream>
@@ -193,6 +195,48 @@ void normal_owner(const Fixture &fixture, const bool fixed = false) {
               result.instructions == 15 && result.stopped_pc == 1 &&
               result.prepared_native_bytes == program.report().native_bytes,
           "An input-bound catalogue runs its prepared variants through the normal DSP owner");
+}
+
+void failed_entry() {
+  constexpr Word absent = 0x100;
+  Fixture fixture;
+  fixture.rom.back() = jump | absent;
+  auto input = catalogue(fixture);
+  auto &variants = *input.getArray("variants");
+  auto target = *variants[1].getAsObject();
+  target["id"] = 3;
+  target["entries"] = Array{absent};
+  target["resumes"] = Array{absent};
+  target["failed_fetches"] = Array{absent};
+  target["guards"] = Array{Object{{.K = "address", .V = absent}, {.K = "value", .V = nullptr}}};
+  variants.push_back(std::move(target));
+  input.getArray("transitions")
+      ->push_back(Object{{.K = "from", .V = 0}, {.K = "to", .V = 3}, {.K = "entry", .V = absent}});
+  const auto program = blofeld::app::aot::prepare_dsp_catalogue(
+      document(std::move(input)), fixture.firmware, fixture.boot_rom());
+  vi::Shi shi;
+  vi::DspReset reset;
+  const auto result = vi::dsp::execute(fixture.boot_rom(),
+                                       shi,
+                                       reset,
+                                       {},
+                                       nullptr,
+                                       {},
+                                       nullptr,
+                                       nullptr,
+                                       nullptr,
+                                       nullptr,
+                                       &program);
+  if (!result.failure) { throw std::runtime_error("The unreadable destination did not fault"); }
+  require(!result.exception && !result.preparation_diagnostic && result.instructions == 11 &&
+              result.stopped_pc == absent &&
+              result.prepared_native_bytes == program.report().native_bytes,
+          "A declared unreadable destination preserves the real loader and native handoff");
+  const auto &fault = *result.failure;
+  require(fault.operation == vi::Access::read && fault.pc == absent && fault.address == absent &&
+              fault.space == 'P' &&
+              fault.code == static_cast<unsigned>(dsp56300::FaultKind::memory_read),
+          "The normal owner reports the actual program read, never a preparation gap");
 }
 
 Object software_catalogue(Fixture &fixture, const bool long_vector, const Word instruction) {
@@ -492,6 +536,8 @@ int main(const int argc, const char *const *argv) try {
     invalid_catalogues(fixture);
     invalid_fields(fixture);
     changed_inputs(fixture);
+  } else if (group == "failed") {
+    failed_entry();
   } else if (group == "targets") {
     multiple_targets();
   } else if (group == "layouts") {

@@ -149,6 +149,39 @@ void mixed_layouts() {
   }
 }
 
+void stream_boundaries() {
+  constexpr Word other = 64;
+  constexpr std::array branch{static_cast<Word>(isa::Opcode::jmp_effective) | (0x30U << 8U), entry};
+  const std::array streams{code[0], CodeSpan{.address = other, .words = branch}};
+  const std::array source{
+      CodeVariant{.id = 0, .code = streams, .entries = entries, .failed_fetches = {}}};
+  const auto image = Core::compile({.variants = source}, {});
+  constexpr std::array resumes{other};
+  const std::array admission{ProgramChoice{.variant = 0, .resumes = resumes, .words = {}}};
+  const Program program(image, {.variants = source}, admission, {});
+  std::array<Word, other + branch.size()> ram{};
+  ram[entry] = words[0];
+  ram[other] = branch[0];
+  ram[other + 1] = branch[1];
+  Core core(Memory::unified(ram));
+  auto initial = core.registers();
+  initial.pc = other;
+  core.set_registers(initial);
+  Bus bus;
+  require(program.install(core, bus) == 0 && core.registers() == initial,
+          "A prepared stream boundary needs no redundant optimization entry");
+  const auto result = core.run();
+  require(result.retired == 2 && result.fault == Fault{} && result.state == ExecutionState::stopped,
+          "Every declared stream executes natively, including non-seeded starts");
+  constexpr std::array operand{other + 1};
+  const std::array invalid{ProgramChoice{.variant = 0, .resumes = operand, .words = {}}};
+  bool rejected_operand = false;
+  try {
+    const Program refused(image, {.variants = source}, invalid, {});
+  } catch (const std::invalid_argument &) { rejected_operand = true; }
+  require(rejected_operand, "An operand inside a prepared span is no instruction boundary");
+}
+
 void rejected(const NativeImage &image) {
   const Program program(image, {.variants = variants}, choices, {});
   Bus bus;
@@ -202,6 +235,7 @@ int main() try {
   selected(image);
   mapped();
   mixed_layouts();
+  stream_boundaries();
   rejected(image);
 } catch (const std::exception &error) {
 
