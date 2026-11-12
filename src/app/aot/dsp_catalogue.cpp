@@ -273,10 +273,7 @@ bool compatible_admission(const Variant &left, const Variant &right) {
          std::ranges::is_permutation(left.memory, right.memory, {}, layout, layout);
 }
 
-void validate_admissions(const std::span<const Variant> variants, const bool fixed_memory) {
-  for (const auto &variant : variants) {
-    if (fixed_memory && !variant.fixed_memory) { invalid("missing variant memory contract"); }
-  }
+void validate_admissions(const std::span<const Variant> variants) {
   for (std::size_t first = 0; first < variants.size(); ++first) {
     const auto &left = variants[first];
     for (const auto &right : variants.subspan(first + 1)) {
@@ -297,7 +294,6 @@ vi::dsp::Program
 prepare(const Object &root, const vi::FirmwareUpdate &firmware, const vi::dsp::BootRom boot) {
   std::vector<Variant> owned;
   std::vector<dsp56300::VariantLayout> layouts;
-  bool fixed_memory = false;
   for (const auto &value : array(root, "variants")) {
     const auto &input = object(value);
     Stored stored;
@@ -306,9 +302,8 @@ prepare(const Object &root, const vi::FirmwareUpdate &firmware, const vi::dsp::B
     }
     auto &variant = owned.emplace_back(number(input, "id"), stored.classify(array(input, "code")));
     admission(variant, input);
-    fixed_memory = fixed_memory || input.get("memory") != nullptr;
   }
-  validate_admissions(owned, fixed_memory);
+  validate_admissions(owned);
   std::vector<dsp56300::CodeVariant> source;
   std::vector<vi::dsp::ProgramChoice> choices;
   for (const auto &variant : owned) {
@@ -321,7 +316,7 @@ prepare(const Object &root, const vi::FirmwareUpdate &firmware, const vi::dsp::B
                        .words = variant.guards,
                        .mode_mask = variant.mode_mask,
                        .mode = variant.mode});
-    if (fixed_memory) { layouts.push_back({.id = variant.id, .memory = variant.memory}); }
+    if (variant.fixed_memory) { layouts.push_back({.id = variant.id, .memory = variant.memory}); }
   }
   std::vector<dsp56300::InterruptRequest> interrupts;
   for (const auto &value : array(root, "interrupts")) {

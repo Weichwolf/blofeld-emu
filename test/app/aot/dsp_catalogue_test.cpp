@@ -153,9 +153,29 @@ std::string document(Object input) {
   return llvm::formatv("{0}", llvm::json::Value(std::move(input))).str();
 }
 
-void normal_owner(const Fixture &fixture) {
+void normal_owner(const Fixture &fixture, const bool fixed = false) {
+  auto input = catalogue(fixture);
+  if (fixed) {
+    constexpr Word low_x_words = 0x3000;
+    constexpr Word high_first = 0xc000;
+    constexpr Word high_x_words = 0x6000;
+    constexpr Word high_y_words = 0xa000;
+    const auto region = [](const char *space, const Word first, const Word count) {
+      return Object{{.K = "space", .V = space},
+                    {.K = "first", .V = first},
+                    {.K = "words", .V = count},
+                    {.K = "tracked", .V = true}};
+    };
+    for (const unsigned index : {1U, 2U}) {
+      (*(*input.getArray("variants"))[index].getAsObject())["memory"] =
+          Array{region("x", 0, low_x_words),
+                region("x", high_first, high_x_words),
+                region("y", 0, 0x2000),
+                region("y", high_first, high_y_words)};
+    }
+  }
   const auto program = blofeld::app::aot::prepare_dsp_catalogue(
-      document(catalogue(fixture)), fixture.firmware, fixture.boot_rom());
+      document(std::move(input)), fixture.firmware, fixture.boot_rom());
   vi::Shi shi;
   vi::DspReset reset;
   const auto result = vi::dsp::execute(fixture.boot_rom(),
@@ -320,7 +340,10 @@ void invalid_catalogues(const Fixture &fixture) {
   rejects(fixture, [](auto &input) { variant(input)["code"] = code_range(Array{0, 1}); });
   rejects(fixture, [](auto &input) { variant(input)["failed_fetches"] = false; });
   rejects(fixture, [](auto &input) { variant(input)["memory"] = false; });
-  rejects(fixture, [](auto &input) { variant(input)["memory"] = Array{}; });
+  rejects(fixture, [](auto &input) {
+    variant(input)["memory"] =
+        Array{Object{{.K = "space", .V = "x"}, {.K = "first", .V = 0}, {.K = "words", .V = 0}}};
+  });
   rejects(fixture, [](auto &input) {
     input["interrupts"] = Array{Object{{.K = "vector", .V = 8}, {.K = "level", .V = 4}}};
   });
@@ -343,6 +366,10 @@ void duplicate_loaded(Object &input) {
 
 void ambiguous_admission(const Fixture &fixture) {
   rejects(fixture, [](auto &input) { duplicate_loaded(input); });
+  rejects(fixture, [](auto &input) {
+    duplicate_loaded(input);
+    variant(input, 3)["memory"] = Array{};
+  });
   rejects(fixture, [](auto &input) {
     duplicate_loaded(input);
     variant(input, 1)["mode_mask"] = 0x80;
@@ -451,6 +478,8 @@ int main(const int argc, const char *const *argv) try {
     invalid_catalogues(fixture);
     invalid_fields(fixture);
     changed_inputs(fixture);
+  } else if (group == "layouts") {
+    normal_owner(Fixture{}, true);
   } else if (group == "derived") {
     derived_word();
   } else if (group == "software") {

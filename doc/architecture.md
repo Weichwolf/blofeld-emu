@@ -157,8 +157,10 @@ Writes construct immutable source views, never guest state or loading effects:
 | field | from, address, 24-bit mask, shift 0..23; ((word & mask) << shift) & $ffffff |
 
 Optional memory regions declare {space, first, words, writable, tracked,
-aliases_program} for X/Y. If one variant declares memory, all must; an empty
-list requires zero grants. Defaults are writable, untracked, not program-aliased.
+aliases_program} for X/Y independently per variant. An omitted contract retains
+dynamic grants; an explicit empty list requires zero grants. Fixed layouts enable
+direct RAM/loop optimization while cold loader variants retain dynamic mappings.
+Defaults are writable, untracked, not program-aliased.
 Interrupts {vector, level} cover levels 0..3, including unmaskable software
 exceptions. Transitions {from, to, entry} declare prepared handoffs.
 failed_fetches describe actual unreadability, never translation gaps.

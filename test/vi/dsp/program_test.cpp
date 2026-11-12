@@ -125,6 +125,30 @@ void mapped() {
   }
 }
 
+void mixed_layouts() {
+  const std::array regions{
+      RegionLayout{.space = Space::x, .first = marker, .size = 1, .tracked = true}};
+  const std::array layouts{VariantLayout{.id = 1, .memory = regions}};
+  const auto image = Core::compile(
+      {.variants = variants},
+      {.memory = layouts, .interrupts = {}, .transitions = {}, .callbacks = {}, .bindings = {}});
+  const Program program(image, {.variants = variants}, choices, {}, layouts);
+  for (const Word mode : {Word{0}, switched}) {
+    Bus bus;
+    bus.expose = true;
+    if (mode == 0) { bus.value = 0; }
+    Core core(Memory::external(), &bus);
+    auto seed = core.registers();
+    seed.pc = entry;
+    seed.omr = mode;
+    core.set_registers(seed);
+    require(program.install(core, bus) == (mode == 0 ? 0U : 1U) && core.registers() == seed,
+            "Generic and fixed variants share one image with their own admission contracts");
+    require(core.run().state == ExecutionState::stopped,
+            "Both memory contracts run their original native STOP");
+  }
+}
+
 void rejected(const NativeImage &image) {
   const Program program(image, {.variants = variants}, choices, {});
   Bus bus;
@@ -170,6 +194,7 @@ int main() try {
   const auto image = Core::compile({.variants = variants}, {});
   selected(image);
   mapped();
+  mixed_layouts();
   rejected(image);
 } catch (const std::exception &error) {
 

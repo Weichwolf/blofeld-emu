@@ -122,6 +122,38 @@ void initialized_windows() {
           "Promoting invariant RAM never grants unknown banked memory");
 }
 
+void cleared_mapping() {
+  Memory memory;
+  constexpr Word mode = 0x600389;
+  constexpr Word sweep_end = 0x20000;
+  constexpr Word high_first = 0xc000;
+  constexpr Word program_tail = 0x1000;
+  constexpr std::size_t low_x_words = 0x3000;
+  constexpr std::size_t low_y_words = 0x2000;
+  constexpr std::size_t high_x_words = 0x4000;
+  constexpr std::size_t high_y_words = 0xa000;
+  memory.configure(mode);
+  for (Word address = 0; address < sweep_end; ++address) {
+    for (const auto space : {Space::x, Space::y}) {
+      require(memory.write({.space = space, .address = address, .value = 0}),
+              "The complete clear accepts actual RAM and discarded reserved stores");
+    }
+  }
+  require(memory.promote_initialized(), "Completed low-bank clears prove initialized RAM");
+  const auto x = memory.windows(Space::x);
+  const auto y = memory.windows(Space::y);
+  require(x.size() == 2 && y.size() == 2 && x[0].words.size() == low_x_words &&
+              y[0].words.size() == low_y_words && x[0].known.empty() && y[0].known.empty() &&
+              x[1].address == high_first && x[1].words.size() == high_x_words &&
+              y[1].address == high_first && y[1].words.size() == high_y_words &&
+              !x[1].known.empty() && !y[1].known.empty() && x[1].known.back() == 1 &&
+              y[1].known.back() == 1,
+          "The selected post-clear grants match low untracked and high tracked RAM bounds");
+  Word value = 1;
+  require(!memory.read(Space::program, program_tail, value) && value == 1,
+          "An overbroad clear never initializes the X tail allocated exclusively to P");
+}
+
 void switched_maps() {
   struct Map {
     Word mode = 0, program_end = 0, x_end = 0, y_end = 0;
@@ -260,6 +292,7 @@ int main() try {
   contents_and_boundaries();
   borrowed_windows();
   initialized_windows();
+  cleared_mapping();
   switched_maps();
   retained_aliases();
   rom_and_reserved();

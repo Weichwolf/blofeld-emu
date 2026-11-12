@@ -95,9 +95,6 @@ void Program::memory_variants(const std::span<const dsp56300::VariantLayout> mem
       return std::pair{left.space, left.first} < std::pair{right.space, right.first};
     });
   }
-  if (!layouts_.empty() && layouts_.size() != ranges_.size()) {
-    throw std::invalid_argument("DSP program memory does not cover every prepared variant");
-  }
 }
 
 void Program::source_variant(const dsp56300::CodeVariant &variant) {
@@ -156,8 +153,9 @@ std::uint64_t Program::install(dsp56300::Core &core, dsp56300::Io &io) const {
 }
 
 bool Program::layout(const std::uint64_t variant, dsp56300::Io &io) const {
-  if (layouts_.empty()) { return true; }
-  const auto &expected = layouts_.at(variant);
+  const auto found = layouts_.find(variant);
+  if (found == layouts_.end()) { return true; }
+  const auto &expected = found->second;
   for (const auto space : {dsp56300::Space::x, dsp56300::Space::y}) {
     const auto actual = io.memory_windows(space);
     if (std::ranges::count(expected, space, &dsp56300::RegionLayout::space) !=
