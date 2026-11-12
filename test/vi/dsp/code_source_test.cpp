@@ -5,6 +5,8 @@
 
 #include <array>
 #include <cstdint>
+#include <dsp56300/core.hpp>
+#include <dsp56300/memory.hpp>
 #include <exception>
 #include <iostream>
 #include <span>
@@ -86,11 +88,74 @@ void missing_words() {
   } catch (const std::invalid_argument &) { rejected = true; }
   require(rejected, "Absent instruction classification is not an executable-source catalogue");
 }
+
+CodeSource retained_source() {
+  constexpr std::array initial{first, second, first, second};
+  constexpr std::array patch{replaced};
+  const std::array writes{dsp56300::CodeSpan{.address = address, .words = initial},
+                          dsp56300::CodeSpan{.address = address + 1, .words = patch},
+                          dsp56300::CodeSpan{.address = address + 1, .words = patch}};
+  constexpr std::array ranges{CodeRange{.address = address, .words = 2},
+                              CodeRange{.address = address + 1, .words = 1},
+                              CodeRange{.address = address + 3, .words = 1}};
+  const CodeSource before(std::span(writes).first(1), ranges);
+  require(before.code()[0].words[1] == second,
+          "A later overlay cannot change an earlier explicitly selected prefix");
+  return {writes, ranges};
+}
+
+void retained_contexts() {
+  auto source = retained_source();
+  const auto code = source.code();
+  require(code.size() == 3 && code[0].address == address && code[0].words.size() == 2 &&
+              code[0].words[0] == first && code[0].words[1] == replaced &&
+              code[1].address == address + 1 && code[1].words[0] == replaced &&
+              code[2].address == address + 3 && code[2].words[0] == second,
+          "Ordered P overlays preserve retained words, equal stores and overlapping contexts");
+  auto moved = std::move(source);
+  constexpr std::array next{CodeRange{.address = address, .words = 1},
+                            CodeRange{.address = address + 3, .words = 1}};
+  const CodeSource reclassified(moved.code(), next);
+  require(reclassified.code().size() == 2 && reclassified.code()[0].words.size() == 1 &&
+              reclassified.code()[0].words[0] == first && reclassified.code()[1].words[0] == second,
+          "A changed instruction extent neither decodes its retained operand nor fills gaps");
+  constexpr std::array missing{CodeRange{.address = address + 2, .words = 1}};
+  bool rejected = false;
+  try {
+    const CodeSource absent(moved.code(), missing);
+  } catch (const std::invalid_argument &) { rejected = true; }
+  require(rejected, "Excluded readable words do not become guessed executable source words");
+}
+
+void invalid_writes() {
+  constexpr std::array valid{first, second};
+  constexpr std::array invalid{dsp56300::word_mask + 1};
+  constexpr std::array ranges{CodeRange{.address = address, .words = 1}};
+  const std::array bad{
+      dsp56300::CodeSpan{.address = address, .words = {}},
+      dsp56300::CodeSpan{.address = dsp56300::address_words, .words = std::span(valid).first(1)},
+      dsp56300::CodeSpan{.address = dsp56300::word_mask, .words = valid},
+      dsp56300::CodeSpan{.address = address, .words = invalid}};
+  for (const auto write : bad) {
+    bool rejected = false;
+    try {
+      const CodeSource source(std::span(&write, 1), ranges);
+    } catch (const std::invalid_argument &) { rejected = true; }
+    require(rejected, "Stored writes must have nonempty, nonwrapping 24-bit words and extents");
+  }
+  const std::array edge{
+      dsp56300::CodeSpan{.address = dsp56300::word_mask, .words = std::span(valid).first(1)}};
+  constexpr std::array last{CodeRange{.address = dsp56300::word_mask, .words = 1}};
+  const CodeSource source(edge, last);
+  require(source.code()[0].words[0] == first, "The final P word is a valid source address");
+}
 }
 
 int main() try {
   ordered_contexts();
   missing_words();
+  retained_contexts();
+  invalid_writes();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

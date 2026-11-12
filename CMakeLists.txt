@@ -227,7 +227,7 @@ if(BUILD_TESTING)
     "blofeld_app_aot;blofeld_vi_execution;blofeld_vi_code_source")
   target_include_directories(app-aot-dsp-test PRIVATE test "${BLOFELD_DSP56300_ROOT}/test/support")
   blofeld_unit(app-aot-dsp-program-test test/app/aot/dsp_program_test.cpp
-    "blofeld_app_aot;blofeld_vi_execution")
+    "blofeld_app_aot;blofeld_vi_execution;blofeld_vi_code_source")
   target_include_directories(app-aot-dsp-program-test PRIVATE "${BLOFELD_DSP56300_ROOT}/test/support")
   blofeld_unit(host-audio-render-test test/host/audio/render_buffer_test.cpp blofeld_host_audio)
   blofeld_unit(host-audio-timeline-test test/host/audio/render_timeline_test.cpp blofeld_host_audio)

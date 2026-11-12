@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "aot/dsp.hpp"
 #include "dsp/boot_rom.hpp"
+#include "dsp/code_source.hpp"
 #include "dsp/execute.hpp"
 #include "dsp/program.hpp"
 #include "execution.hpp"
@@ -49,15 +50,18 @@ std::vector<Word> bootstrap() {
 vi::dsp::Program prepare(const std::span<const Word> boot_words) {
   const std::array first_code{CodeSpan{.address = boot, .words = boot_words}};
   const std::array second_code{CodeSpan{.address = 0, .words = initial}};
-  const std::array final_code{CodeSpan{.address = 0, .words = changed},
-                              CodeSpan{.address = 2, .words = std::span(initial).subspan(2)}};
+  const std::array final_writes{second_code[0], CodeSpan{.address = 0, .words = changed}};
+  constexpr std::array final_ranges{vi::dsp::CodeRange{.address = 0, .words = 1},
+                                    vi::dsp::CodeRange{.address = 2, .words = initial.size() - 2}};
+  const vi::dsp::CodeSource final_code(final_writes, final_ranges);
   constexpr std::array first_entries{boot};
   constexpr std::array second_entries{Word{0}};
   constexpr std::array final_entries{Word{0}, Word{4}};
   const std::array variants{
       CodeVariant{.id = 0, .code = first_code, .entries = first_entries, .failed_fetches = {}},
       CodeVariant{.id = 1, .code = second_code, .entries = second_entries, .failed_fetches = {}},
-      CodeVariant{.id = 2, .code = final_code, .entries = final_entries, .failed_fetches = {}}};
+      CodeVariant{
+          .id = 2, .code = final_code.code(), .entries = final_entries, .failed_fetches = {}}};
   const std::array initial_guard{vi::dsp::ProgramWord{.address = 0, .value = literal}};
   const std::array final_guards{vi::dsp::ProgramWord{.address = 0, .value = stop},
                                 vi::dsp::ProgramWord{.address = 1, .value = stop}};
