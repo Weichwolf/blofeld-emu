@@ -173,15 +173,15 @@ void normal_owner(const Fixture &fixture) {
           "An input-bound catalogue runs its prepared variants through the normal DSP owner");
 }
 
-Object software_catalogue(Fixture &fixture, const bool long_vector) {
-  constexpr Word vector = 8;
-  constexpr Word callee = 16;
+Object software_catalogue(Fixture &fixture, const bool long_vector, const Word instruction) {
   constexpr Word trap = static_cast<Word>(dsp56300::isa::Opcode::trap);
+  const Word vector = instruction == trap ? 8 : 4;
+  constexpr Word callee = 16;
   constexpr Word nop = static_cast<Word>(dsp56300::isa::Opcode::nop);
   constexpr Word call = static_cast<Word>(dsp56300::isa::Opcode::jsr_effective) | (0x30U << 8U);
   constexpr Word rti = static_cast<Word>(dsp56300::isa::Opcode::rti);
   std::vector<Word> words(long_vector ? callee + 1 : vector + 2, nop);
-  words[0] = trap;
+  words[0] = instruction;
   words[1] = stop;
   if (long_vector) {
     words[vector] = call;
@@ -205,38 +205,43 @@ Object software_catalogue(Fixture &fixture, const bool long_vector) {
   Array code{Array{0, 2}, Array{vector, 2}};
   if (long_vector) { code.push_back(Array{callee, 1}); }
   loaded["code"] = std::move(code);
-  loaded["guards"] = Array{Object{{.K = "address", .V = 0}, {.K = "value", .V = trap}}};
+  loaded["guards"] = Array{Object{{.K = "address", .V = 0}, {.K = "value", .V = instruction}}};
   result["variants"] = Array{std::move(variants[0]), std::move(variants[1])};
   result["interrupts"] = Array{Object{{.K = "vector", .V = vector}, {.K = "level", .V = 3}}};
   return result;
 }
 
 void software_interrupts() {
-  constexpr Word fast_instructions = 25;
+  constexpr Word trap = static_cast<Word>(dsp56300::isa::Opcode::trap);
+  constexpr Word undefined = 0x000143; // Authored reserved-domain member, not firmware code.
   constexpr Word long_instructions = 39;
-  for (const bool long_vector : {false, true}) {
-    Fixture fixture;
-    auto input = software_catalogue(fixture, long_vector);
-    const auto program = blofeld::app::aot::prepare_dsp_catalogue(
-        document(std::move(input)), fixture.firmware, fixture.boot_rom());
-    vi::Shi shi;
-    vi::DspReset reset;
-    const auto result = vi::dsp::execute(fixture.boot_rom(),
-                                         shi,
-                                         reset,
-                                         {},
-                                         nullptr,
-                                         {},
-                                         nullptr,
-                                         nullptr,
-                                         nullptr,
-                                         nullptr,
-                                         &program);
-    require(!result.failure && !result.exception && !result.preparation_diagnostic &&
-                result.instructions == (long_vector ? long_instructions : fast_instructions) &&
-                result.stopped_pc == 2,
-            "A prepared level-three software trap runs its actual fast vector or JSR/RTI and "
-            "returns to the guest continuation despite the initial interrupt mask");
+  for (const Word instruction : {trap, undefined}) {
+    const Word fast_instructions = instruction == trap ? 25 : 17;
+    for (const bool long_vector : {false, true}) {
+      Fixture fixture;
+      auto input = software_catalogue(fixture, long_vector, instruction);
+      const auto program = blofeld::app::aot::prepare_dsp_catalogue(
+          document(std::move(input)), fixture.firmware, fixture.boot_rom());
+      vi::Shi shi;
+      vi::DspReset reset;
+      const auto result = vi::dsp::execute(fixture.boot_rom(),
+                                           shi,
+                                           reset,
+                                           {},
+                                           nullptr,
+                                           {},
+                                           nullptr,
+                                           nullptr,
+                                           nullptr,
+                                           nullptr,
+                                           &program);
+      require(
+          !result.failure && !result.exception && !result.preparation_diagnostic &&
+              result.instructions == (long_vector ? long_instructions : fast_instructions) &&
+              result.stopped_pc == 2,
+          "A prepared level-three software exception runs its actual fast vector or JSR/RTI and "
+          "returns to the guest continuation despite the initial interrupt mask");
+    }
   }
 }
 
