@@ -173,6 +173,73 @@ void normal_owner(const Fixture &fixture) {
           "An input-bound catalogue runs its prepared variants through the normal DSP owner");
 }
 
+Object software_catalogue(Fixture &fixture, const bool long_vector) {
+  constexpr Word vector = 8;
+  constexpr Word callee = 16;
+  constexpr Word trap = static_cast<Word>(dsp56300::isa::Opcode::trap);
+  constexpr Word nop = static_cast<Word>(dsp56300::isa::Opcode::nop);
+  constexpr Word call = static_cast<Word>(dsp56300::isa::Opcode::jsr_effective) | (0x30U << 8U);
+  constexpr Word rti = static_cast<Word>(dsp56300::isa::Opcode::rti);
+  std::vector<Word> words(long_vector ? callee + 1 : vector + 2, nop);
+  words[0] = trap;
+  words[1] = stop;
+  if (long_vector) {
+    words[vector] = call;
+    words[vector + 1] = callee;
+    words[callee] = rti;
+  }
+  fixture.firmware.blocks[0] = packed(words);
+  fixture.rom.clear();
+  for (Word address = 0; address < words.size(); ++address) {
+    fixture.rom.insert(fixture.rom.end(), {literal, words[address], store, address});
+  }
+  fixture.rom.push_back(jump);
+  auto result = catalogue(fixture);
+  auto &variants = *result.getArray("variants");
+  auto &loaded = *variants[1].getAsObject();
+  loaded["writes"] = Array{Object{{.K = "kind", .V = "block"},
+                                  {.K = "block", .V = 0},
+                                  {.K = "byte_offset", .V = 0},
+                                  {.K = "address", .V = 0},
+                                  {.K = "words", .V = words.size()}}};
+  Array code{Array{0, 2}, Array{vector, 2}};
+  if (long_vector) { code.push_back(Array{callee, 1}); }
+  loaded["code"] = std::move(code);
+  loaded["guards"] = Array{Object{{.K = "address", .V = 0}, {.K = "value", .V = trap}}};
+  result["variants"] = Array{std::move(variants[0]), std::move(variants[1])};
+  result["interrupts"] = Array{Object{{.K = "vector", .V = vector}, {.K = "level", .V = 3}}};
+  return result;
+}
+
+void software_interrupts() {
+  constexpr Word fast_instructions = 25;
+  constexpr Word long_instructions = 39;
+  for (const bool long_vector : {false, true}) {
+    Fixture fixture;
+    auto input = software_catalogue(fixture, long_vector);
+    const auto program = blofeld::app::aot::prepare_dsp_catalogue(
+        document(std::move(input)), fixture.firmware, fixture.boot_rom());
+    vi::Shi shi;
+    vi::DspReset reset;
+    const auto result = vi::dsp::execute(fixture.boot_rom(),
+                                         shi,
+                                         reset,
+                                         {},
+                                         nullptr,
+                                         {},
+                                         nullptr,
+                                         nullptr,
+                                         nullptr,
+                                         nullptr,
+                                         &program);
+    require(!result.failure && !result.exception && !result.preparation_diagnostic &&
+                result.instructions == (long_vector ? long_instructions : fast_instructions) &&
+                result.stopped_pc == 2,
+            "A prepared level-three software trap runs its actual fast vector or JSR/RTI and "
+            "returns to the guest continuation despite the initial interrupt mask");
+  }
+}
+
 template <class Change> void rejects(const Fixture &fixture, Change change) {
   auto input = catalogue(fixture);
   change(input);
@@ -206,6 +273,9 @@ void invalid_catalogues(const Fixture &fixture) {
   rejects(fixture, [](auto &input) { variant(input)["failed_fetches"] = false; });
   rejects(fixture, [](auto &input) { variant(input)["memory"] = false; });
   rejects(fixture, [](auto &input) { variant(input)["memory"] = Array{}; });
+  rejects(fixture, [](auto &input) {
+    input["interrupts"] = Array{Object{{.K = "vector", .V = 8}, {.K = "level", .V = 4}}};
+  });
   rejects(fixture, [](auto &input) {
     variant(input)["memory"] =
         Array{Object{{.K = "space", .V = "p"}, {.K = "first", .V = 0}, {.K = "words", .V = 1}}};
@@ -251,6 +321,7 @@ int main() try {
   normal_owner(fixture);
   invalid_catalogues(fixture);
   changed_inputs(fixture);
+  software_interrupts();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

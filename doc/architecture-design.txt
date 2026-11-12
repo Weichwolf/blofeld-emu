@@ -124,7 +124,8 @@ Optional memory lists X/Y regions {space, first, words, writable, tracked,
 aliases_program}. If one variant declares memory, every variant must declare it;
 an explicit empty list requires zero native grants. The defaults are writable,
 untracked and not aliased. Top-level interrupts {vector, level} and transitions
-{from, to, entry} establish prepared entry and transfer contracts. Optional
+{from, to, entry} establish prepared entry and transfer contracts. Interrupt
+levels are 0..3, including unmaskable software exceptions. Optional
 failed_fetches declare actual unreadable targets, never missing translations.
 The source owner must establish complete known code, entry and variant coverage;
 matching hashes and a translated subset alone do not prove instrument coverage.

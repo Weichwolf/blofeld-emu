@@ -273,7 +273,7 @@ prepare(const Object &root, const vi::FirmwareUpdate &firmware, const vi::dsp::B
   for (const auto &value : array(root, "interrupts")) {
     const auto &request = object(value);
     const auto level = number(request, "level");
-    if (level > 2) { invalid("interrupt level"); }
+    if (level > 3) { invalid("interrupt level"); }
     interrupts.push_back(
         {.vector = word(request, "vector"), .level = static_cast<unsigned>(level)});
   }
