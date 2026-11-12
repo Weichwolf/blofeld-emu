@@ -155,9 +155,16 @@ Writes construct immutable source views, never guest state or loading effects:
 | --- | --- |
 | boot-main / boot-eeprom | word_offset, words, destination address |
 | block | block, byte_offset, words, address |
+| blob | source name, byte_offset, words, address |
 | records | Original count prefix; logical P payloads only |
 | copy | Earlier source at from, words, destination address |
 | field | from, address, 24-bit mask, shift 0..23; ((word & mask) << shift) & $ffffff |
+
+Optional `inputs.blobs` entries bind {name, sha256} to complete additional source
+bytes, including bytes outside selected code slices. The file loader also requires
+`path`, resolved relative to the catalogue. Pure preparation receives named byte
+spans instead. Names must be unique and supplied/declared sets equal. Blob writes
+construct source views only; actual loading still executes the firmware protocol.
 
 Optional memory regions declare {space, first, words, writable, tracked,
 aliases_program} for X/Y independently per variant. An omitted contract retains

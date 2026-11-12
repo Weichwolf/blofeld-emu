@@ -234,7 +234,7 @@ if(BUILD_TESTING)
     "blofeld_app_aot;blofeld_vi_execution;LLVM" inputs)
   target_include_directories(app-aot-dsp-catalogue-test PRIVATE test "${BLOFELD_DSP56300_ROOT}/test/support")
   target_include_directories(app-aot-dsp-catalogue-test SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
-  foreach(group software derived nested layouts targets failed boundaries)
+  foreach(group software derived nested layouts targets failed boundaries sources)
     add_test(NAME app-aot-dsp-catalogue-${group}-test COMMAND app-aot-dsp-catalogue-test
       "${CMAKE_CURRENT_BINARY_DIR}/Testing/app-aot-dsp-catalogue-${group}-test" ${group})
     set_tests_properties(app-aot-dsp-catalogue-${group}-test PROPERTIES TIMEOUT 10)
@@ -325,6 +325,11 @@ if(BUILD_TESTING)
   add_dependencies(vi-firmware-test unit-inputs)
   add_dependencies(vi-update-transport-test unit-inputs)
   add_dependencies(app-firmware-test unit-inputs)
+  add_dependencies(app-aot-dsp-catalogue-test unit-inputs)
+  add_test(NAME app-aot-dsp-catalogue-source-files-test COMMAND app-aot-dsp-catalogue-test
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/app-aot-dsp-catalogue-source-files-test"
+    source-files "${blofeld_unit_inputs}")
+  set_tests_properties(app-aot-dsp-catalogue-source-files-test PROPERTIES TIMEOUT 10)
   blofeld_unit(vi-flash-image-test test/vi/storage/flash_image_test.cpp
     blofeld_vi_storage "${blofeld_unit_inputs}")
   add_dependencies(vi-flash-image-test unit-inputs)

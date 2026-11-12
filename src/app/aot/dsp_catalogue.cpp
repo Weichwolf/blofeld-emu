@@ -21,6 +21,7 @@
 #include <dsp56300/memory.hpp>
 #include <format>
 #include <optional>
+#include <set>
 #include <span>
 #include <stdexcept>
 #include <string_view>
@@ -103,7 +104,34 @@ void identity(const std::span<const Word> words, const std::string_view expected
   identity(bytes, expected);
 }
 
-void inputs(const Object &root, const vi::FirmwareUpdate &firmware, const vi::dsp::BootRom boot) {
+std::span<const std::uint8_t> source_bytes(const std::span<const DspSource> sources,
+                                           const std::string_view name) {
+  const auto found = std::ranges::find(sources, name, &DspSource::name);
+  if (found == sources.end()) { invalid("missing named source"); }
+  return found->bytes;
+}
+
+void source_inputs(const Object &input, const std::span<const DspSource> sources) {
+  std::set<std::string_view> supplied;
+  std::set<std::string_view> declared;
+  for (const auto &source : sources) {
+    if (source.name.empty() || !supplied.insert(source.name).second) { invalid("source name"); }
+  }
+  if (input.get("blobs") != nullptr) {
+    for (const auto &value : array(input, "blobs")) {
+      const auto &blob = object(value);
+      const auto name = text(blob, "name");
+      if (name.empty() || !declared.insert(name).second) { invalid("source name"); }
+      identity(source_bytes(sources, name), text(blob, "sha256"));
+    }
+  }
+  if (supplied != declared) { invalid("source identities"); }
+}
+
+void inputs(const Object &root,
+            const vi::FirmwareUpdate &firmware,
+            const vi::dsp::BootRom boot,
+            const std::span<const DspSource> sources) {
   if (!boot.valid()) { invalid("boot regions"); }
   const auto *source = root.getObject("inputs");
   if (source == nullptr) { invalid("inputs"); }
@@ -117,6 +145,7 @@ void inputs(const Object &root, const vi::FirmwareUpdate &firmware, const vi::ds
   identity(firmware.nand_program, text(*source, "nand"));
   identity(boot.main, text(*source, "boot-main"));
   identity(boot.eeprom, text(*source, "boot-eeprom"));
+  source_inputs(*source, sources);
 }
 
 std::vector<Word> addresses(const Array &input) {
@@ -177,10 +206,28 @@ private:
   std::vector<dsp56300::CodeSpan> writes_;
 };
 
+std::span<const std::uint8_t> stored_payload(const Object &input,
+                                             const vi::FirmwareUpdate &firmware,
+                                             const std::span<const DspSource> sources) {
+  std::span<const std::uint8_t> bytes;
+  if (text(input, "kind") == "block") {
+    const auto block = number(input, "block");
+    if (block >= firmware.blocks.size()) { invalid("block index"); }
+    bytes = firmware.blocks[block];
+  } else {
+    bytes = source_bytes(sources, text(input, "source"));
+  }
+  const auto offset = number(input, "byte_offset");
+  const auto count = number(input, "words");
+  if (offset > bytes.size() || count > (bytes.size() - offset) / 3) { invalid("source extent"); }
+  return bytes.subspan(offset, count * 3);
+}
+
 void stored_write(Stored &stored,
                   const Object &input,
                   const vi::FirmwareUpdate &firmware,
-                  const vi::dsp::BootRom boot) {
+                  const vi::dsp::BootRom boot,
+                  const std::span<const DspSource> sources) {
   const auto kind = text(input, "kind");
   if (kind == "copy") {
     stored.copy(input);
@@ -193,14 +240,8 @@ void stored_write(Stored &stored,
     for (const auto &record : records.records().first(count)) {
       if (record.space == 0) { stored.bytes(record.address, record.payload); }
     }
-  } else if (kind == "block") {
-    const auto block = number(input, "block");
-    if (block >= firmware.blocks.size()) { invalid("block index"); }
-    const auto bytes = std::span(firmware.blocks[block]);
-    const auto offset = number(input, "byte_offset");
-    const auto count = number(input, "words");
-    if (offset > bytes.size() || count > (bytes.size() - offset) / 3) { invalid("block extent"); }
-    stored.bytes(word(input, "address"), bytes.subspan(offset, count * 3));
+  } else if (kind == "block" || kind == "blob") {
+    stored.bytes(word(input, "address"), stored_payload(input, firmware, sources));
   } else if (kind == "boot-main" || kind == "boot-eeprom") {
     const auto words = kind == "boot-main" ? boot.main : boot.eeprom;
     const auto offset = number(input, "word_offset");
@@ -290,15 +331,17 @@ void validate_admissions(const std::span<const Variant> variants) {
   }
 }
 
-vi::dsp::Program
-prepare(const Object &root, const vi::FirmwareUpdate &firmware, const vi::dsp::BootRom boot) {
+vi::dsp::Program prepare(const Object &root,
+                         const vi::FirmwareUpdate &firmware,
+                         const vi::dsp::BootRom boot,
+                         const std::span<const DspSource> sources) {
   std::vector<Variant> owned;
   std::vector<dsp56300::VariantLayout> layouts;
   for (const auto &value : array(root, "variants")) {
     const auto &input = object(value);
     Stored stored;
     for (const auto &write : array(input, "writes")) {
-      stored_write(stored, object(write), firmware, boot);
+      stored_write(stored, object(write), firmware, boot, sources);
     }
     auto &variant = owned.emplace_back(number(input, "id"), stored.classify(array(input, "code")));
     admission(variant, input);
@@ -339,12 +382,13 @@ prepare(const Object &root, const vi::FirmwareUpdate &firmware, const vi::dsp::B
 
 vi::dsp::Program prepare_dsp_catalogue(const std::string_view document,
                                        const vi::FirmwareUpdate &firmware,
-                                       const vi::dsp::BootRom boot) {
+                                       const vi::dsp::BootRom boot,
+                                       const std::span<const DspSource> sources) {
   auto parsed = llvm::json::parse(document);
   if (!parsed) { throw std::invalid_argument(llvm::toString(parsed.takeError())); }
   const auto &root = object(*parsed);
   if (number(root, "format") != 1) { invalid("format"); }
-  inputs(root, firmware, boot);
-  return prepare(root, firmware, boot);
+  inputs(root, firmware, boot, sources);
+  return prepare(root, firmware, boot, sources);
 }
 }

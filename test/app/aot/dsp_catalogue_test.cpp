@@ -3,9 +3,11 @@
 #include "dsp/boot_rom.hpp"
 #include "dsp/execute.hpp"
 #include "execution.hpp"
+#include "firmware.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/shi.hpp"
 #include "isa.hpp"
+#include "profile.hpp"
 #include "storage/firmware.hpp"
 #include "support/dsp_records.hpp"
 
@@ -21,6 +23,8 @@
 #include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
 #include <exception>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <span>
 #include <stdexcept>
@@ -281,9 +285,10 @@ Object software_catalogue(Fixture &fixture, const bool long_vector, const Word i
 void execute_owner(const Fixture &fixture,
                    Object input,
                    const Word instructions,
-                   const Word stopped_pc = 2) {
+                   const Word stopped_pc = 2,
+                   const std::span<const blofeld::app::aot::DspSource> sources = {}) {
   const auto program = blofeld::app::aot::prepare_dsp_catalogue(
-      document(std::move(input)), fixture.firmware, fixture.boot_rom());
+      document(std::move(input)), fixture.firmware, fixture.boot_rom(), sources);
   vi::Shi shi;
   vi::DspReset reset;
   const auto result = vi::dsp::execute(fixture.boot_rom(),
@@ -524,11 +529,127 @@ void changed_inputs(const Fixture &fixture) {
   rejects_input(input, fixture.firmware, {.main = fixture.rom, .eeprom = other});
   rejects_input(input, fixture.firmware, {.main = fixture.rom, .eeprom = {}});
 }
+
+std::vector<std::uint8_t> source_payload() {
+  constexpr std::array<std::uint8_t, 2> prefix{0xd3, 0x42};
+  constexpr std::uint8_t suffix = 0xe1;
+  auto bytes = packed(initial);
+  bytes.insert(bytes.begin(), prefix.begin(), prefix.end());
+  bytes.push_back(suffix);
+  return bytes;
+}
+
+Object source_catalogue(const Fixture &fixture, const std::span<const std::uint8_t> bytes) {
+  auto input = catalogue(fixture);
+  (*input.getObject("inputs"))["blobs"] =
+      Array{Object{{.K = "name", .V = "helper"}, {.K = "sha256", .V = hash(bytes)}}};
+  const llvm::json::Value write(Object{{.K = "kind", .V = "blob"},
+                                       {.K = "source", .V = "helper"},
+                                       {.K = "byte_offset", .V = 2},
+                                       {.K = "address", .V = 0},
+                                       {.K = "words", .V = initial.size()}});
+  variant(input, 1)["writes"] = Array{write};
+  (*variant(input, 2).getArray("writes"))[0] = write;
+  return input;
+}
+
+void refuses_source(const Fixture &fixture,
+                    Object input,
+                    const std::span<const blofeld::app::aot::DspSource> sources) {
+  bool rejected = false;
+  try {
+    const auto program = blofeld::app::aot::prepare_dsp_catalogue(
+        document(std::move(input)), fixture.firmware, fixture.boot_rom(), sources);
+  } catch (const std::invalid_argument &) { rejected = true; }
+  require(rejected,
+          "External translation sources require exact names, whole-byte hashes and bounds");
+}
+
+void external_sources() {
+  const Fixture fixture;
+  const auto bytes = source_payload();
+  const auto input = source_catalogue(fixture, bytes);
+  using blofeld::app::aot::DspSource;
+  const std::array sources{DspSource{.name = "helper", .bytes = bytes}};
+  execute_owner(fixture, input, 15, 1, sources);
+  refuses_source(fixture, input, {});
+  const std::array duplicate{sources[0], sources[0]};
+  refuses_source(fixture, input, duplicate);
+  const std::array extra{sources[0], DspSource{.name = "unused", .bytes = bytes}};
+  refuses_source(fixture, input, extra);
+  for (const auto *name : {"", "other"}) {
+    const std::array renamed{DspSource{.name = name, .bytes = bytes}};
+    refuses_source(fixture, input, renamed);
+  }
+  for (const auto offset : {std::size_t{0}, bytes.size() - 1}) {
+    auto changed = bytes;
+    changed[offset] ^= 1;
+    const std::array altered{DspSource{.name = "helper", .bytes = changed}};
+    refuses_source(fixture, input, altered);
+  }
+  auto duplicated = input;
+  auto &blobs = *duplicated.getObject("inputs")->getArray("blobs");
+  blobs.push_back(blobs.front());
+  refuses_source(fixture, std::move(duplicated), sources);
+  for (unsigned example = 0; example < 3; ++example) {
+    auto changed = input;
+    auto &write = *(*variant(changed, 1).getArray("writes"))[0].getAsObject();
+    if (example == 0) { write["source"] = "missing"; }
+    if (example == 1) { write["byte_offset"] = bytes.size() + 1; }
+    if (example == 2) { write["words"] = bytes.size(); }
+    refuses_source(fixture, std::move(changed), sources);
+  }
+}
+
+void source_files(const blofeld::app::Profile &profile) {
+  const auto directory = profile.dsp_catalogue.parent_path();
+  std::filesystem::create_directories(directory);
+  Fixture fixture;
+  fixture.firmware = blofeld::app::load_firmware(profile.firmware);
+  const auto bytes = source_payload();
+  auto input = source_catalogue(fixture, bytes);
+  auto &blob = *input.getObject("inputs")->getArray("blobs")->front().getAsObject();
+  blob["path"] = "helper.bin";
+  {
+    std::ofstream file(directory / "helper.bin", std::ios::binary);
+    for (const auto byte : bytes) { file.put(static_cast<char>(byte)); }
+    require(static_cast<bool>(file), "Write independently authored local source bytes");
+  }
+  const auto &path = profile.dsp_catalogue;
+  { std::ofstream(path) << document(input); }
+  const auto prepared = blofeld::app::aot::load_dsp_program(profile, fixture.boot_rom());
+  require(prepared.report().prepared_entries != 0,
+          "The normal loader resolves a blob beside its catalogue and binds its bytes");
+  {
+    std::ofstream file(directory / "helper.bin", std::ios::binary | std::ios::app);
+    file.put('x');
+  }
+  bool stale = false;
+  try {
+    const auto program = blofeld::app::aot::load_dsp_program(profile, fixture.boot_rom());
+  } catch (const std::invalid_argument &error) {
+    stale = std::string_view(error.what()).contains("SHA256");
+  }
+  require(stale, "The file loader rejects a changed byte outside all selected code slices");
+  for (const auto *invalid : {"", "absent.bin"}) {
+    blob["path"] = invalid;
+    { std::ofstream(path) << document(input); }
+    bool rejected = false;
+    try {
+      const auto program = blofeld::app::aot::load_dsp_program(profile, fixture.boot_rom());
+    } catch (const std::exception &error) {
+      const std::string_view message(error.what());
+      rejected = message.contains("unique name and path") || message.contains("Open input");
+    }
+    require(rejected, "An empty or absent source file never starts compilation");
+  }
+  std::filesystem::remove_all(directory);
+}
 }
 
 int main(const int argc, const char *const *argv) try {
-  require(argc <= 3, "Supply an optional test directory and catalogue test group");
-  const std::string_view group = argc == 3 ? argv[2] : "inputs";
+  require(argc <= 4, "Supply an optional test directory, catalogue group and input directory");
+  const std::string_view group = argc >= 3 ? argv[2] : "inputs";
   if (group == "inputs") {
     const Fixture fixture;
     ambiguous_admission(fixture);
@@ -551,6 +672,14 @@ int main(const int argc, const char *const *argv) try {
     software_interrupts();
   } else if (group == "nested") {
     nested_software();
+  } else if (group == "sources") {
+    external_sources();
+  } else if (group == "source-files") {
+    require(argc == 4, "Supply the authored firmware input directory");
+    blofeld::app::Profile profile;
+    profile.firmware = std::filesystem::path(argv[3]) / "update.mid";
+    profile.dsp_catalogue = std::filesystem::path(argv[1]) / "code.json";
+    source_files(profile);
   } else {
     throw std::invalid_argument("Unknown catalogue test group");
   }
