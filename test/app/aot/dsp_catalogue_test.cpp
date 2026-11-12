@@ -233,7 +233,10 @@ Object software_catalogue(Fixture &fixture, const bool long_vector, const Word i
   return result;
 }
 
-void software_owner(const Fixture &fixture, Object input, const Word instructions) {
+void execute_owner(const Fixture &fixture,
+                   Object input,
+                   const Word instructions,
+                   const Word stopped_pc = 2) {
   const auto program = blofeld::app::aot::prepare_dsp_catalogue(
       document(std::move(input)), fixture.firmware, fixture.boot_rom());
   vi::Shi shi;
@@ -250,9 +253,21 @@ void software_owner(const Fixture &fixture, Object input, const Word instruction
                                        nullptr,
                                        &program);
   require(!result.failure && !result.exception && !result.preparation_diagnostic &&
-              result.instructions == instructions && result.stopped_pc == 2,
-          "A prepared level-three software exception executes its actual vectors and returns "
-          "through the normal owner despite the initial interrupt mask");
+              result.instructions == instructions && result.stopped_pc == stopped_pc &&
+              result.prepared_native_bytes == program.report().native_bytes,
+          "A prepared catalogue executes its exact native instruction/STOP prefix through the "
+          "normal owner with its bound code size");
+}
+
+void multiple_targets() {
+  for (const bool stop_payload : {false, true}) {
+    Fixture fixture;
+    if (stop_payload) { fixture.rom[1] = stop; }
+    auto input = catalogue(fixture);
+    input.getArray("transitions")
+        ->push_back(Object{{.K = "from", .V = 0}, {.K = "to", .V = 2}, {.K = "entry", .V = 0}});
+    execute_owner(fixture, std::move(input), stop_payload ? 12 : 15, 1);
+  }
 }
 
 void software_interrupts() {
@@ -264,8 +279,7 @@ void software_interrupts() {
     for (const bool long_vector : {false, true}) {
       Fixture fixture;
       auto input = software_catalogue(fixture, long_vector, instruction);
-      software_owner(
-          fixture, std::move(input), long_vector ? long_instructions : fast_instructions);
+      execute_owner(fixture, std::move(input), long_vector ? long_instructions : fast_instructions);
     }
   }
 }
@@ -283,7 +297,7 @@ void derived_word() {
                                               {.K = "mask", .V = 4},
                                               {.K = "shift", .V = shift}});
   constexpr Word instructions = 25;
-  software_owner(fixture, std::move(input), instructions);
+  execute_owner(fixture, std::move(input), instructions);
 }
 
 void nested_software() {
@@ -305,7 +319,7 @@ void nested_software() {
   loaded.getArray("code")->push_back(Array{4, 2});
   input.getArray("interrupts")->push_back(Object{{.K = "vector", .V = 4}, {.K = "level", .V = 3}});
   constexpr Word instructions = 26;
-  software_owner(fixture, std::move(input), instructions);
+  execute_owner(fixture, std::move(input), instructions);
 }
 
 template <class Change> void rejects(const Fixture &fixture, Change change) {
@@ -478,6 +492,8 @@ int main(const int argc, const char *const *argv) try {
     invalid_catalogues(fixture);
     invalid_fields(fixture);
     changed_inputs(fixture);
+  } else if (group == "targets") {
+    multiple_targets();
   } else if (group == "layouts") {
     normal_owner(Fixture{}, true);
   } else if (group == "derived") {

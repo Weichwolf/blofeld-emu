@@ -187,6 +187,13 @@ void rejected(const NativeImage &image) {
     const Program missing(image, {.variants = variants}, choices, invalid_transfer);
   } catch (const std::invalid_argument &) { failed = true; }
   require(failed, "Every declared transfer needs a prepared target installation point");
+  constexpr CodeTransition transfer{.from = 0, .to = 1, .entry = entry};
+  constexpr std::array duplicate{transfer, transfer};
+  failed = false;
+  try {
+    const Program missing(image, {.variants = variants}, choices, duplicate);
+  } catch (const std::invalid_argument &) { failed = true; }
+  require(failed, "Duplicate native target declarations cannot create a second transition");
 }
 }
 

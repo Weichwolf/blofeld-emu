@@ -162,7 +162,10 @@ dynamic grants; an explicit empty list requires zero grants. Fixed layouts enabl
 direct RAM/loop optimization while cold loader variants retain dynamic mappings.
 Defaults are writable, untracked, not program-aliased.
 Interrupts {vector, level} cover levels 0..3, including unmaskable software
-exceptions. Transitions {from, to, entry} declare prepared handoffs.
+exceptions. Transitions {from, to, entry} declare prepared handoffs. A shared entry
+may name several target variants; reject duplicate triples. Select a unique
+admitted target only after actual source words/layout match, retaining the
+completed real jump and pending transfer on refusal.
 failed_fetches describe actual unreadability, never translation gaps.
 Installation validates prepared words against actual guest-produced P contents.
 Entry admission must be disjoint: compatible mode/word/memory predicates cannot

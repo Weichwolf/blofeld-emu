@@ -6,6 +6,7 @@
 #include <dsp56300/memory.hpp>
 #include <map>
 #include <optional>
+#include <set>
 #include <span>
 #include <utility>
 #include <vector>
@@ -67,6 +68,6 @@ private:
   std::map<std::uint64_t, std::vector<Range>> ranges_;
   std::vector<Choice> choices_;
   std::map<std::uint64_t, std::vector<dsp56300::RegionLayout>> layouts_;
-  std::map<std::pair<std::uint64_t, dsp56300::Word>, std::uint64_t> transitions_;
+  std::set<std::pair<std::uint64_t, dsp56300::Word>> transitions_;
 };
 }

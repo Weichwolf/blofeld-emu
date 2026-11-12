@@ -11,6 +11,7 @@
 #include <set>
 #include <span>
 #include <stdexcept>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -65,15 +66,17 @@ Program::Program(dsp56300::NativeImage image,
   if (covered.size() != ranges_.size()) {
     throw std::invalid_argument("DSP program admission does not cover every prepared variant");
   }
+  std::set<std::tuple<std::uint64_t, dsp56300::Word, std::uint64_t>> targets;
   for (const auto &transfer : transitions) {
     const bool admitted = std::ranges::any_of(choices_, [&transfer](const auto &choice) {
       return choice.variant == transfer.to &&
              std::ranges::find(choice.resumes, transfer.entry) != choice.resumes.end();
     });
     if (!ranges_.contains(transfer.from) || transfer.from == transfer.to || !admitted ||
-        !transitions_.emplace(std::pair{transfer.from, transfer.entry}, transfer.to).second) {
+        !targets.emplace(transfer.from, transfer.entry, transfer.to).second) {
       throw std::invalid_argument("Invalid DSP program transition contract");
     }
+    transitions_.emplace(transfer.from, transfer.entry);
   }
 }
 
