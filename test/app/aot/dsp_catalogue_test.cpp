@@ -155,8 +155,9 @@ std::string document(Object input) {
   return llvm::formatv("{0}", llvm::json::Value(std::move(input))).str();
 }
 
-void normal_owner(const Fixture &fixture, const bool fixed = false) {
+void normal_owner(const Fixture &fixture, const bool fixed = false, const bool unseeded = false) {
   auto input = catalogue(fixture);
+  if (unseeded) { (*(*input.getArray("variants"))[1].getAsObject())["entries"] = Array{2}; }
   if (fixed) {
     constexpr Word low_x_words = 0x3000;
     constexpr Word high_first = 0xc000;
@@ -536,6 +537,8 @@ int main(const int argc, const char *const *argv) try {
     invalid_catalogues(fixture);
     invalid_fields(fixture);
     changed_inputs(fixture);
+  } else if (group == "boundaries") {
+    normal_owner(Fixture{}, false, true);
   } else if (group == "failed") {
     failed_entry();
   } else if (group == "targets") {

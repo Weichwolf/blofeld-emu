@@ -234,7 +234,7 @@ if(BUILD_TESTING)
     "blofeld_app_aot;blofeld_vi_execution;LLVM" inputs)
   target_include_directories(app-aot-dsp-catalogue-test PRIVATE test "${BLOFELD_DSP56300_ROOT}/test/support")
   target_include_directories(app-aot-dsp-catalogue-test SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
-  foreach(group software derived nested layouts targets failed)
+  foreach(group software derived nested layouts targets failed boundaries)
     add_test(NAME app-aot-dsp-catalogue-${group}-test COMMAND app-aot-dsp-catalogue-test
       "${CMAKE_CURRENT_BINARY_DIR}/Testing/app-aot-dsp-catalogue-${group}-test" ${group})
     set_tests_properties(app-aot-dsp-catalogue-${group}-test PROPERTIES TIMEOUT 10)
