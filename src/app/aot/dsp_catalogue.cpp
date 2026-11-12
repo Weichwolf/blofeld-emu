@@ -155,6 +155,17 @@ public:
     write({.address = word(input, "address"), .words = snapshot.code()[0].words});
   }
 
+  void field(const Object &input) {
+    constexpr std::uint64_t bits = 24;
+    const auto shift = number(input, "shift");
+    if (shift >= bits) { invalid("field shift"); }
+    const std::array source{vi::dsp::CodeRange{.address = word(input, "from"), .words = 1}};
+    const vi::dsp::CodeSource snapshot(writes_, source);
+    const std::array value{((snapshot.code()[0].words[0] & word(input, "mask")) << shift) &
+                           dsp56300::word_mask};
+    write({.address = word(input, "address"), .words = value});
+  }
+
   [[nodiscard]] vi::dsp::CodeSource classify(const Array &code) const {
     return {writes_, ranges(code)};
   }
@@ -171,6 +182,8 @@ void stored_write(Stored &stored,
   const auto kind = text(input, "kind");
   if (kind == "copy") {
     stored.copy(input);
+  } else if (kind == "field") {
+    stored.field(input);
   } else if (kind == "records") {
     const auto records = vi::DspRecords::read(firmware.nand_program);
     const auto count = number(input, "count");

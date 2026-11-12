@@ -13,6 +13,7 @@
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/SHA256.h"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -22,6 +23,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -211,6 +213,28 @@ Object software_catalogue(Fixture &fixture, const bool long_vector, const Word i
   return result;
 }
 
+void software_owner(const Fixture &fixture, Object input, const Word instructions) {
+  const auto program = blofeld::app::aot::prepare_dsp_catalogue(
+      document(std::move(input)), fixture.firmware, fixture.boot_rom());
+  vi::Shi shi;
+  vi::DspReset reset;
+  const auto result = vi::dsp::execute(fixture.boot_rom(),
+                                       shi,
+                                       reset,
+                                       {},
+                                       nullptr,
+                                       {},
+                                       nullptr,
+                                       nullptr,
+                                       nullptr,
+                                       nullptr,
+                                       &program);
+  require(!result.failure && !result.exception && !result.preparation_diagnostic &&
+              result.instructions == instructions && result.stopped_pc == 2,
+          "A prepared level-three software exception executes its actual vectors and returns "
+          "through the normal owner despite the initial interrupt mask");
+}
+
 void software_interrupts() {
   constexpr Word trap = static_cast<Word>(dsp56300::isa::Opcode::trap);
   constexpr Word undefined = 0x000143; // Authored reserved-domain member, not firmware code.
@@ -220,29 +244,48 @@ void software_interrupts() {
     for (const bool long_vector : {false, true}) {
       Fixture fixture;
       auto input = software_catalogue(fixture, long_vector, instruction);
-      const auto program = blofeld::app::aot::prepare_dsp_catalogue(
-          document(std::move(input)), fixture.firmware, fixture.boot_rom());
-      vi::Shi shi;
-      vi::DspReset reset;
-      const auto result = vi::dsp::execute(fixture.boot_rom(),
-                                           shi,
-                                           reset,
-                                           {},
-                                           nullptr,
-                                           {},
-                                           nullptr,
-                                           nullptr,
-                                           nullptr,
-                                           nullptr,
-                                           &program);
-      require(
-          !result.failure && !result.exception && !result.preparation_diagnostic &&
-              result.instructions == (long_vector ? long_instructions : fast_instructions) &&
-              result.stopped_pc == 2,
-          "A prepared level-three software exception runs its actual fast vector or JSR/RTI and "
-          "returns to the guest continuation despite the initial interrupt mask");
+      software_owner(
+          fixture, std::move(input), long_vector ? long_instructions : fast_instructions);
     }
   }
+}
+
+void derived_word() {
+  constexpr unsigned shift = 22;
+  constexpr Word trap = static_cast<Word>(dsp56300::isa::Opcode::trap);
+  Fixture fixture;
+  auto input = software_catalogue(fixture, false, trap);
+  auto &loaded = *(*input.getArray("variants"))[1].getAsObject();
+  // (TRAP & bit2) << 22 wraps to the NOP independently loaded at vector8 by guest MOVEM.
+  loaded.getArray("writes")->push_back(Object{{.K = "kind", .V = "field"},
+                                              {.K = "from", .V = 0},
+                                              {.K = "address", .V = 8},
+                                              {.K = "mask", .V = 4},
+                                              {.K = "shift", .V = shift}});
+  constexpr Word instructions = 25;
+  software_owner(fixture, std::move(input), instructions);
+}
+
+void nested_software() {
+  constexpr Word trap = static_cast<Word>(dsp56300::isa::Opcode::trap);
+  constexpr Word undefined = 0x000143;
+  constexpr Word vector = 8;
+  constexpr unsigned loader_words = 4;
+  Fixture fixture;
+  auto input = software_catalogue(fixture, false, trap);
+  const auto bytes = packed(std::array{undefined});
+  std::ranges::copy(
+      bytes,
+      std::span(fixture.firmware.blocks[0]).subspan(static_cast<std::size_t>(vector) * 3).begin());
+  fixture.rom[(vector * loader_words) + 1] = undefined;
+  auto &identity = *input.getObject("inputs");
+  (*identity.getArray("blocks"))[0] = hash(fixture.firmware.blocks[0]);
+  identity["boot-main"] = hash(packed(fixture.rom));
+  auto &loaded = *(*input.getArray("variants"))[1].getAsObject();
+  loaded.getArray("code")->push_back(Array{4, 2});
+  input.getArray("interrupts")->push_back(Object{{.K = "vector", .V = 4}, {.K = "level", .V = 3}});
+  constexpr Word instructions = 26;
+  software_owner(fixture, std::move(input), instructions);
 }
 
 template <class Change> void rejects(const Fixture &fixture, Change change) {
@@ -291,6 +334,25 @@ void invalid_catalogues(const Fixture &fixture) {
   });
 }
 
+void invalid_fields(const Fixture &fixture) {
+  for (const unsigned example : {0U, 1U, 2U, 3U}) {
+    Object field{{.K = "kind", .V = "field"},
+                 {.K = "from", .V = 0},
+                 {.K = "address", .V = 0},
+                 {.K = "mask", .V = dsp56300::word_mask},
+                 {.K = "shift", .V = 0}};
+    constexpr unsigned bits = 24;
+    if (example == 0) { field["shift"] = bits; }
+    if (example == 1) { field["shift"] = -1; }
+    if (example == 2) { field["mask"] = dsp56300::address_words; }
+    constexpr Word missing = 32;
+    if (example == 3) { field["from"] = missing; }
+    rejects(fixture, [&](auto &input) {
+      variant(input, 1).getArray("writes")->push_back(std::move(field));
+    });
+  }
+}
+
 void rejects_input(const std::string &document,
                    const vi::FirmwareUpdate &firmware,
                    const vi::dsp::BootRom rom) {
@@ -321,12 +383,24 @@ void changed_inputs(const Fixture &fixture) {
 }
 }
 
-int main() try {
-  const Fixture fixture;
-  normal_owner(fixture);
-  invalid_catalogues(fixture);
-  changed_inputs(fixture);
-  software_interrupts();
+int main(const int argc, const char *const *argv) try {
+  require(argc <= 3, "Supply an optional test directory and catalogue test group");
+  const std::string_view group = argc == 3 ? argv[2] : "inputs";
+  if (group == "inputs") {
+    const Fixture fixture;
+    normal_owner(fixture);
+    invalid_catalogues(fixture);
+    invalid_fields(fixture);
+    changed_inputs(fixture);
+  } else if (group == "derived") {
+    derived_word();
+  } else if (group == "software") {
+    software_interrupts();
+  } else if (group == "nested") {
+    nested_software();
+  } else {
+    throw std::invalid_argument("Unknown catalogue test group");
+  }
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

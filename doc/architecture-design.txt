@@ -127,6 +127,11 @@ untracked and not aliased. Top-level interrupts {vector, level} and transitions
 {from, to, entry} establish prepared entry and transfer contracts. Interrupt
 levels are 0..3, including unmaskable software exceptions. Optional
 failed_fetches declare actual unreadable targets, never missing translations.
+A field write {from, address, mask, shift} derives one expected P word from a
+known word in the current cold source: ((word & mask) << shift) & $ffffff,
+with a 24-bit mask and shift 0..23. This admits embedded constant fields without
+executing a loader during preparation. Installation still validates every code
+word against actual guest-produced P contents.
 The source owner must establish complete known code, entry and variant coverage;
 matching hashes and a translated subset alone do not prove instrument coverage.
 
