@@ -334,6 +334,63 @@ void invalid_catalogues(const Fixture &fixture) {
   });
 }
 
+void duplicate_loaded(Object &input) {
+  auto &variants = *input.getArray("variants");
+  auto duplicate = variants[1];
+  (*duplicate.getAsObject())["id"] = 3;
+  variants.push_back(std::move(duplicate));
+}
+
+void ambiguous_admission(const Fixture &fixture) {
+  rejects(fixture, [](auto &input) { duplicate_loaded(input); });
+  rejects(fixture, [](auto &input) {
+    duplicate_loaded(input);
+    variant(input, 1)["mode_mask"] = 0x80;
+    variant(input, 1)["mode"] = 0;
+    variant(input, 3)["mode_mask"] = 0x100;
+    variant(input, 3)["mode"] = 0;
+  });
+  rejects(fixture, [](auto &input) {
+    duplicate_loaded(input);
+    for (auto &value : *input.getArray("variants")) { (*value.getAsObject())["memory"] = Array{}; }
+    Object x{{.K = "space", .V = "x"}, {.K = "first", .V = 0}, {.K = "words", .V = 8}};
+    Object y{{.K = "space", .V = "y"}, {.K = "first", .V = 0}, {.K = "words", .V = 8}};
+    const llvm::json::Value first(std::move(x));
+    const llvm::json::Value second(std::move(y));
+    variant(input, 1)["memory"] = Array{first, second};
+    variant(input, 3)["memory"] = Array{second, first};
+  });
+}
+
+void disjoint_admission(const Fixture &fixture) {
+  for (const bool memory : {false, true}) {
+    auto input = catalogue(fixture);
+    duplicate_loaded(input);
+    if (memory) {
+      for (auto &value : *input.getArray("variants")) {
+        (*value.getAsObject())["memory"] = Array{};
+      }
+      variant(input, 1)["memory"] = Array{Object{{.K = "space", .V = "x"},
+                                                 {.K = "first", .V = 0},
+                                                 {.K = "words", .V = 8},
+                                                 {.K = "tracked", .V = true}}};
+      variant(input, 3)["memory"] = Array{Object{{.K = "space", .V = "x"},
+                                                 {.K = "first", .V = 0},
+                                                 {.K = "words", .V = 8},
+                                                 {.K = "tracked", .V = false}}};
+    } else {
+      variant(input, 1)["mode_mask"] = 0x80;
+      variant(input, 1)["mode"] = 0;
+      variant(input, 3)["mode_mask"] = 0x80;
+      variant(input, 3)["mode"] = 0x80;
+    }
+    const auto program = blofeld::app::aot::prepare_dsp_catalogue(
+        document(std::move(input)), fixture.firmware, fixture.boot_rom());
+    require(program.report().prepared_entries != 0 && program.report().unresolved_entries == 0,
+            "Disjoint OMR predicates and initialized-memory layouts retain valid prepared choices");
+  }
+}
+
 void invalid_fields(const Fixture &fixture) {
   for (const unsigned example : {0U, 1U, 2U, 3U}) {
     Object field{{.K = "kind", .V = "field"},
@@ -388,6 +445,8 @@ int main(const int argc, const char *const *argv) try {
   const std::string_view group = argc == 3 ? argv[2] : "inputs";
   if (group == "inputs") {
     const Fixture fixture;
+    ambiguous_admission(fixture);
+    disjoint_admission(fixture);
     normal_owner(fixture);
     invalid_catalogues(fixture);
     invalid_fields(fixture);

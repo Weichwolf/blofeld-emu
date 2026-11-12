@@ -163,6 +163,9 @@ Interrupts {vector, level} cover levels 0..3, including unmaskable software
 exceptions. Transitions {from, to, entry} declare prepared handoffs.
 failed_fetches describe actual unreadability, never translation gaps.
 Installation validates prepared words against actual guest-produced P contents.
+Entry admission must be disjoint: compatible mode/word/memory predicates cannot
+share an installation PC across variants. Reject overlaps with both IDs and the
+PC before lowering.
 The source owner establishes complete code/entry/variant closure; matching hashes
 or a translated subset alone does not establish it.
 

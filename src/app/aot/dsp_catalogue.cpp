@@ -13,6 +13,7 @@
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/SHA256.h"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -23,6 +24,7 @@
 #include <span>
 #include <stdexcept>
 #include <string_view>
+#include <tuple>
 #include <vector>
 
 namespace blofeld::app::aot {
@@ -252,6 +254,45 @@ void admission(Variant &variant, const Object &input) {
   }
 }
 
+bool compatible_admission(const Variant &left, const Variant &right) {
+  if (((left.mode ^ right.mode) & left.mode_mask & right.mode_mask) != 0) { return false; }
+  for (const auto &guard : left.guards) {
+    const auto found =
+        std::ranges::find(right.guards, guard.address, &vi::dsp::ProgramWord::address);
+    if (found != right.guards.end() && found->value != guard.value) { return false; }
+  }
+  const auto layout = [](const dsp56300::RegionLayout &region) {
+    return std::tuple{region.space,
+                      region.first,
+                      region.size,
+                      region.writable,
+                      region.tracked,
+                      region.aliases_program};
+  };
+  return !left.fixed_memory || !right.fixed_memory ||
+         std::ranges::is_permutation(left.memory, right.memory, {}, layout, layout);
+}
+
+void validate_admissions(const std::span<const Variant> variants, const bool fixed_memory) {
+  for (const auto &variant : variants) {
+    if (fixed_memory && !variant.fixed_memory) { invalid("missing variant memory contract"); }
+  }
+  for (std::size_t first = 0; first < variants.size(); ++first) {
+    const auto &left = variants[first];
+    for (const auto &right : variants.subspan(first + 1)) {
+      if (!compatible_admission(left, right)) { continue; }
+      const auto shared = std::ranges::find_first_of(left.resumes, right.resumes);
+      if (shared != left.resumes.end()) {
+        throw std::invalid_argument(
+            std::format("Ambiguous DSP catalogue admission at P:${:06x}: variants {} and {}",
+                        *shared,
+                        left.id,
+                        right.id));
+      }
+    }
+  }
+}
+
 vi::dsp::Program
 prepare(const Object &root, const vi::FirmwareUpdate &firmware, const vi::dsp::BootRom boot) {
   std::vector<Variant> owned;
@@ -267,10 +308,10 @@ prepare(const Object &root, const vi::FirmwareUpdate &firmware, const vi::dsp::B
     admission(variant, input);
     fixed_memory = fixed_memory || input.get("memory") != nullptr;
   }
+  validate_admissions(owned, fixed_memory);
   std::vector<dsp56300::CodeVariant> source;
   std::vector<vi::dsp::ProgramChoice> choices;
   for (const auto &variant : owned) {
-    if (fixed_memory && !variant.fixed_memory) { invalid("missing variant memory contract"); }
     source.push_back({.id = variant.id,
                       .code = variant.code.code(),
                       .entries = variant.entries,
