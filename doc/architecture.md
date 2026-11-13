@@ -228,6 +228,15 @@ Receivers must not pass a possible earlier input; late timestamps cannot repair
 causality. Derive channel-specific lookahead from prepared CFG/bindings, real
 device latency and waiting states. Unknown control flow or addresses end a proof.
 
+Lower a read-only admission query and native execution from the same semantic
+guard plan. Certify the first possible effect on each bound channel, rather than
+every access to an owner callback. Use established memory ranges and loop/alias
+proofs to admit long native regions. A later computed-address guard ends the
+certified prefix unless its outcome is already proved; entry admission alone
+does not certify the whole region. Keep guest state unchanged during admission.
+Reuse validated guards in execution; invalidate grants on relevant state, code,
+mapping or binding changes.
+
 Include IRQ paths, actual masks/priorities/shadows and REP/return state in each
 bound. Derive incoming-to-outgoing delays as well as autonomous effects. Specify
 same-time ordering and atomic instruction crossings. Prove progress through
