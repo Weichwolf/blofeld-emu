@@ -9,13 +9,14 @@
 #include "io/midi_port.hpp"
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
-#include "preparation_clock.hpp"
+#include "mcu/program.hpp"
 #include "storage/flash_image.hpp"
 
 #include <stop_token>
 
 namespace blofeld::vi::mcu {
 [[nodiscard]] ExecutionReport execute(FlashImage &image,
+                                      const Program &program,
                                       Shi &shi,
                                       DspReset &reset,
                                       const std::stop_token &stop,
@@ -23,6 +24,5 @@ namespace blofeld::vi::mcu {
                                       DisplayState *display = nullptr,
                                       PeerPort *peer = nullptr,
                                       ExecutionTime *time = nullptr,
-                                      MidiPort *midi = nullptr,
-                                      PreparationClock *preparation = nullptr);
+                                      MidiPort *midi = nullptr);
 }

@@ -45,8 +45,8 @@ remains runtime data; it does not prevent translation. Resolve indirect transfer
 to prepared native targets. Incomplete executable coverage fails with code
 identity, address and reason; optimizing only a hot subset does not qualify.
 
-Prefer startup firmware loading followed by full AOT. Build-time translation and
-linking use the same semantic pipeline and native code-quality contract. Both
+Complete AOT before starting execution owners. Build-time translation and linking
+use the same semantic pipeline and native code-quality contract. Both
 cores export detached LLVM bitcode or relocatable objects; consumers never copy
 private ISA lowering or use public LLVM handles. Preparation has no fixed time
 budget. Measure compilation, original boot/readiness and warm execution separately.
@@ -138,12 +138,32 @@ once; destroy resources before code release. Core::bind copies typed maps and
 retains the shared native owner. Count shared native text once, not per variant
 or component. Borrowed compiler inputs may expire after binding.
 
-Development always runs complete AOT. Operation may reuse validated artifacts
-keyed by source/variant hashes, core/LLVM pipeline, target/features, generation
+Development and operation may reuse fully validated code artifacts keyed by
+source/variant hashes, core/LLVM pipeline, target/features, generation
 mode and binding ABI. Store relocations, never instance pointers or device-state
 snapshots. Reject corrupt/incompatible artifacts and rebuild before playback.
 Keep derived source, IR, objects, catalogues and executables untracked in build/.
 Preserve original boot/device effects; caching changes startup, not warm speed.
+
+### Local MCU catalogue, JSON format 1
+
+Require `format: 1`, `inputs.mcu` (SHA256 of the original decoded 32 KiB MCU
+image), `inputs.blobs` and explicit `cross_domain_entries: true`. Each optional
+blob pins a unique name and full source SHA256; file loading additionally needs a
+path relative to the catalogue. Reserve the source name `mcu` for decoded flash.
+
+Each variant declares `id`, `source`, logical `address`, `byte_offset`, `bytes`
+and exact `instructions: [[PC, length], ...]`. Translate every declared instruction
+and prepare all cross-domain entry contracts before starting either owner. Reject
+invalid extents, repeated IDs/starts, conflicting source and unresolved code.
+Metadata describes executable source; it never initializes guest storage.
+
+Admit only code matching initialized actual memory. Jointly mount compatible,
+disjoint domains so normal calls and returns remain native. Protect exactly the
+executable RAM bytes; data holes stay writable. Changed code, mapping and USB
+buffer grants rebind at completed instruction boundaries. Unknown code fails;
+execution never invokes preparation or discovers new variants. Immutable native
+programs may be shared; RAM, device state and code lifetime belong to each VM.
 
 ### Local DSP catalogue, JSON format 1
 

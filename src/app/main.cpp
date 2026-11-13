@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "aot/dsp.hpp"
+#include "aot/mcu.hpp"
 #include "boot_rom.hpp"
 #include "dsp/boot_rom.hpp"
 #include "dsp/program.hpp"
 #include "files/read.hpp"
 #include "io/midi_port.hpp"
+#include "mcu/program.hpp"
 #include "options.hpp"
 #if defined(BLOFELD_NATIVE_MIDI)
 #include "audio/playback.hpp"
@@ -40,12 +42,15 @@ int main(const int argc, char **argv) try {
   auto media = std::make_unique<blofeld::vi::MediaImage>(
       blofeld::host::read_file(profile.storage, blofeld::vi::MediaImage::max_bytes));
   auto boot = blofeld::app::load_boot_rom(profile.boot_rom, profile.boot_format);
+  const auto mcu_program =
+      std::make_shared<blofeld::vi::mcu::Program>(blofeld::app::aot::load_mcu_program(profile));
   const auto program = std::make_shared<blofeld::vi::dsp::Program>(
       blofeld::app::aot::load_dsp_program(profile, blofeld::vi::dsp::BootRom::document(boot)));
   if (options.midi && options.wav) {
     blofeld::app::OfflineRender render(options);
     blofeld::vi::VmContext vm(std::move(image),
                               std::move(boot),
+                              mcu_program,
                               std::move(media),
                               render.output(),
                               blofeld::vi::MidiPort::InputMode::stream,
@@ -62,6 +67,7 @@ int main(const int argc, char **argv) try {
   blofeld::app::Live live(audio, display, options);
   blofeld::vi::VmContext vm(std::move(image),
                             std::move(boot),
+                            mcu_program,
                             std::move(media),
                             live.output(),
                             blofeld::vi::MidiPort::InputMode::stream,

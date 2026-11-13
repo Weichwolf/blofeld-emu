@@ -5,6 +5,8 @@
 #include "files/read.hpp"
 #include "process/configuration.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <filesystem>
 #include <iomanip>
@@ -13,6 +15,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <utility>
 
 namespace blofeld::app {
 Profile load_profile(const std::filesystem::path &path) {
@@ -38,18 +42,19 @@ Profile load_profile(const std::filesystem::path &path) {
       throw std::runtime_error("Invalid or duplicate instrument profile field: " + line);
     }
     const auto file = (base / value).lexically_normal();
-    if (key == "firmware") {
-      profile.firmware = file;
-    } else if (key == "dsp-catalogue") {
-      profile.dsp_catalogue = file;
+    using Field = std::pair<std::string_view, std::filesystem::path *>;
+    const std::array<Field, 5> fields_by_name{{{"firmware", &profile.firmware},
+                                               {"mcu-catalogue", &profile.mcu_catalogue},
+                                               {"dsp-catalogue", &profile.dsp_catalogue},
+                                               {"device-state", &profile.device_state},
+                                               {"nand", &profile.storage}}};
+    const auto *const found = std::ranges::find(fields_by_name, key, &Field::first);
+    if (found != fields_by_name.end()) {
+      *found->second = file;
     } else if (key == "boot-rom" || key == "boot-prefix") {
       if (!profile.boot_rom.empty()) { throw std::runtime_error("Conflicting DSP boot inputs"); }
       profile.boot_rom = file;
       profile.boot_format = key == "boot-prefix" ? BootFormat::spi_prefix : BootFormat::rom;
-    } else if (key == "device-state") {
-      profile.device_state = file;
-    } else if (key == "nand") {
-      profile.storage = file;
     } else {
       throw std::runtime_error("Unknown instrument profile field: " + key);
     }

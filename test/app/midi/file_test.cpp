@@ -7,8 +7,8 @@
 #include "mcu/execute.hpp"
 #include "midi/file.hpp"
 #include "storage/flash_image.hpp"
+#include "support/mcu.hpp"
 
-#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -73,7 +73,7 @@ std::filesystem::path save(const std::filesystem::path &path,
   return path;
 }
 
-std::unique_ptr<blofeld::vi::FlashImage> echo_image() {
+blofeld::test::McuImage echo_image() {
   namespace isa = cpu12::isa;
   constexpr auto program = isa::program(isa::opcode<isa::Opcode::lds_immediate>(),
                                         std::array<cpu12::Byte, 2>{0x17, 0},
@@ -97,12 +97,12 @@ std::unique_ptr<blofeld::vi::FlashImage> echo_image() {
                                         isa::opcode<isa::Opcode::staa_direct>(),
                                         std::array<cpu12::Byte, 1>{0xcf},
                                         isa::opcode<isa::Opcode::rti>());
-  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  blofeld::test::McuImage image;
   image->known.fill(1);
-  std::ranges::copy(program, image->bytes.begin());
+  image.load(0x8000, program);
   constexpr unsigned handler_offset = 0x100;
   constexpr unsigned irq_vector = 0x7fd6;
-  std::ranges::copy(handler, image->bytes.begin() + handler_offset);
+  image.load(static_cast<cpu12::Address>(0x8000 + (handler_offset)), handler);
   constexpr std::uint8_t handler_segment = 0x81;
   image->bytes[irq_vector] = handler_segment;
   image->bytes[irq_vector + 1] = 0;
@@ -116,6 +116,7 @@ void native_echo(const std::filesystem::path &root) {
   MidiFile source(save(root / "echo.mid", {track}));
   MidiPort port(MidiPort::InputMode::stream);
   auto firmware = echo_image();
+  const auto prepared = firmware.program();
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
   blofeld::vi::ExecutionReport report;
@@ -123,7 +124,7 @@ void native_echo(const std::filesystem::path &root) {
   std::jthread mcu([&](const std::stop_token &stop) {
     try {
       report = blofeld::vi::mcu::execute(
-          *firmware, shi, reset, stop, nullptr, nullptr, nullptr, nullptr, &port);
+          *firmware, *prepared, shi, reset, stop, nullptr, nullptr, nullptr, nullptr, &port);
     } catch (...) { report.exception = std::current_exception(); }
     done.store(true, std::memory_order_release);
   });

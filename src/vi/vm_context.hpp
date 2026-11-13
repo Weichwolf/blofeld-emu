@@ -15,6 +15,7 @@
 #include "io/pcm_output.hpp"
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
+#include "mcu/program.hpp"
 #include "preparation_clock.hpp"
 #include "storage/flash_image.hpp"
 #include "storage/media_image.hpp"
@@ -36,6 +37,7 @@ class VmContext {
 public:
   VmContext(std::unique_ptr<FlashImage> image,
             std::vector<dsp56300::Word> boot,
+            std::shared_ptr<const mcu::Program> mcu_program,
             std::unique_ptr<MediaImage> media = {},
             PcmOutput output = {},
             MidiPort::InputMode input = MidiPort::InputMode::live,
@@ -80,6 +82,7 @@ private:
   std::unique_ptr<FlashImage> image_;
   std::unique_ptr<MediaImage> media_;
   std::stop_source stop_;
+  std::shared_ptr<const mcu::Program> mcu_program_;
   std::shared_ptr<const dsp::Program> program_;
   std::jthread mcu_;
   std::jthread dsp_;

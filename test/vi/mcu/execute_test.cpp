@@ -11,8 +11,8 @@
 #include "isa.hpp"
 #include "mcu/execute.hpp"
 #include "storage/flash_image.hpp"
+#include "support/mcu.hpp"
 
-#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -72,15 +72,16 @@ void native_boot_word() {
                                        isa::opcode<isa::Opcode::staa_extended>(),
                                        std::array<cpu12::Byte, 2>{0x30, 0});
   append(finish);
-  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  blofeld::test::McuImage image;
   image->known.fill(1);
-  std::ranges::copy(program, image->bytes.begin());
+  image.load(0x8000, program);
   image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
   image->bytes.back() = 0;
+  const auto prepared = image.program();
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
   require(shi.write({.address = control, .value = fifo24}), "Configure actual SPI receive");
-  const auto report = blofeld::vi::mcu::execute(*image, shi, reset, {});
+  const auto report = blofeld::vi::mcu::execute(*image, *prepared, shi, reset, {});
   constexpr cpu12::Byte released_readback = 0x17;
   require(report.failure && report.failure->address == marker &&
               report.failure->value == released_readback,
@@ -111,18 +112,19 @@ void firmware_controls_reset() {
                                         std::array<cpu12::Byte, 2>{0x30, 1},
                                         isa::opcode<isa::Opcode::ldaa_extended>(),
                                         std::array<cpu12::Byte, 2>{0x30, 0});
-  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  blofeld::test::McuImage image;
   image->known.fill(1);
-  std::ranges::copy(program, image->bytes.begin());
+  image.load(0x8000, program);
   image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
   image->bytes.back() = 0;
+  const auto prepared = image.program();
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
   blofeld::vi::ExecutionReport report;
   std::atomic<bool> done{false};
   std::jthread worker([&](const std::stop_token &stop) {
     try {
-      report = blofeld::vi::mcu::execute(*image, shi, reset, stop);
+      report = blofeld::vi::mcu::execute(*image, *prepared, shi, reset, stop);
     } catch (...) { report.exception = std::current_exception(); }
     done.store(true, std::memory_order_release);
   });
@@ -166,15 +168,17 @@ void native_display_status() {
                                        isa::opcode<isa::Opcode::staa_extended>(),
                                        std::array<cpu12::Byte, 2>{0x30, 0});
   program.insert(program.end(), finish.begin(), finish.end());
-  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  blofeld::test::McuImage image;
   image->known.fill(1);
-  std::ranges::copy(program, image->bytes.begin());
+  image.load(0x8000, program);
   image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
   image->bytes.back() = 0;
+  const auto prepared = image.program();
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
   blofeld::vi::DisplayState display;
-  const auto report = blofeld::vi::mcu::execute(*image, shi, reset, {}, nullptr, &display);
+  const auto report =
+      blofeld::vi::mcu::execute(*image, *prepared, shi, reset, {}, nullptr, &display);
   constexpr cpu12::Address marker = 0x3000;
   require(report.failure && report.failure->address == marker && report.failure->value == 0x40,
           "Native MCU stores and reads observe the LCD's actual command-derived status");
@@ -223,16 +227,18 @@ void native_package_and_peer() {
                       input_address,
                       isa::opcode<isa::Opcode::stab_extended>(),
                       marker_address));
-  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  blofeld::test::McuImage image;
   image->known.fill(1);
-  std::ranges::copy(program, image->bytes.begin());
+  image.load(0x8000, program);
   image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
   image->bytes.back() = 0;
+  const auto prepared = image.program();
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
   blofeld::vi::PeerPort peer;
   peer.dsp_data({.mask = peer_byte_mask, .known = peer_byte_mask, .value = datum});
-  const auto report = blofeld::vi::mcu::execute(*image, shi, reset, {}, nullptr, nullptr, &peer);
+  const auto report =
+      blofeld::vi::mcu::execute(*image, *prepared, shi, reset, {}, nullptr, nullptr, &peer);
   require(report.failure && report.failure->address == marker && report.failure->value == datum,
           "Actual package-sense branches select 100-pin routing and PTQ samples the DSP driver");
 }
@@ -248,9 +254,9 @@ void native_reply_time() {
                                         std::array<cpu12::Byte, 2>{2, 0x60},
                                         isa::opcode<isa::Opcode::stab_extended>(),
                                         std::array<cpu12::Byte, 2>{0x30, 0});
-  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  blofeld::test::McuImage image;
   image->known.fill(1);
-  std::ranges::copy(program, image->bytes.begin());
+  image.load(0x8000, program);
   image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
   image->bytes.back() = 0;
   constexpr std::uint64_t read_time = (std::uint64_t{5} + 1) * 10;
@@ -260,9 +266,11 @@ void native_reply_time() {
     require(peer.dsp_ready(true) && peer.dsp_ready(false) && peer.mcu_strobe(true) &&
                 peer.mcu_strobe(false) && peer.dsp_write(payload, available),
             "An actual report request and timestamped write precede native MCU execution");
+    const auto prepared = image.program();
     blofeld::vi::Shi shi;
     blofeld::vi::DspReset reset;
-    const auto report = blofeld::vi::mcu::execute(*image, shi, reset, {}, nullptr, nullptr, &peer);
+    const auto report =
+        blofeld::vi::mcu::execute(*image, *prepared, shi, reset, {}, nullptr, nullptr, &peer);
     if (available == read_time) {
       require(report.failure && report.failure->address == marker &&
                   report.failure->value == payload.value && peer.error() == nullptr,
@@ -297,42 +305,46 @@ void native_peer_xirq() {
                                         input_address,
                                         isa::opcode<isa::Opcode::stab_extended>(),
                                         marker_address);
-  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  blofeld::test::McuImage image;
   image->known.fill(1);
-  std::ranges::copy(setup, image->bytes.begin());
-  std::ranges::copy(handler, image->bytes.begin() + static_cast<std::ptrdiff_t>(setup.size()));
+  image.load(0x8000, setup);
+  image.load(static_cast<cpu12::Address>(0x8000 + (static_cast<std::ptrdiff_t>(setup.size()))),
+             handler);
   constexpr auto entry = static_cast<std::uint16_t>(0x8000 + setup.size());
   image->bytes[blofeld::vi::FlashImage::byte_count - 12] = static_cast<cpu12::Byte>(entry >> 8U);
   image->bytes[blofeld::vi::FlashImage::byte_count - 11] = static_cast<cpu12::Byte>(entry);
   image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
   image->bytes.back() = 0;
+  const auto prepared = image.program();
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
   blofeld::vi::PeerPort peer;
   peer.dsp_data({.mask = peer_byte_mask, .known = peer_byte_mask, .value = datum});
   require(peer.dsp_ready(true) && peer.dsp_ready(false), "Post an actual external request pulse");
   blofeld::vi::ExecutionTime lifecycle;
-  const auto ended =
-      blofeld::vi::mcu::execute(*image, shi, reset, {}, nullptr, nullptr, &peer, &lifecycle);
+  const auto ended = blofeld::vi::mcu::execute(
+      *image, *prepared, shi, reset, {}, nullptr, nullptr, &peer, &lifecycle);
   require(lifecycle.mcu_wait_time().has_value(),
           "Only the actual native WAI publishes the initial MCU wait observation");
   require(!ended.failure && ended.instructions == 3 && !peer.mcu_interrupt(),
           "An XIRQ pulse that ended before unmasking cannot enter its vector");
   require(peer.dsp_ready(true), "Keep an actual XIRQ source asserted through MCU admission");
-  const auto report = blofeld::vi::mcu::execute(*image, shi, reset, {}, nullptr, nullptr, &peer);
+  const auto report =
+      blofeld::vi::mcu::execute(*image, *prepared, shi, reset, {}, nullptr, nullptr, &peer);
   require(report.failure && report.failure->address == marker && report.failure->value == datum &&
               peer.mcu_interrupt() == 2 && peer.dsp_ready(false) && !peer.mcu_interrupt(),
           "Unmasking X wakes through the real XIRQ vector despite I remaining masked");
   blofeld::vi::PeerPort idle;
   require(idle.dsp_ready(true), "A real notification can accompany a released data bus");
-  const auto released = blofeld::vi::mcu::execute(*image, shi, reset, {}, nullptr, nullptr, &idle);
+  const auto released =
+      blofeld::vi::mcu::execute(*image, *prepared, shi, reset, {}, nullptr, nullptr, &idle);
   require(released.failure && released.failure->address == marker && released.failure->value == 0,
           "Native MCU input reads the attached DSP's documented released-bus bias");
   blofeld::vi::PeerPort unknown;
   unknown.dsp_data({.mask = peer_byte_mask});
   require(unknown.dsp_ready(true), "An active unknown driver accompanies a genuine notification");
   const auto rejected =
-      blofeld::vi::mcu::execute(*image, shi, reset, {}, nullptr, nullptr, &unknown);
+      blofeld::vi::mcu::execute(*image, *prepared, shi, reset, {}, nullptr, nullptr, &unknown);
   require(rejected.failure && rejected.failure->operation == blofeld::vi::Access::read &&
               rejected.failure->address == ((unsigned{input_address[0]} << 8U) | input_address[1]),
           "The native binding cannot convert actively unknown peer bytes into idle zeros");
@@ -342,7 +354,7 @@ void native_peer_xirq() {
   require(announced.dsp_ready(true) && announced.dsp_ready(false),
           "Publish a real report command before the MCU owner starts");
   const auto pending =
-      blofeld::vi::mcu::execute(*image, shi, reset, {}, nullptr, nullptr, &announced);
+      blofeld::vi::mcu::execute(*image, *prepared, shi, reset, {}, nullptr, nullptr, &announced);
   require(pending.failure && pending.failure->address == marker &&
               pending.failure->value == command && announced.mcu_interrupt() == 1,
           "A still-driven report enters the original XIRQ vector after MCU unmasking");
@@ -359,18 +371,19 @@ void native_pedal_input() {
                                         std::array<cpu12::Byte, 2>{2, 0x48},
                                         isa::opcode<isa::Opcode::stab_extended>(),
                                         std::array<cpu12::Byte, 2>{0x30, 0});
-  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  blofeld::test::McuImage image;
   image->known.fill(1);
-  std::ranges::copy(program, image->bytes.begin());
+  image.load(0x8000, program);
   image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
   image->bytes.back() = 0;
+  const auto prepared = image.program();
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
   blofeld::vi::Controls controls;
   require(!controls.pedal(), "The virtual pedal starts inactive");
   for (const bool level : {false, true}) {
     controls.pedal(level);
-    const auto report = blofeld::vi::mcu::execute(*image, shi, reset, {}, &controls);
+    const auto report = blofeld::vi::mcu::execute(*image, *prepared, shi, reset, {}, &controls);
     constexpr cpu12::Address marker = 0x3000;
     require(report.failure && report.failure->address == marker &&
                 report.failure->value == (level ? 8U : 0U),
@@ -402,11 +415,12 @@ void native_local_port_access() {
                                         std::array<cpu12::Byte, 2>{2, 0x62},
                                         isa::opcode<isa::Opcode::stab_extended>(),
                                         std::array<cpu12::Byte, 2>{0x30, 0});
-  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  blofeld::test::McuImage image;
   image->known.fill(1);
-  std::ranges::copy(program, image->bytes.begin());
+  image.load(0x8000, program);
   image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
   image->bytes.back() = 0;
+  const auto prepared = image.program();
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
   blofeld::vi::PeerPort peer;
@@ -419,7 +433,7 @@ void native_local_port_access() {
 #endif
   auto worker = std::async(std::launch::async, [&] {
     return blofeld::vi::mcu::execute(
-        *image, shi, reset, stop.get_token(), nullptr, nullptr, &peer, &time);
+        *image, *prepared, shi, reset, stop.get_token(), nullptr, nullptr, &peer, &time);
   });
   const auto completed = worker.wait_for(std::chrono::seconds(1));
   if (completed != std::future_status::ready) { stop.request_stop(); }
@@ -451,11 +465,12 @@ void native_queued_data_without_dsp() {
                                         std::array<cpu12::Byte, 2>{2, 0x60},
                                         isa::opcode<isa::Opcode::stab_extended>(),
                                         std::array<cpu12::Byte, 2>{0x30, 0});
-  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  blofeld::test::McuImage image;
   image->known.fill(1);
-  std::ranges::copy(program, image->bytes.begin());
+  image.load(0x8000, program);
   image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
   image->bytes.back() = 0;
+  const auto prepared = image.program();
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
   blofeld::vi::PeerPort peer;
@@ -463,8 +478,8 @@ void native_queued_data_without_dsp() {
   std::promise<blofeld::vi::ExecutionReport> result;
   auto completed = result.get_future();
   std::jthread mcu([&](const std::stop_token &stop) {
-    result.set_value(
-        blofeld::vi::mcu::execute(*image, shi, reset, stop, nullptr, nullptr, &peer, &time));
+    result.set_value(blofeld::vi::mcu::execute(
+        *image, *prepared, shi, reset, stop, nullptr, nullptr, &peer, &time));
   });
   const auto ready = completed.wait_for(std::chrono::seconds(1));
   mcu.request_stop();
@@ -500,17 +515,19 @@ void native_polling_progress(const bool pulse) {
                                         std::array{datum},
                                         isa::opcode<isa::Opcode::stab_extended>(),
                                         std::array<cpu12::Byte, 2>{0x30, 0});
-  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  blofeld::test::McuImage image;
   image->known.fill(1);
-  std::ranges::copy(setup, image->bytes.begin());
-  std::ranges::copy(loop, image->bytes.begin() + static_cast<std::ptrdiff_t>(setup.size()));
+  image.load(0x8000, setup);
+  image.load(static_cast<cpu12::Address>(0x8000 + (static_cast<std::ptrdiff_t>(setup.size()))),
+             loop);
   const auto offset = setup.size() + loop.size();
-  std::ranges::copy(handler, image->bytes.begin() + static_cast<std::ptrdiff_t>(offset));
+  image.load(static_cast<cpu12::Address>(0x8000 + (static_cast<std::ptrdiff_t>(offset))), handler);
   constexpr auto entry = static_cast<cpu12::Address>(0x8000 + offset);
   image->bytes[blofeld::vi::FlashImage::byte_count - 12] = static_cast<cpu12::Byte>(entry >> 8U);
   image->bytes[blofeld::vi::FlashImage::byte_count - 11] = static_cast<cpu12::Byte>(entry);
   image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
   image->bytes.back() = 0;
+  const auto prepared = image.program();
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
   blofeld::vi::PeerPort peer;
@@ -519,8 +536,8 @@ void native_polling_progress(const bool pulse) {
   auto completed = result.get_future();
   std::jthread mcu([&](const std::stop_token &stop) {
     try {
-      result.set_value(
-          blofeld::vi::mcu::execute(*image, shi, reset, stop, nullptr, nullptr, &peer, &time));
+      result.set_value(blofeld::vi::mcu::execute(
+          *image, *prepared, shi, reset, stop, nullptr, nullptr, &peer, &time));
     } catch (...) { result.set_exception(std::current_exception()); }
   });
   bool posted = false;
@@ -596,11 +613,12 @@ void native_panel_sampling(const bool timed_boundary) {
   }
   append(isa::program(isa::opcode<isa::Opcode::stab_extended>(),
                       std::array<cpu12::Byte, 2>{static_cast<cpu12::Byte>(marker >> 8U), 0}));
-  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  blofeld::test::McuImage image;
   image->known.fill(1);
-  std::ranges::copy(program, image->bytes.begin());
+  image.load(0x8000, program);
   image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
   image->bytes.back() = 0;
+  const auto prepared = image.program();
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
   blofeld::vi::PeerPort peer;
@@ -609,8 +627,8 @@ void native_panel_sampling(const bool timed_boundary) {
   auto completed = result.get_future();
   std::jthread mcu([&](const std::stop_token &stop) {
     try {
-      result.set_value(
-          blofeld::vi::mcu::execute(*image, shi, reset, stop, nullptr, nullptr, &peer, &time));
+      result.set_value(blofeld::vi::mcu::execute(
+          *image, *prepared, shi, reset, stop, nullptr, nullptr, &peer, &time));
     } catch (...) { result.set_exception(std::current_exception()); }
   });
   bool sampled = false;
@@ -661,11 +679,12 @@ void native_clock_input_frontier() {
                    padding,
                    isa::opcode<isa::Opcode::staa_extended>(),
                    std::array<cpu12::Byte, 2>{static_cast<cpu12::Byte>(marker >> 8U), 0});
-  auto image = std::make_unique<blofeld::vi::FlashImage>();
+  blofeld::test::McuImage image;
   image->known.fill(1);
-  std::ranges::copy(program, image->bytes.begin());
+  image.load(0x8000, program);
   image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
   image->bytes.back() = 0;
+  const auto prepared = image.program();
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
   blofeld::vi::MidiPort midi(blofeld::vi::MidiPort::InputMode::stream);
@@ -675,7 +694,7 @@ void native_clock_input_frontier() {
   std::jthread mcu([&](const std::stop_token &stop) {
     try {
       completion.set_value(blofeld::vi::mcu::execute(
-          *image, shi, reset, stop, nullptr, nullptr, nullptr, nullptr, &midi));
+          *image, *prepared, shi, reset, stop, nullptr, nullptr, nullptr, nullptr, &midi));
     } catch (...) { completion.set_exception(std::current_exception()); }
   });
   const auto timeout = std::chrono::steady_clock::now() + std::chrono::seconds(2);

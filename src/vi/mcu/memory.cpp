@@ -60,7 +60,7 @@ std::vector<unsigned> boundaries(const std::array<std::uint8_t, 4> &mapping) {
 struct Area {
   unsigned first, bytes;
   Location location;
-  bool executable;
+  std::uint64_t identity;
 };
 
 template <typename Locate, typename Executable>
@@ -72,17 +72,19 @@ std::vector<Area> areas(std::vector<unsigned> points, Locate locate, Executable 
   for (std::size_t index = 1; index < points.size(); ++index) {
     const auto first = points[index - 1];
     const auto location = locate(static_cast<std::uint16_t>(first));
-    const bool code = executable(location);
+    const auto identity = executable(location);
     if (!result.empty()) {
       auto &previous = result.back();
-      if (previous.location.space == location.space && previous.executable == code &&
+      if (previous.location.space == location.space && previous.identity == identity &&
           unsigned{previous.location.offset} + previous.bytes == location.offset) {
         previous.bytes += points[index] - first;
         continue;
       }
     }
-    result.push_back(
-        {.first = first, .bytes = points[index] - first, .location = location, .executable = code});
+    result.push_back({.first = first,
+                      .bytes = points[index] - first,
+                      .location = location,
+                      .identity = identity});
   }
   return result;
 }
@@ -113,8 +115,9 @@ Memory::Memory(FlashImage &flash) : flash_(flash) {
 }
 
 void Memory::reset() {
-  program_changed_ = program_changed_ || program_.has_value();
-  program_.reset();
+  program_changed_ = program_changed_ || !program_.empty();
+  program_.clear();
+  program_points_.clear();
   mapping_ = {9, 0, 1, 0x0d};
   pending_ = mapping_;
   written_ = 0;
@@ -185,8 +188,7 @@ bool Memory::read(const std::uint16_t address, std::uint8_t &value) const noexce
 bool Memory::write(const cpu12::ByteWrite access) noexcept {
   const auto location = locate(access.address);
   if (location.space == Space::system_ram) {
-    if (program_contains(location) && system_[location.offset] != access.value) {
-      program_.reset();
+    if (program_identity(location) != 0 && system_[location.offset] != access.value) {
       program_changed_ = true;
     }
     system_[location.offset] = access.value;
@@ -194,6 +196,9 @@ bool Memory::write(const cpu12::ByteWrite access) noexcept {
     return true;
   }
   if (location.space == Space::queue_ram) {
+    if (program_identity(location) != 0 && queue_[location.offset] != access.value) {
+      program_changed_ = true;
+    }
     queue_[location.offset] = access.value;
     queue_known_[location.offset] = 1;
     return true;
@@ -201,34 +206,72 @@ bool Memory::write(const cpu12::ByteWrite access) noexcept {
   return false;
 }
 
-bool Memory::program_contains(const Location location) const noexcept {
-  return program_ && location.space == Space::system_ram && location.offset >= program_offset_ &&
-         std::size_t{location.offset} - program_offset_ < program_bytes;
+std::uint64_t Memory::program_identity(const Location location) const noexcept {
+  for (const auto &range : program_) {
+    if (range.space == location.space && location.offset >= range.first &&
+        location.offset < range.last) {
+      return range.identity;
+    }
+  }
+  return 0;
 }
 
-bool Memory::bind_program(const std::uint16_t pc) {
-  if (program_ || program_changed_ || pc < program_first ||
-      std::size_t{pc} - program_first >= program_bytes) {
-    return false;
+bool Memory::protect(const CodeBinding &binding,
+                     const std::span<std::uint64_t> owners,
+                     std::vector<unsigned> &points) const {
+  if (binding.identity == 0 || binding.code.empty()) {
+    throw std::invalid_argument("MCU code binding requires identity and source");
   }
-  const auto first = locate(program_first);
-  const auto last = locate(static_cast<std::uint16_t>(program_first + program_bytes - 1));
-  if (first.space != Space::system_ram || last.space != first.space ||
-      last.offset != first.offset + program_bytes - 1) {
-    return false;
+  for (const auto span : binding.code) {
+    if (span.words.empty() || span.words.size() > cpu12::address_bytes) {
+      throw std::invalid_argument("Invalid MCU code binding extent");
+    }
+    for (std::size_t index = 0; index < span.words.size(); ++index) {
+      const auto address = static_cast<std::uint16_t>(span.address + index);
+      std::uint8_t actual = 0;
+      if (!read(address, actual) || actual != span.words[index]) { return false; }
+      const auto location = locate(address);
+      if (location.space != Space::system_ram && location.space != Space::queue_ram) { continue; }
+      const auto offset = location.space == Space::system_ram ? std::size_t{location.offset}
+                                                              : system_bytes + location.offset;
+      auto &identity = owners[offset];
+      if (identity != 0 && identity != binding.identity) {
+        throw std::invalid_argument("MCU code bindings overlap physical RAM");
+      }
+      identity = binding.identity;
+      points.push_back(address);
+      points.push_back(unsigned{address} + 1U);
+    }
   }
-  const auto known = std::span(system_known_).subspan(first.offset, program_bytes);
-  if (std::ranges::any_of(known, [](const auto byte) { return byte == 0; })) { return false; }
-  std::array<std::uint8_t, program_bytes> image{};
-  std::ranges::copy(std::span(system_).subspan(first.offset, program_bytes), image.begin());
-  const auto found = std::ranges::find(programs_, image);
-  if (found == programs_.end()) {
-    programs_.push_back(image);
-    program_ = programs_.size() - 1;
-  } else {
-    program_ = static_cast<std::size_t>(found - programs_.begin());
+  return true;
+}
+
+bool Memory::bind_program(const std::span<const CodeBinding> bindings) {
+  if (program_changed_) { return false; }
+  std::array<std::uint64_t, system_bytes + queue_bytes> owners{};
+  std::vector<unsigned> points;
+  for (const auto &binding : bindings) {
+    if (!protect(binding, owners, points)) { return false; }
   }
-  program_offset_ = first.offset;
+  std::vector<CodeRange> ranges;
+  for (std::size_t index = 0; index < owners.size();) {
+    const bool system = index < system_bytes;
+    const auto boundary = system ? system_bytes : owners.size();
+    if (owners[index] == 0) {
+      ++index;
+      continue;
+    }
+    const auto first = index;
+    const auto identity = owners[index];
+    while (index < boundary && owners[index] == identity) { ++index; }
+    const auto offset = system ? 0U : system_bytes;
+    ranges.push_back({.space = system ? Space::system_ram : Space::queue_ram,
+                      .first = static_cast<std::uint16_t>(first - offset),
+                      .last = static_cast<std::uint16_t>(index - offset),
+                      .identity = identity});
+  }
+  program_ = std::move(ranges);
+  program_points_ = std::move(points);
   return true;
 }
 
@@ -245,16 +288,12 @@ cpu12::Ram Memory::region(const Location start, const std::size_t size) {
 
 std::vector<cpu12::Ram> Memory::regions() {
   std::vector<cpu12::Ram> views;
-  const auto identity = program_ ? *program_ + 1 : 0;
   auto points = boundaries(mapping_);
-  if (program_) {
-    points.push_back(program_first);
-    points.push_back(program_first + program_bytes);
-  }
+  points.insert(points.end(), program_points_.begin(), program_points_.end());
   const auto mapped = areas(
       std::move(points),
       [this](const auto address) { return locate(address); },
-      [this](const auto location) { return program_contains(location); });
+      [this](const auto location) { return program_identity(location); });
   for (const auto &area : mapped) {
     if (area.location.space == Space::flash) {
       flash_regions(views, flash_, area);
@@ -264,10 +303,10 @@ std::vector<cpu12::Ram> Memory::regions() {
       continue;
     }
     auto view = region(area.location, area.bytes);
-    if (area.executable) {
+    if (area.identity != 0) {
       view.known = {};
       view.writable = false;
-      view.identity = identity;
+      view.identity = area.identity;
     }
     view.first = static_cast<std::uint16_t>(area.first);
     views.push_back(view);
@@ -291,7 +330,10 @@ bool Memory::write_mapping(const cpu12::ByteWrite access) {
 
 bool Memory::commit_mapping() noexcept {
   const bool changed = mapping_ != pending_ || program_changed_;
-  if (mapping_ != pending_) { program_.reset(); }
+  if (changed) {
+    program_.clear();
+    program_points_.clear();
+  }
   program_changed_ = false;
   mapping_ = pending_;
   return changed;

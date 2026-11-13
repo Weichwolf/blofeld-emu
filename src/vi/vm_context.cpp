@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "vm_context.hpp"
 
+#include "mcu/program.hpp"
+
 #if defined(BLOFELD_CENSUS)
 #include "census.hpp"
 #endif
@@ -29,17 +31,20 @@
 namespace blofeld::vi {
 VmContext::VmContext(std::unique_ptr<FlashImage> image,
                      std::vector<dsp56300::Word> boot,
+                     std::shared_ptr<const mcu::Program> mcu_program,
                      std::unique_ptr<MediaImage> media,
                      const PcmOutput output,
                      const MidiPort::InputMode input,
                      std::shared_ptr<const dsp::Program> program)
     : image_(std::move(image)),
       media_(std::move(media)),
+      mcu_program_(std::move(mcu_program)),
       program_(std::move(program)),
       boot_(std::move(boot)),
       output_(output),
       midi_(input) {
   if (!image_) { throw std::invalid_argument("VM requires a persistent MCU image"); }
+  if (!mcu_program_) { throw std::invalid_argument("VM requires a complete prepared MCU program"); }
 }
 
 VmContext::~VmContext() {
@@ -66,6 +71,7 @@ void VmContext::start() {
       const Census::Scope observed(census_, Census::Actor::mcu);
 #endif
       reports_[0] = mcu::execute(*image_,
+                                 *mcu_program_,
                                  shi_,
                                  reset_,
                                  stop,
@@ -73,8 +79,7 @@ void VmContext::start() {
                                  &display_,
                                  &peer_,
                                  &time_,
-                                 &midi_,
-                                 &preparation_);
+                                 &midi_);
     } catch (...) { reports_[0].exception = std::current_exception(); }
     completed_.fetch_add(1, std::memory_order_release);
     completed_.notify_one();

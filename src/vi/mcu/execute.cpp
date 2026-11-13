@@ -13,12 +13,10 @@
 #include "mcu/devices.hpp"
 #include "mcu/io.hpp"
 #include "mcu/memory.hpp"
+#include "mcu/program.hpp"
 #include "mcu/timer.hpp"
-#include "preparation_clock.hpp"
 #include "storage/flash_image.hpp"
 
-#include <array>
-#include <chrono>
 #include <cpu12/core.hpp>
 #include <cpu12/memory.hpp>
 #include <cstdint>
@@ -110,41 +108,23 @@ std::vector<cpu12::Ram> regions(Memory &memory, Usb &usb) {
 
 enum class Dispatch : std::uint8_t { run, again, done };
 
-void prepare_code(cpu12::Core &core, ExecutionReport &report, PreparationClock *preparation) {
-  const std::array entries{core.registers().pc};
-  const PreparationClock::Scope phase(preparation);
-  const auto begun = std::chrono::steady_clock::now();
-  const auto prepared = core.prepare(entries);
-  const auto elapsed =
-      std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - begun)
-          .count();
-  report.preparation_nanoseconds += static_cast<std::uint64_t>(elapsed);
-  report.prepared_native_bytes += prepared.native_bytes;
-  if (prepared.failure.fault != cpu12::Fault::none) {
-    report.preparation_diagnostic = Failure{
-        .operation = operation(prepared.failure.fault),
-        .pc = prepared.failure.pc,
-        .address = prepared.failure.address,
-        .value = prepared.failure.value,
-        .code = static_cast<std::uint32_t>(prepared.failure.fault),
-        .reason = "MCU preparation incomplete; remaining entries use retained native execution"};
-  }
-}
-
 void bind_memory(cpu12::Core &core,
                  Memory &memory,
                  Usb &usb,
                  std::vector<cpu12::Ram> &grants,
-                 ExecutionReport &report,
-                 PreparationClock *preparation) {
+                 std::vector<std::uint64_t> &mounted,
+                 const Program &program) {
   const bool mapping_changed = memory.commit_mapping();
   const bool buffers_changed = usb.commit_mapping();
-  const bool program_changed = memory.bind_program(core.registers().pc);
-  if (!mapping_changed && !buffers_changed && !program_changed) { return; }
-  auto next_grants = regions(memory, usb);
-  core.set_memory(cpu12::Memory::mapped(next_grants));
-  grants.swap(next_grants);
-  prepare_code(core, report, preparation);
+  if (!mapping_changed && !buffers_changed && program.contains(mounted, core.registers().pc)) {
+    return;
+  }
+  auto selected = program.admit(memory, core.registers().pc);
+  auto next = regions(memory, usb);
+  core.set_memory(cpu12::Memory::mapped(next));
+  program.install(core, selected);
+  grants.swap(next);
+  mounted.swap(selected);
 }
 
 Dispatch prepare(cpu12::Core &core, Devices &devices, ExecutionReport &report) {
@@ -170,6 +150,7 @@ Dispatch prepare(cpu12::Core &core, Devices &devices, ExecutionReport &report) {
 }
 
 ExecutionReport execute(FlashImage &image,
+                        const Program &program,
                         Shi &shi,
                         DspReset &reset,
                         const std::stop_token &stop,
@@ -177,8 +158,7 @@ ExecutionReport execute(FlashImage &image,
                         DisplayState *display,
                         PeerPort *peer,
                         ExecutionTime *time,
-                        MidiPort *midi,
-                        PreparationClock *preparation) {
+                        MidiPort *midi) {
   const PeerAdmission admission{peer};
   if (peer != nullptr && !peer->mcu_interrupt_ready(false)) {
     throw std::overflow_error(peer->error());
@@ -195,6 +175,8 @@ ExecutionReport execute(FlashImage &image,
   io.bind(core);
   io.capture_display();
   ExecutionReport report;
+  report.prepared_native_bytes = program.report().native_bytes;
+  std::vector<std::uint64_t> mounted;
   const auto initial = core.reset(reset_vector);
   if (!initial.accepted) {
     report.failure = Failure{.operation = Access::reset,
@@ -205,9 +187,9 @@ ExecutionReport execute(FlashImage &image,
                              .reason = "MCU reset vector access failed"};
     return report;
   }
-  prepare_code(core, report, preparation);
+  bind_memory(core, memory, devices.usb, grants, mounted, program);
   while (!stop.stop_requested()) {
-    bind_memory(core, memory, devices.usb, grants, report, preparation);
+    bind_memory(core, memory, devices.usb, grants, mounted, program);
     const auto dispatch = prepare(core, devices, report);
     if (dispatch == Dispatch::done) { break; }
     if (dispatch == Dispatch::again) { continue; }
@@ -233,6 +215,9 @@ ExecutionReport execute(FlashImage &image,
     devices.activity(result.state);
   }
 
+  if (core.statistics().compiled_entries != 0) {
+    throw std::logic_error("Prepared MCU execution generated runtime code");
+  }
   if (display != nullptr) { display->request(); }
   io.capture_display();
   report.stopped_pc = core.registers().pc;

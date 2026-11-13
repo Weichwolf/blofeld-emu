@@ -10,9 +10,11 @@
 #include "io/shi.hpp"
 #include "isa.hpp"
 #include "storage/flash_image.hpp"
+#include "support/mcu.hpp"
 #include "vm_context.hpp"
 
 #include <array>
+#include <cpu12/memory.hpp>
 #include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
 #include <exception>
@@ -99,7 +101,11 @@ void normal_owner() {
   const std::weak_ptr<const vi::dsp::Program> retained = program;
   {
     auto image = std::make_unique<vi::FlashImage>();
-    const vi::VmContext vm(std::move(image), words, {}, {}, vi::MidiPort::InputMode::live, program);
+    blofeld::test::McuImage mcu;
+    constexpr std::array<cpu12::Byte, 2> stopped{0x20, 0xfe};
+    mcu.load(0x8000, stopped);
+    const vi::VmContext vm(
+        std::move(image), words, mcu.program(), {}, {}, vi::MidiPort::InputMode::live, program);
     program.reset();
     require(!retained.expired(), "The VM owns prepared code independently of the producer");
   }

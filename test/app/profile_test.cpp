@@ -24,16 +24,18 @@ int main(const int argc, char **argv) try {
   const auto file = root / "default.profile";
   {
     std::ofstream output(file);
-    output << "# Local paths\nfirmware original.zip\ndsp-catalogue code.json\n"
-              "boot-rom boot.bin\ndevice-state unit.bfnvm\n"
-              "nand \"sample image.bfnand\"\n";
+    output
+        << "# Local paths\nfirmware original.zip\ndsp-catalogue code.json\nmcu-catalogue mcu.json\n"
+           "boot-rom boot.bin\ndevice-state unit.bfnvm\n"
+           "nand \"sample image.bfnand\"\n";
   }
   const auto profile = blofeld::app::load_profile(file);
   require(profile.boot_rom == root / "boot.bin" && profile.device_state == root / "unit.bfnvm" &&
               profile.storage == root / "sample image.bfnand" &&
               profile.boot_format == blofeld::app::BootFormat::rom &&
               profile.firmware == root / "original.zip" &&
-              profile.dsp_catalogue == root / "code.json",
+              profile.dsp_catalogue == root / "code.json" &&
+              profile.mcu_catalogue == root / "mcu.json",
           "Relative and quoted paths are resolved against the profile");
   {
     std::ofstream output(file);

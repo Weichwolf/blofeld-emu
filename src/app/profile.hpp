@@ -7,7 +7,7 @@
 
 namespace blofeld::app {
 struct Profile {
-  std::filesystem::path firmware, boot_rom, dsp_catalogue, device_state, storage;
+  std::filesystem::path firmware, boot_rom, dsp_catalogue, mcu_catalogue, device_state, storage;
   BootFormat boot_format = BootFormat::rom;
 };
 

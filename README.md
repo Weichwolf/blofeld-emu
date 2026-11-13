@@ -81,11 +81,12 @@ and quoted path, relative to the profile:
 firmware "original-update.zip"
 boot-rom "boot.bin"
 dsp-catalogue "dsp-code.json"
+mcu-catalogue "mcu-code.json"
 device-state "device.bfnvm"
 nand "samples.bfnand"
 ```
 
-Supply the original update container, complete bound executable catalogue and
+Supply the original update container, complete bound MCU/DSP executable catalogues and
 existing versioned device/NAND images with explicit knowledge metadata.
 Startup does not provision or overwrite image files. Use the common preset
 producer ../blofeld-src/tools/blofeld_image.py with its required inputs;
@@ -98,7 +99,8 @@ authentic programs/samples and the original boot.
 Missing words remain unknown. The catalogue pins decoded firmware, NAND records
 and separate ROM inputs and declares executable variants/entries/contracts.
 Mismatched inputs or incomplete translation fail before VM execution.
-See the [catalogue contract](doc/architecture.md#local-dsp-catalogue-json-format-1).
+See the [MCU](doc/architecture.md#local-mcu-catalogue-json-format-1) and
+[DSP](doc/architecture.md#local-dsp-catalogue-json-format-1) catalogue contracts.
 
 Live mode uses the normal host audio output, an external MIDI keyboard and the
 independent viewer. Query actual rates/buffer grants and report native faults,

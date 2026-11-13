@@ -8,11 +8,16 @@
 #include <cpu12/memory.hpp>
 #include <cstddef>
 #include <cstdint>
-#include <optional>
+#include <span>
 #include <vector>
 
 namespace blofeld::vi::mcu {
 enum class Space : std::uint8_t { unmapped, registers, system_ram, queue_ram, flash, reserved };
+
+struct CodeBinding {
+  std::uint64_t identity;
+  std::span<const cpu12::CodeSpan> code;
+};
 
 struct Location {
   Space space = Space::unmapped;
@@ -38,7 +43,7 @@ public:
   [[nodiscard]] bool write(cpu12::ByteWrite access) noexcept;
   // Bind a fully initialized resident overlay at an execution-owner boundary.
   // A real write releases the binding before the next instruction executes.
-  [[nodiscard]] bool bind_program(std::uint16_t pc);
+  [[nodiscard]] bool bind_program(std::span<const CodeBinding> bindings);
 
   [[nodiscard]] bool program_changed() const noexcept { return program_changed_; }
 
@@ -50,7 +55,10 @@ public:
 
 private:
   [[nodiscard]] cpu12::Ram region(Location start, std::size_t size);
-  [[nodiscard]] bool program_contains(Location location) const noexcept;
+  bool protect(const CodeBinding &binding,
+               std::span<std::uint64_t> owners,
+               std::vector<unsigned> &points) const;
+  [[nodiscard]] std::uint64_t program_identity(Location location) const noexcept;
   FlashImage &flash_;
   static constexpr std::size_t system_bytes = 3584;
   static constexpr std::size_t queue_bytes = 1536;
@@ -61,11 +69,15 @@ private:
   std::array<std::uint8_t, 4> mapping_{};
   std::array<std::uint8_t, 4> pending_{};
   std::uint8_t written_ = 0;
-  static constexpr std::uint16_t program_first = 0x1600;
-  static constexpr std::size_t program_bytes = 0x210;
-  std::vector<std::array<std::uint8_t, program_bytes>> programs_;
-  std::optional<std::size_t> program_;
-  std::uint16_t program_offset_ = 0;
+
+  struct CodeRange {
+    Space space;
+    std::uint16_t first, last;
+    std::uint64_t identity;
+  };
+
+  std::vector<CodeRange> program_;
+  std::vector<unsigned> program_points_;
   bool program_changed_ = false;
 };
 }
