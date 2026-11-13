@@ -59,12 +59,16 @@ Access operation(const cpu12::Fault fault) {
 }
 
 bool interrupt(cpu12::Core &core, const Devices &devices, ExecutionReport &report) {
-  if (devices.peer != nullptr &&
-      !devices.peer->mcu_interrupt_ready(core.interrupt_ready(cpu12::InterruptKind::xirq))) {
+  const bool ready = core.interrupt_ready(cpu12::InterruptKind::xirq);
+  if (devices.peer != nullptr && ready && !devices.peer->mcu_interrupt_ready() &&
+      devices.time != nullptr && !devices.time->wait_for_dsp(devices.clock.ticks(), devices.stop)) {
+    return false;
+  }
+  if (devices.peer != nullptr && !devices.peer->mcu_interrupt_ready(ready)) {
     throw std::overflow_error(devices.peer->error());
   }
   const auto external = devices.peer != nullptr ? devices.peer->mcu_interrupt() : std::nullopt;
-  const bool xirq = external && core.interrupt_ready(cpu12::InterruptKind::xirq);
+  const bool xirq = external && ready;
   const auto vector = xirq ? std::optional<std::uint16_t>{xirq_vector} : devices.pending();
   const auto kind = xirq ? cpu12::InterruptKind::xirq : cpu12::InterruptKind::maskable;
   if (!vector || !core.interrupt_ready(kind)) { return false; }

@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "io/execution_time.hpp"
+#include "io/peer_port.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <exception>
+#include <future>
 #include <iostream>
 #include <stdexcept>
 #include <stop_token>
@@ -176,6 +179,54 @@ void cancelled_transactions() {
   require(cancelled, "Shutdown wakes a DSP even while the MCU still holds its granted access");
   time.leave_mcu();
 }
+
+void unmask_after_earlier_dsp_work() {
+  ExecutionTime time;
+  blofeld::vi::PeerPort peer;
+  constexpr std::uint64_t earlier = 50;
+  constexpr std::uint64_t unmask = 100;
+  require(time.publish_mcu(earlier) && time.dsp_limit(0, {}) == earlier,
+          "The DSP owns an earlier interval while the MCU remains masked");
+  std::promise<void> published;
+  auto announced = published.get_future();
+  auto mcu = std::async(std::launch::async, [&] {
+    const bool valid = time.publish_mcu(unmask);
+    published.set_value();
+    return valid && time.wait_for_dsp(unmask, {}) && peer.mcu_interrupt_ready(true) &&
+           time.publish_mcu(unmask + 1);
+  });
+  announced.wait();
+  require(mcu.wait_for(std::chrono::milliseconds(10)) == std::future_status::timeout &&
+              !peer.mcu_interrupt_ready(),
+          "A grant is not completed DSP work and cannot publish a future unmask");
+  // A pulse at ticks25..30 belongs to the DSP grant, before the unmask at100.
+  require(peer.dsp_ready(true) && peer.dsp_ready(false), "Execute the earlier masked pulse");
+  require(time.dsp_limit(earlier, {}) == unmask && time.dsp_limit(unmask, {}) == unmask + 1,
+          "Completed DSP progress releases the unmask without a fabricated clock advance");
+  require(mcu.get() && peer.mcu_interrupt_ready() && !peer.mcu_interrupt(),
+          "The new MCU window cannot retain a pulse from an earlier masked interval");
+}
+
+void cancelled_dsp_prefix() {
+  ExecutionTime time;
+  constexpr std::uint64_t timestamp = 100;
+  bool accepted = true;
+  std::jthread mcu(
+      [&](const std::stop_token &stop) { accepted = time.wait_for_dsp(timestamp, stop); });
+  require(time.dsp_limit(0, {}) == timestamp, "The waiting MCU publishes actual completed work");
+  mcu.request_stop();
+  mcu.join();
+  require(!accepted, "Shutdown cancels an uncompleted DSP prefix");
+  time.hold_dsp();
+  require(time.wait_for_dsp(timestamp, {}), "A held DSP has no earlier notification to produce");
+  time.release_dsp(timestamp);
+  require(time.wait_for_dsp(timestamp, {}), "A released epoch retains its actual origin");
+  bool backwards = false;
+  try {
+    static_cast<void>(time.wait_for_dsp(timestamp - 1, {}));
+  } catch (const std::logic_error &) { backwards = true; }
+  require(backwards, "An admission barrier rejects backwards MCU progress");
+}
 }
 
 int main() try {
@@ -185,6 +236,8 @@ int main() try {
   publication_wakeups();
   repeated_timestamp_transactions();
   cancelled_transactions();
+  unmask_after_earlier_dsp_work();
+  cancelled_dsp_prefix();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

@@ -322,8 +322,14 @@ void native_peer_xirq() {
   peer.dsp_data({.mask = peer_byte_mask, .known = peer_byte_mask, .value = datum});
   require(peer.dsp_ready(true) && peer.dsp_ready(false), "Post an actual external request pulse");
   blofeld::vi::ExecutionTime lifecycle;
+  std::jthread dsp([&](const std::stop_token &stop) {
+    std::uint64_t ticks = 0;
+    while (const auto limit = lifecycle.dsp_limit(ticks, stop)) { ticks = *limit; }
+  });
   const auto ended = blofeld::vi::mcu::execute(
       *image, *prepared, shi, reset, {}, nullptr, nullptr, &peer, &lifecycle);
+  dsp.request_stop();
+  dsp.join();
   require(lifecycle.mcu_wait_time().has_value(),
           "Only the actual native WAI publishes the initial MCU wait observation");
   require(!ended.failure && ended.instructions == 3 && !peer.mcu_interrupt(),

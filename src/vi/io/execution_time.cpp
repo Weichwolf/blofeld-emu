@@ -122,12 +122,25 @@ void ExecutionTime::leave_mcu() noexcept {
   notify();
 }
 
+bool ExecutionTime::wait_for_dsp(const std::uint64_t ticks, const std::stop_token &stop) {
+  if (!publish_mcu(ticks)) {
+    throw std::logic_error("MCU interrupt admission time moved backwards");
+  }
+  return await(waiting_mcu_, stop, [&] {
+    return held_.load(std::memory_order_seq_cst) || dsp_.load(std::memory_order_seq_cst) >= ticks;
+  });
+}
+
 std::optional<std::uint64_t> ExecutionTime::dsp_limit(const std::uint64_t ticks,
                                                       const std::stop_token &stop) {
-  if (ticks < dsp_.load(std::memory_order_seq_cst)) {
+  const auto previous = dsp_.load(std::memory_order_seq_cst);
+  if (ticks < previous) {
     throw std::logic_error("DSP execution time moved backwards within its epoch");
   }
-  dsp_.store(ticks, std::memory_order_seq_cst);
+  if (ticks != previous) {
+    dsp_.store(ticks, std::memory_order_seq_cst);
+    notify();
+  }
   while (!stop.stop_requested() && !held_.load(std::memory_order_seq_cst)) {
     auto transaction = transaction_.load(std::memory_order_seq_cst);
     const auto frontier = mcu_.load(std::memory_order_seq_cst);

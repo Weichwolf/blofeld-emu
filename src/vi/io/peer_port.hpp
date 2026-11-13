@@ -53,6 +53,11 @@ public:
   // MCU owner publishes admission at native mask/return boundaries. Masked pulses
   // are never retained for a later unmask; this is transport, not a pin latch.
   [[nodiscard]] bool mcu_interrupt_ready(bool ready) noexcept;
+
+  [[nodiscard]] bool mcu_interrupt_ready() const noexcept {
+    return (mcu_admission_.load(std::memory_order_acquire) & 1U) != 0;
+  }
+
   [[nodiscard]] bool mcu_strobe(bool active) noexcept;
   [[nodiscard]] bool dsp_ready(bool active) noexcept;
   [[nodiscard]] std::optional<std::uint64_t> dsp_interrupt(bool edge) const noexcept;
