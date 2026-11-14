@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <format>
 #include <limits>
 #include <optional>
 #include <stdexcept>
@@ -131,6 +132,67 @@ bool ExecutionTime::wait_for_dsp(const std::uint64_t ticks, const std::stop_toke
   });
 }
 
+std::optional<std::uint64_t> ExecutionTime::idle_mcu(const std::uint64_t now,
+                                                     const std::uint64_t until,
+                                                     const std::stop_token &stop) {
+  const auto previous = idle_.load(std::memory_order_seq_cst);
+  const auto completed_mcu = mcu_.load(std::memory_order_seq_cst);
+  const auto held = held_.load(std::memory_order_seq_cst);
+  const auto completed_dsp = dsp_.load(std::memory_order_seq_cst);
+  if ((previous & phase_mask) != 0 || until <= now ||
+      previous > std::numeric_limits<std::uint64_t>::max() - next_generation ||
+      now != completed_mcu || (!held && completed_dsp < now)) {
+    throw std::logic_error(
+        std::format("Invalid MCU idle lease: now={} until={} MCU={} DSP={} held={} generation={}",
+                    now,
+                    until,
+                    completed_mcu,
+                    completed_dsp,
+                    held,
+                    previous));
+  }
+  if (stop.stop_requested()) { return {}; }
+  const auto generation = previous + next_generation;
+  const auto request = generation | requested;
+  idle_until_.store(until, std::memory_order_seq_cst);
+  idle_.store(request, std::memory_order_seq_cst);
+  notify();
+  const auto ready = await(waiting_mcu_, stop, [&] {
+    return idle_.load(std::memory_order_seq_cst) != request ||
+           held_.load(std::memory_order_seq_cst) || dsp_.load(std::memory_order_seq_cst) >= until;
+  });
+  const auto state = idle_.load(std::memory_order_seq_cst);
+  const auto result =
+      state == (generation | granted) ? wake_at_.load(std::memory_order_seq_cst) : until;
+  idle_.store(generation, std::memory_order_seq_cst);
+  notify();
+  if (!ready) { return {}; }
+  if (result < now || result > until) {
+    throw std::logic_error("DSP wake lies outside its MCU idle lease");
+  }
+  return result;
+}
+
+bool ExecutionTime::wake_mcu(const std::uint64_t ticks) noexcept {
+  auto request = idle_.load(std::memory_order_seq_cst);
+  if ((request & phase_mask) != requested || ticks >= idle_until_.load(std::memory_order_seq_cst)) {
+    return false;
+  }
+  wake_at_.store(ticks, std::memory_order_seq_cst);
+  const auto wake = (request & ~phase_mask) | granted;
+  if (!idle_.compare_exchange_strong(request, wake, std::memory_order_seq_cst)) { return false; }
+  notify();
+  return true;
+}
+
+std::optional<std::uint64_t> ExecutionTime::idle_limit() const noexcept {
+  const auto state = idle_.load(std::memory_order_seq_cst);
+  if ((state & phase_mask) != requested) { return {}; }
+  const auto until = idle_until_.load(std::memory_order_seq_cst);
+  if (idle_.load(std::memory_order_seq_cst) != state) { return {}; }
+  return until;
+}
+
 std::optional<std::uint64_t> ExecutionTime::dsp_limit(const std::uint64_t ticks,
                                                       const std::stop_token &stop) {
   const auto previous = dsp_.load(std::memory_order_seq_cst);
@@ -162,10 +224,13 @@ std::optional<std::uint64_t> ExecutionTime::dsp_limit(const std::uint64_t ticks,
       }
     } else if (frontier > ticks) {
       return frontier;
+    } else if (const auto idle = idle_limit(); idle && *idle > ticks) {
+      return idle;
     } else if (!await(waiting_dsp_, stop, [&] {
+                 const auto idle = idle_limit();
                  return (transaction_.load(std::memory_order_seq_cst) & phase_mask) != 0 ||
                         held_.load(std::memory_order_seq_cst) ||
-                        mcu_.load(std::memory_order_seq_cst) > ticks;
+                        mcu_.load(std::memory_order_seq_cst) > ticks || (idle && *idle > ticks);
                })) {
       return {};
     }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "io/execution_time.hpp"
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
 
@@ -24,6 +25,7 @@ void blofeld_dsp_peer_data(PeerPort *channel,
 // Record the currently published output only on an actual PDRC data write.
 [[nodiscard]] bool blofeld_dsp_peer_write(PeerPort *channel, std::uint64_t ticks) noexcept;
 [[nodiscard]] bool blofeld_dsp_peer_ready(PeerPort *channel, bool active) noexcept;
+[[nodiscard]] bool blofeld_dsp_time_wake(ExecutionTime *channel, std::uint64_t ticks) noexcept;
 // A missing request leaves generation untouched; generation zero is not a sentinel.
 [[nodiscard]] bool
 blofeld_dsp_peer_interrupt(const PeerPort *channel, bool edge, std::uint64_t &generation) noexcept;

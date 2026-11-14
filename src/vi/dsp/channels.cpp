@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dsp/channels.hpp"
 
+#include "io/execution_time.hpp"
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
 
@@ -38,6 +39,10 @@ bool blofeld_dsp_peer_write(PeerPort *const channel, const std::uint64_t ticks) 
 
 bool blofeld_dsp_peer_ready(PeerPort *const channel, const bool active) noexcept {
   return channel->dsp_ready(active);
+}
+
+bool blofeld_dsp_time_wake(ExecutionTime *const channel, const std::uint64_t ticks) noexcept {
+  return channel->wake_mcu(ticks);
 }
 
 bool blofeld_dsp_peer_interrupt(const PeerPort *const channel,

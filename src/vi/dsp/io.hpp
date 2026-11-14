@@ -654,7 +654,7 @@ private:
     return ports_.read(space, address, value);
   }
 
-  [[nodiscard]] bool publish_peer() const {
+  [[nodiscard]] bool publish_peer() {
     if (peer_ == nullptr) { return true; }
     const auto data = ports_.output(Port::c);
     constexpr dsp56300::Word byte_mask = 0xff;
@@ -665,8 +665,16 @@ private:
                           static_cast<std::uint8_t>(data.value & byte_mask));
     const auto request = ports_.output(Port::e);
     if ((request.mask & ~request.known & ready) != 0) { return false; }
-    return blofeld_dsp_peer_ready(peer_,
-                                  (request.mask & ready) != 0 && (request.value & ready) == 0);
+    const bool active = (request.mask & ready) != 0 && (request.value & ready) == 0;
+    if (!blofeld_dsp_peer_ready(peer_, active)) { return false; }
+    if (active && time_ != nullptr) {
+      if (!clock_.advance(device_cycles()) ||
+          clock_.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_) {
+        return false;
+      }
+      if (blofeld_dsp_time_wake(time_, origin_ + clock_.ticks())) { core_->request_yield(); }
+    }
+    return true;
   }
 
   bool update_ports() noexcept {

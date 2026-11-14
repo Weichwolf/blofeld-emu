@@ -18,6 +18,10 @@ public:
   [[nodiscard]] std::optional<std::uint64_t> mcu_wait_time() const noexcept;
   [[nodiscard]] bool enter_mcu(std::uint64_t ticks, const std::stop_token &stop);
   [[nodiscard]] bool wait_for_dsp(std::uint64_t ticks, const std::stop_token &stop);
+  // WAI lends time without completed progress. The source yields on a real wake.
+  [[nodiscard]] std::optional<std::uint64_t>
+  idle_mcu(std::uint64_t now, std::uint64_t until, const std::stop_token &stop);
+  [[nodiscard]] bool wake_mcu(std::uint64_t ticks) noexcept;
   void leave_mcu() noexcept;
   [[nodiscard]] std::optional<std::uint64_t> dsp_limit(std::uint64_t ticks,
                                                        const std::stop_token &stop);
@@ -28,6 +32,7 @@ public:
 private:
   void notify() noexcept;
   void signal() noexcept;
+  [[nodiscard]] std::optional<std::uint64_t> idle_limit() const noexcept;
   template <typename Ready>
   [[nodiscard]] bool await(std::atomic<bool> &waiting, const std::stop_token &stop, Ready ready);
 
@@ -38,6 +43,7 @@ private:
   std::atomic<bool> waited_{false};
   std::atomic<std::uint64_t> transaction_{0}, changed_{0};
   std::atomic<bool> waiting_mcu_{false}, waiting_dsp_{false};
+  std::atomic<std::uint64_t> idle_{0}, idle_until_{0}, wake_at_{0};
   alignas(128) std::atomic<std::uint64_t> dsp_{0};
   alignas(128) std::atomic<std::uint64_t> origin_{0};
   std::atomic<bool> held_{false};

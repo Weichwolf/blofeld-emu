@@ -131,11 +131,36 @@ void bind_memory(cpu12::Core &core,
   mounted.swap(selected);
 }
 
+std::optional<Timer::Cycle> idle_deadline(Devices &devices, const bool peer_wait) {
+  auto next = devices.deadline();
+  if (!peer_wait || (next && *next == devices.clock.cycles())) { return next; }
+  auto until = std::numeric_limits<std::uint64_t>::max();
+  if (next) {
+    auto projected = devices.clock;
+    if (!projected.advance(*next)) {
+      throw std::overflow_error("MCU idle time is not representable");
+    }
+    until = projected.ticks();
+  }
+  const auto resumed = devices.time->idle_mcu(devices.clock.ticks(), until, devices.stop);
+  if (!resumed) { return {}; }
+  if (!next && *resumed == std::numeric_limits<std::uint64_t>::max()) { return {}; }
+  next = devices.clock.at_ticks(*resumed);
+  if (!next) { throw std::overflow_error("MCU wake time is not representable"); }
+  return next;
+}
+
 Dispatch prepare(cpu12::Core &core, Devices &devices, ExecutionReport &report) {
   advance(core, devices);
   if (devices.stop.stop_requested()) { return Dispatch::done; }
   const auto state = core.state().execution;
   if (state == cpu12::ExecutionState::stopped) { return Dispatch::done; }
+  const bool peer_wait = state == cpu12::ExecutionState::waiting && devices.peer != nullptr &&
+                         devices.time != nullptr &&
+                         core.interrupt_ready(cpu12::InterruptKind::xirq);
+  if (peer_wait && !devices.time->wait_for_dsp(devices.clock.ticks(), devices.stop)) {
+    return Dispatch::done;
+  }
   if (interrupt(core, devices, report)) {
     devices.activity(cpu12::ExecutionState::running);
     return Dispatch::again;
@@ -143,7 +168,7 @@ Dispatch prepare(cpu12::Core &core, Devices &devices, ExecutionReport &report) {
   if (report.failure) { return Dispatch::done; }
   if (core.state().returned_frame) { core.close_return_window(); }
   if (state == cpu12::ExecutionState::waiting) {
-    const auto next = devices.deadline();
+    const auto next = idle_deadline(devices, peer_wait);
     if (!next) { return Dispatch::done; }
     devices.idle = *next - core.progress().estimated_cycles;
     return Dispatch::again;

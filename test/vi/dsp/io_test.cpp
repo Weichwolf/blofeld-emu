@@ -5,16 +5,23 @@
 #include "dsp/program.hpp"
 #include "execution.hpp"
 #include "io/dsp_reset.hpp"
+#include "io/execution_time.hpp"
+#include "io/peer_port.hpp"
 #include "io/shi.hpp"
 #include "isa.hpp"
 
 #include <array>
+#include <chrono>
+#include <cstdint>
 #include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
 #include <exception>
+#include <future>
 #include <iostream>
+#include <optional>
 #include <span>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -156,6 +163,76 @@ void changed_code(const vi::dsp::Program &program, const std::span<const Word> w
           "A changed executable DMA store installs the prepared version at the real next PC; "
           "the new STOP executes before the old image's intentional fault");
 }
+
+void native_idle_wake() {
+  constexpr Word store_y = static_cast<Word>(isa::Opcode::move_y_effective) | (0x30U << 8);
+  constexpr std::array code{literal,        Word{0x5a},     store_x,
+                            Word{0xffffbd}, literal,        Word{0xff},
+                            store_x,        Word{0xffffbe}, literal,
+                            Word{0},        store_y,        Word{0xffff9d},
+                            literal,        Word{0x200},    store_y,
+                            Word{0xffff9e}, literal,        Word{0},
+                            store_y,        Word{0xffff9e}, static_cast<Word>(isa::Opcode::stop)};
+  constexpr std::array entries{boot};
+  const std::array spans{CodeSpan{.address = boot, .words = code}};
+  const std::array variants{
+      CodeVariant{.id = 0, .code = spans, .entries = entries, .failed_fetches = {}}};
+  const std::array choices{vi::dsp::ProgramChoice{.variant = 0, .resumes = entries, .words = {}}};
+  const auto program =
+      blofeld::app::aot::prepare_dsp_program({.variants = variants}, choices, {}, {}, {});
+  vi::Shi shi;
+  vi::DspReset reset;
+  vi::PeerPort peer;
+  vi::ExecutionTime time;
+  require(peer.mcu_interrupt_ready(true), "Open the actual MCU admission window");
+  std::promise<std::optional<std::uint64_t>> sleeping;
+  auto woke = sleeping.get_future();
+  constexpr std::uint64_t horizon = 1000;
+  std::jthread mcu(
+      [&](const std::stop_token &stop) { sleeping.set_value(time.idle_mcu(0, horizon, stop)); });
+  std::promise<vi::ExecutionReport> execution;
+  auto completed = execution.get_future();
+  std::jthread dsp([&](const std::stop_token &stop) {
+    try {
+      execution.set_value(vi::dsp::execute({.main = code, .eeprom = {}},
+                                           shi,
+                                           reset,
+                                           stop,
+                                           nullptr,
+                                           {},
+                                           &peer,
+                                           &time,
+                                           nullptr,
+                                           nullptr,
+                                           &program));
+    } catch (...) { execution.set_exception(std::current_exception()); }
+  });
+  require(woke.wait_for(std::chrono::seconds(2)) == std::future_status::ready,
+          "Actual native DSP publication wakes the idle owner");
+  const auto event = woke.get();
+  mcu.join();
+  if (!event) { throw std::runtime_error("The native source failed to publish its wake"); }
+  const auto event_tick = *event;
+  constexpr std::uint64_t irq_cycles = 14;
+  constexpr std::uint64_t clock_top = 12500;
+  constexpr std::uint64_t clock_bottom = 17052;
+  constexpr auto irq_tick = irq_cycles * clock_top / clock_bottom;
+  require(event_tick == irq_tick && peer.mcu_interrupt_ready(false) && peer.mcu_interrupt() == 1,
+          "A real asserted source level survives the cleared transport notification");
+  require(time.wait_for_dsp(event_tick + 1, {}),
+          "Observe actual completed source work after its publication");
+  require(completed.wait_for(std::chrono::milliseconds(10)) == std::future_status::timeout &&
+              peer.mcu_interrupt() == 1,
+          "The native successor cannot withdraw the IRQ using the old lease");
+  require(time.publish_mcu(horizon + 1), "Authorize new actual receiver progress");
+  require(completed.wait_for(std::chrono::seconds(2)) == std::future_status::ready,
+          "The native source resumes after a new grant");
+  dsp.join();
+  const auto report = completed.get();
+  require(!report.failure && !report.exception && !report.preparation_diagnostic &&
+              report.instructions == 11 && !peer.mcu_interrupt(),
+          "The fully AOT source executes the real withdrawal and STOP exactly once");
+}
 }
 
 int main() try {
@@ -163,6 +240,7 @@ int main() try {
   const auto program = prepare(words);
   data_and_equal_writes(program, words);
   changed_code(program, words);
+  native_idle_wake();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

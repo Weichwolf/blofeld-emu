@@ -8,6 +8,7 @@
 #include <exception>
 #include <future>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <stop_token>
 #include <thread>
@@ -227,6 +228,113 @@ void cancelled_dsp_prefix() {
   } catch (const std::logic_error &) { backwards = true; }
   require(backwards, "An admission barrier rejects backwards MCU progress");
 }
+
+void conditional_idle_wake() {
+  constexpr std::uint64_t now = 100;
+  constexpr std::uint64_t wake = 500;
+  constexpr std::uint64_t deadline = 1000;
+  ExecutionTime time;
+  require(time.publish_mcu(now) && time.dsp_limit(0, {}) == now,
+          "Only actual MCU work establishes the initial completed frontier");
+  std::promise<std::optional<std::uint64_t>> completion;
+  auto result = completion.get_future();
+  std::jthread mcu([&](const std::stop_token &stop) {
+    try {
+      completion.set_value(time.wait_for_dsp(now, stop) ? time.idle_mcu(now, deadline, stop)
+                                                        : std::nullopt);
+    } catch (...) { completion.set_exception(std::current_exception()); }
+  });
+  require(time.dsp_limit(now, {}) == deadline &&
+              result.wait_for(std::chrono::milliseconds(10)) == std::future_status::timeout,
+          "An idle execution grant is neither completed DSP work nor elapsed MCU time");
+  require(time.wake_mcu(wake) && !time.wake_mcu(wake + 1),
+          "The first actual source event ends the conditional window exactly once");
+  require(result.get() == wake, "The waiting MCU resumes at the real source timestamp");
+  mcu.join();
+  require(time.publish_mcu(now), "Lending time never advances the completed MCU frontier");
+  std::promise<std::optional<std::uint64_t>> source;
+  auto next = source.get_future();
+  std::jthread dsp(
+      [&](const std::stop_token &stop) { source.set_value(time.dsp_limit(wake, stop)); });
+  require(next.wait_for(std::chrono::milliseconds(10)) == std::future_status::timeout,
+          "After a wake the source cannot reuse its old long execution window");
+  require(time.publish_mcu(wake + 1) && next.get() == wake + 1,
+          "Only new actual MCU progress releases the source again");
+  dsp.join();
+}
+
+void conditional_idle_expiry() {
+  constexpr std::uint64_t now = 100;
+  constexpr std::uint64_t deadline = 1000;
+  ExecutionTime time;
+  require(time.publish_mcu(now) && time.dsp_limit(0, {}) == now,
+          "Establish the original completed prefix");
+  std::promise<std::optional<std::uint64_t>> completion;
+  auto result = completion.get_future();
+  std::jthread mcu([&](const std::stop_token &stop) {
+    const auto resumed =
+        time.wait_for_dsp(now, stop) ? time.idle_mcu(now, deadline, stop) : std::nullopt;
+    completion.set_value(resumed);
+    if (resumed) { static_cast<void>(time.publish_mcu(deadline + 1)); }
+  });
+  require(time.dsp_limit(now, {}) == deadline && !time.wake_mcu(deadline),
+          "The local deadline is outside the exclusive earlier-event window");
+  require(time.dsp_limit(deadline, {}) == deadline + 1 && result.get() == deadline,
+          "An event-free completed source prefix releases the real local device deadline");
+  mcu.join();
+}
+
+void conditional_idle_cancellation() {
+  constexpr std::uint64_t deadline = 1000;
+  ExecutionTime time;
+  std::optional<std::uint64_t> resumed = deadline;
+  std::jthread mcu(
+      [&](const std::stop_token &stop) { resumed = time.idle_mcu(0, deadline, stop); });
+  require(time.dsp_limit(0, {}) == deadline, "The source observes the outstanding idle window");
+  mcu.request_stop();
+  mcu.join();
+  require(!resumed && !time.wake_mcu(1) && time.publish_mcu(0),
+          "Cancellation withdraws the lease without inventing a wake or completed time");
+  time.hold_dsp();
+  require(time.idle_mcu(0, deadline, {}) == deadline,
+          "A held source cannot produce an earlier peer event");
+  time.release_dsp(0);
+}
+
+void repeated_idle_generations() {
+  constexpr std::uint64_t count = 512;
+  constexpr std::uint64_t spacing = 100;
+  constexpr std::uint64_t wake_offset = spacing / 2;
+  ExecutionTime time;
+  bool ordered = true;
+  std::jthread mcu([&](const std::stop_token &stop) {
+    std::uint64_t now = 0;
+    for (std::uint64_t index = 1; index <= count; ++index) {
+      if (!time.wait_for_dsp(now, stop)) { return; }
+      const auto next = now + (index % 2 == 0 ? spacing : wake_offset);
+      const auto wake = time.idle_mcu(now, now + spacing, stop);
+      if (!wake || *wake != next) {
+        ordered = false;
+        return;
+      }
+      now = *wake;
+    }
+    ordered = time.publish_mcu(now + 1);
+  });
+  std::uint64_t ticks = 0;
+  for (std::uint64_t index = 1; index <= count; ++index) {
+    require(time.dsp_limit(ticks, {}) == ticks + spacing,
+            "Every fresh generation lends only its own conditional horizon");
+    ticks += index % 2 == 0 ? spacing : wake_offset;
+    if (index % 2 != 0) {
+      require(time.wake_mcu(ticks), "Only the current generation accepts its real source event");
+    }
+  }
+  require(time.dsp_limit(ticks, {}) == ticks + 1,
+          "The last wake cannot leak a retired lease into subsequent source execution");
+  mcu.join();
+  require(ordered, "Wait registration and repeated generations preserve every exact wake");
+}
 }
 
 int main() try {
@@ -238,6 +346,10 @@ int main() try {
   cancelled_transactions();
   unmask_after_earlier_dsp_work();
   cancelled_dsp_prefix();
+  conditional_idle_wake();
+  conditional_idle_expiry();
+  conditional_idle_cancellation();
+  repeated_idle_generations();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';
