@@ -237,13 +237,16 @@ does not certify the whole region. Keep guest state unchanged during admission.
 Reuse validated guards in execution; invalidate grants on relevant state, code,
 mapping or binding changes.
 
-A WAI owner may lend a conditional execution window without publishing its end
-as completed progress. The source ends that window at the first eligible real
-wake, finishes only its current atomic group and yields before a successor can
-reuse the old permission. Resume at the original event or established local
-deadline. Process already-due device events and source frontiers before lending
-a nonempty window; awaiting source knowledge advances no clock. Conditional
-execution permissions are not immutable no-event bounds.
+A waiting owner or a running owner with a certified no-outgoing-effect prefix
+may lend a conditional window without publishing its end as completed progress.
+The source ends that window at the first eligible real wake, finishes only its
+current atomic group and yields before a successor can reuse the old permission.
+A running receiver executes the certified foreground only through the event's
+atomic instruction boundary; establish source knowledge through that completed
+boundary before admitting its IRQ or another prefix. A waiting receiver resumes
+at the original event or established local deadline. Process already-due device
+events and source frontiers before lending a nonempty window; awaiting source
+knowledge advances no clock. Conditional permissions are not no-event bounds.
 
 Include IRQ paths, actual masks/priorities/shadows and REP/return state in each
 bound. Derive incoming-to-outgoing delays as well as autonomous effects. Specify
