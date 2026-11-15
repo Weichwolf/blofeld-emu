@@ -4,6 +4,10 @@
 #include <atomic>
 #include <cstdint>
 #include <exception>
+#if defined(__linux__)
+#include <filesystem>
+#include <string>
+#endif
 #include <iostream>
 #include <stdexcept>
 #include <thread>
@@ -33,7 +37,9 @@ void native_owner() {
   const ThreadUsageReader reader;
   std::atomic<unsigned> phase{0};
   std::uint64_t result = 0;
+  ThreadUsageReader::ThreadId owner;
   std::jthread worker([&] {
+    owner = ThreadUsageReader::current();
     phase.store(1);
     phase.notify_one();
     phase.wait(1);
@@ -43,6 +49,10 @@ void native_owner() {
     phase.wait(3);
   });
   phase.wait(0);
+#if defined(__linux__)
+  const bool live_owner =
+      std::filesystem::exists("/proc/self/task/" + std::to_string(owner.identifier));
+#endif
   const auto thread = ThreadUsageReader::identify(worker.native_handle());
   const auto first = reader.read(thread);
   phase.store(2);
@@ -52,6 +62,12 @@ void native_owner() {
   phase.store(4);
   phase.notify_one();
   worker.join();
+  require(owner.error == 0 && owner.identifier != 0 &&
+              owner.identifier != ThreadUsageReader::current().identifier,
+          "Current-owner identity distinguishes the worker from the calling thread");
+#if defined(__linux__)
+  require(live_owner, "Current-owner identity is a real Linux task ID usable by perf");
+#endif
   static_cast<void>(reader.read(thread));
   require(first.error == 0 && last.error == 0, "Regular-user counter reads succeed");
   require(first.count > 0 && last.count == first.count,
@@ -75,6 +91,9 @@ void native_owner() {
   require(first.pmc && last.pmc && first.identifier != 0 && first.identifier == last.identifier,
           "Darwin PMCs identify the same native owner, without task aggregation");
   require(instructions > 0 && cycles > 0, "Actual native instructions and cycles are counted");
+#else
+  require(!first.pmc && !last.pmc && instructions == 0 && cycles == 0,
+          "The CPU-time provider does not report unavailable hardware counters");
 #endif
 }
 }

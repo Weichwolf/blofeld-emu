@@ -34,8 +34,8 @@ public:
   [[nodiscard]] static int name_current(const char *name) noexcept;
 
 private:
-#if defined(__APPLE__)
   unsigned levels_ = 1;
+#if defined(__APPLE__)
   std::uint32_t numerator_ = 1, denominator_ = 1;
 #endif
 };

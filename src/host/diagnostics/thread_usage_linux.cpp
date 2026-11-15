@@ -3,15 +3,19 @@
 
 #include <cerrno>
 #include <cstdint>
+#include <ctime>
 #include <pthread.h>
+#include <sys/syscall.h>
 #include <thread>
-#include <time.h>
+#include <unistd.h>
 
 namespace blofeld::host::diagnostics {
 ThreadUsageReader::ThreadUsageReader() = default;
 
 ThreadUsageReader::ThreadId ThreadUsageReader::current() noexcept {
-  return identify(pthread_self());
+  auto result = identify(pthread_self());
+  result.identifier = static_cast<std::uint64_t>(gettid());
+  return result;
 }
 
 int ThreadUsageReader::name_current(const char *name) noexcept {
@@ -21,7 +25,7 @@ int ThreadUsageReader::name_current(const char *name) noexcept {
 ThreadUsageReader::ThreadId
 ThreadUsageReader::identify(const std::thread::native_handle_type thread) noexcept {
   ThreadId result;
-  clockid_t clock{};
+  int clock{};
   result.error = pthread_getcpuclockid(thread, &clock);
   result.clock = clock;
   return result;
@@ -30,13 +34,13 @@ ThreadUsageReader::identify(const std::thread::native_handle_type thread) noexce
 ThreadUsage ThreadUsageReader::read(const ThreadId thread) const noexcept {
   ThreadUsage result{.identifier = thread.identifier, .error = thread.error};
   if (result.error != 0) { return result; }
-  timespec time{};
-  if (clock_gettime(static_cast<clockid_t>(thread.clock), &time) != 0) {
+  std::timespec time{};
+  if (syscall(SYS_clock_gettime, static_cast<int>(thread.clock), &time) != 0) {
     result.error = errno;
     return result;
   }
   constexpr std::uint64_t nanoseconds = 1000000000;
-  result.count = 1;
+  result.count = levels_;
   result.levels[0].cpu_nanoseconds = (static_cast<std::uint64_t>(time.tv_sec) * nanoseconds) +
                                      static_cast<std::uint64_t>(time.tv_nsec);
   return result;
