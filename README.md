@@ -142,6 +142,20 @@ Its manifest identifies single-note, chord/pedal, sixteen-channel,
 control/SysEx/tempo and SL cases. Verify actual voice/effect/sample use;
 matching files alone do not establish instrument acceptance.
 
+Build `blofeld-render-controls` explicitly to prepare immutable MCU/DSP programs
+once and run fresh normal offline VMs for several controls. Separate complete CLI
+argument sets with `--`; use the same profile and distinct WAV paths:
+
+```sh
+cmake --build --preset release --target blofeld-render-controls
+build/release/blofeld-render-controls --profile /path/to/instrument.profile \
+  --midi /path/to/W1.mid --wav build/W1.wav --tail 0 -- \
+  --profile /path/to/instrument.profile --midi /path/to/W2.mid --wav build/W2.wav --tail 1
+```
+
+AOT timings appear once; ordinary startup/render reports follow per workload.
+Readiness, watchdogs, devices and rendering use the product path.
+
 The optional offline bootstrap tool retains source/listing/provenance and requires
 the canonical verified 55-word hash:
 

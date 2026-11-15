@@ -181,6 +181,8 @@ add_library(blofeld_app_runtime src/app/options.cpp src/app/report.cpp src/app/r
 target_include_directories(blofeld_app_runtime PUBLIC src/app)
 target_link_libraries(blofeld_app_runtime PUBLIC blofeld_app_profile blofeld_app_midi
   blofeld_app_wav blofeld_host_process blofeld_vi_execution blofeld_app_aot)
+add_executable(blofeld-render-controls EXCLUDE_FROM_ALL tools/render_controls.cpp)
+target_link_libraries(blofeld-render-controls PRIVATE blofeld_app_runtime blofeld_app_boot)
 add_executable(blofeld-headless src/app/main.cpp)
 target_include_directories(blofeld-headless PRIVATE src/app)
 if(TARGET blofeld_host_midi_input)
