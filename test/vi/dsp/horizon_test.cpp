@@ -178,7 +178,7 @@ void fractional_port_boundary(const FractionalCase input) {
   vi::DspReset reset;
   vi::PeerPort peer;
   vi::ExecutionTime time;
-  const std::stop_source cancellation;
+  auto cancellation = std::stop_source{};
   const auto token = cancellation.get_token();
   vi::dsp::Io io({.main = words, .eeprom = {}},
                  shi,
@@ -259,7 +259,7 @@ void quiescent_boundary(const bool delayed_input) {
   vi::PeerPort peer;
   vi::ExecutionTime time;
   vi::MidiPort midi(vi::MidiPort::InputMode::stream);
-  const std::stop_source cancellation;
+  auto cancellation = std::stop_source{};
   const auto token = cancellation.get_token();
   vi::dsp::Io io({.main = code, .eeprom = {}},
                  shi,
