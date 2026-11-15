@@ -60,6 +60,10 @@ build/release/blofeld-headless --profile /path/to/instrument.profile \
   --midi /path/to/score.mid --wav /path/to/render.wav --tail 5
 ```
 
+Offline startup allows 15 seconds of instrument time. The independent host hang
+watchdog defaults to 600 seconds after AOT; select another positive duration with
+`--startup-watchdog SECONDS`. Live startup uses its own policy.
+
 Owner attribution uses a separate Release build with `-DBLOFELD_CENSUS=ON`.
 Set `BLOFELD_CENSUS=1` for offline rendering. The terminal emits one JSON census
 covering the interval from the first accepted PCM block to completion; exclude

@@ -15,7 +15,7 @@
 namespace blofeld::app {
 namespace {
 struct Provided {
-  bool profile = false, tail = false, group = false;
+  bool profile = false, tail = false, group = false, watchdog = false;
 };
 
 template <typename T> T number(const std::string_view value, const char *message) {
@@ -31,8 +31,12 @@ void validate(const Options &result, const Provided &provided) {
   if (result.midi && (result.midi_source || provided.group)) {
     throw std::invalid_argument("Native MIDI routing is only available in live mode");
   }
-  if (result.midi.has_value() != result.wav.has_value() || (provided.tail && !result.midi)) {
+  if (result.midi.has_value() != result.wav.has_value() ||
+      ((provided.tail || provided.watchdog) && !result.midi)) {
     throw std::invalid_argument("Offline rendering requires both --midi and --wav");
+  }
+  if (result.startup_watchdog_seconds == 0) {
+    throw std::invalid_argument("--startup-watchdog requires positive whole seconds");
   }
 }
 
@@ -66,10 +70,14 @@ Options options(const std::span<const char *const> arguments) {
       provided.tail = true;
       result.tail_seconds =
           number<std::uint64_t>(value, "--tail requires whole nonnegative seconds");
+    } else if (key == "--startup-watchdog" && !provided.watchdog) {
+      provided.watchdog = true;
+      result.startup_watchdog_seconds =
+          number<std::uint64_t>(value, "--startup-watchdog requires positive whole seconds");
     } else {
       throw std::invalid_argument(
           "Usage: blofeld-headless [--profile FILE] [--midi-source ID --midi-group 0..15] "
-          "[--midi FILE --wav FILE [--tail SECONDS]]");
+          "[--midi FILE --wav FILE [--tail SECONDS] [--startup-watchdog SECONDS]]");
     }
   }
   validate(result, provided);

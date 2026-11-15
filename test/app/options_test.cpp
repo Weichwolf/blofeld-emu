@@ -9,6 +9,8 @@
 #include <stdexcept>
 
 namespace {
+constexpr std::uint64_t default_watchdog = 600, extended_watchdog = 1200;
+
 void require(const bool condition, const char *message) {
   if (!condition) { throw std::runtime_error(message); }
 }
@@ -28,11 +30,20 @@ int main() try {
   require(live.profile == "local.profile" && !live.midi && !live.wav, "Profile selects live mode");
   const auto render = options(std::array{
       "--wav", "out.wav", "--profile", "local.profile", "--tail", "12", "--midi", "score.mid"});
-  require(render.wav == "out.wav" && render.midi == "score.mid" && render.tail_seconds == 12,
+  require(render.wav == "out.wav" && render.midi == "score.mid" && render.tail_seconds == 12 &&
+              render.startup_watchdog_seconds == default_watchdog,
           "Offline input/output and tail are independent of option order");
   const auto zero =
       options(std::array{"--profile", "p", "--midi", "m", "--wav", "w", "--tail", "0"});
   require(zero.tail_seconds == 0, "An explicit zero tail is valid");
+  const auto watchdog = options(
+      std::array{"--startup-watchdog", "1200", "--profile", "p", "--midi", "m", "--wav", "w"});
+  require(watchdog.startup_watchdog_seconds == extended_watchdog,
+          "The offline host watchdog is configurable independently of guest time");
+  rejects(std::array{"--profile", "p", "--startup-watchdog", "60"});
+  rejects(std::array{"--profile", "p", "--midi", "m", "--wav", "w", "--startup-watchdog", "0"});
+  rejects(std::array{
+      "--midi", "m", "--wav", "w", "--startup-watchdog", "1", "--startup-watchdog", "2"});
   const auto routed =
       options(std::array{"--profile", "p", "--midi-group", "15", "--midi-source", "-2147483648"});
   require(routed.midi_source == std::numeric_limits<std::int32_t>::min() && routed.midi_group == 15,
@@ -52,6 +63,7 @@ int main() try {
   rejects(std::array{"--profile", ""});
   for (const auto *value : {"-1", "1.5", "2s", "18446744073709551616"}) {
     rejects(std::array{"--profile", "p", "--midi", "m", "--wav", "w", "--tail", value});
+    rejects(std::array{"--profile", "p", "--midi", "m", "--wav", "w", "--startup-watchdog", value});
   }
 } catch (const std::exception &error) {
 

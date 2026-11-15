@@ -38,7 +38,7 @@ private:
 #endif
   WavConsumer wav_;
   MidiFile midi_;
-  std::uint64_t tail_;
+  std::uint64_t tail_, startup_watchdog_seconds_;
   vi::VmContext *vm_ = nullptr;
   std::chrono::steady_clock::time_point launched_, started_, ready_, finished_;
   std::chrono::steady_clock::duration startup_execution_{};

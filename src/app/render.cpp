@@ -24,7 +24,7 @@
 namespace blofeld::app {
 namespace {
 constexpr unsigned rate = 44100;
-constexpr std::chrono::minutes startup_limit{1};
+constexpr std::uint64_t startup_ticks = 15 * std::uint64_t{vi::MidiPort::reference_hz};
 constexpr std::chrono::milliseconds startup_poll{1}, control_poll{10};
 
 const std::filesystem::path &required_path(const std::optional<std::filesystem::path> &path) {
@@ -43,7 +43,8 @@ std::uint64_t tail_ticks(const std::uint64_t seconds) {
 OfflineRender::OfflineRender(const Options &options)
     : wav_(required_path(options.wav), rate, true),
       midi_(required_path(options.midi)),
-      tail_(tail_ticks(options.tail_seconds)) {}
+      tail_(tail_ticks(options.tail_seconds)),
+      startup_watchdog_seconds_(options.startup_watchdog_seconds) {}
 
 vi::PcmOutput OfflineRender::output() noexcept {
   return {.owner = this,
@@ -85,6 +86,11 @@ std::optional<std::uint64_t> OfflineRender::startup(vi::VmContext &vm,
   vm.start();
   while (!vm.finished()) {
     if (signals.wait(startup_poll)) { break; }
+    if (vm.midi().time() >= startup_ticks) {
+      std::cerr << "Startup failed: readiness not reached within "
+                << startup_ticks / vi::MidiPort::reference_hz << " instrument seconds.\n";
+      break;
+    }
     const auto origin = startup.poll(vm.midi(), this, [](void *owner) noexcept {
       const auto &render = *static_cast<OfflineRender *>(owner);
       return MidiStartup::Readiness{.application = render.vm_->mcu_wait_time().has_value(),
@@ -92,9 +98,12 @@ std::optional<std::uint64_t> OfflineRender::startup(vi::VmContext &vm,
     });
     startup_execution_ = vm.execution_elapsed() - begun;
     if (origin) { return origin; }
-    if (startup_execution_ >= startup_limit) {
-      std::cerr << "Startup failed: no original MIDI identity and valid PCM within one host minute "
-                   "excluding AOT.\n";
+    const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                             std::chrono::steady_clock::now() - started_)
+                             .count();
+    if (static_cast<std::uint64_t>(elapsed) >= startup_watchdog_seconds_) {
+      std::cerr << "Startup watchdog expired after " << startup_watchdog_seconds_
+                << " host seconds without readiness.\n";
       break;
     }
   }
