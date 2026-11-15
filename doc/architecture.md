@@ -143,6 +143,10 @@ source/variant hashes, core/LLVM pipeline, target/features, generation
 mode and binding ABI. Store relocations, never instance pointers or device-state
 snapshots. Reject corrupt/incompatible artifacts and rebuild before playback.
 Keep derived source, IR, objects, catalogues and executables untracked in build/.
+Use the build's aot-cache/ for pre-platform optimized bitcode. Validate current
+inputs before lookup; key the composed module, ABI sets, target/features and
+compiler/build pipeline. Verify artifact identity and payload before import.
+Relocate, resolve exports and initialize fresh native instances through ORC.
 Preserve original boot/device effects; caching changes startup, not warm speed.
 
 ### Local MCU catalogue, JSON format 1
@@ -236,6 +240,23 @@ certified prefix unless its outcome is already proved; entry admission alone
 does not certify the whole region. Keep guest state unchanged during admission.
 Reuse validated guards in execution; invalidate grants on relevant state, code,
 mapping or binding changes.
+Allow stopped owners to describe total, channel-isolated ranges and exact writes
+in the current device state. Match complete native footprints, end at instruction
+completion and re-evaluate before continuing; retain IRQ and binding proofs.
+
+At a non-isolated access, settle source effects through the actual instruction-start
+instant before executing the prepared native instruction atomically. Retain source
+fractional phase: a later operation within the same integer tick is future work.
+Publish fractional source events at the first admissible integer receiver instant;
+preserve exact integer coincidences. Apply the same conversion to IRQ wakes and
+retained response bytes, without advancing the completed producer clock.
+At exact coincidence, admit only the current source instruction group, then park
+before a successor. Distinguish this permission from a future execution frontier
+and completed MCU progress. Preserve an eligible RTI return window through IRQ
+arbitration. A waiting source can publish current-instant quiescence after known
+input and due local events, without changing its completed clock. Scope this
+knowledge to the receiver's atomic operation and process new inputs before
+continuing. WAIT reaching a permission endpoint retains IRQs for the next grant.
 
 A waiting owner or a running owner with a certified no-outgoing-effect prefix
 may lend a conditional window without publishing its end as completed progress.
@@ -248,6 +269,14 @@ at the original event or established local deadline. Process already-due device
 events and source frontiers before lending a nonempty window; awaiting source
 knowledge advances no clock. Conditional permissions are not no-event bounds.
 
+Overlap running native work under a joint no-event bound capped by both owners' proved
+prefixes, device deadlines and committed input knowledge. Reserve the same
+generation for the bound and the source permission; neither may outlive its
+window. Sleeping owners retain real event/deadline wakes. Shared operations still
+require actual source completion. Read input
+commitment before queued events; unbounded execution does not prove future silence.
+Recompute source proofs after input transactions and relevant state changes.
+
 Include IRQ paths, actual masks/priorities/shadows and REP/return state in each
 bound. Derive incoming-to-outgoing delays as well as autonomous effects. Specify
 same-time ordering and atomic instruction crossings. Prove progress through
@@ -259,7 +288,8 @@ Batch bounded queue publication with release/acquire committed prefixes and
 individual transaction timestamps. An earlier-visible write cannot wait for a
 later block's completion. Wake only for requested horizons, data or space; recheck
 predicates after registering waiters. Stop/reset cancels waits without advancing
-time. Short adaptive spins may precede OS waits. Genuine request/reply dependencies
+time. Reuse cancellation registrations for an owner's token lifetime. Short adaptive
+spins may precede OS waits. Genuine request/reply dependencies
 remain serial; overlap independent work rather than repeatedly waking both owners.
 
 Summarize polling only over proved stable intervals, retaining elapsed nominal
@@ -267,6 +297,7 @@ time, timeout, registers/flags, observable reads and IRQ boundaries. FIFO and
 clear-on-read accesses require their actual effects. Audio block size establishes
 neither a communication horizon nor an IRQ-latency guarantee.
 
+Asserted DSP reset immediately disconnects its outputs and pending notification.
 Reset stops the old execution owner before retiring its channel prefix and
 acknowledging the epoch. Retain MCU-owned inputs during asserted reset, then
 publish them at release without discarding newer data. DSP reset recreates its

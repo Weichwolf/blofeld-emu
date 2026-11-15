@@ -33,9 +33,8 @@ public:
   // DSP owner applies only changes at or before its actual instrument time.
   // Repeated reads retain the same sample; reading never consumes future data.
   [[nodiscard]] Sample sample_mcu_data(std::uint64_t ticks) noexcept;
-  // MCU owner: coalesce inputs while reset is asserted, then publish the retained
-  // value at release. DSP owner retires the old prefix before acknowledging reset.
-  void hold_mcu_data() noexcept;
+  // Retain MCU inputs under reset; retire old DSP work before publishing at release.
+  void hold_reset() noexcept;
   [[nodiscard]] bool release_mcu_data(std::uint64_t ticks, const std::stop_token &stop);
   void retire_mcu_data() noexcept;
   [[nodiscard]] Sample dsp_data() const noexcept;
@@ -115,5 +114,6 @@ private:
   std::atomic<std::uint64_t> mcu_admission_{0};
   Reply reply_;
   std::atomic<const char *> error_{nullptr};
+  std::atomic<bool> dsp_held_{false};
 };
 }

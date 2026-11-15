@@ -14,6 +14,7 @@
 #include <cpu12/memory.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <format>
 #include <set>
 #include <span>
@@ -142,7 +143,8 @@ Variant variant(const Object &input,
 
 vi::mcu::Program prepare_mcu_catalogue(const std::string_view document,
                                        const vi::FirmwareUpdate &firmware,
-                                       const std::span<const McuSource> sources) {
+                                       const std::span<const McuSource> sources,
+                                       const std::filesystem::path &cache) {
   auto parsed = llvm::json::parse(document);
   if (!parsed) { throw std::invalid_argument(llvm::toString(parsed.takeError())); }
   const auto &root = object(*parsed);
@@ -170,6 +172,6 @@ vi::mcu::Program prepare_mcu_catalogue(const std::string_view document,
       }
     }
   }
-  return prepare_mcu_program({.variants = variants}, transitions);
+  return prepare_mcu_program({.variants = variants}, transitions, cache);
 }
 }

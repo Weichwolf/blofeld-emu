@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <span>
 #include <string_view>
@@ -24,7 +25,9 @@ struct Import {
 
 class Code {
 public:
-  explicit Code(std::span<const Module> modules, std::span<const Import> imports = {});
+  explicit Code(std::span<const Module> modules,
+                std::span<const Import> imports = {},
+                const std::filesystem::path &cache = {});
   ~Code();
   Code(const Code &) = delete;
   Code &operator=(const Code &) = delete;

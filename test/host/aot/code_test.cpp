@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "aot/code.hpp"
 #include "calls.hpp"
+#include "files/directory.hpp"
+#include "files/read.hpp"
 #include "fixture.hpp"
 #include "io/peer_port.hpp"
 
@@ -17,6 +19,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <filesystem>
 #include <future>
 #include <iostream>
 #include <memory>
@@ -151,6 +154,130 @@ template <unsigned Instance> std::shared_ptr<const Code> imported_code() {
   inputs.imports[0].address = std::bit_cast<const void *>(&native_step<Instance>);
   inputs.imports[1].address = std::bit_cast<const void *>(&native_event<Instance>);
   return std::make_shared<const Code>(inputs.modules(), inputs.imports);
+}
+
+std::vector<std::filesystem::path> cache_files(const std::filesystem::path &root) {
+  std::vector<std::filesystem::path> files;
+  for (const auto &entry : std::filesystem::directory_iterator(root)) {
+    require(entry.path().extension() == ".bc", "A cache exposes only complete artifacts");
+    files.push_back(entry.path());
+  }
+  return files;
+}
+
+template <unsigned Instance> void cached_imports(const std::filesystem::path &root) {
+  ImportInputs inputs;
+  inputs.imports[0].address = std::bit_cast<const void *>(&native_step<Instance>);
+  inputs.imports[1].address = std::bit_cast<const void *>(&native_event<Instance>);
+  const auto begun = native_started[Instance].load();
+  const auto ended = native_finished[Instance].load();
+  {
+    const Code code(inputs.modules(), inputs.imports, root);
+    require(native_started[Instance].load() == begun + 1 &&
+                native_finished[Instance].load() == ended,
+            "Cached code initializes against its current imports before publication");
+    using Step = unsigned (*)(unsigned, unsigned *) noexcept;
+    auto state = 5U;
+    const auto result = std::bit_cast<Step>(code.address("aot_import_step"))(11, &state);
+    require(result == (Instance == 0 ? 14U : 8U) && state == (Instance == 0 ? 7U : 0U),
+            "Each cached instance resolves fresh import addresses and owns fresh mutable state");
+  }
+  require(native_finished[Instance].load() == ended + 1,
+          "Cached code retains actual native destructor registration and teardown");
+}
+
+void cached_globals(const std::filesystem::path &root) {
+  const Inputs input;
+  const auto begun = started.load();
+  const auto ended = finished.load();
+  unsigned cold_passes = 0;
+  for (unsigned instance = 0; instance < 2; ++instance) {
+    const Code code(input.modules(), {}, root);
+    using Getter = unsigned (*)() noexcept;
+    require(std::bit_cast<Getter>(code.address("aot_initializations"))() == 1 &&
+                started.load() == begun + instance + 1 && finished.load() == ended + instance,
+            "Each cached native instance initializes its own original mutable globals once");
+    if (instance == 0) { cold_passes = calls().optimizations; }
+    require(calls().optimizations == cold_passes,
+            "The warm native-global instance reuses validated O3 without another optimizer call");
+  }
+  require(finished.load() == ended + 2, "Each cached native-global instance finalizes once");
+}
+
+void cached_code() {
+  const std::filesystem::path root(BLOFELD_AOT_CACHE_TEST);
+  std::filesystem::remove_all(root);
+  const auto before = calls().optimizations;
+  cached_imports<0>(root);
+  const auto optimized = calls().optimizations;
+  require(optimized > before, "A cold artifact is produced by the actual LLVM optimizer");
+  const auto files = cache_files(root);
+  require(files.size() == 1, "Cold preparation publishes one complete optimized module");
+  constexpr std::size_t limit = std::size_t{1} << 24U;
+  const auto original = blofeld::host::read_file(files.front(), limit);
+  const auto modified = std::filesystem::last_write_time(files.front());
+  cached_imports<1>(root);
+  require(cache_files(root).size() == 1 &&
+              blofeld::host::read_file(files.front(), limit) == original &&
+              std::filesystem::last_write_time(files.front()) == modified &&
+              calls().optimizations == optimized,
+          "A warm instance reuses the same immutable artifact across native import providers");
+  const ImportInputs input;
+  const auto begun = native_started[0].load();
+  for (const unsigned failure : {0U, 1U, 2U}) {
+    auto corrupt = original;
+    if (failure == 2) {
+      corrupt.resize(8);
+    } else {
+      const auto index = failure == 0 ? 0 : corrupt.size() - 1;
+      corrupt[index] ^= 1;
+    }
+    {
+      const blofeld::host::Directory directory(root);
+      directory.replace(files.front().filename().string(), corrupt);
+    }
+    bool refused = false;
+    try {
+      const Code code(input.modules(), input.imports, root);
+    } catch (const std::invalid_argument &) { refused = true; }
+    require(refused && native_started[0].load() == begun,
+            "Wrong identity, payload corruption and truncation fail before native initialization");
+  }
+  {
+    const blofeld::host::Directory directory(root);
+    directory.replace(files.front().filename().string(), original);
+  }
+  auto invalid = input;
+  invalid.imports[0].abi = "wrong";
+  bool refused = false;
+  try {
+    const Code code(invalid.modules(), invalid.imports, root);
+  } catch (const std::invalid_argument &) { refused = true; }
+  require(refused && native_started[0].load() == begun && cache_files(root).size() == 1,
+          "A valid warm cache cannot bypass current input ABI validation");
+  constexpr unsigned changed_result = 42;
+  invalid = input;
+  invalid.bytes = change(input.bytes, [](LLVMModuleRef module) {
+    auto *function = LLVMGetNamedFunction(module, "aot_import_step");
+    auto *returned = LLVMGetBasicBlockTerminator(LLVMGetEntryBasicBlock(function));
+    require(LLVMGetInstructionOpcode(returned) == LLVMRet, "Change an actual native return");
+    LLVMSetOperand(
+        returned,
+        0,
+        LLVMConstInt(LLVMInt32TypeInContext(LLVMGetModuleContext(module)), changed_result, 0));
+  });
+  {
+    const Code code(invalid.modules(), invalid.imports, root);
+    using Step = unsigned (*)(unsigned, unsigned *) noexcept;
+    auto state = 5U;
+    require(std::bit_cast<Step>(code.address("aot_import_step"))(11, &state) == changed_result &&
+                state == 7 && cache_files(root).size() == 2,
+            "Changed source semantics require a new artifact and execute the changed return");
+  }
+  cached_imports<0>(root);
+  require(cache_files(root).size() == 2, "Distinct immutable source artifacts coexist");
+  cached_globals(root / "globals");
+  std::filesystem::remove_all(root);
 }
 
 void native_imports() {
@@ -657,6 +784,7 @@ int main() try {
   native_imports();
   import_process_isolation();
   imported_channel();
+  cached_code();
   const ImportInputs unbound;
   rejected_imports(unbound.modules(), {}, "unresolved native symbol");
   std::cout << "Verified joint native fusion, prelink contracts, actual lifecycle and shared "

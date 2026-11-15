@@ -21,6 +21,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <format>
 #include <future>
 #include <iostream>
 #include <limits>
@@ -329,11 +330,11 @@ void native_peer_xirq() {
   std::jthread dsp([&](const std::stop_token &stop) {
     std::uint64_t ticks = 0;
     while (const auto limit = lifecycle.dsp_limit(ticks, stop)) {
-      if (*limit == std::numeric_limits<std::uint64_t>::max()) {
+      if (limit->until == std::numeric_limits<std::uint64_t>::max()) {
         sleeping.set_value();
         break;
       }
-      ticks = *limit;
+      ticks = limit->until;
     }
   });
   std::promise<blofeld::vi::ExecutionReport> completion;
@@ -432,14 +433,14 @@ void waiting_peer_time(blofeld::vi::FlashImage &image,
     bool posted = false;
     std::uint64_t ticks = 0;
     while (const auto limit = time.dsp_limit(ticks, stop)) {
-      if (!posted && *limit > input.pulse) {
+      if (!posted && limit->until > input.pulse) {
         std::this_thread::sleep_for(input.delay);
         const bool woke = peer.dsp_ready(true) && time.wake_mcu(input.pulse);
         publication.set_value(woke);
         posted = true;
         ticks = input.pulse + 7;
       } else {
-        ticks = *limit;
+        ticks = limit->until;
       }
     }
   });
@@ -470,12 +471,27 @@ void waiting_peer_time(blofeld::vi::FlashImage &image,
   const auto result = done.get();
   // TEN starts at bus10; WAI reuses its frame in6 cycles, before the timer load.
   const auto expected = (((input.pulse + 9) / 10) + 6 - 10) & 0xffU;
+  const bool posted = announced == std::future_status::ready && published.get();
+  const auto message = std::format("WAI peer timing: pulse={} delay={} frontier={} done={} "
+                                   "announced={} woke={} wait={} retired={} "
+                                   "address={} value={} expected={} exception={}",
+                                   input.pulse,
+                                   input.delay.count(),
+                                   frontier,
+                                   completed == std::future_status::ready,
+                                   announced == std::future_status::ready,
+                                   posted,
+                                   time.mcu_wait_time().value_or(0),
+                                   result.instructions,
+                                   result.failure ? result.failure->address : 0,
+                                   result.failure ? result.failure->value : 0,
+                                   expected,
+                                   bool{result.exception});
   require(completed == std::future_status::ready && announced == std::future_status::ready &&
-              published.get() && time.mcu_wait_time() == first_wait && result.instructions == 7 &&
+              posted && time.mcu_wait_time() == first_wait && result.instructions == 7 &&
               !result.exception && result.failure && result.failure->address == marker &&
               result.failure->value == expected,
-          "A real WAI resumes on the earliest peer IRQ with exact timer phase, "
-          "independent of source host delay, bus alignment and local overflow");
+          message.c_str());
 }
 
 void native_waiting_peer_time() {
@@ -695,13 +711,18 @@ void native_polling_progress(const bool pulse) {
     } catch (...) { result.set_exception(std::current_exception()); }
   });
   bool posted = false;
+  std::uint64_t posted_at = 0;
   std::jthread dsp([&](const std::stop_token &stop) {
     std::uint64_t ticks = 0;
     while (const auto limit = time.dsp_limit(ticks, stop)) {
-      ticks = *limit;
-      if (ticks >= peer_time) {
+      if (!posted && limit->until > peer_time) {
+        ticks = peer_time;
         posted = peer.dsp_ready(true) && (!pulse || peer.dsp_ready(false));
-        return;
+        if (!posted) { return; }
+        posted_at = ticks;
+        static_cast<void>(time.wake_mcu(ticks));
+      } else {
+        ticks = limit->until;
       }
     }
   });
@@ -711,8 +732,9 @@ void native_polling_progress(const bool pulse) {
   mcu.join();
   dsp.join();
   const auto report = completed.get();
-  require(ready == std::future_status::ready && posted && report.failure &&
-              report.failure->address == marker && report.failure->value == datum,
+  require(ready == std::future_status::ready && posted && posted_at == peer_time &&
+              !time.mcu_wait_time() && report.failure && report.failure->address == marker &&
+              report.failure->value == datum,
           "A native timer-poll loop publishes device time so its peer can deliver the real XIRQ");
 }
 
@@ -789,7 +811,7 @@ void native_panel_sampling(const bool timed_boundary) {
   std::jthread dsp([&](const std::stop_token &stop) {
     std::uint64_t ticks = 0;
     while (const auto limit = time.dsp_limit(ticks, stop)) {
-      ticks = *limit;
+      ticks = limit->until;
       const auto input = peer.sample_mcu_data(ticks);
       if (input.mask != 0 || input.value != phase_marker) { continue; }
       sampled = true;

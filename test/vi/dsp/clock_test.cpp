@@ -16,6 +16,19 @@ void require(const bool condition, const char *message) {
   if (!condition) { throw std::runtime_error(message); }
 }
 
+void fractional_boundaries() {
+  Clock clock;
+  constexpr std::uint64_t period = 4263;
+  constexpr std::uint64_t ticks = 3125;
+  for (const auto cycles : {std::uint64_t{0}, std::uint64_t{1}, period - 1, period, period + 1}) {
+    require(clock.advance(cycles) && clock.fractional() == (cycles % period != 0) &&
+                clock.ticks() == (cycles * ticks) / period,
+            "Exact 3125/4263 phase distinguishes a future position from the same integer tick");
+  }
+  clock.reset(true);
+  require(!clock.fractional(), "A new source epoch cannot retain an older fractional position");
+}
+
 void reset_and_reserved() {
   Clock clock;
   constexpr dsp56300::Word disabled_reset = 0x04401d;
@@ -125,6 +138,7 @@ void instrument_clock_changes() {
 }
 
 int main() try {
+  fractional_boundaries();
   reset_and_reserved();
   nominal_factors();
   all_dividers();

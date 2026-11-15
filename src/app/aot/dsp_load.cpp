@@ -56,6 +56,10 @@ vi::dsp::Program load_dsp_program(const Profile &profile, const vi::dsp::BootRom
   const auto owned = load_sources(document, profile.dsp_catalogue.parent_path());
   std::vector<DspSource> sources;
   for (const auto &[name, bytes] : owned) { sources.push_back({.name = name, .bytes = bytes}); }
-  return prepare_dsp_catalogue(document, load_firmware(profile.firmware), boot, sources);
+  return prepare_dsp_catalogue(document,
+                               load_firmware(profile.firmware),
+                               boot,
+                               sources,
+                               std::filesystem::path{BLOFELD_AOT_CACHE_DIRECTORY});
 }
 }

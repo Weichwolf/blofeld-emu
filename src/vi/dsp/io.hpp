@@ -25,6 +25,7 @@
 #include "preparation_clock.hpp"
 #include "storage/media_image.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <dsp56300/core.hpp>
@@ -216,6 +217,9 @@ public:
     }
     if (!synchronize_midi()) { throw std::runtime_error(error()); }
     advance_waiting();
+    if (peer_deadline_ && device_cycles() >= *peer_deadline_) {
+      return completed(core_->run_until(core_->progress().estimated_cycles));
+    }
     const auto sources = interrupt_sources();
     if (interrupts_.select(sources, 0)) {
       const auto state = core_->registers();
@@ -451,6 +455,68 @@ private:
     return true;
   }
 
+  [[nodiscard]] ExecutionTime::DspBoundary source_boundary() const noexcept {
+    if (clock_.fractional()) { return ExecutionTime::DspBoundary::fractional; }
+    if (!waiting_ || !midi_.known()) { return ExecutionTime::DspBoundary::exact; }
+    const auto next = local_deadline();
+    if ((next && *next <= device_cycles()) ||
+        interrupts_.select(interrupt_sources(), core_->registers().sr)) {
+      return ExecutionTime::DspBoundary::exact;
+    }
+    return ExecutionTime::DspBoundary::quiescent;
+  }
+
+  [[nodiscard]] std::optional<ExecutionTime::DspGrant> source_limit() {
+    if (waiting_ && !synchronize_midi()) { throw std::runtime_error(error()); }
+    for (;;) {
+      const auto limit = time_->dsp_limit(origin_ + clock_.ticks(),
+                                          stop_,
+                                          source_boundary(),
+                                          {.owner = this, .query = [](void *owner) {
+                                             return static_cast<Io *>(owner)->source_forecast();
+                                           }});
+      if (!limit || limit->kind != ExecutionTime::DspGrant::Kind::current || !waiting_) {
+        return limit;
+      }
+      if (!midi_.await_current(stop_)) { return {}; }
+      if (!synchronize_midi()) { throw std::runtime_error(error()); }
+      if (source_boundary() != ExecutionTime::DspBoundary::quiescent) { return limit; }
+    }
+  }
+
+  [[nodiscard]] std::uint64_t source_forecast() {
+    const auto now = origin_ + clock_.ticks();
+    const auto input = midi_.horizon();
+    if (input <= now) { return 0; }
+    if (!synchronize_midi()) { throw std::runtime_error(error()); }
+    const auto sources = interrupt_sources();
+    if (interrupts_.select(sources, 0) && interrupts_.select(sources, core_->registers().sr)) {
+      return 0;
+    }
+    constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+    auto next = local_deadline();
+    if (!waiting_) {
+      const auto prefix = core_->foreground_prefix();
+      if (prefix == 0) { return 0; }
+      if (prefix != maximum) {
+        if (prefix > maximum - device_cycles()) { return 0; }
+        const auto boundary = device_cycles() + prefix;
+        if (!next || boundary < *next) { next = boundary; }
+      }
+    }
+    auto until = input;
+    if (next) {
+      if (*next <= device_cycles()) { return 0; }
+      auto projected = clock_;
+      if (!projected.advance(*next)) { return 0; }
+      const auto event = event_time(projected);
+      if (!event) { return 0; }
+      until = std::min(until, *event);
+    }
+    if (const auto bit = midi_.deadline()) { until = std::min(until, *bit); }
+    return until > now ? until : 0;
+  }
+
   bool synchronize_peer() {
     if (!clock_.advance(device_cycles())) {
       throw std::overflow_error("DSP instrument time is not representable or monotonic");
@@ -463,9 +529,16 @@ private:
       PeerPort::Sample sample;
       blofeld_dsp_peer_sample(peer_, origin_ + clock_.ticks(), sample);
     }
-    const auto limit = time_->dsp_limit(origin_ + clock_.ticks(), stop_);
+    const auto limit = source_limit();
     if (!limit) { return false; }
-    peer_deadline_ = clock_.deadline(*limit - origin_);
+    if (limit->kind == ExecutionTime::DspGrant::Kind::current) {
+      if (device_cycles() == std::numeric_limits<std::uint64_t>::max()) {
+        throw std::overflow_error("DSP current instruction has no representable completion");
+      }
+      peer_deadline_ = device_cycles() + 1;
+    } else {
+      peer_deadline_ = clock_.deadline(limit->until - origin_);
+    }
     if (!peer_deadline_) { throw std::overflow_error("DSP peer deadline is not representable"); }
     return true;
   }
@@ -479,11 +552,16 @@ private:
     return core_->progress().estimated_cycles + idle_;
   }
 
-  [[nodiscard]] std::optional<std::uint64_t> deadline() const noexcept {
+  [[nodiscard]] std::optional<std::uint64_t> local_deadline() const noexcept {
     auto result = timers_.deadline();
     for (const auto next : {media_deadline_, audio_.deadline(), midi_deadline_}) {
       if (next && (!result || *next < *result)) { result = next; }
     }
+    return result;
+  }
+
+  [[nodiscard]] std::optional<std::uint64_t> deadline() const noexcept {
+    auto result = local_deadline();
     if (peer_deadline_ && (!result || *peer_deadline_ < *result)) { result = peer_deadline_; }
     return result;
   }
@@ -623,12 +701,10 @@ private:
   bool write_port(const Ports::Write access, const dsp56300::Word pc) noexcept {
     const bool peer_write = peer_ != nullptr && access.space == dsp56300::Space::x &&
                             access.address == peer_data_address;
-    if (peer_write && (!clock_.advance(device_cycles()) ||
-                       clock_.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_)) {
-      return false;
-    }
+    const auto timestamp = peer_write ? outgoing_time() : std::nullopt;
+    if (peer_write && !timestamp) { return false; }
     if (!ports_.write(access) || !update_ports()) { return false; }
-    if (peer_write && !blofeld_dsp_peer_write(peer_, origin_ + clock_.ticks())) { return false; }
+    if (timestamp && !blofeld_dsp_peer_write(peer_, *timestamp)) { return false; }
     if (controller_.pending() && controller_.epoch() != media_epoch_) {
       if (!synchronize_timers(true) || !schedule_media()) { return false; }
       completion_failure_ = {.operation = Access::write,
@@ -668,13 +744,25 @@ private:
     const bool active = (request.mask & ready) != 0 && (request.value & ready) == 0;
     if (!blofeld_dsp_peer_ready(peer_, active)) { return false; }
     if (active && time_ != nullptr) {
-      if (!clock_.advance(device_cycles()) ||
-          clock_.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_) {
-        return false;
-      }
-      if (blofeld_dsp_time_wake(time_, origin_ + clock_.ticks())) { core_->request_yield(); }
+      const auto timestamp = outgoing_time();
+      if (!timestamp) { return false; }
+      if (blofeld_dsp_time_wake(time_, *timestamp)) { core_->request_yield(); }
     }
     return true;
+  }
+
+  [[nodiscard]] std::optional<std::uint64_t> outgoing_time() noexcept {
+    if (!clock_.advance(device_cycles())) { return {}; }
+    return event_time(clock_);
+  }
+
+  [[nodiscard]] std::optional<std::uint64_t> event_time(const Clock &clock) const noexcept {
+    const auto fraction = unsigned{clock.fractional()};
+    constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+    if (clock.ticks() > maximum - origin_ || fraction > maximum - origin_ - clock.ticks()) {
+      return {};
+    }
+    return origin_ + clock.ticks() + fraction;
   }
 
   bool update_ports() noexcept {

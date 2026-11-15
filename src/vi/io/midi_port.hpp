@@ -44,6 +44,7 @@ public:
   [[nodiscard]] bool await_output(const std::stop_token &stop) noexcept;
 
   [[nodiscard]] std::optional<std::uint64_t> input_limit() const noexcept;
+  [[nodiscard]] std::uint64_t input_knowledge() const noexcept;
 
   [[nodiscard]] std::uint64_t time() const noexcept {
     return time_.load(std::memory_order_acquire);

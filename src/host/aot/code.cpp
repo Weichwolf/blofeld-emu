@@ -17,6 +17,7 @@
 #include <bit>
 #include <cstdint>
 #include <exception>
+#include <filesystem>
 #include <functional>
 #include <iostream>
 #include <map>
@@ -114,7 +115,9 @@ public:
   Phase phase = Phase::assembling;
 };
 
-Code::Code(const std::span<const Module> modules, const std::span<const Import> imports)
+Code::Code(const std::span<const Module> modules,
+           const std::span<const Import> imports,
+           const std::filesystem::path &cache)
     : impl_(std::make_unique<Impl>()) {
   const auto bindings = detail::imports(imports);
   detail::initialize();
@@ -141,7 +144,7 @@ Code::Code(const std::span<const Module> modules, const std::span<const Import> 
   detail::validate_imports(module.get(), bindings);
   detail::validate_symbols(module.get(), bindings);
   Owner<LLVMTargetMachineRef, LLVMDisposeTargetMachine> machine(detail::target(module.get()));
-  detail::optimize(module.get(), machine.get(), exports);
+  detail::optimize(module, machine.get(), exports, bindings, cache);
   Owner<LLVMOrcLLJITBuilderRef, LLVMOrcDisposeLLJITBuilder> builder(LLVMOrcCreateLLJITBuilder());
   platform(builder.get(), impl_->bytes);
   LLVMOrcLLJITBuilderSetJITTargetMachineBuilder(

@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <stop_token>
 
 namespace blofeld::vi::dsp {
 // Functional 8N1 input for the firmware's Timer0 receiver. No voltage model or
@@ -17,6 +18,10 @@ public:
   [[nodiscard]] bool advance(std::uint64_t now) noexcept;
 
   [[nodiscard]] bool connected() const noexcept { return port_ != nullptr; }
+
+  [[nodiscard]] bool known() const noexcept;
+  [[nodiscard]] std::uint64_t horizon() const noexcept;
+  [[nodiscard]] bool await_current(const std::stop_token &stop) const noexcept;
 
   [[nodiscard]] bool level() const noexcept { return level_; }
 

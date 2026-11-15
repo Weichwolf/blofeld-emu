@@ -4,7 +4,9 @@
 #include "io/midi_port.hpp"
 
 #include <cstdint>
+#include <limits>
 #include <optional>
+#include <stop_token>
 
 namespace blofeld::vi::dsp {
 namespace {
@@ -12,6 +14,20 @@ constexpr unsigned data_bits = 8, character_bits = data_bits + 2;
 constexpr auto bit_ticks = MidiPort::byte_ticks / character_bits;
 static_assert(bit_ticks * character_bits == MidiPort::byte_ticks);
 constexpr auto receiver = MidiPort::Receiver::dsp;
+}
+
+std::uint64_t MidiInput::horizon() const noexcept {
+  return port_ == nullptr ? std::numeric_limits<std::uint64_t>::max() : port_->input_knowledge();
+}
+
+bool MidiInput::known() const noexcept {
+  if (port_ == nullptr) { return true; }
+  const auto limit = port_->input_limit();
+  return !limit || time_ < *limit;
+}
+
+bool MidiInput::await_current(const std::stop_token &stop) const noexcept {
+  return port_ == nullptr || port_->await_input(time_, stop);
 }
 
 void MidiInput::sample() noexcept {

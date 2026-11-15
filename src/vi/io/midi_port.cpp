@@ -154,6 +154,11 @@ bool MidiPort::admit(const std::span<const std::uint8_t> bytes,
   return true;
 }
 
+std::uint64_t MidiPort::input_knowledge() const noexcept {
+  if (phase_.load(std::memory_order_seq_cst) == Phase::ended) { return maximum; }
+  return input_mode_ == InputMode::stream ? input_until_.load(std::memory_order_seq_cst) : 0;
+}
+
 std::optional<std::uint64_t> MidiPort::input_limit() const noexcept {
   if (input_mode_ == InputMode::live || phase_.load(std::memory_order_seq_cst) == Phase::ended) {
     return {};

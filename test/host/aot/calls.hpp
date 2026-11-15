@@ -3,7 +3,7 @@
 
 namespace blofeld::test::aot {
 struct Calls {
-  unsigned machines = 0, engines = 0, objects = 0, helpers = 0, modules = 0;
+  unsigned machines = 0, engines = 0, objects = 0, helpers = 0, modules = 0, optimizations = 0;
   bool operator==(const Calls &) const = default;
 };
 

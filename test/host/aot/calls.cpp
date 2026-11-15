@@ -7,6 +7,7 @@
 #include "llvm-c/Object.h"
 #include "llvm-c/Orc.h"
 #include "llvm-c/TargetMachine.h"
+#include "llvm-c/Transforms/PassBuilder.h"
 #include "llvm-c/Types.h"
 
 #include <atomic>
@@ -19,7 +20,7 @@
 #include <vector>
 
 namespace {
-std::atomic<unsigned> machines{0}, engines{0}, objects{0}, helpers{0}, modules{0};
+std::atomic<unsigned> machines{0}, engines{0}, objects{0}, helpers{0}, modules{0}, optimizations{0};
 
 struct Probe {
   LLVMOrcObjectTransformLayerTransformFunction transform;
@@ -74,6 +75,14 @@ LLVMErrorRef observe(void *owner, LLVMMemoryBufferRef *buffer) noexcept {
 }
 }
 
+extern "C" LLVMErrorRef LLVMRunPasses(LLVMModuleRef M,
+                                      const char *Passes,
+                                      LLVMTargetMachineRef TM,
+                                      LLVMPassBuilderOptionsRef Options) {
+  ++optimizations;
+  return original<decltype(&LLVMRunPasses)>("LLVMRunPasses")(M, Passes, TM, Options);
+}
+
 extern "C" LLVMTargetMachineRef LLVMCreateTargetMachine(LLVMTargetRef target,
                                                         const char *triple,
                                                         const char *cpu,
@@ -116,6 +125,7 @@ Calls calls() noexcept {
           .engines = engines.load(),
           .objects = objects.load(),
           .helpers = helpers.load(),
-          .modules = modules.load()};
+          .modules = modules.load(),
+          .optimizations = optimizations.load()};
 }
 }

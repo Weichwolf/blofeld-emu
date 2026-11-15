@@ -8,6 +8,7 @@
 #include <exception>
 #include <future>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <stop_token>
@@ -18,6 +19,162 @@ using blofeld::vi::ExecutionTime;
 
 void require(const bool condition, const char *message) {
   if (!condition) { throw std::runtime_error(message); }
+}
+
+void cancellation_tokens(const bool source) {
+  ExecutionTime time;
+  std::stop_source first;
+  for (std::uint64_t step = 1; step <= 2; ++step) {
+    std::promise<bool> completion;
+    auto result = completion.get_future();
+    std::jthread owner([&] {
+      completion.set_value(source ? time.dsp_limit(step - 1, first.get_token()).has_value()
+                                  : time.wait_for_dsp(step, first.get_token()));
+    });
+    const auto blocked = result.wait_for(std::chrono::milliseconds(10));
+    std::optional<ExecutionTime::DspGrant> supplied;
+    std::optional<std::jthread> publisher;
+    if (source) {
+      static_cast<void>(time.publish_mcu(step));
+    } else {
+      publisher.emplace([&] { supplied = time.dsp_limit(step, {}); });
+    }
+    const auto ready = result.wait_for(std::chrono::seconds(2));
+    const bool published = time.publish_mcu(source ? step : step + 1);
+    if (ready != std::future_status::ready) {
+      static_cast<void>(first.request_stop());
+      time.hold_dsp();
+    }
+    owner.join();
+    if (publisher) { publisher->join(); }
+    require(blocked == std::future_status::timeout && ready == std::future_status::ready &&
+                result.get() && published &&
+                (source || supplied == ExecutionTime::DspGrant{.until = step + 1}),
+            "One cancellation token permits consecutive real progress waits");
+  }
+  std::stop_source next;
+  std::promise<bool> completion;
+  auto result = completion.get_future();
+  std::jthread owner([&] {
+    completion.set_value(source ? time.dsp_limit(2, next.get_token()).has_value()
+                                : time.wait_for_dsp(3, next.get_token()));
+  });
+  const auto blocked = result.wait_for(std::chrono::milliseconds(10));
+  static_cast<void>(first.request_stop());
+  const auto old_cancelled = result.wait_for(std::chrono::milliseconds(10));
+  static_cast<void>(next.request_stop());
+  const auto cancelled = result.wait_for(std::chrono::seconds(2));
+  if (cancelled != std::future_status::ready) { time.hold_dsp(); }
+  owner.join();
+  const bool advanced = result.get();
+  const bool published = time.publish_mcu(3);
+  require(blocked == std::future_status::timeout && old_cancelled == std::future_status::timeout &&
+              cancelled == std::future_status::ready && !advanced && published &&
+              time.dsp_limit(2, {}) == ExecutionTime::DspGrant{.until = 3},
+          "A replacement owner token cancels without old-token cancellation or invented time");
+}
+
+void cancellation_lifetime() {
+  std::stop_source stop;
+  {
+    ExecutionTime time;
+    std::promise<bool> completion;
+    auto result = completion.get_future();
+    std::jthread owner([&] { completion.set_value(time.wait_for_dsp(1, stop.get_token())); });
+    const auto blocked = result.wait_for(std::chrono::milliseconds(10));
+    std::jthread source([&] { static_cast<void>(time.dsp_limit(1, {})); });
+    const auto ready = result.wait_for(std::chrono::seconds(2));
+    if (ready != std::future_status::ready) { time.hold_dsp(); }
+    static_cast<void>(time.publish_mcu(2));
+    owner.join();
+    source.join();
+    require(blocked == std::future_status::timeout && ready == std::future_status::ready &&
+                result.get(),
+            "Complete a genuinely blocked wait before destroying the coordinator");
+  }
+  require(stop.request_stop(), "Destroying the coordinator detaches its cancellation callback");
+}
+
+void forecast_overlap(const std::uint64_t source_bound) {
+  ExecutionTime time;
+  constexpr std::uint64_t receiver_bound = 200;
+
+  struct Bound {
+    std::uint64_t until;
+    unsigned queries = 0;
+  } bound{.until = source_bound};
+
+  const ExecutionTime::DspForecast forecast{.owner = &bound, .query = [](void *owner) {
+                                              auto &value = *static_cast<Bound *>(owner);
+                                              ++value.queries;
+                                              return value.until;
+                                            }};
+  std::promise<std::optional<std::uint64_t>> completion;
+  auto receiver = completion.get_future();
+  std::jthread mcu([&](const std::stop_token &stop) {
+    completion.set_value(time.idle_mcu(0, receiver_bound, stop, ExecutionTime::McuWork::running));
+  });
+  std::optional<ExecutionTime::DspGrant> grant;
+  std::jthread dsp([&](const std::stop_token &stop) {
+    grant = time.dsp_limit(0, stop, ExecutionTime::DspBoundary::exact, forecast);
+  });
+  dsp.join();
+  const auto ready = receiver.wait_for(std::chrono::seconds(2));
+  mcu.request_stop();
+  mcu.join();
+  const auto until = source_bound < receiver_bound ? source_bound : receiver_bound;
+  require(ready == std::future_status::ready && receiver.get() == until && grant &&
+              grant->until == until && bound.queries == 1,
+          "Both owners receive the joint no-event bound before source work completes");
+
+  std::promise<bool> transaction;
+  auto admitted = transaction.get_future();
+  std::jthread writer(
+      [&](const std::stop_token &stop) { transaction.set_value(time.enter_mcu(until, stop)); });
+  require(time.dsp_limit(0, {}) == ExecutionTime::DspGrant{.until = until},
+          "The paused source still reports its original actual clock");
+  const auto premature = admitted.wait_for(std::chrono::milliseconds(10));
+  std::jthread source([&](const std::stop_token &stop) {
+    static_cast<void>(time.dsp_limit(until, stop, ExecutionTime::DspBoundary::exact, forecast));
+  });
+  const auto settled = admitted.wait_for(std::chrono::seconds(2));
+  writer.request_stop();
+  writer.join();
+  time.leave_mcu();
+  source.request_stop();
+  source.join();
+  require(premature == std::future_status::timeout && settled == std::future_status::ready &&
+              admitted.get() && bound.queries == 1,
+          "A no-event bound cannot replace actual source completion at a shared operation");
+}
+
+void cancelled_forecast() {
+  ExecutionTime time;
+  std::stop_source cancelled;
+  std::promise<std::optional<std::uint64_t>> completion;
+  auto receiver = completion.get_future();
+  constexpr std::uint64_t receiver_until = 200;
+  std::jthread mcu([&](const std::stop_token &stop) {
+    completion.set_value(time.idle_mcu(0, receiver_until, stop, ExecutionTime::McuWork::running));
+  });
+  std::optional<ExecutionTime::DspGrant> grant;
+  std::jthread dsp([&] {
+    grant =
+        time.dsp_limit(0,
+                       cancelled.get_token(),
+                       ExecutionTime::DspBoundary::exact,
+                       {.owner = &cancelled, .query = [](void *owner) {
+                          static_cast<void>(static_cast<std::stop_source *>(owner)->request_stop());
+                          constexpr std::uint64_t until = 80;
+                          return until;
+                        }});
+  });
+  dsp.join();
+  const auto advanced = receiver.wait_for(std::chrono::milliseconds(10));
+  mcu.request_stop();
+  mcu.join();
+  require(!grant && advanced == std::future_status::timeout && !receiver.get(),
+          "A cancelled source query cannot grant either owner future execution");
 }
 
 void first_wait() {
@@ -52,8 +209,8 @@ void ordered_transactions() {
         ordered = false;
         break;
       }
-      ordered = ordered && *limit == (expected + 1) * spacing && data == expected;
-      now = *limit;
+      ordered = ordered && limit->until == (expected + 1) * spacing && data == expected;
+      now = limit->until;
     }
     done.store(true);
     done.notify_one();
@@ -76,6 +233,8 @@ void reset_and_cancellation() {
   time.hold_dsp();
   constexpr std::uint64_t reset_time = 120;
   require(time.enter_mcu(reset_time, {}), "A held DSP cannot block MCU reset setup");
+  require(!time.settle_dsp(reset_time, {}),
+          "Settlement cannot overlap an active shared transaction even during reset");
   time.leave_mcu();
   require(!time.dsp_limit(0, {}), "A reset interrupts a DSP grant wait");
   time.release_dsp(reset_time);
@@ -111,8 +270,8 @@ void publication_wakeups() {
         ordered = false;
         return;
       }
-      ordered = ordered && *next == expected * spacing;
-      now = *next;
+      ordered = ordered && next->until == expected * spacing;
+      now = next->until;
       acknowledged.store(expected, std::memory_order_release);
       acknowledged.notify_one();
     }
@@ -138,7 +297,7 @@ void repeated_timestamp_transactions() {
   constexpr std::uint64_t count = 1024;
   bool completed = false;
   std::jthread dsp([&](const std::stop_token &stop) {
-    completed = time.dsp_limit(timestamp, stop) == timestamp + 1;
+    completed = time.dsp_limit(timestamp, stop) == ExecutionTime::DspGrant{.until = timestamp + 1};
   });
   for (std::uint64_t index = 0; index < count; ++index) {
     require(time.enter_mcu(timestamp, {}), "Each same-time transaction receives its own grant");
@@ -161,7 +320,7 @@ void cancelled_transactions() {
   bool accepted = true;
   std::jthread mcu(
       [&](const std::stop_token &stop) { accepted = time.enter_mcu(timestamp, stop); });
-  require(time.dsp_limit(0, {}) == timestamp,
+  require(time.dsp_limit(0, {}) == ExecutionTime::DspGrant{.until = timestamp},
           "The DSP sees publication while the MCU awaits actual boundary admission");
   mcu.request_stop();
   mcu.join();
@@ -186,7 +345,8 @@ void unmask_after_earlier_dsp_work() {
   blofeld::vi::PeerPort peer;
   constexpr std::uint64_t earlier = 50;
   constexpr std::uint64_t unmask = 100;
-  require(time.publish_mcu(earlier) && time.dsp_limit(0, {}) == earlier,
+  require(time.publish_mcu(earlier) &&
+              time.dsp_limit(0, {}) == ExecutionTime::DspGrant{.until = earlier},
           "The DSP owns an earlier interval while the MCU remains masked");
   std::promise<void> published;
   auto announced = published.get_future();
@@ -202,7 +362,8 @@ void unmask_after_earlier_dsp_work() {
           "A grant is not completed DSP work and cannot publish a future unmask");
   // A pulse at ticks25..30 belongs to the DSP grant, before the unmask at100.
   require(peer.dsp_ready(true) && peer.dsp_ready(false), "Execute the earlier masked pulse");
-  require(time.dsp_limit(earlier, {}) == unmask && time.dsp_limit(unmask, {}) == unmask + 1,
+  require(time.dsp_limit(earlier, {}) == ExecutionTime::DspGrant{.until = unmask} &&
+              time.dsp_limit(unmask, {}) == ExecutionTime::DspGrant{.until = unmask + 1},
           "Completed DSP progress releases the unmask without a fabricated clock advance");
   require(mcu.get() && peer.mcu_interrupt_ready() && !peer.mcu_interrupt(),
           "The new MCU window cannot retain a pulse from an earlier masked interval");
@@ -214,7 +375,8 @@ void cancelled_dsp_prefix() {
   bool accepted = true;
   std::jthread mcu(
       [&](const std::stop_token &stop) { accepted = time.wait_for_dsp(timestamp, stop); });
-  require(time.dsp_limit(0, {}) == timestamp, "The waiting MCU publishes actual completed work");
+  require(time.dsp_limit(0, {}) == ExecutionTime::DspGrant{.until = timestamp},
+          "The waiting MCU publishes actual completed work");
   mcu.request_stop();
   mcu.join();
   require(!accepted, "Shutdown cancels an uncompleted DSP prefix");
@@ -234,7 +396,7 @@ void conditional_idle_wake() {
   constexpr std::uint64_t wake = 500;
   constexpr std::uint64_t deadline = 1000;
   ExecutionTime time;
-  require(time.publish_mcu(now) && time.dsp_limit(0, {}) == now,
+  require(time.publish_mcu(now) && time.dsp_limit(0, {}) == ExecutionTime::DspGrant{.until = now},
           "Only actual MCU work establishes the initial completed frontier");
   std::promise<std::optional<std::uint64_t>> completion;
   auto result = completion.get_future();
@@ -244,7 +406,7 @@ void conditional_idle_wake() {
                                                         : std::nullopt);
     } catch (...) { completion.set_exception(std::current_exception()); }
   });
-  require(time.dsp_limit(now, {}) == deadline &&
+  require(time.dsp_limit(now, {}) == ExecutionTime::DspGrant{.until = deadline} &&
               result.wait_for(std::chrono::milliseconds(10)) == std::future_status::timeout,
           "An idle execution grant is neither completed DSP work nor elapsed MCU time");
   require(time.wake_mcu(wake) && !time.wake_mcu(wake + 1),
@@ -252,13 +414,13 @@ void conditional_idle_wake() {
   require(result.get() == wake, "The waiting MCU resumes at the real source timestamp");
   mcu.join();
   require(time.publish_mcu(now), "Lending time never advances the completed MCU frontier");
-  std::promise<std::optional<std::uint64_t>> source;
+  std::promise<std::optional<ExecutionTime::DspGrant>> source;
   auto next = source.get_future();
   std::jthread dsp(
       [&](const std::stop_token &stop) { source.set_value(time.dsp_limit(wake, stop)); });
   require(next.wait_for(std::chrono::milliseconds(10)) == std::future_status::timeout,
           "After a wake the source cannot reuse its old long execution window");
-  require(time.publish_mcu(wake + 1) && next.get() == wake + 1,
+  require(time.publish_mcu(wake + 1) && next.get() == ExecutionTime::DspGrant{.until = wake + 1},
           "Only new actual MCU progress releases the source again");
   dsp.join();
 }
@@ -267,7 +429,7 @@ void conditional_idle_expiry() {
   constexpr std::uint64_t now = 100;
   constexpr std::uint64_t deadline = 1000;
   ExecutionTime time;
-  require(time.publish_mcu(now) && time.dsp_limit(0, {}) == now,
+  require(time.publish_mcu(now) && time.dsp_limit(0, {}) == ExecutionTime::DspGrant{.until = now},
           "Establish the original completed prefix");
   std::promise<std::optional<std::uint64_t>> completion;
   auto result = completion.get_future();
@@ -277,9 +439,11 @@ void conditional_idle_expiry() {
     completion.set_value(resumed);
     if (resumed) { static_cast<void>(time.publish_mcu(deadline + 1)); }
   });
-  require(time.dsp_limit(now, {}) == deadline && !time.wake_mcu(deadline),
+  require(time.dsp_limit(now, {}) == ExecutionTime::DspGrant{.until = deadline} &&
+              !time.wake_mcu(deadline),
           "The local deadline is outside the exclusive earlier-event window");
-  require(time.dsp_limit(deadline, {}) == deadline + 1 && result.get() == deadline,
+  require(time.dsp_limit(deadline, {}) == ExecutionTime::DspGrant{.until = deadline + 1} &&
+              result.get() == deadline,
           "An event-free completed source prefix releases the real local device deadline");
   mcu.join();
 }
@@ -290,7 +454,8 @@ void conditional_idle_cancellation() {
   std::optional<std::uint64_t> resumed = deadline;
   std::jthread mcu(
       [&](const std::stop_token &stop) { resumed = time.idle_mcu(0, deadline, stop); });
-  require(time.dsp_limit(0, {}) == deadline, "The source observes the outstanding idle window");
+  require(time.dsp_limit(0, {}) == ExecutionTime::DspGrant{.until = deadline},
+          "The source observes the outstanding idle window");
   mcu.request_stop();
   mcu.join();
   require(!resumed && !time.wake_mcu(1) && time.publish_mcu(0),
@@ -323,21 +488,121 @@ void repeated_idle_generations() {
   });
   std::uint64_t ticks = 0;
   for (std::uint64_t index = 1; index <= count; ++index) {
-    require(time.dsp_limit(ticks, {}) == ticks + spacing,
+    require(time.dsp_limit(ticks, {}) == ExecutionTime::DspGrant{.until = ticks + spacing},
             "Every fresh generation lends only its own conditional horizon");
     ticks += index % 2 == 0 ? spacing : wake_offset;
     if (index % 2 != 0) {
       require(time.wake_mcu(ticks), "Only the current generation accepts its real source event");
     }
   }
-  require(time.dsp_limit(ticks, {}) == ticks + 1,
+  require(time.dsp_limit(ticks, {}) == ExecutionTime::DspGrant{.until = ticks + 1},
           "The last wake cannot leak a retired lease into subsequent source execution");
   mcu.join();
   require(ordered, "Wait registration and repeated generations preserve every exact wake");
 }
+
+void current_tick_settlement() {
+  constexpr std::uint64_t now = 100;
+  constexpr std::uint64_t later = 120;
+  ExecutionTime time;
+  std::promise<bool> completed;
+  auto settled = completed.get_future();
+  std::jthread mcu(
+      [&](const std::stop_token &stop) { completed.set_value(time.settle_dsp(now, stop)); });
+  require(time.dsp_limit(0, {}) == ExecutionTime::DspGrant{.until = now} &&
+              time.dsp_limit(now, {}) ==
+                  ExecutionTime::DspGrant{.until = now + 1,
+                                          .kind = ExecutionTime::DspGrant::Kind::current} &&
+              settled.wait_for(std::chrono::milliseconds(10)) == std::future_status::timeout,
+          "A current-instruction permission is not completed source work");
+  std::promise<std::optional<ExecutionTime::DspGrant>> advanced;
+  auto resumed = advanced.get_future();
+  std::jthread dsp(
+      [&](const std::stop_token &stop) { advanced.set_value(time.dsp_limit(now + 1, stop)); });
+  const auto finished = settled.wait_for(std::chrono::seconds(1));
+  const bool unchanged = time.publish_mcu(now);
+  const bool parked =
+      resumed.wait_for(std::chrono::milliseconds(10)) == std::future_status::timeout;
+  const bool published = time.publish_mcu(later);
+  const auto source_done = resumed.wait_for(std::chrono::seconds(1));
+  mcu.request_stop();
+  dsp.request_stop();
+  mcu.join();
+  dsp.join();
+  require(
+      finished == std::future_status::ready && settled.get() && unchanged && parked && published &&
+          source_done == std::future_status::ready &&
+          resumed.get() == ExecutionTime::DspGrant{.until = later},
+      "Strict source settlement leaves MCU time unchanged and cannot be reused as a future grant");
+  require(!time.settle_dsp(now, {}) &&
+              !time.settle_dsp(std::numeric_limits<std::uint64_t>::max(), {}),
+          "Settlement refuses backwards time and an unrepresentable exclusive endpoint");
+}
+
+void source_knowledge(const ExecutionTime::DspBoundary boundary) {
+  constexpr std::uint64_t now = 100;
+  ExecutionTime time;
+  std::promise<std::optional<ExecutionTime::DspGrant>> completion;
+  auto resumed = completion.get_future();
+  std::jthread source([&](const std::stop_token &stop) {
+    completion.set_value(time.dsp_limit(now, stop, boundary));
+  });
+  const bool settled = time.settle_dsp(now, {});
+  const auto parked = resumed.wait_for(std::chrono::milliseconds(10));
+  const bool actual = time.publish_mcu(now);
+  const bool next = time.publish_mcu(now + 1);
+  const auto continued = resumed.wait_for(std::chrono::seconds(1));
+  source.request_stop();
+  source.join();
+  require(settled && actual && parked == std::future_status::timeout && next &&
+              continued == std::future_status::ready &&
+              resumed.get() == ExecutionTime::DspGrant{.until = now + 1},
+          "Source knowledge settles this instant without permission for a later opcode");
+}
+
+void cancelled_settlement() {
+  constexpr std::uint64_t now = 100;
+  ExecutionTime time;
+  bool accepted = true;
+  std::jthread mcu([&](const std::stop_token &stop) { accepted = time.settle_dsp(now, stop); });
+  require(time.dsp_limit(0, {}) == ExecutionTime::DspGrant{.until = now} &&
+              time.dsp_limit(now, {}) ==
+                  ExecutionTime::DspGrant{.until = now + 1,
+                                          .kind = ExecutionTime::DspGrant::Kind::current},
+          "The source observes a current-tick permission before cancellation");
+  mcu.request_stop();
+  mcu.join();
+  std::promise<std::optional<ExecutionTime::DspGrant>> completion;
+  auto resumed = completion.get_future();
+  std::jthread dsp(
+      [&](const std::stop_token &stop) { completion.set_value(time.dsp_limit(now, stop)); });
+  const auto waiting = resumed.wait_for(std::chrono::milliseconds(10));
+  dsp.request_stop();
+  dsp.join();
+  require(!accepted && time.publish_mcu(now) && waiting == std::future_status::timeout &&
+              !resumed.get(),
+          "Cancellation revokes settlement permission without fabricating source completion or a "
+          "transaction");
+  time.hold_dsp();
+  require(time.settle_dsp(now, {}),
+          "A held execution owner needs no permission to run another instruction");
+}
+
 }
 
 int main() try {
+  cancellation_tokens(false);
+  cancellation_tokens(true);
+  cancellation_lifetime();
+  constexpr std::uint64_t source_first = 80;
+  constexpr std::uint64_t receiver_first = 400;
+  forecast_overlap(source_first);
+  forecast_overlap(receiver_first);
+  cancelled_forecast();
+  current_tick_settlement();
+  source_knowledge(ExecutionTime::DspBoundary::fractional);
+  source_knowledge(ExecutionTime::DspBoundary::quiescent);
+  cancelled_settlement();
   first_wait();
   ordered_transactions();
   reset_and_cancellation();

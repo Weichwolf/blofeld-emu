@@ -28,6 +28,12 @@ public:
   [[nodiscard]] bool acknowledge(std::uint64_t epoch) noexcept;
   [[nodiscard]] std::optional<State> wait_release(const std::stop_token &stop);
 
+  [[nodiscard]] bool quiescent() {
+    const std::lock_guard lock(mutex_);
+    const auto current = state();
+    return current.held && acknowledged_ == current.epoch;
+  }
+
 private:
   std::atomic<std::uint64_t> state_{0};
   std::mutex mutex_;

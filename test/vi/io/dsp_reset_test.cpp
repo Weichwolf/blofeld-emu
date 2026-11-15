@@ -16,18 +16,21 @@ void require(const bool condition, const char *message) {
 
 void epochs() {
   blofeld::vi::DspReset reset;
-  require(reset.state().epoch == 0 && !reset.state().held && !reset.pending(0),
+  require(reset.state().epoch == 0 && !reset.state().held && !reset.pending(0) &&
+              !reset.quiescent(),
           "Cold reset starts released at epoch zero");
   require(reset.assert_reset() && reset.assert_reset(), "Assertion is idempotent while held");
-  require(reset.state().epoch == 1 && reset.state().held && reset.pending(0),
+  require(reset.state().epoch == 1 && reset.state().held && reset.pending(0) && !reset.quiescent(),
           "A held assertion advances the epoch exactly once");
-  require(!reset.acknowledge(2) && reset.acknowledge(1), "Only requested epochs can be applied");
-  require(reset.release({}) && !reset.state().held && reset.state().epoch == 1,
+  require(!reset.acknowledge(2) && reset.acknowledge(1) && reset.quiescent(),
+          "Only the matching acknowledged held epoch establishes quiescence");
+  require(reset.release({}) && !reset.state().held && reset.state().epoch == 1 &&
+              !reset.quiescent(),
           "Release preserves the acknowledged epoch");
   require(reset.pending(0) && !reset.pending(1), "An unobserved complete reset cannot disappear");
   require(!reset.acknowledge(0), "Acknowledgement cannot move backwards");
-  require(reset.assert_reset() && reset.state().epoch == 2 && reset.acknowledge(2) &&
-              reset.release({}),
+  require(reset.assert_reset() && reset.state().epoch == 2 && !reset.quiescent() &&
+              reset.acknowledge(2) && reset.quiescent() && reset.release({}) && !reset.quiescent(),
           "The next reset has independent ownership and release");
 }
 

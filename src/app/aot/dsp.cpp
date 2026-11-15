@@ -13,6 +13,7 @@
 #include <array>
 #include <cstddef>
 #include <dsp56300/core.hpp>
+#include <filesystem>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -70,7 +71,8 @@ private:
 dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
                                   const std::span<const dsp56300::VariantLayout> memory,
                                   const std::span<const dsp56300::InterruptRequest> interrupts,
-                                  const std::span<const dsp56300::CodeTransition> transitions) {
+                                  const std::span<const dsp56300::CodeTransition> transitions,
+                                  const std::filesystem::path &cache) {
   using dsp56300::CallbackBinding;
   using dsp56300::CallbackRole;
   constexpr std::array callbacks{
@@ -93,7 +95,7 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
   const std::array modules{native::Module{.bitcode = semantic.bitcode(), .exports = exports},
                            native::Module{.bitcode = detail::dsp_bindings, .exports = {}}};
   const Channels channels(detail::dsp_bindings);
-  const auto code = std::make_shared<native::Code>(modules, channels.entries());
+  const auto code = std::make_shared<native::Code>(modules, channels.entries(), cache);
   std::vector<dsp56300::NativeSymbol> symbols;
   for (const auto symbol : semantic.exports()) {
     symbols.push_back({.name = symbol.name, .address = code->address(symbol.name)});
@@ -109,8 +111,13 @@ vi::dsp::Program prepare_dsp_program(const dsp56300::CodeImage image,
                                      const std::span<const vi::dsp::ProgramChoice> choices,
                                      const std::span<const dsp56300::VariantLayout> memory,
                                      const std::span<const dsp56300::InterruptRequest> interrupts,
-                                     const std::span<const dsp56300::CodeTransition> transitions) {
-  return {prepare_dsp(image, memory, interrupts, transitions), image, choices, transitions, memory};
+                                     const std::span<const dsp56300::CodeTransition> transitions,
+                                     const std::filesystem::path &cache) {
+  return {prepare_dsp(image, memory, interrupts, transitions, cache),
+          image,
+          choices,
+          transitions,
+          memory};
 }
 
 }

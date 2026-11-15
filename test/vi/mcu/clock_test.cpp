@@ -72,6 +72,30 @@ void reset_and_qualification() {
           "Reference-divider changes preserve elapsed time and affect subsequent spans");
 }
 
+void local_flag_accesses() {
+  constexpr Clock::Cycle after_period = 3000;
+  constexpr unsigned clearable = power_on | lock_change | rti;
+  for (const bool use_pll : {false, true}) {
+    for (unsigned value = 0; value < 256; ++value) {
+      Clock clock;
+      write(clock, {.offset = usb_control, .value = usb_clock, .bytes = 2});
+      if (use_pll) { write(clock, {.offset = select, .value = pll}); }
+      write(clock, {.offset = rti_control, .value = rti_fast});
+      write(clock, {.offset = interrupts, .value = rti | lock_change});
+      require(clock.advance(after_period), "The flag fixture completes real PLL/RTI events");
+      const auto before = read(clock, flags);
+      const auto period = clock.bus_period();
+      const auto cycles = clock.cycles();
+      const auto ticks = clock.ticks();
+      write(clock, {.offset = flags, .value = static_cast<std::uint16_t>(value)});
+      require(
+          before == (clearable | locked) && read(clock, flags) == (before & ~(value & clearable)) &&
+              clock.bus_period() == period && clock.cycles() == cycles && clock.ticks() == ticks,
+          "Every CRGFLG byte is total W1C without a clock-rate or completed-time change");
+    }
+  }
+}
+
 void clock_switch_during_span() {
   Clock clock;
   write(clock, {.offset = usb_control, .value = usb_clock, .bytes = 2});
@@ -184,6 +208,7 @@ void controls_and_limits() {
 
 int main() try {
   reset_and_qualification();
+  local_flag_accesses();
   clock_switch_during_span();
   periodic_interrupt();
   wait_and_stop();

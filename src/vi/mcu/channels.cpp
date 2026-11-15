@@ -40,7 +40,7 @@ bool blofeld_mcu_peer_read(PeerPort *const channel,
 }
 
 void blofeld_mcu_peer_hold(PeerPort *const channel) noexcept {
-  channel->hold_mcu_data();
+  channel->hold_reset();
 }
 
 bool blofeld_mcu_peer_publish(PeerPort *const channel,
@@ -61,7 +61,7 @@ bool blofeld_mcu_time_publish(ExecutionTime *const channel, const std::uint64_t 
 bool blofeld_mcu_time_enter(ExecutionTime *const channel,
                             const std::uint64_t ticks,
                             const std::stop_token &stop) {
-  return channel->enter_mcu(ticks, stop);
+  return channel->settle_dsp(ticks, stop) && channel->enter_mcu(ticks, stop);
 }
 
 void blofeld_mcu_time_leave(ExecutionTime *const channel) noexcept {

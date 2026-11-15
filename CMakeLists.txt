@@ -58,13 +58,24 @@ find_package(LLVM 19.1 CONFIG REQUIRED GLOBAL)
 if(NOT LLVM_VERSION_MAJOR EQUAL 19 OR NOT TARGET LLVM)
   message(FATAL_ERROR "The packaged LLVM 19 shared library and headers are required")
 endif()
-add_library(blofeld_host_aot src/host/aot/abi.cpp src/host/aot/code.cpp
+add_library(blofeld_host_aot src/host/aot/abi.cpp src/host/aot/cache.cpp src/host/aot/code.cpp
   src/host/aot/contracts.cpp src/host/aot/imports.cpp src/host/aot/link_graph.cpp
   src/host/aot/module.cpp src/host/aot/optimize.cpp
   src/host/aot/symbols.cpp src/host/aot/target.cpp)
 target_include_directories(blofeld_host_aot PUBLIC src/host)
 target_include_directories(blofeld_host_aot SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
-target_link_libraries(blofeld_host_aot PUBLIC blofeld_quality PRIVATE LLVM)
+target_link_libraries(blofeld_host_aot PUBLIC blofeld_quality PRIVATE LLVM blofeld_host_files)
+file(GLOB blofeld_aot_pipeline_inputs CONFIGURE_DEPENDS src/host/aot/*.cpp src/host/aot/*.hpp)
+set(blofeld_aot_pipeline "${LLVM_PACKAGE_VERSION};${CMAKE_CXX_COMPILER_VERSION};${CMAKE_BUILD_TYPE};${BLOFELD_SANITIZER};${CMAKE_CXX_FLAGS};${CMAKE_CXX_FLAGS_RELEASE};${CMAKE_CXX_FLAGS_DEBUG}")
+foreach(input IN LISTS blofeld_aot_pipeline_inputs)
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${input}")
+  file(SHA256 "${input}" input_hash)
+  get_filename_component(input_name "${input}" NAME)
+  string(APPEND blofeld_aot_pipeline ";${input_name}:${input_hash}")
+endforeach()
+string(SHA256 blofeld_aot_pipeline "${blofeld_aot_pipeline}")
+set_source_files_properties(src/host/aot/cache.cpp PROPERTIES
+  COMPILE_DEFINITIONS "BLOFELD_AOT_PIPELINE=\"${blofeld_aot_pipeline}\"")
 
 add_library(blofeld_vi_display src/vi/display/st7565.cpp src/vi/display/lcd_image.cpp src/vi/display/state.cpp)
 target_include_directories(blofeld_vi_display PUBLIC src/vi)
@@ -243,6 +254,7 @@ if(BUILD_TESTING)
   endif()
   target_include_directories(host-aot-code-test SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
   target_compile_definitions(host-aot-code-test PRIVATE
+    BLOFELD_AOT_CACHE_TEST="${CMAKE_CURRENT_BINARY_DIR}/test-aot-cache"
     BLOFELD_AOT_FIRST="$<TARGET_OBJECTS:blofeld-aot-first-ir>"
     BLOFELD_AOT_SECOND="$<TARGET_OBJECTS:blofeld-aot-second-ir>"
     BLOFELD_AOT_HOST="$<TARGET_OBJECTS:blofeld-aot-host-ir>"
@@ -346,6 +358,8 @@ if(BUILD_TESTING)
     "blofeld_app_aot;blofeld_vi_execution")
   target_include_directories(vi-dsp-io-promotion-test PRIVATE "${BLOFELD_DSP56300_ROOT}/test/support")
   target_include_directories(vi-dsp-io-test PRIVATE "${BLOFELD_DSP56300_ROOT}/test/support")
+  blofeld_unit(vi-dsp-horizon-test test/vi/dsp/horizon_test.cpp "blofeld_app_aot;blofeld_vi_execution")
+  target_include_directories(vi-dsp-horizon-test PRIVATE "${BLOFELD_DSP56300_ROOT}/test/support")
   target_include_directories(vi-dsp-program-test PRIVATE "${BLOFELD_DSP56300_ROOT}/test/support")
   target_include_directories(vi-dsp-code-source-test PRIVATE test)
   blofeld_unit(vi-update-transport-test test/vi/storage/update_transport_test.cpp
@@ -379,6 +393,8 @@ if(BUILD_TESTING)
   blofeld_unit(vi-sci-test test/vi/io/sci_test.cpp blofeld_vi_execution)
   blofeld_unit(vi-mcu-execute-test test/vi/mcu/execute_test.cpp "blofeld_app_aot;blofeld_vi_execution")
   target_include_directories(vi-mcu-execute-test PRIVATE "${BLOFELD_CPU12_ROOT}/test/support")
+  blofeld_unit(vi-mcu-horizon-test test/vi/mcu/horizon_test.cpp "blofeld_app_aot;blofeld_vi_execution")
+  target_include_directories(vi-mcu-horizon-test PRIVATE "${BLOFELD_CPU12_ROOT}/test/support")
   blofeld_unit(vi-dsp-memory-test test/vi/dsp/memory_test.cpp blofeld_vi_execution)
   blofeld_unit(vi-dsp-boot-rom-test test/vi/dsp/boot_rom_test.cpp blofeld_quality)
   target_include_directories(vi-dsp-boot-rom-test PRIVATE src/vi)
@@ -411,9 +427,10 @@ if(BUILD_TESTING)
   add_test(NAME app-ui-display-test COMMAND "${Python3_EXECUTABLE}" -B
     "${CMAKE_CURRENT_SOURCE_DIR}/test/app/ui/display_test.py" "${CMAKE_CURRENT_BINARY_DIR}/Testing")
   set_tests_properties(app-ui-display-test PROPERTIES TIMEOUT 10)
-  set_tests_properties(vi-mcu-execute-test vi-mcu-midi-test vi-vm-context-test
+  set_tests_properties(vi-mcu-execute-test vi-mcu-horizon-test vi-mcu-midi-test vi-vm-context-test
     PROPERTIES TIMEOUT 60)
   foreach(target app-midi-file-test vi-mcu-midi-test vi-vm-context-test vi-mcu-execute-test
+      vi-mcu-horizon-test
       app-aot-dsp-program-test)
     target_include_directories(${target} PRIVATE test "${BLOFELD_CPU12_ROOT}/test/support")
   endforeach()

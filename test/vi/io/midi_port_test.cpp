@@ -34,12 +34,16 @@ void wait_for(auto ready, const char *message_text) {
 
 void stream_frontiers() {
   MidiPort live;
-  require(!live.input_limit() && live.await_input(std::numeric_limits<std::uint64_t>::max(), {}),
+  require(!live.input_limit() && live.input_knowledge() == 0 &&
+              live.await_input(std::numeric_limits<std::uint64_t>::max(), {}),
           "Live input retains its unbounded execution contract");
   MidiPort stream(MidiPort::InputMode::stream);
   constexpr std::uint64_t first = 100;
-  require(stream.input_limit() == 0 && stream.advance_input(first) &&
-              stream.input_limit() == first && stream.await_input(first - 1, {}) &&
+  live.publish_time(first);
+  require(live.input_knowledge() == 0, "Live time alone certifies no future input silence");
+  require(stream.input_limit() == 0 && stream.input_knowledge() == 0 &&
+              stream.advance_input(first) && stream.input_limit() == first &&
+              stream.input_knowledge() == first && stream.await_input(first - 1, {}) &&
               !stream.peek_input() && stream.time() == 0,
           "A known silent interval publishes no bytes and advances no device time");
   require(stream.write_input(message, first) &&
@@ -47,6 +51,7 @@ void stream_frontiers() {
               stream.await_input(first, {}),
           "Accepted actual bytes extend knowledge through their serialized character intervals");
   require(stream.finish_input() && stream.finish_input() && !stream.input_limit() &&
+              stream.input_knowledge() == std::numeric_limits<std::uint64_t>::max() &&
               stream.await_input(std::numeric_limits<std::uint64_t>::max(), {}) &&
               stream.peek_input() == MidiPort::Event{.ticks = first, .byte = note_on},
           "EOF removes the future-input barrier without discarding queued bytes");

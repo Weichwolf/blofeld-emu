@@ -58,10 +58,10 @@ void write_all(const int descriptor, std::span<const std::uint8_t> bytes) {
 }
 }
 
-Directory::Directory(const std::filesystem::path &path)
+Directory::Directory(const std::filesystem::path &path, const Lock lock)
     : descriptor_(::open(path.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)) {
   if (descriptor_ < 0) { fail("Open publication directory", path.native()); }
-  if (::flock(descriptor_, LOCK_EX | LOCK_NB) != 0) {
+  if (::flock(descriptor_, LOCK_EX | (lock == Lock::wait ? 0 : LOCK_NB)) != 0) {
     const auto error = errno;
     ::close(descriptor_);
     throw std::system_error(error, std::generic_category(), "Lock publication directory");

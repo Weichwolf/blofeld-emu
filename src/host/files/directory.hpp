@@ -24,7 +24,8 @@ private:
 // path renames. No instrument types, serialization or device timing belong here.
 class Directory {
 public:
-  explicit Directory(const std::filesystem::path &path);
+  enum class Lock : std::uint8_t { try_once, wait };
+  explicit Directory(const std::filesystem::path &path, Lock lock = Lock::try_once);
   ~Directory();
   Directory(const Directory &) = delete;
   Directory &operator=(const Directory &) = delete;

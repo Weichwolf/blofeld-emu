@@ -216,8 +216,10 @@ void native_idle_wake() {
   constexpr std::uint64_t irq_cycles = 14;
   constexpr std::uint64_t clock_top = 12500;
   constexpr std::uint64_t clock_bottom = 17052;
-  constexpr auto irq_tick = irq_cycles * clock_top / clock_bottom;
-  require(event_tick == irq_tick && peer.mcu_interrupt_ready(false) && peer.mcu_interrupt() == 1,
+  constexpr auto irq_tick = ((irq_cycles * clock_top) + clock_bottom - 1) / clock_bottom;
+  require(event_tick == irq_tick,
+          "The first admissible MCU instant follows the real fractional E9 assertion");
+  require(peer.mcu_interrupt_ready(false) && peer.mcu_interrupt() == 1,
           "A real asserted source level survives the cleared transport notification");
   require(time.wait_for_dsp(event_tick + 1, {}),
           "Observe actual completed source work after its publication");

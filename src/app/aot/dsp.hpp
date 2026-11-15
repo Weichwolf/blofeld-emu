@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <dsp56300/core.hpp>
+#include <filesystem>
 #include <span>
 #include <string_view>
 
@@ -23,18 +24,21 @@ struct DspSource {
 prepare_dsp(dsp56300::CodeImage image,
             std::span<const dsp56300::VariantLayout> memory = {},
             std::span<const dsp56300::InterruptRequest> interrupts = {},
-            std::span<const dsp56300::CodeTransition> transitions = {});
+            std::span<const dsp56300::CodeTransition> transitions = {},
+            const std::filesystem::path &cache = {});
 [[nodiscard]] vi::dsp::Program
 prepare_dsp_program(dsp56300::CodeImage image,
                     std::span<const vi::dsp::ProgramChoice> choices,
                     std::span<const dsp56300::VariantLayout> memory = {},
                     std::span<const dsp56300::InterruptRequest> interrupts = {},
-                    std::span<const dsp56300::CodeTransition> transitions = {});
+                    std::span<const dsp56300::CodeTransition> transitions = {},
+                    const std::filesystem::path &cache = {});
 // Bind a local source catalogue to the exact decoded firmware and ROM inputs.
 // Source construction and compilation execute no device or guest state.
 [[nodiscard]] vi::dsp::Program prepare_dsp_catalogue(std::string_view document,
                                                      const vi::FirmwareUpdate &firmware,
                                                      vi::dsp::BootRom boot,
-                                                     std::span<const DspSource> sources = {});
+                                                     std::span<const DspSource> sources = {},
+                                                     const std::filesystem::path &cache = {});
 [[nodiscard]] vi::dsp::Program load_dsp_program(const Profile &profile, vi::dsp::BootRom boot);
 }

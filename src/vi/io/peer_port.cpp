@@ -107,7 +107,8 @@ PeerPort::Sample PeerPort::sample_mcu_data(const std::uint64_t ticks) noexcept {
   return inputs_.sample;
 }
 
-void PeerPort::hold_mcu_data() noexcept {
+void PeerPort::hold_reset() noexcept {
+  dsp_held_.store(true, std::memory_order_release);
   inputs_.held = true;
   inputs_.reset_through.store(inputs_.published.load(std::memory_order_relaxed),
                               std::memory_order_release);
@@ -128,6 +129,7 @@ void PeerPort::retire_mcu_data() noexcept {
 }
 
 void PeerPort::dsp_data(const Sample value) noexcept {
+  if (dsp_held_.load(std::memory_order_acquire)) { return; }
   const auto word = encode(value);
   if (dsp_.load(std::memory_order_relaxed) != word) {
     reply_.announced.store(false, std::memory_order_release);
@@ -148,6 +150,7 @@ PeerPort::Sample PeerPort::mcu_data() const noexcept {
 }
 
 PeerPort::Sample PeerPort::dsp_data() const noexcept {
+  if (dsp_held_.load(std::memory_order_acquire)) { return {}; }
   return decode(dsp_.load(std::memory_order_acquire));
 }
 
@@ -169,6 +172,7 @@ bool PeerPort::start_reply() noexcept {
 }
 
 bool PeerPort::dsp_write(const Sample value, const std::uint64_t ticks) noexcept {
+  if (dsp_held_.load(std::memory_order_acquire)) { return true; }
   if (!reply_.recording.load(std::memory_order_acquire)) { return true; }
   const std::lock_guard lock(reply_.mutex);
   if (!reply_.recording.load(std::memory_order_relaxed)) { return true; }
@@ -181,6 +185,7 @@ bool PeerPort::dsp_write(const Sample value, const std::uint64_t ticks) noexcept
 }
 
 std::optional<PeerPort::Sample> PeerPort::read_dsp_data(const Read access) noexcept {
+  if (dsp_held_.load(std::memory_order_acquire)) { return Sample{}; }
   constexpr std::uint8_t byte_mask = 0xff;
   if (access.mask != byte_mask || mcu_data().mask != 0 ||
       !reply_.active.load(std::memory_order_acquire)) {
@@ -250,7 +255,8 @@ bool PeerPort::mcu_interrupt_ready(const bool ready) noexcept {
 }
 
 bool PeerPort::mcu_strobe(const bool active) noexcept {
-  if (active && !to_dsp_.active.load(std::memory_order_relaxed) &&
+  if (!dsp_held_.load(std::memory_order_acquire) && active &&
+      !to_dsp_.active.load(std::memory_order_relaxed) &&
       reply_.announced.exchange(false, std::memory_order_acq_rel) && !start_reply()) {
     return false;
   }
@@ -258,6 +264,7 @@ bool PeerPort::mcu_strobe(const bool active) noexcept {
 }
 
 bool PeerPort::dsp_ready(const bool active) noexcept {
+  if (dsp_held_.load(std::memory_order_acquire)) { return true; }
   const bool posted = active && !to_mcu_.active.load(std::memory_order_relaxed);
   auto admission = posted ? mcu_admission_.load(std::memory_order_acquire) : 0;
   if (posted) {
@@ -287,6 +294,7 @@ std::optional<std::uint64_t> PeerPort::dsp_interrupt(const bool edge) const noex
 }
 
 std::optional<std::uint64_t> PeerPort::mcu_interrupt() const noexcept {
+  if (dsp_held_.load(std::memory_order_acquire)) { return {}; }
   if (const auto level = to_mcu_.pending(false)) { return level; }
   if ((mcu_admission_.load(std::memory_order_acquire) & admission_flags) == admission_flags) {
     if (const auto notification = to_mcu_.pending(true)) { return notification; }
@@ -314,10 +322,11 @@ void PeerPort::reset_dsp() noexcept {
     reply_.read = reply_.written = 0;
     error_.store(nullptr, std::memory_order_release);
   }
-  dsp_data({});
+  dsp_.store(0, std::memory_order_release);
   mcu_admission_.fetch_and(~notified, std::memory_order_acq_rel);
   to_mcu_.active.store(false, std::memory_order_release);
   static_cast<void>(to_mcu_.acknowledge(to_mcu_.posted.load(std::memory_order_acquire)));
   static_cast<void>(to_dsp_.acknowledge(to_dsp_.posted.load(std::memory_order_acquire)));
+  dsp_held_.store(false, std::memory_order_release);
 }
 }

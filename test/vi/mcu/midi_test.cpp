@@ -191,7 +191,7 @@ void native_loop_frontier() {
     done.store(true, std::memory_order_release);
   });
   wait_at(midi, frontier, done);
-  std::optional<std::uint64_t> observed;
+  std::optional<blofeld::vi::ExecutionTime::DspGrant> observed;
   std::atomic<bool> published{false};
   std::jthread dsp([&](const std::stop_token &stop) {
     observed = time.dsp_limit(frontier - 1, stop);
@@ -204,7 +204,7 @@ void native_loop_frontier() {
     std::this_thread::yield();
   }
   dsp.join();
-  require(observed == frontier,
+  require(observed == blofeld::vi::ExecutionTime::DspGrant{.until = frontier},
           "Input starvation cannot leave the DSP behind an unpublished MCU frontier");
   execution.request_stop();
   execution.join();

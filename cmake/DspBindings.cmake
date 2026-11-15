@@ -13,3 +13,5 @@ target_include_directories(blofeld_app_aot PUBLIC src/app PRIVATE "${blofeld_bin
 target_include_directories(blofeld_app_aot SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
 target_link_libraries(blofeld_app_aot PUBLIC dsp56300::core blofeld_host_aot
   PRIVATE blofeld_vi_execution blofeld_vi_code_source blofeld_app_firmware LLVM)
+target_compile_definitions(blofeld_app_aot PRIVATE
+  BLOFELD_AOT_CACHE_DIRECTORY="${CMAKE_CURRENT_BINARY_DIR}/aot-cache")

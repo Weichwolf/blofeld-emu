@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
+#include <filesystem>
 #include <format>
 #include <optional>
 #include <set>
@@ -334,7 +335,8 @@ void validate_admissions(const std::span<const Variant> variants) {
 vi::dsp::Program prepare(const Object &root,
                          const vi::FirmwareUpdate &firmware,
                          const vi::dsp::BootRom boot,
-                         const std::span<const DspSource> sources) {
+                         const std::span<const DspSource> sources,
+                         const std::filesystem::path &cache) {
   std::vector<Variant> owned;
   std::vector<dsp56300::VariantLayout> layouts;
   for (const auto &value : array(root, "variants")) {
@@ -376,19 +378,21 @@ vi::dsp::Program prepare(const Object &root,
                            .to = number(transfer, "to"),
                            .entry = word(transfer, "entry")});
   }
-  return prepare_dsp_program({.variants = source}, choices, layouts, interrupts, transitions);
+  return prepare_dsp_program(
+      {.variants = source}, choices, layouts, interrupts, transitions, cache);
 }
 }
 
 vi::dsp::Program prepare_dsp_catalogue(const std::string_view document,
                                        const vi::FirmwareUpdate &firmware,
                                        const vi::dsp::BootRom boot,
-                                       const std::span<const DspSource> sources) {
+                                       const std::span<const DspSource> sources,
+                                       const std::filesystem::path &cache) {
   auto parsed = llvm::json::parse(document);
   if (!parsed) { throw std::invalid_argument(llvm::toString(parsed.takeError())); }
   const auto &root = object(*parsed);
   if (number(root, "format") != 1) { invalid("format"); }
   inputs(root, firmware, boot, sources);
-  return prepare(root, firmware, boot, sources);
+  return prepare(root, firmware, boot, sources, cache);
 }
 }

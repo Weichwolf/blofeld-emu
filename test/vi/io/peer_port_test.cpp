@@ -136,7 +136,7 @@ void reset_data_retirement(const bool retire_before_release) {
   constexpr std::uint8_t known = 0x3f;
   constexpr PeerPort::Sample before{.mask = 0xff, .known = 0xff, .value = 0x52};
   require(peer.mcu_data(before, 0), "An old unconsumed input precedes reset assertion");
-  peer.hold_mcu_data();
+  peer.hold_reset();
   if (retire_before_release) { peer.retire_mcu_data(); }
   std::promise<bool> outcome;
   auto completion = outcome.get_future();
@@ -477,9 +477,39 @@ void reply_time_order() {
               !peer.read_dsp_data({.mask = byte_mask, .ticks = first}),
           "Same-tick writes retain source order and a rejected write consumes no slot");
 }
+
+void reset_disconnects_outputs() {
+  PeerPort peer;
+  constexpr PeerPort::Sample report{.mask = byte_mask, .known = byte_mask, .value = 13};
+  constexpr PeerPort::Sample payload{.mask = byte_mask, .known = byte_mask, .value = 0x5a};
+  peer.dsp_data(report);
+  require(peer.mcu_interrupt_ready(true) && peer.dsp_ready(true) && peer.mcu_strobe(true) &&
+              peer.dsp_write(payload, 0),
+          "Start a genuine pending reply before hardware reset");
+  const auto previous = peer.mcu_interrupt();
+  peer.hold_reset();
+  peer.dsp_data({.mask = byte_mask, .known = 0, .value = byte_mask});
+  require(previous && peer.dsp_data() == PeerPort::Sample{} && !peer.mcu_interrupt() &&
+              peer.dsp_ready(true) && peer.dsp_write(payload, 1) &&
+              peer.read_dsp_data({.mask = byte_mask, .ticks = 0}) == PeerPort::Sample{} &&
+              peer.mcu_strobe(false) && peer.mcu_strobe(true) && peer.error() == nullptr,
+          "Asserted reset disconnects old data/IRQs and prevents consuming or arming an old reply");
+  peer.reset_dsp();
+  require(peer.dsp_data() == PeerPort::Sample{} && !peer.mcu_interrupt() &&
+              peer.release_mcu_data(1, {}),
+          "Only the reset owner reopens fresh peripheral state");
+  peer.dsp_data(payload);
+  const bool posted = peer.dsp_ready(true);
+  const auto current = peer.mcu_interrupt();
+  require(posted && current && previous && *current > *previous &&
+              peer.read_dsp_data({.mask = byte_mask, .ticks = 1}) == payload,
+          "A fresh epoch exposes its actual new sample and monotonically new request");
+}
+
 }
 
 int main() try {
+  reset_disconnects_outputs();
   data_views();
   timed_data();
   concurrent_timed_data();

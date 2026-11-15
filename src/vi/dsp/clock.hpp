@@ -34,6 +34,8 @@ public:
 
   [[nodiscard]] std::uint64_t ticks() const noexcept { return ticks_; }
 
+  [[nodiscard]] bool fractional() const noexcept { return phase_ != 0 || residue_ != 0; }
+
   [[nodiscard]] std::optional<std::uint64_t> deadline(std::uint64_t ticks) const noexcept;
 
 private:

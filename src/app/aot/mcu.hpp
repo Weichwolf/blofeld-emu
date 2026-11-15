@@ -10,6 +10,7 @@
 #include <cpu12/core.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <span>
 #include <string>
 #include <string_view>
@@ -36,13 +37,17 @@ struct McuSource {
 };
 
 [[nodiscard]] cpu12::NativeImage
-prepare_mcu(cpu12::CodeImage image, std::span<const cpu12::CodeTransition> transitions = {});
+prepare_mcu(cpu12::CodeImage image,
+            std::span<const cpu12::CodeTransition> transitions = {},
+            const std::filesystem::path &cache = {});
 [[nodiscard]] vi::mcu::Program
 prepare_mcu_program(cpu12::CodeImage image,
-                    std::span<const cpu12::CodeTransition> transitions = {});
+                    std::span<const cpu12::CodeTransition> transitions = {},
+                    const std::filesystem::path &cache = {});
 [[nodiscard]] vi::mcu::Program prepare_mcu_catalogue(std::string_view document,
                                                      const vi::FirmwareUpdate &firmware,
-                                                     std::span<const McuSource> sources = {});
+                                                     std::span<const McuSource> sources = {},
+                                                     const std::filesystem::path &cache = {});
 [[nodiscard]] vi::mcu::Program load_mcu_program(const Profile &profile);
 
 }

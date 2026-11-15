@@ -14,6 +14,7 @@
 #include <cpu12/core.hpp>
 #include <cpu12/memory.hpp>
 #include <cstddef>
+#include <filesystem>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -80,7 +81,8 @@ std::span<const std::byte> McuBinding::bitcode() noexcept {
 }
 
 cpu12::NativeImage prepare_mcu(const cpu12::CodeImage image,
-                               const std::span<const cpu12::CodeTransition> transitions) {
+                               const std::span<const cpu12::CodeTransition> transitions,
+                               const std::filesystem::path &cache) {
   using cpu12::CallbackBinding;
   using cpu12::CallbackRole;
   constexpr std::array callbacks{
@@ -113,7 +115,7 @@ cpu12::NativeImage prepare_mcu(const cpu12::CodeImage image,
   }
   const std::array modules{native::Module{.bitcode = semantic.bitcode(), .exports = exports},
                            native::Module{.bitcode = McuBinding::bitcode(), .exports = {}}};
-  const auto code = std::make_shared<native::Code>(modules, binding.imports());
+  const auto code = std::make_shared<native::Code>(modules, binding.imports(), cache);
   std::vector<cpu12::NativeSymbol> symbols;
   symbols.reserve(semantic.exports().size());
   for (const auto symbol : semantic.exports()) {
@@ -127,8 +129,9 @@ cpu12::NativeImage prepare_mcu(const cpu12::CodeImage image,
 }
 
 vi::mcu::Program prepare_mcu_program(const cpu12::CodeImage image,
-                                     const std::span<const cpu12::CodeTransition> transitions) {
-  return {prepare_mcu(image, transitions), image};
+                                     const std::span<const cpu12::CodeTransition> transitions,
+                                     const std::filesystem::path &cache) {
+  return {prepare_mcu(image, transitions, cache), image};
 }
 
 }

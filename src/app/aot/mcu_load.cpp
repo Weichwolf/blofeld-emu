@@ -55,6 +55,9 @@ vi::mcu::Program load_mcu_program(const Profile &profile) {
   const auto owned = load_sources(document, profile.mcu_catalogue.parent_path());
   std::vector<McuSource> sources;
   for (const auto &[name, bytes] : owned) { sources.push_back({.name = name, .bytes = bytes}); }
-  return prepare_mcu_catalogue(document, load_firmware(profile.firmware), sources);
+  return prepare_mcu_catalogue(document,
+                               load_firmware(profile.firmware),
+                               sources,
+                               std::filesystem::path{BLOFELD_AOT_CACHE_DIRECTORY});
 }
 }
