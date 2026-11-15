@@ -4,8 +4,14 @@ Execute unchanged Blofeld Desktop SL firmware as native host code. Firmware owns
 instrument behavior; cpu12/dsp56300 supply ISA translation. The application owns
 executable-image analysis, concrete device bindings and lifecycle.
 
-Core repositories are organizational boundaries. Choose APIs, state ownership,
-layouts and LLVM composition for complete-instrument throughput and efficiency.
+The boundary to the cores is architectural. cpu12 and dsp56300 are generic
+instruction-set translators usable by any device on those processors; they hold
+no peripheral model and no Blofeld knowledge. This repository owns the device:
+chip peripherals, board wiring, firmware knowledge (code inventory, entries,
+variants, memory layouts), clocks, scheduling and the coupling of the two cores.
+It reaches the cores only through their public interfaces and the IR it links
+before optimization. If the instrument needs something from a core, the core
+gains a general mechanism that a similar device could use as well.
 
 ```text
 known MCU/DSP code + variants -> semantic LLVM IR --+
