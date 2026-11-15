@@ -33,8 +33,10 @@ and macOS ARM64. Decide everything else yourself.
 
 APIs, state ownership and layouts, LLVM composition, scheduling design, tools,
 test strategy, caching of validated code in development, and the order of work
-are your choice. Core repositories are organizational boundaries. Change an
-interface when it obstructs the instrument.
+are your choice. Change a core interface when it obstructs the instrument, but
+the cores stay generic for other devices built on the same chips: all Blofeld
+knowledge (code inventory, entries, variants, memory layout, devices, timing)
+lives here and reaches the cores through their public interfaces.
 
 ## Working together
 
