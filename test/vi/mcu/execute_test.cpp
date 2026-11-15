@@ -25,7 +25,6 @@
 #include <future>
 #include <iostream>
 #include <limits>
-#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <stop_token>
