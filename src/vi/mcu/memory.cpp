@@ -16,6 +16,17 @@
 #include <vector>
 
 namespace blofeld::vi::mcu {
+Memory::Snapshot Memory::save() const noexcept {
+  return state_;
+}
+
+void Memory::restore(const Snapshot &snapshot) noexcept {
+  state_ = snapshot;
+  program_.clear();
+  program_points_.clear();
+  program_changed_ = true;
+}
+
 namespace {
 constexpr unsigned register_bytes = 1024;
 constexpr unsigned register_mask = 0x78;
@@ -118,26 +129,26 @@ void Memory::reset() {
   program_changed_ = program_changed_ || !program_.empty();
   program_.clear();
   program_points_.clear();
-  mapping_ = {9, 0, 1, 0x0d};
-  pending_ = mapping_;
-  written_ = 0;
+  state_.mapping = {9, 0, 1, 0x0d};
+  state_.pending = state_.mapping;
+  state_.written = 0;
 }
 
 void Memory::power_on() {
-  system_.fill(0);
-  system_known_.fill(0);
-  queue_.fill(0);
-  queue_known_.fill(0);
+  state_.system.fill(0);
+  state_.system_known.fill(0);
+  state_.queue.fill(0);
+  state_.queue_known.fill(0);
   reset();
 }
 
 Location Memory::locate(const std::uint16_t address) const noexcept {
-  const unsigned registers = (mapping_[1] & register_mask) << 8U;
+  const unsigned registers = (state_.mapping[1] & register_mask) << 8U;
   if (address >= registers && address - registers < register_bytes) {
     return {.space = Space::registers, .offset = static_cast<std::uint16_t>(address - registers)};
   }
   const unsigned system =
-      ((mapping_[0] & system_mask) << 8U) + ((mapping_[0] & 1U) != 0 ? high_align : 0);
+      ((state_.mapping[0] & system_mask) << 8U) + ((state_.mapping[0] & 1U) != 0 ? high_align : 0);
   if (address >= system && address - system < system_window) {
     const auto relative = address - system;
     return relative < system_offset
@@ -145,18 +156,18 @@ Location Memory::locate(const std::uint16_t address) const noexcept {
                : Location{.space = Space::system_ram,
                           .offset = static_cast<std::uint16_t>(relative - system_offset)};
   }
-  const unsigned queue = (mapping_[2] & queue_mask) << 8U;
-  if ((mapping_[2] & 1U) != 0 && address >= queue && address - queue < queue_window) {
+  const unsigned queue = (state_.mapping[2] & queue_mask) << 8U;
+  if ((state_.mapping[2] & 1U) != 0 && address >= queue && address - queue < queue_window) {
     const auto relative = address - queue;
     return relative >= queue_bytes ? Location{.space = Space::reserved}
                                    : Location{.space = Space::queue_ram,
                                               .offset = static_cast<std::uint16_t>(relative)};
   }
-  if ((mapping_[3] & 1U) == 0) { return {}; }
+  if ((state_.mapping[3] & 1U) == 0) { return {}; }
   if (address >= flash_first) {
     return {.space = Space::flash, .offset = static_cast<std::uint16_t>(address - flash_first)};
   }
-  if ((mapping_[3] & 2U) == 0 && address >= flash_alias) {
+  if ((state_.mapping[3] & 2U) == 0 && address >= flash_alias) {
     return {.space = Space::flash, .offset = static_cast<std::uint16_t>(address - flash_alias)};
   }
   return {};
@@ -171,12 +182,12 @@ bool Memory::read(const std::uint16_t address, std::uint8_t &value) const noexce
       value = flash_.bytes[at];
       return true;
     case Space::system_ram:
-      if (system_known_[at] == 0) { return false; }
-      value = system_[at];
+      if (state_.system_known[at] == 0) { return false; }
+      value = state_.system[at];
       return true;
     case Space::queue_ram:
-      if (queue_known_[at] == 0) { return false; }
-      value = queue_[at];
+      if (state_.queue_known[at] == 0) { return false; }
+      value = state_.queue[at];
       return true;
     case Space::unmapped:
     case Space::registers:
@@ -188,19 +199,19 @@ bool Memory::read(const std::uint16_t address, std::uint8_t &value) const noexce
 bool Memory::write(const cpu12::ByteWrite access) noexcept {
   const auto location = locate(access.address);
   if (location.space == Space::system_ram) {
-    if (program_identity(location) != 0 && system_[location.offset] != access.value) {
+    if (program_identity(location) != 0 && state_.system[location.offset] != access.value) {
       program_changed_ = true;
     }
-    system_[location.offset] = access.value;
-    system_known_[location.offset] = 1;
+    state_.system[location.offset] = access.value;
+    state_.system_known[location.offset] = 1;
     return true;
   }
   if (location.space == Space::queue_ram) {
-    if (program_identity(location) != 0 && queue_[location.offset] != access.value) {
+    if (program_identity(location) != 0 && state_.queue[location.offset] != access.value) {
       program_changed_ = true;
     }
-    queue_[location.offset] = access.value;
-    queue_known_[location.offset] = 1;
+    state_.queue[location.offset] = access.value;
+    state_.queue_known[location.offset] = 1;
     return true;
   }
   return false;
@@ -279,16 +290,16 @@ cpu12::Ram Memory::region(const Location start, const std::size_t size) {
   if (start.space == Space::flash) {
     return {.bytes = std::span(flash_.bytes).subspan(start.offset, size), .writable = false};
   }
-  const auto bytes = start.space == Space::system_ram ? std::span<std::uint8_t>(system_)
-                                                      : std::span<std::uint8_t>(queue_);
-  const auto known = start.space == Space::system_ram ? std::span<std::uint8_t>(system_known_)
-                                                      : std::span<std::uint8_t>(queue_known_);
+  const auto bytes = start.space == Space::system_ram ? std::span<std::uint8_t>(state_.system)
+                                                      : std::span<std::uint8_t>(state_.queue);
+  const auto known = start.space == Space::system_ram ? std::span<std::uint8_t>(state_.system_known)
+                                                      : std::span<std::uint8_t>(state_.queue_known);
   return {.bytes = bytes.subspan(start.offset, size), .known = known.subspan(start.offset, size)};
 }
 
 std::vector<cpu12::Ram> Memory::regions() {
   std::vector<cpu12::Ram> views;
-  auto points = boundaries(mapping_);
+  auto points = boundaries(state_.mapping);
   points.insert(points.end(), program_points_.begin(), program_points_.end());
   const auto mapped = areas(
       std::move(points),
@@ -315,27 +326,27 @@ std::vector<cpu12::Ram> Memory::regions() {
 }
 
 std::uint8_t Memory::read_mapping(const std::uint16_t offset) const {
-  return mapping_[mapping_index(offset)];
+  return state_.mapping[mapping_index(offset)];
 }
 
 bool Memory::write_mapping(const cpu12::ByteWrite access) {
   const auto index = mapping_index(access.address);
   const auto bit = static_cast<std::uint8_t>(1U << index);
   constexpr unsigned queue_mapping = 2;
-  if (index != queue_mapping && (written_ & bit) != 0) { return false; }
-  written_ |= bit;
-  pending_[index] = static_cast<std::uint8_t>(access.value & write_masks[index]);
-  return pending_ != mapping_;
+  if (index != queue_mapping && (state_.written & bit) != 0) { return false; }
+  state_.written |= bit;
+  state_.pending[index] = static_cast<std::uint8_t>(access.value & write_masks[index]);
+  return state_.pending != state_.mapping;
 }
 
 bool Memory::commit_mapping() noexcept {
-  const bool changed = mapping_ != pending_ || program_changed_;
+  const bool changed = state_.mapping != state_.pending || program_changed_;
   if (changed) {
     program_.clear();
     program_points_.clear();
   }
   program_changed_ = false;
-  mapping_ = pending_;
+  state_.mapping = state_.pending;
   return changed;
 }
 }

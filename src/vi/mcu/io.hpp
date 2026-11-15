@@ -41,6 +41,31 @@ class Io {
   static constexpr std::uint8_t all_bits = 0xff;
 
 public:
+  struct Snapshot {
+    McuFlash flash;
+    Ports::Snapshot ports;
+    DisplayPort display;
+    bool release_reset = false, peer_strobe = false, panel_sampled = false;
+  };
+
+  [[nodiscard]] Snapshot save() const noexcept {
+    return {.flash = flash_,
+            .ports = ports_.save(),
+            .display = display_,
+            .release_reset = release_reset_,
+            .peer_strobe = peer_strobe_,
+            .panel_sampled = panel_sampled_};
+  }
+
+  void restore(const Snapshot &snapshot) noexcept {
+    flash_ = snapshot.flash;
+    ports_.restore(snapshot.ports);
+    display_ = snapshot.display;
+    release_reset_ = snapshot.release_reset;
+    peer_strobe_ = snapshot.peer_strobe;
+    panel_sampled_ = snapshot.panel_sampled;
+  }
+
   Io(Memory &memory,
      const FlashImage &image,
      Devices &devices,

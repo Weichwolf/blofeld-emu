@@ -32,6 +32,35 @@ public:
     std::uint8_t direction = 0, known = 0, value = 0;
   };
 
+private:
+  static constexpr std::uint8_t all_bits = 0xff;
+  static constexpr std::uint8_t reset_pull = 0x90;
+  static constexpr std::size_t port_count = 11;
+
+  struct Registers {
+    std::uint8_t latch = 0, known = 0, direction = 0, reduced = 0, pull = 0, polarity = 0;
+    Input external;
+  };
+
+  struct State {
+    std::array<Registers, port_count> ports{};
+    std::uint8_t assignment = 0x10, mode = 0x80, pull = reset_pull, reduced = 0, routing = 0;
+    bool assignment_written = false, mode_written = false;
+  };
+
+public:
+  struct Snapshot {
+    State state;
+    BootPort::Snapshot boot;
+  };
+
+  [[nodiscard]] Snapshot save() const noexcept { return {.state = state_, .boot = boot_.save()}; }
+
+  void restore(const Snapshot &snapshot) noexcept {
+    state_ = snapshot.state;
+    boot_.restore(snapshot.boot);
+  }
+
   explicit Ports(Shi &shi);
   [[nodiscard]] static bool contains(std::uint16_t offset) noexcept;
   [[nodiscard]] bool
@@ -49,24 +78,13 @@ public:
   void reset_boot_transfer() noexcept { boot_.reset(); }
 
 private:
-  static constexpr std::uint8_t all_bits = 0xff;
-  static constexpr std::uint8_t reset_pull = 0x90;
-  static constexpr std::size_t port_count = 11;
-
-  struct Registers {
-    std::uint8_t latch = 0, known = 0, direction = 0, reduced = 0, pull = 0, polarity = 0;
-    Input external;
-  };
-
   struct Sample {
     unsigned known = 0, value = 0;
   };
 
   [[nodiscard]] Sample pins(std::size_t index) const noexcept;
   [[nodiscard]] bool write_control(Write access) noexcept;
-  std::array<Registers, port_count> ports_{};
+  State state_;
   BootPort boot_;
-  std::uint8_t assignment_ = 0x10, mode_ = 0x80, pull_ = reset_pull, reduced_ = 0, routing_ = 0;
-  bool assignment_written_ = false, mode_written_ = false;
 };
 }

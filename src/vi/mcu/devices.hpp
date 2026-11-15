@@ -22,6 +22,33 @@ namespace blofeld::vi::mcu {
 struct Devices {
   static constexpr std::uint8_t all_bits = 0xff;
 
+  struct Snapshot {
+    Timer timer;
+    Clock clock;
+    Sci sci;
+    Usb usb;
+    Timer::Cycle idle = 0;
+    const char *midi_error = nullptr;
+  };
+
+  [[nodiscard]] Snapshot save() const noexcept {
+    return {.timer = timer,
+            .clock = clock,
+            .sci = sci,
+            .usb = usb,
+            .idle = idle,
+            .midi_error = midi_error};
+  }
+
+  void restore(const Snapshot &snapshot) noexcept {
+    timer = snapshot.timer;
+    clock = snapshot.clock;
+    sci = snapshot.sci;
+    usb = snapshot.usb;
+    idle = snapshot.idle;
+    midi_error = snapshot.midi_error;
+  }
+
   explicit Devices(const std::stop_token &cancellation) : stop(cancellation) {}
 
   const std::stop_token &stop;

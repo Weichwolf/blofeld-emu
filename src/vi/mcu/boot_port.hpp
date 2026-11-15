@@ -23,21 +23,31 @@ public:
     }
   };
 
+  struct Snapshot {
+    std::uint8_t previous = 0;
+    bool selected = false, pending_word = false;
+    std::optional<Shi::Mode> mode;
+    unsigned bits = 0;
+    std::uint32_t word = 0;
+  };
+
+  [[nodiscard]] Snapshot save() const noexcept { return state_; }
+
+  void restore(const Snapshot &snapshot) noexcept { state_ = snapshot; }
+
   explicit BootPort(Shi &shi) : shi_(shi) {}
 
   [[nodiscard]] bool write(Write access) noexcept;
   void reset() noexcept;
 
-  [[nodiscard]] bool pending() const noexcept { return pending_word_ || (selected_ && !mode_); }
+  [[nodiscard]] bool pending() const noexcept {
+    return state_.pending_word || (state_.selected && !state_.mode);
+  }
 
   [[nodiscard]] bool complete(const std::stop_token &stop);
 
 private:
   Shi &shi_;
-  std::uint8_t previous_ = 0;
-  bool selected_ = false, pending_word_ = false;
-  std::optional<Shi::Mode> mode_;
-  unsigned bits_ = 0;
-  std::uint32_t word_ = 0;
+  Snapshot state_;
 };
 }

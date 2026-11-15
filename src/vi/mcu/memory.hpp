@@ -28,7 +28,26 @@ struct Location {
 // Normal single-chip UF32 map with SMRAM in its reset (3.5 KiB) mode.
 // Owns volatile RAM; borrows persistent flash. One MCU execution owner.
 class Memory {
+  static constexpr std::size_t system_bytes = 3584;
+  static constexpr std::size_t queue_bytes = 1536;
+
+  struct State {
+    std::array<std::uint8_t, system_bytes> system{};
+    std::array<std::uint8_t, system_bytes> system_known{};
+    std::array<std::uint8_t, queue_bytes> queue{};
+    std::array<std::uint8_t, queue_bytes> queue_known{};
+    std::array<std::uint8_t, 4> mapping{};
+    std::array<std::uint8_t, 4> pending{};
+    std::uint8_t written = 0;
+  };
+
 public:
+  using Snapshot = State;
+
+  [[nodiscard]] Snapshot save() const noexcept;
+  // Identical storage addresses can name different code after restoration.
+  void restore(const Snapshot &snapshot) noexcept;
+
   explicit Memory(FlashImage &flash);
   Memory(const Memory &) = delete;
   Memory &operator=(const Memory &) = delete;
@@ -60,15 +79,7 @@ private:
                std::vector<unsigned> &points) const;
   [[nodiscard]] std::uint64_t program_identity(Location location) const noexcept;
   FlashImage &flash_;
-  static constexpr std::size_t system_bytes = 3584;
-  static constexpr std::size_t queue_bytes = 1536;
-  std::array<std::uint8_t, system_bytes> system_{};
-  std::array<std::uint8_t, system_bytes> system_known_{};
-  std::array<std::uint8_t, queue_bytes> queue_{};
-  std::array<std::uint8_t, queue_bytes> queue_known_{};
-  std::array<std::uint8_t, 4> mapping_{};
-  std::array<std::uint8_t, 4> pending_{};
-  std::uint8_t written_ = 0;
+  State state_;
 
   struct CodeRange {
     Space space;

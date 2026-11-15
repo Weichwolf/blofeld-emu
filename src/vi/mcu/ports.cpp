@@ -46,10 +46,10 @@ std::optional<Register> decode(const std::uint16_t offset) noexcept {
 
 Ports::Ports(Shi &shi) : boot_(shi) {
   // 9S12UF32DGV1 4.2.1.1: all Port E inputs have pulls after normal reset.
-  ports_[2].pull = static_cast<std::uint8_t>(byte_mask);
+  state_.ports[2].pull = static_cast<std::uint8_t>(byte_mask);
   // MEBI output latches reset unknown; PIM output latches reset to zero.
-  for (std::size_t index = first_pim; index < ports_.size(); ++index) {
-    ports_[index].known = static_cast<std::uint8_t>(valid[index]);
+  for (std::size_t index = first_pim; index < state_.ports.size(); ++index) {
+    state_.ports[index].known = static_cast<std::uint8_t>(valid[index]);
   }
 }
 
@@ -58,7 +58,7 @@ bool Ports::contains(const std::uint16_t offset) noexcept {
 }
 
 Ports::Sample Ports::pins(const std::size_t index) const noexcept {
-  const auto &port = ports_[index];
+  const auto &port = state_.ports[index];
   auto result =
       Sample{.known = port.pull, .value = port.pull & ~static_cast<unsigned>(port.polarity)};
   const auto outputs = static_cast<unsigned>(port.direction);
@@ -70,13 +70,13 @@ Ports::Sample Ports::pins(const std::size_t index) const noexcept {
   const auto idle = port.external.fallback_low & ~result.known & ~external & ~outputs;
   result.known |= idle;
   result.value &= ~idle;
-  if ((routing_ & 3) == 3) {
+  if ((state_.routing & 3) == 3) {
     result.known |= tied[index];
     result.value &= ~tied[index];
   }
   result.known |= byte_mask & ~valid[index];
   result.value &= valid[index];
-  if (index == 2 && (assignment_ & assignment_clock) == 0) {
+  if (index == 2 && (state_.assignment & assignment_clock) == 0) {
     // The clock output is not GPIO. Its sampling is not supplied by this bank.
     result.known &= ~static_cast<unsigned>(assignment_clock);
   }
@@ -88,14 +88,14 @@ bool Ports::read(const std::uint16_t offset,
                  const std::uint8_t mask) const noexcept {
   const auto decoded = decode(offset);
   if (decoded) {
-    const auto &port = ports_[decoded->port];
+    const auto &port = state_.ports[decoded->port];
     switch (decoded->kind) {
       case 0:
       case 1: {
         auto result = pins(decoded->port);
         if (decoded->kind == 0) {
           auto outputs = static_cast<unsigned>(port.direction);
-          if (decoded->port == 2 && (assignment_ & assignment_clock) == 0) {
+          if (decoded->port == 2 && (state_.assignment & assignment_clock) == 0) {
             outputs &= ~static_cast<unsigned>(assignment_clock);
           }
           result.known = (result.known & ~outputs) | (port.known & outputs);
@@ -115,11 +115,11 @@ bool Ports::read(const std::uint16_t offset,
     }
   }
   switch (offset) {
-    case assignment_address: value = assignment_; return true;
-    case mode_address: value = mode_; return true;
-    case pull_address: value = pull_; return true;
-    case reduced_address: value = reduced_; return true;
-    case routing_address: value = routing_; return true;
+    case assignment_address: value = state_.assignment; return true;
+    case mode_address: value = state_.mode; return true;
+    case pull_address: value = state_.pull; return true;
+    case reduced_address: value = state_.reduced; return true;
+    case routing_address: value = state_.routing; return true;
     case 4:
     case 5:
     case 6:
@@ -132,28 +132,29 @@ bool Ports::read(const std::uint16_t offset,
 bool Ports::write_control(const Write access) noexcept {
   switch (access.offset) {
     case assignment_address:
-      assignment_ =
-          static_cast<std::uint8_t>(assignment_written_ ? (assignment_ & ~assignment_clock) |
+      state_.assignment = static_cast<std::uint8_t>(state_.assignment_written
+                                                        ? (state_.assignment & ~assignment_clock) |
                                                               (access.value & assignment_clock)
                                                         : access.value & assignment_mask);
-      assignment_written_ = true;
+      state_.assignment_written = true;
       return true;
     case mode_address:
-      if (!mode_written_) {
+      if (!state_.mode_written) {
         if ((access.value & expansion_modes) != 0) { return false; }
-        mode_ = normal_mode | (access.value & mode_controls);
-        mode_written_ = true;
+        state_.mode = normal_mode | (access.value & mode_controls);
+        state_.mode_written = true;
       }
       return true;
     case pull_address:
-      pull_ = access.value & core_controls;
+      state_.pull = access.value & core_controls;
       for (std::size_t index = 0; index < first_pim; ++index) {
         const unsigned select = index == 2 ? 0x10 : 1U << index;
-        ports_[index].pull = (pull_ & select) != 0 ? static_cast<std::uint8_t>(byte_mask) : 0;
+        state_.ports[index].pull =
+            (state_.pull & select) != 0 ? static_cast<std::uint8_t>(byte_mask) : 0;
       }
       return true;
-    case reduced_address: reduced_ = access.value & core_controls; return true;
-    case routing_address: routing_ = access.value & routing_mask; return true;
+    case reduced_address: state_.reduced = access.value & core_controls; return true;
+    case routing_address: state_.routing = access.value & routing_mask; return true;
     case 4:
     case 5:
     case 6:
@@ -166,7 +167,7 @@ bool Ports::write_control(const Write access) noexcept {
 bool Ports::write(const Write access) noexcept {
   const auto decoded = decode(access.offset);
   if (!decoded) { return write_control(access); }
-  auto &port = ports_[decoded->port];
+  auto &port = state_.ports[decoded->port];
   const auto value = static_cast<std::uint8_t>(access.value & valid[decoded->port]);
   switch (decoded->kind) {
     case 0:
@@ -190,14 +191,14 @@ bool Ports::write(const Write access) noexcept {
 
 void Ports::input(const Port port, const Input sample) {
   const auto index = static_cast<std::size_t>(port);
-  if (index >= ports_.size()) { throw std::out_of_range("Unknown MCU port"); }
-  ports_[index].external = sample;
+  if (index >= state_.ports.size()) { throw std::out_of_range("Unknown MCU port"); }
+  state_.ports[index].external = sample;
 }
 
 std::optional<Ports::Output> Ports::output(const Port port) const noexcept {
   const auto index = static_cast<std::size_t>(port);
-  if (index >= ports_.size()) { return {}; }
-  const auto &value = ports_[index];
+  if (index >= state_.ports.size()) { return {}; }
+  const auto &value = state_.ports[index];
   return Output{.direction = value.direction, .known = value.known, .value = value.latch};
 }
 
