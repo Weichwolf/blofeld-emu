@@ -67,7 +67,11 @@ void ExecutionTime::notify() noexcept {
 
 template <typename Ready>
 bool ExecutionTime::await(std::atomic<bool> &waiting, const std::stop_token &stop, Ready ready) {
+#if defined(__APPLE__) && defined(__aarch64__)
+  constexpr unsigned spin_attempts = 4096;
+#else
   constexpr unsigned spin_attempts = 64;
+#endif
   for (unsigned attempt = 0; attempt < spin_attempts; ++attempt) {
     if (stop.stop_requested()) { return false; }
     if (ready()) { return true; }
