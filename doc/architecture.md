@@ -245,19 +245,27 @@ pending-event state. Retain ordered host inputs for exact replay; never resample
 an external input while replaying. Prepared native code is immutable and shared,
 not part of a checkpoint. An incomplete device snapshot is an explicit failure.
 
-Separate two DSP-to-MCU dependencies:
+Validate DSP-driven MCU inputs against attained DSP history:
 
-- A synchronous MCU read of DSP-driven data, receive FIFO or status waits for
-  the DSP to attain the read's actual time. Publish preceding source transactions
-  before waiting. End the speculative window, commit the validated prefix and
-  perform the real read and its effects once at the admitted instruction boundary.
-  Establish the next checkpoint after this read; never predict a reply or replay
-  a destructive DSP read against an already advanced DSP.
-- An asynchronous DSP-driven interrupt or readiness edge at time t invalidates
-  speculative MCU work after t. Stop the DSP before it consumes that invalid
-  suffix, restore the MCU window, replay to the exact receiving boundary and
-  admit the real edge. Preserve already committed effects without publishing them
-  twice. Resume with a newly produced suffix. No DSP state rollback is required.
+- Non-destructive reads of peer data, shared pins, status and interrupt lines use
+  the last known DSP output with the actual driver, direction and knownness rules.
+  Record each read's time, signal and value used in a bounded read set. These reads
+  do not wait for the DSP and do not create a new DSP session.
+- At attained DSP time, confirm and discard the matching read-set prefix. A DSP
+  output change at time t invalidates speculation if a read at or after t used a
+  different value, or if an interrupt-relevant edge could have interrupted the MCU.
+  Stop the DSP before it consumes the invalid MCU suffix, restore the MCU window
+  and replay to the exact receiving boundary. Admit the real input and regenerate
+  the suffix. Preserve already committed effects without publishing them twice.
+- Destructive reads, including reply-byte consumption and FIFO pops, wait for
+  attained DSP time. Publish preceding source transactions before waiting, end
+  the speculative window and commit the validated prefix. Perform the real read
+  once at its admitted instruction boundary and establish the next checkpoint
+  after it. Never predict consumption or replay it against an advanced DSP.
+
+No DSP state rollback is required. With no changed DSP outputs, repeated panel
+reads validate without synchronizing the owners. A quiet output trace alone is
+not proof that no reads occurred; report the read set by signal.
 
 Stage MCU peer-data, SPI, MIDI output, LCD and storage effects with their actual
 timestamps. Release observable effects only through attained DSP time and only
@@ -283,8 +291,8 @@ clear-on-read effects; audio block size establishes no communication horizon.
 Qualification compares complete original PCM for W1 (held-note polyphony) and
 W2 (SL samples) against the corrected non-speculative controls, with at least two
 different window lengths and changed owner scheduling. Report startup and active
-throughput separately, rollback count, DSP sessions per frame and bounded storage
-use. The target coupling replaces
+throughput separately, rollback count, reads and failed validations by signal,
+DSP sessions per frame and bounded storage use. The target coupling replaces
 conservative prefix/certificate machinery only after that gate passes.
 
 Asserted DSP reset immediately disconnects its outputs and pending notification.
