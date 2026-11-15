@@ -15,6 +15,12 @@ target_compile_options(blofeld_diagnostics INTERFACE
   -ffp-contract=off -fno-omit-frame-pointer)
 add_library(blofeld_quality INTERFACE)
 target_link_libraries(blofeld_quality INTERFACE blofeld_diagnostics)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)$")
+  set(blofeld_native_option -mcpu=native)
+else()
+  set(blofeld_native_option -march=native)
+endif()
+target_compile_options(blofeld_quality INTERFACE $<$<CONFIG:Release>:${blofeld_native_option}>)
 # Contextual control-path exceptions must never cross the audio callback.
 if(APPLE)
   target_link_options(blofeld_quality INTERFACE -Wl,-fatal_warnings)
