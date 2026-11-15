@@ -14,6 +14,13 @@ class BootPort {
 public:
   struct Write {
     std::uint8_t direction = 0, known = 0, value = 0;
+
+    [[nodiscard]] constexpr bool selected() const noexcept {
+      constexpr std::uint8_t transaction_mask = 0x16;
+      constexpr std::uint8_t select_bit = 2;
+      return (direction & known & transaction_mask) == transaction_mask &&
+             (value & select_bit) == 0;
+    }
   };
 
   explicit BootPort(Shi &shi) : shi_(shi) {}

@@ -10,8 +10,7 @@
 
 namespace blofeld::vi::mcu {
 namespace {
-constexpr std::uint8_t select_bit = 2, clock_bit = 4, data_bit = 0x10;
-constexpr std::uint8_t transaction_mask = select_bit | clock_bit | data_bit;
+constexpr std::uint8_t clock_bit = 4, data_bit = 0x10;
 }
 
 void BootPort::reset() noexcept {
@@ -42,8 +41,7 @@ bool BootPort::write(const Write access) noexcept {
   if (pending_word_) { return false; }
   const auto previous = previous_;
   previous_ = access.value;
-  const bool selected = (access.direction & access.known & transaction_mask) == transaction_mask &&
-                        (access.value & select_bit) == 0;
+  const bool selected = access.selected();
   if (selected != selected_) {
     Shi::Mode mode;
     mode_ = blofeld_mcu_shi_select(&shi_, selected, mode) ? std::optional{mode} : std::nullopt;

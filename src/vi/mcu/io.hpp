@@ -11,6 +11,7 @@
 #include "io/sci.hpp"
 #include "io/shi.hpp"
 #include "io/usb.hpp"
+#include "mcu/boot_port.hpp"
 #include "mcu/channels.hpp"
 #include "mcu/clock.hpp"
 #include "mcu/devices.hpp"
@@ -236,8 +237,21 @@ private:
   }
 
   [[nodiscard]] bool shared_write(const Ports::Write access) const noexcept {
+    constexpr std::uint16_t data_b = 1;
+    constexpr std::uint16_t direction_b = 3;
     constexpr std::uint16_t data_u = 0x278;
     constexpr std::uint16_t direction_u = 0x27a;
+    if (access.offset == data_b || access.offset == direction_b) {
+      const auto output = ports_.output(Port::b);
+      if (!output) { return true; }
+      const BootPort::Write before{
+          .direction = output->direction, .known = output->known, .value = output->value};
+      const BootPort::Write after{.direction = access.offset == direction_b ? access.value
+                                                                            : before.direction,
+                                  .known = access.offset == data_b ? all_bits : before.known,
+                                  .value = access.offset == data_b ? access.value : before.value};
+      return before.selected() != after.selected();
+    }
     if (access.offset != peer_j_data && access.offset != peer_j_direction) {
       return access.offset == data_u || access.offset == direction_u;
     }

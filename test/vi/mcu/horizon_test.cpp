@@ -30,10 +30,12 @@
 #include <future>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <stop_token>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -363,7 +365,8 @@ struct NativePorts {
   std::vector<cpu12::Ram> grants;
   cpu12::Core core{cpu12::Memory::external(), &callbacks};
 
-  explicit NativePorts(const std::span<const cpu12::CodeSpan> code) {
+  explicit NativePorts(const std::span<const cpu12::CodeSpan> code, std::stop_token cancelled = {})
+      : stop(std::move(cancelled)) {
     if (code.empty()) { throw std::runtime_error("Missing native port fixture code"); }
     for (const auto span : code) { image.load(span.address, span.words); }
     const auto program = image.program();
@@ -380,6 +383,71 @@ struct NativePorts {
     }
   }
 };
+
+struct SpiSelection {
+  std::optional<cpu12::Byte> initial;
+  cpu12::Byte direction;
+  cpu12::ByteWrite edge;
+  bool before, after, shared;
+};
+
+void spi_selection(const SpiSelection &selection) {
+  constexpr cpu12::Address entry = 0x8000;
+  constexpr auto nop = isa::opcode<isa::Opcode::nop>();
+  constexpr std::uint32_t status_address = 0xffff91;
+  constexpr std::uint32_t control = 0xa9;
+  constexpr std::uint32_t busy = 0x400000;
+  constexpr std::uint64_t cycles = 100;
+  constexpr std::uint64_t tick = cycles * 10;
+  constexpr std::uint64_t later = tick * 2;
+  const std::array code{cpu12::CodeSpan{.address = entry, .words = nop}};
+  auto cancellation = std::stop_source{};
+  NativePorts fixture(code, cancellation.get_token());
+  if (!fixture.shi.write({.address = status_address, .value = control})) {
+    throw std::runtime_error("SPI receiver setup");
+  }
+  if (selection.initial) { fixture.write({.address = 1, .value = *selection.initial}); }
+  fixture.write({.address = 3, .value = selection.direction});
+  blofeld::vi::ExecutionTime time;
+  fixture.devices.time = &time;
+  fixture.devices.idle = cycles;
+  bool observed = false;
+  bool early = false;
+  std::jthread dsp;
+  if (selection.shared) {
+    dsp = std::jthread([&] {
+      const auto limit = time.dsp_limit(0, cancellation.get_token());
+      std::uint32_t status = 0;
+      observed = limit && limit->until == tick && fixture.shi.read(status_address, status);
+      early = (status & busy) != 0;
+      const auto current = time.dsp_limit(tick, cancellation.get_token());
+      observed = observed && current &&
+                 current->kind == blofeld::vi::ExecutionTime::DspGrant::Kind::current &&
+                 current->until == tick + 1;
+      static_cast<void>(time.dsp_limit(tick + 1, cancellation.get_token()));
+    });
+  }
+  std::promise<bool> completion;
+  auto done = completion.get_future();
+  std::jthread mcu([&] {
+    const bool accepted = fixture.callbacks.write(fixture.callbacks.owner, selection.edge);
+    const bool published = time.publish_mcu(later);
+    completion.set_value(accepted && published);
+  });
+  const auto ready = done.wait_for(std::chrono::seconds(2));
+  cancellation.request_stop();
+  mcu.join();
+  if (dsp.joinable()) { dsp.join(); }
+  std::uint32_t final = 0;
+  const bool read = fixture.shi.read(status_address, final);
+  if (ready != std::future_status::ready || !done.get() || !read ||
+      ((final & busy) != 0) != selection.after ||
+      (selection.shared && (!observed || early != selection.before))) {
+    throw std::runtime_error(std::format("SPI selection must follow its receiver boundary: {}/{}",
+                                         selection.edge.address,
+                                         selection.edge.value));
+  }
+}
 
 void input_source(blofeld::vi::PeerPort &peer,
                   blofeld::vi::ExecutionTime &time,
@@ -919,6 +987,53 @@ int main() try {
   native_clock_return();
   for (const bool rmw : {false, true}) {
     for (const auto known : {cpu12::Byte{0}, all_bits}) { settled_reads(rmw, known); }
+  }
+  constexpr cpu12::Byte pins = 0x16;
+  constexpr cpu12::Byte selected = 0x14;
+  constexpr cpu12::Byte clock_low = 0x10;
+  for (const auto selection : std::array{SpiSelection{.initial = pins,
+                                                      .direction = pins,
+                                                      .edge = {.address = 1, .value = selected},
+                                                      .before = false,
+                                                      .after = true,
+                                                      .shared = true},
+                                         SpiSelection{.initial = selected,
+                                                      .direction = pins,
+                                                      .edge = {.address = 1, .value = pins},
+                                                      .before = true,
+                                                      .after = false,
+                                                      .shared = true},
+                                         SpiSelection{.initial = selected,
+                                                      .direction = 0,
+                                                      .edge = {.address = 3, .value = pins},
+                                                      .before = false,
+                                                      .after = true,
+                                                      .shared = true},
+                                         SpiSelection{.initial = selected,
+                                                      .direction = pins,
+                                                      .edge = {.address = 3, .value = 0},
+                                                      .before = true,
+                                                      .after = false,
+                                                      .shared = true},
+                                         SpiSelection{.initial = std::nullopt,
+                                                      .direction = pins,
+                                                      .edge = {.address = 1, .value = selected},
+                                                      .before = false,
+                                                      .after = true,
+                                                      .shared = true},
+                                         SpiSelection{.initial = selected,
+                                                      .direction = pins,
+                                                      .edge = {.address = 1, .value = clock_low},
+                                                      .before = true,
+                                                      .after = true,
+                                                      .shared = false},
+                                         SpiSelection{.initial = selected,
+                                                      .direction = pins,
+                                                      .edge = {.address = 1, .value = selected},
+                                                      .before = true,
+                                                      .after = true,
+                                                      .shared = false}}) {
+    spi_selection(selection);
   }
   local_outputs();
   latch_reads();
