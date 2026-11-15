@@ -231,80 +231,64 @@ scheduling to favor performance resources for execution and efficiency resources
 for bounded preparation/background work. Query topology; QoS is not proof of
 P/E affinity. Host placement never changes guest time or ISA semantics.
 
-ExecutionTime relates completed native progress to nominal 60 MHz instrument
-units. Distinguish completed time from an exclusive channel bound B: no unconsumed
-producer event may precede B. Publish effects before the bound covering them.
-Receivers must not pass a possible earlier input; late timestamps cannot repair
-causality. Derive channel-specific lookahead from prepared CFG/bindings, real
-device latency and waiting states. Unknown control flow or addresses end a proof.
+Relate nominal core progress to 60 MHz instrument units, retaining fractional
+clock phase and exact instruction crossings. Distinguish speculative MCU progress,
+attained DSP progress and committed instrument effects. Host scheduling and window
+length change processing time only. Neither advances a guest clock or changes
+event ordering. Define ordering at equal timestamps, including real IRQ masks,
+priorities, shadows, WAI/STOP/RTI and REP state.
 
-Lower a read-only admission query and native execution from the same semantic
-guard plan. Certify the first possible effect on each bound channel, rather than
-every access to an owner callback. Use established memory ranges and loop/alias
-proofs to admit long native regions. A later computed-address guard ends the
-certified prefix unless its outcome is already proved; entry admission alone
-does not certify the whole region. Keep guest state unchanged during admission.
-Reuse validated guards in execution; invalidate grants on relevant state, code,
-mapping or binding changes.
-Allow stopped owners to describe total, channel-isolated ranges and exact writes
-in the current device state. Match complete native footprints, end at instruction
-completion and re-evaluate before continuing; retain IRQ and binding proofs.
+The target coupling lets the MCU run ahead in bounded windows while the DSP
+consumes its timestamped output. At each window start, save complete MCU core
+state through the common core contract and consumer-owned RAM, device, clock and
+pending-event state. Retain ordered host inputs for exact replay; never resample
+an external input while replaying. Prepared native code is immutable and shared,
+not part of a checkpoint. An incomplete device snapshot is an explicit failure.
 
-At a non-isolated access, settle source effects through the actual instruction-start
-instant before executing the prepared native instruction atomically. Retain source
-fractional phase: a later operation within the same integer tick is future work.
-Publish fractional source events at the first admissible integer receiver instant;
-preserve exact integer coincidences. Apply the same conversion to IRQ wakes and
-retained response bytes, without advancing the completed producer clock.
-At exact coincidence, admit only the current source instruction group, then park
-before a successor. Distinguish this permission from a future execution frontier
-and completed MCU progress. Preserve an eligible RTI return window through IRQ
-arbitration. A waiting source can publish current-instant quiescence after known
-input and due local events, without changing its completed clock. Scope this
-knowledge to the receiver's atomic operation and process new inputs before
-continuing. WAIT reaching a permission endpoint retains IRQs for the next grant.
+Separate two DSP-to-MCU dependencies:
 
-A waiting owner or a running owner with a certified no-outgoing-effect prefix
-may lend a conditional window without publishing its end as completed progress.
-The source ends that window at the first eligible real wake, finishes only its
-current atomic group and yields before a successor can reuse the old permission.
-A running receiver executes the certified foreground only through the event's
-atomic instruction boundary; establish source knowledge through that completed
-boundary before admitting its IRQ or another prefix. A waiting receiver resumes
-at the original event or established local deadline. Process already-due device
-events and source frontiers before lending a nonempty window; awaiting source
-knowledge advances no clock. Conditional permissions are not no-event bounds.
+- A synchronous MCU read of DSP-driven data, receive FIFO or status waits for
+  the DSP to attain the read's actual time. Publish preceding source transactions
+  before waiting. End the speculative window, commit the validated prefix and
+  perform the real read and its effects once at the admitted instruction boundary.
+  Establish the next checkpoint after this read; never predict a reply or replay
+  a destructive DSP read against an already advanced DSP.
+- An asynchronous DSP-driven interrupt or readiness edge at time t invalidates
+  speculative MCU work after t. Stop the DSP before it consumes that invalid
+  suffix, restore the MCU window, replay to the exact receiving boundary and
+  admit the real edge. Preserve already committed effects without publishing them
+  twice. Resume with a newly produced suffix. No DSP state rollback is required.
 
-Overlap running native work under a joint no-event bound capped by both owners' proved
-prefixes, device deadlines and committed input knowledge. Reserve the same
-generation for the bound and the source permission; neither may outlive its
-window. Sleeping owners retain real event/deadline wakes. Shared operations still
-require actual source completion. Read input
-commitment before queued events; unbounded execution does not prove future silence.
-Recompute source proofs after input transactions and relevant state changes.
+Stage MCU peer-data, SPI, MIDI output, LCD and storage effects with their actual
+timestamps. Release observable effects only through attained DSP time and only
+from validated MCU history. Discard invalid speculative effects on rollback.
+Retained input history and staged outputs use bounded storage; full buffers stop
+the producer at an instruction boundary. A blocked synchronous read must not
+prevent the DSP from consuming the preceding MCU history it needs to reach it.
 
-Include IRQ paths, actual masks/priorities/shadows and REP/return state in each
-bound. Derive incoming-to-outgoing delays as well as autonomous effects. Specify
-same-time ordering and atomic instruction crossings. Prove progress through
-cyclic dependencies, zero-delay paths, reset epochs and unequal clocks; mirrored
-completed-frontier waits can deadlock. Never advance a clock to advertise channel
-knowledge or revoke a bound after a legal input arrives.
+The DSP applies incoming events at their exact receiving boundaries. Changes that
+can affect IRQ eligibility or an actual input read bound native execution. Plain
+data changes may be applied at the next read if every intervening event and the
+value read are preserved. SS assertion/release, including DDR-B changes, follows
+the same receiver-boundary rule as other shared outputs. No peer GPIO value or
+readiness may become visible early. Local MCU work creates no per-access
+rendezvous, CFG-prefix query or joint permission window.
 
-Batch bounded queue publication with release/acquire committed prefixes and
-individual transaction timestamps. An earlier-visible write cannot wait for a
-later block's completion. Wake only for requested horizons, data or space; recheck
-predicates after registering waiters. Stop/reset cancels waits without advancing
-time. Reuse cancellation registrations for an owner's token lifetime. Short adaptive
-spins may precede OS waits. Genuine request/reply dependencies
-remain serial; overlap independent work rather than repeatedly waking both owners.
+Use release/acquire publication for timestamped history and completion frontiers.
+Wake only for actual input, required progress, space, stop or reset; recheck the
+predicate after registering a waiter. Stop/reset cancels waits without advancing
+time. Genuine request/reply dependencies remain serial. Preserve FIFO and
+clear-on-read effects; audio block size establishes no communication horizon.
 
-Summarize polling only over proved stable intervals, retaining elapsed nominal
-time, timeout, registers/flags, observable reads and IRQ boundaries. FIFO and
-clear-on-read accesses require their actual effects. Audio block size establishes
-neither a communication horizon nor an IRQ-latency guarantee.
+Qualification compares complete original PCM for W1 (held-note polyphony) and
+W2 (SL samples) against the corrected non-speculative controls, with at least two
+different window lengths and changed owner scheduling. Report startup and active
+throughput separately, rollback count, DSP sessions per frame and bounded storage
+use. The target coupling replaces
+conservative prefix/certificate machinery only after that gate passes.
 
 Asserted DSP reset immediately disconnects its outputs and pending notification.
-Reset stops the old execution owner before retiring its channel prefix and
+Reset stops the old execution owner before retiring its buffered history and
 acknowledging the epoch. Retain MCU-owned inputs during asserted reset, then
 publish them at release without discarding newer data. DSP reset recreates its
 Core/code bindings, resets SHI and retains SRAM. Old work cannot publish into the
@@ -326,8 +310,7 @@ payloads, acknowledgements or success replies.
   withdrawn or reset. Repeated bytes remain distinct writes; no future byte is
   readable early. Raw reads outside the decoded transfer retain raw semantics.
 - MCU-owned data/direction changes use a bounded SPSC timeline. Apply only
-  entries at or before attained DSP time. Local panel sampling can retain an
-  admitted peer frontier only until a relevant GPIO/I/O/owner boundary changes it.
+  entries at or before attained DSP time and discard invalid speculative suffixes.
   Keep released-input bias distinct from active unknown drivers. Port C's
   documented pull-downs, inactive B3/B5..B7 samples and the E3/E2 package route
   are explicit VM input contracts, not recovered response bytes or PCB evidence.
