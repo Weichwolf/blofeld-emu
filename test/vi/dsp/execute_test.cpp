@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "aot/dsp.hpp"
+#include "dsp/boot_rom.hpp"
 #include "dsp/execute.hpp"
 #if defined(BLOFELD_CENSUS)
 #include "census.hpp"
 #endif
 #include "dsp/ports.hpp"
+#include "dsp/program.hpp"
 #include "execution.hpp"
 #include "files/read.hpp"
 #include "io/dsp_reset.hpp"
@@ -35,6 +38,71 @@ void require(const bool condition, const char *message) {
   if (!condition) { throw std::runtime_error(message); }
 }
 
+blofeld::vi::dsp::Program prepare(const blofeld::vi::dsp::BootRom boot) {
+  using namespace dsp56300;
+  constexpr std::array entries{blofeld::vi::dsp::BootRom::main_first};
+  std::vector<CodeSpan> code{{.address = entries[0], .words = boot.main}};
+  std::vector<Word> failed{entries[0] + static_cast<Word>(boot.main.size())};
+  if (!boot.eeprom.empty()) {
+    constexpr Word eeprom = blofeld::vi::dsp::BootRom::eeprom_first;
+    code.push_back({.address = eeprom, .words = boot.eeprom});
+    failed.push_back(eeprom + static_cast<Word>(boot.eeprom.size()));
+  }
+  const std::array variants{
+      CodeVariant{.id = 0, .code = code, .entries = entries, .failed_fetches = failed}};
+  const std::array choices{
+      blofeld::vi::dsp::ProgramChoice{.variant = 0, .resumes = entries, .words = {}}};
+  return blofeld::app::aot::prepare_dsp_program({.variants = variants}, choices);
+}
+
+blofeld::vi::dsp::Program
+prepare_loaded(const blofeld::vi::dsp::BootRom boot,
+               const std::span<const dsp56300::CodeSpan> loaded,
+               const dsp56300::Word handoff,
+               const std::span<const dsp56300::InterruptRequest> interrupts = {}) {
+  using namespace dsp56300;
+  constexpr Word first = blofeld::vi::dsp::BootRom::main_first;
+  const auto split =
+      handoff >= first && handoff - first < boot.main.size() ? handoff - first : boot.main.size();
+  const std::array initial{CodeSpan{.address = first, .words = boot.main.first(split)}};
+  std::vector<CodeSpan> final(loaded.begin(), loaded.end());
+  if (split < boot.main.size()) {
+    final.push_back({.address = handoff, .words = boot.main.subspan(split)});
+  }
+  constexpr std::array initial_entries{first};
+  const std::array final_entries{handoff};
+  std::vector<Word> failed;
+  for (const auto request : interrupts) { failed.push_back(request.vector); }
+  failed.push_back(first + static_cast<Word>(boot.main.size()));
+  const std::array final_failed{first + static_cast<Word>(boot.main.size())};
+  const std::array variants{
+      CodeVariant{.id = 0, .code = initial, .entries = initial_entries, .failed_fetches = failed},
+      CodeVariant{
+          .id = 1, .code = final, .entries = final_entries, .failed_fetches = final_failed}};
+  const std::array choices{
+      blofeld::vi::dsp::ProgramChoice{.variant = 0, .resumes = initial_entries, .words = {}},
+      blofeld::vi::dsp::ProgramChoice{.variant = 1, .resumes = final_entries, .words = {}}};
+  const std::array transfers{CodeTransition{.from = 0, .to = 1, .entry = handoff}};
+  return blofeld::app::aot::prepare_dsp_program(
+      {.variants = variants}, choices, {}, interrupts, transfers);
+}
+
+blofeld::vi::ExecutionReport execute(const blofeld::vi::dsp::BootRom boot,
+                                     blofeld::vi::Shi &shi,
+                                     blofeld::vi::DspReset &reset,
+                                     const std::stop_token &stop,
+                                     blofeld::vi::MediaImage *media = nullptr,
+                                     const blofeld::vi::PcmOutput output = {},
+                                     blofeld::vi::PeerPort *peer = nullptr,
+                                     const blofeld::vi::dsp::Program *prepared = nullptr) {
+  const auto run = [&](const blofeld::vi::dsp::Program &image) {
+    std::cerr << "Execute prepared fixture: words=" << boot.main.size() << '\n';
+    return blofeld::vi::dsp::execute(
+        boot, shi, reset, stop, media, output, peer, nullptr, nullptr, nullptr, &image);
+  };
+  return prepared != nullptr ? run(*prepared) : run(prepare(boot));
+}
+
 void native_clock_register() {
 #if defined(BLOFELD_CENSUS)
   using blofeld::vi::Census;
@@ -64,7 +132,7 @@ void native_clock_register() {
       std::array{configure, control, clear, read, output, ram, zero, load, ram, sink, unmapped});
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
+  const auto report = execute({.main = program, .eeprom = {}}, shi, reset, {});
   require(report.failure && report.failure->operation == blofeld::vi::Access::write &&
               report.failure->space == 'P' && report.failure->address == unmapped &&
               report.failure->value == expected,
@@ -122,8 +190,8 @@ void native_timed_peer_input() {
             "Queue two real MCU data states before native DSP execution");
     blofeld::vi::Shi shi;
     blofeld::vi::DspReset reset;
-    const auto report = blofeld::vi::dsp::execute(
-        {.main = program, .eeprom = {}}, shi, reset, {}, nullptr, {}, &peer);
+    const auto report =
+        execute({.main = program, .eeprom = {}}, shi, reset, {}, nullptr, {}, &peer);
     const auto expected = second_tick == later ? before : after;
     require(report.failure && report.failure->operation == blofeld::vi::Access::write &&
                 report.failure->space == 'P' && report.failure->address == marker &&
@@ -180,6 +248,7 @@ std::vector<dsp56300::Word> peer_reply_program() {
 
 void native_reply_time() {
   const auto program = peer_reply_program();
+  const auto prepared = prepare({.main = program, .eeprom = {}});
   blofeld::vi::PeerPort peer;
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
@@ -188,8 +257,8 @@ void native_reply_time() {
   std::jthread worker([&](const std::stop_token &stop) {
     blofeld::vi::ExecutionReport report;
     try {
-      report = blofeld::vi::dsp::execute(
-          {.main = program, .eeprom = {}}, shi, reset, stop, nullptr, {}, &peer);
+      report =
+          execute({.main = program, .eeprom = {}}, shi, reset, stop, nullptr, {}, &peer, &prepared);
     } catch (...) { report.exception = std::current_exception(); }
     promise.set_value(report);
   });
@@ -230,8 +299,7 @@ void unknown_boot_tail() {
   constexpr dsp56300::Word next = 0xff0001;
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report =
-      blofeld::vi::dsp::execute({.main = dsp56300::isa::nop, .eeprom = {}}, shi, reset, {});
+  const auto report = execute({.main = dsp56300::isa::nop, .eeprom = {}}, shi, reset, {});
   const bool correct =
       report.instructions == 1 && report.failure &&
       report.failure->operation == blofeld::vi::Access::read && report.failure->space == 'P' &&
@@ -264,7 +332,19 @@ void sparse_boot_rom() {
   constexpr auto eeprom = isa::program(std::array{sink | loading, data_address, sink, marker});
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute({.main = main, .eeprom = eeprom}, shi, reset, {});
+  constexpr std::array entries{blofeld::vi::dsp::BootRom::main_first};
+  const std::array code{
+      dsp56300::CodeSpan{.address = entries[0], .words = std::span(main).first(2)},
+      dsp56300::CodeSpan{.address = eeprom_address, .words = eeprom}};
+  const std::array failed{entries[0] + static_cast<Word>(main.size()),
+                          eeprom_address + static_cast<Word>(eeprom.size())};
+  const std::array variants{
+      dsp56300::CodeVariant{.id = 0, .code = code, .entries = entries, .failed_fetches = failed}};
+  const std::array choices{
+      blofeld::vi::dsp::ProgramChoice{.variant = 0, .resumes = entries, .words = {}}};
+  const auto prepared = blofeld::app::aot::prepare_dsp_program({.variants = variants}, choices);
+  const auto report =
+      execute({.main = main, .eeprom = eeprom}, shi, reset, {}, nullptr, {}, nullptr, &prepared);
   const bool correct = report.instructions == 2 && report.failure &&
                        report.failure->operation == blofeld::vi::Access::write &&
                        report.failure->space == 'P' && report.failure->address == marker &&
@@ -293,7 +373,7 @@ template <dsp56300::Word reserved> void native_reserved_y_read() {
   constexpr auto program = isa::program(std::array{load, reserved, store, marker});
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
+  const auto report = execute({.main = program, .eeprom = {}}, shi, reset, {});
   require(report.failure && report.failure->operation == blofeld::vi::Access::write &&
               report.failure->space == 'P' && report.failure->address == marker &&
               report.failure->value == 0,
@@ -324,7 +404,13 @@ void native_memory_switch() {
                    std::array{jump, destination});
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
+  constexpr dsp56300::Word prefix_words = 7;
+  const std::array loaded{dsp56300::CodeSpan{.address = destination, .words = isa::stop}};
+  const auto prepared = prepare_loaded({.main = program, .eeprom = {}},
+                                       loaded,
+                                       blofeld::vi::dsp::BootRom::main_first + prefix_words);
+  const auto report =
+      execute({.main = program, .eeprom = {}}, shi, reset, {}, nullptr, {}, nullptr, &prepared);
   require(!report.failure && report.instructions == 9,
           "Guest OMR remaps retained X RAM into executable P without copying or a new Core");
 }
@@ -381,9 +467,44 @@ void native_dma_program_write() {
                            function,
                            store_p,
                            marker};
+  constexpr dsp56300::Word boot = blofeld::vi::dsp::BootRom::main_first;
+  constexpr unsigned first_call = 12;
+  constexpr unsigned second_call = 26;
+  const std::span words(program);
+  const std::array before{dsp56300::CodeSpan{.address = boot, .words = words.first(first_call)}};
+  const std::array original{literal, dsp56300::Word{0}, isa::rts[0]};
+  const std::array changed{literal, replacement, isa::rts[0]};
+  const std::array middle{
+      dsp56300::CodeSpan{.address = boot + first_call,
+                         .words = words.subspan(first_call, second_call - first_call)},
+      dsp56300::CodeSpan{.address = function, .words = original}};
+  const std::array after{
+      dsp56300::CodeSpan{.address = boot + second_call, .words = words.subspan(second_call)},
+      dsp56300::CodeSpan{.address = function, .words = changed}};
+  constexpr std::array first_entries{boot};
+  constexpr std::array middle_entries{boot + first_call};
+  constexpr std::array last_entries{boot + second_call};
+  const std::array failed{boot + static_cast<dsp56300::Word>(program.size())};
+  const std::array variants{
+      dsp56300::CodeVariant{
+          .id = 0, .code = before, .entries = first_entries, .failed_fetches = failed},
+      dsp56300::CodeVariant{
+          .id = 1, .code = middle, .entries = middle_entries, .failed_fetches = failed},
+      dsp56300::CodeVariant{
+          .id = 2, .code = after, .entries = last_entries, .failed_fetches = failed}};
+  const std::array choices{
+      blofeld::vi::dsp::ProgramChoice{.variant = 0, .resumes = first_entries, .words = {}},
+      blofeld::vi::dsp::ProgramChoice{.variant = 1, .resumes = middle_entries, .words = {}},
+      blofeld::vi::dsp::ProgramChoice{.variant = 2, .resumes = last_entries, .words = {}}};
+  constexpr std::array transfers{
+      dsp56300::CodeTransition{.from = 0, .to = 1, .entry = middle_entries[0]},
+      dsp56300::CodeTransition{.from = 1, .to = 2, .entry = last_entries[0]}};
+  const auto prepared =
+      blofeld::app::aot::prepare_dsp_program({.variants = variants}, choices, {}, {}, transfers);
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
+  const auto report =
+      execute({.main = program, .eeprom = {}}, shi, reset, {}, nullptr, {}, nullptr, &prepared);
   if (report.failure && report.failure->address != marker) {
     std::cerr << "DMA native failure pc=" << report.failure->pc
               << " address=" << report.failure->address << " reason=" << report.failure->reason
@@ -433,7 +554,7 @@ void native_dma_esai_write() {
   program.push_back(marker);
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
+  const auto report = execute({.main = program, .eeprom = {}}, shi, reset, {});
   require(report.failure && report.failure->space == 'P' && report.failure->address == marker &&
               report.failure->value == all_done,
           "Native software DMA completes only after the connected ESAI TX register accepts data");
@@ -474,7 +595,7 @@ void native_dma_dax_write() {
   program.push_back(marker);
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
+  const auto report = execute({.main = program, .eeprom = {}}, shi, reset, {});
   require(report.failure && report.failure->space == 'P' && report.failure->address == marker &&
               report.failure->value == all_done,
           "Native writes bind DAX and Port D, then software DMA transfers an actual XADR word");
@@ -510,7 +631,7 @@ void native_timer_events() {
   program.push_back(marker);
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
+  const auto report = execute({.main = program, .eeprom = {}}, shi, reset, {});
   require(report.failure && report.failure->space == 'P' && report.failure->address == marker &&
               report.failure->value == expected,
           "Native execution reaches a real timer compare deadline and reads its sticky TCF");
@@ -559,6 +680,7 @@ void native_timer_interrupt(const bool waiting, const bool late_vba = false) {
   for (unsigned index = 0; index < interrupt_handler.size(); ++index) {
     put_code(handler + index, interrupt_handler[index]);
   }
+  const auto handoff = blofeld::vi::dsp::BootRom::main_first + static_cast<Word>(program.size());
   const std::array set_base{literal,
                             vba,
                             isa::opcode<isa::Opcode::movec_register>()[0] | (x0 << 8U) | write |
@@ -595,79 +717,20 @@ void native_timer_interrupt(const bool waiting, const bool late_vba = false) {
   program.push_back(marker);
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
+  const std::array vector_words{call, handler};
+  const std::array loaded{dsp56300::CodeSpan{.address = vector, .words = vector_words},
+                          dsp56300::CodeSpan{.address = handler, .words = interrupt_handler}};
+  constexpr std::array interrupts{dsp56300::InterruptRequest{.vector = vector, .level = 0}};
+  const auto prepared =
+      prepare_loaded({.main = program, .eeprom = {}}, loaded, handoff, interrupts);
+  const auto report =
+      execute({.main = program, .eeprom = {}}, shi, reset, {}, nullptr, {}, nullptr, &prepared);
   constexpr Word boot = 0xff0000;
   require(report.failure && report.failure->space == 'P' && report.failure->address == marker &&
               report.failure->value == timer_enable &&
               report.failure->pc == boot + program.size() - 2,
           "A real timer IRQ observes masks/REP or wakes WAIT, uses VBA, acknowledges TCF and "
           "returns via RTI");
-}
-
-void configured_vector_preparation() {
-  namespace isa = dsp56300::isa;
-  using dsp56300::Word;
-  constexpr Word immediate = 0x34;
-  constexpr Word absolute = 0x30;
-  constexpr Word write = 0x8000;
-  constexpr Word x0 = 4;
-  constexpr Word a1 = 12;
-  constexpr Word vba_selector = 0x10;
-  constexpr Word vba = 0x200;
-  constexpr Word vector = vba + 0x54;
-  constexpr Word handler = 0x300;
-  constexpr Word finish = 0x350;
-  constexpr Word priority_port = 0x3e;
-  constexpr Word priority = 0x100;
-  constexpr Word marker = 0xc000;
-  constexpr unsigned expected_instructions =
-      15; // Six code-word transfers and three setup instructions.
-  constexpr auto literal =
-      isa::opcode<isa::Opcode::move_x_effective>()[0] | (immediate << 8U) | write;
-  constexpr auto store = isa::opcode<isa::Opcode::movem_effective>()[0] | (absolute << 8U) | x0;
-  constexpr auto jump = isa::opcode<isa::Opcode::jmp_absolute_short>()[0];
-  for (const bool enabled : {false, true}) {
-    std::vector<Word> program;
-    const auto put = [&](const Word address, const Word value) {
-      const std::array words{literal, value, store, address};
-      program.insert(program.end(), words.begin(), words.end());
-    };
-    put(vector, jump | handler);
-    // Uninitialized X:(R0) proves preparation never reads guest data or executes the handler.
-    put(handler, isa::opcode<isa::Opcode::move_x_effective>()[0] | (4U << 11) | write);
-    put(handler + 1, isa::opcode<isa::Opcode::asr_immediate>()[0] | (3U << 1) | 1U);
-    put(handler + 2, isa::opcode<isa::Opcode::add_x0_a>()[0]);
-    put(handler + 3, jump | finish);
-    put(finish, isa::rti[0]);
-    const std::array setup{literal,
-                           vba,
-                           isa::opcode<isa::Opcode::movec_register>()[0] | (x0 << 8U) | write |
-                               vba_selector,
-                           isa::opcode<isa::Opcode::movep_memory_high>()[0] | (immediate << 8U) |
-                               write | priority_port,
-                           enabled ? priority : Word{0},
-                           isa::opcode<isa::Opcode::movem_effective>()[0] | (absolute << 8U) | a1,
-                           marker};
-    program.insert(program.end(), setup.begin(), setup.end());
-    blofeld::vi::Shi shi;
-    blofeld::vi::DspReset reset;
-    const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
-    const bool correct = report.failure && report.failure->space == 'P' &&
-                         report.failure->address == marker && report.failure->value == 0 &&
-                         report.instructions == expected_instructions &&
-                         ((report.prepared_native_bytes != 0) == enabled);
-    if (!correct) {
-      std::cerr << "Configured code: enabled=" << enabled << " retired=" << report.instructions
-                << " native-bytes=" << report.prepared_native_bytes;
-      if (report.failure) {
-        std::cerr << " failure=" << report.failure->space << ':' << std::hex
-                  << report.failure->address << " value=" << report.failure->value << std::dec;
-      }
-      std::cerr << '\n';
-    }
-    require(correct,
-            "Configured vector code prepares before any request without executing its handler");
-  }
 }
 
 void native_audio_dma(const bool throwing) {
@@ -758,7 +821,7 @@ void native_audio_dma(const bool throwing) {
   blofeld::vi::ExecutionReport report;
   bool caught = false;
   try {
-    report = blofeld::vi::dsp::execute(
+    report = execute(
         {.main = program, .eeprom = {}}, shi, reset, consumer.stop.get_token(), nullptr, output);
   } catch (const std::runtime_error &) { caught = true; }
   require(consumer.submitted && caught == throwing && consumer.closed == 1 &&
@@ -797,7 +860,7 @@ void native_transmit_registers() {
                                                    sink});
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
+  const auto report = execute({.main = program, .eeprom = {}}, shi, reset, {});
   require(report.failure && report.failure->space == 'P' && report.failure->address == sink &&
               report.failure->value == expected_status,
           "Native HTX writes occupy both real transmit stages; HCSR reports HTX full");
@@ -824,14 +887,13 @@ void native_interrupt_priorities() {
         configure | port, dsp56300::word_mask, clear | (port << 8U), read | port, output, sink};
     blofeld::vi::Shi shi;
     blofeld::vi::DspReset reset;
-    const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
+    const auto report = execute({.main = program, .eeprom = {}}, shi, reset, {});
     const auto expected = port == core_port ? core_expected : peripheral_expected;
     require(report.failure && report.failure->space == 'P' && report.failure->address == sink &&
                 report.failure->value == expected,
             "Native priority writes, bit updates and reads retain only implemented fields");
     const std::array reset_program{read | port, output, sink};
-    const auto after_reset =
-        blofeld::vi::dsp::execute({.main = reset_program, .eeprom = {}}, shi, reset, {});
+    const auto after_reset = execute({.main = reset_program, .eeprom = {}}, shi, reset, {});
     require(after_reset.failure && after_reset.failure->address == sink &&
                 after_reset.failure->value == 0,
             "A new reset instance starts with every programmable priority disabled");
@@ -983,8 +1045,7 @@ void native_media(const std::filesystem::path &root, const MediaCase operation) 
   if (programming) { require(image.erase(0) == true, "Prepare a qualified erased program target"); }
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report =
-      blofeld::vi::dsp::execute({.main = guest.code, .eeprom = {}}, shi, reset, {}, &image);
+  const auto report = execute({.main = guest.code, .eeprom = {}}, shi, reset, {}, &image);
   constexpr dsp56300::Word complete_status = 0xc0;
   const auto expected = writing ? complete_status : 1U;
   const bool matched = report.failure && report.failure->space == 'P' &&
@@ -1023,8 +1084,7 @@ void native_missing_media(const std::filesystem::path &root) {
       blofeld::host::read_file(root / "media.bfnand", blofeld::vi::MediaImage::max_bytes));
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto report =
-      blofeld::vi::dsp::execute({.main = guest.code, .eeprom = {}}, shi, reset, {}, &image);
+  const auto report = execute({.main = guest.code, .eeprom = {}}, shi, reset, {}, &image);
   require(report.failure && report.failure->operation == blofeld::vi::Access::write &&
               report.failure->space == 'X' && report.failure->address == MediaGuest::c_data &&
               report.failure->media && report.failure->media->page == page &&
@@ -1056,7 +1116,10 @@ void consecutive_receive_registers() {
   require(shi.transfer(1).accepted && shi.transfer(0).accepted &&
               shi.transfer(isa::stop[0]).accepted,
           "Queue separate length, destination and code words");
-  const auto report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
+  const std::array loaded{dsp56300::CodeSpan{.address = 0, .words = isa::stop}};
+  const auto prepared = prepare_loaded({.main = program, .eeprom = {}}, loaded, 0);
+  const auto report =
+      execute({.main = program, .eeprom = {}}, shi, reset, {}, nullptr, {}, nullptr, &prepared);
   dsp56300::Word word = 0;
   require(!report.failure && report.instructions == 5 && !shi.read(receive, word),
           "Each native MOVEP consumes exactly one word across A0, R0 and program destinations");
@@ -1091,10 +1154,13 @@ void reset_running_core() {
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
   blofeld::vi::ExecutionReport report;
+  const std::array loaded{dsp56300::CodeSpan{.address = 0, .words = isa::stop}};
+  const auto prepared = prepare_loaded({.main = program, .eeprom = {}}, loaded, 0);
   std::atomic<bool> done{false};
   std::jthread worker([&](const std::stop_token &stop) {
     try {
-      report = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, stop);
+      report = execute(
+          {.main = program, .eeprom = {}}, shi, reset, stop, nullptr, {}, nullptr, &prepared);
     } catch (...) { report.exception = std::current_exception(); }
     done.store(true, std::memory_order_release);
   });
@@ -1118,35 +1184,39 @@ void reset_running_core() {
 
 int main(const int argc, char **argv) try {
   require(argc == 3, "Supply artifact and fixture directories");
-  native_media(argv[2], MediaCase::read);
-  native_media(argv[2], MediaCase::released_read);
-  native_media(argv[2], MediaCase::erase);
-  native_media(argv[2], MediaCase::program);
-  native_missing_media(argv[2]);
-  native_clock_register();
-  native_timed_peer_input();
-  native_reply_time();
-  unknown_boot_tail();
-  sparse_boot_rom();
+  const auto run = [](const char *name, const auto action) {
+    std::cerr << name << '\n';
+    action();
+  };
+  run("native_media(MediaCase::read)", [&] { native_media(argv[2], MediaCase::read); });
+  run("native_media(MediaCase::released_read)",
+      [&] { native_media(argv[2], MediaCase::released_read); });
+  run("native_media(MediaCase::erase)", [&] { native_media(argv[2], MediaCase::erase); });
+  run("native_media(MediaCase::program)", [&] { native_media(argv[2], MediaCase::program); });
+  run("native_missing_media(argv[2])", [&] { native_missing_media(argv[2]); });
+  run("native_clock_register()", native_clock_register);
+  run("native_timed_peer_input()", native_timed_peer_input);
+  run("native_reply_time()", native_reply_time);
+  run("unknown_boot_tail()", unknown_boot_tail);
+  run("sparse_boot_rom()", sparse_boot_rom);
   constexpr dsp56300::Word delay_boundary = 0x16000;
-  native_reserved_y_read<delay_boundary>();
-  native_reserved_y_read<dsp56300::word_mask>();
-  native_transmit_registers();
-  native_interrupt_priorities();
-  native_memory_switch();
-  native_dma_program_write();
-  native_dma_esai_write();
-  native_dma_dax_write();
-  native_audio_dma(false);
-  native_audio_dma(true);
-  native_timer_events();
-  native_timer_interrupt(false);
-  native_timer_interrupt(true);
-  native_timer_interrupt(false, true);
-  native_timer_interrupt(true, true);
-  configured_vector_preparation();
-  consecutive_receive_registers();
-  reset_running_core();
+  run("native_reserved_y_read<delay_boundary>()", native_reserved_y_read<delay_boundary>);
+  run("native_reserved_y_read<dsp56300::word_mask>()", native_reserved_y_read<dsp56300::word_mask>);
+  run("native_transmit_registers()", native_transmit_registers);
+  run("native_interrupt_priorities()", native_interrupt_priorities);
+  run("native_memory_switch()", native_memory_switch);
+  run("native_dma_program_write()", native_dma_program_write);
+  run("native_dma_esai_write()", native_dma_esai_write);
+  run("native_dma_dax_write()", native_dma_dax_write);
+  run("native_audio_dma(false)", [&] { native_audio_dma(false); });
+  run("native_audio_dma(true)", [&] { native_audio_dma(true); });
+  run("native_timer_events()", native_timer_events);
+  run("native_timer_interrupt(false)", [&] { native_timer_interrupt(false); });
+  run("native_timer_interrupt(true)", [&] { native_timer_interrupt(true); });
+  run("native_timer_interrupt(false, true)", [&] { native_timer_interrupt(false, true); });
+  run("native_timer_interrupt(true, true)", [&] { native_timer_interrupt(true, true); });
+  run("consecutive_receive_registers()", consecutive_receive_registers);
+  run("reset_running_core()", reset_running_core);
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

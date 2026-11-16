@@ -54,6 +54,12 @@ public:
     if (entry.ticks < position_) { return fail(Error::time); }
     position_ = entry.ticks;
     if (replaying_) {
+      const auto &expected = storage_[replayed_];
+      // Finer native deadlines may add progress publications while replaying the same instructions.
+      if (entry.kind == Kind::time && entry.value == 0 && entry.ticks <= expected.ticks &&
+          (expected.kind != Kind::time || entry.ticks < expected.ticks)) {
+        return true;
+      }
       if (storage_[replayed_] != entry) {
         expected_ = storage_[replayed_];
         refused_ = entry;
@@ -64,6 +70,7 @@ public:
       return true;
     }
     if (entry.ticks < attained_) {
+      if (entry.kind == Kind::time && entry.value == 0) { return true; }
       refused_ = entry;
       return fail(Error::prefix);
     }

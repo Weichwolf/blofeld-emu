@@ -125,22 +125,31 @@ struct Machine {
     grants.swap(next);
   }
 
-  void run(const Effects &effects) {
-    constexpr unsigned maximum_sessions = 64;
+  void run(const Effects &effects, const mcu::Timer::Cycle interval = 0) {
+    constexpr unsigned maximum_sessions = 4096;
     for (unsigned session = 0; session < maximum_sessions; ++session) {
       const auto deadline = devices.deadline();
-      const auto until =
+      auto until =
           deadline ? *deadline - devices.idle : std::numeric_limits<mcu::Timer::Cycle>::max() / 2;
+      if (interval != 0) { until = std::min(until, core.progress().estimated_cycles + interval); }
       const auto result = core.run_until(until);
       if (result.fault != cpu12::Fault::none || !io.complete_events()) {
+        const auto diagnostic = effects.diagnostic();
         throw std::runtime_error(std::format("Fused MCU fault={} PC=${:04x} address=${:04x} "
-                                             "value=${:04x} effects={} ticks={}; {}; {}",
+                                             "value=${:04x} effects={} ticks={}; expected={}/{}/{} "
+                                             "actual={}/{}/{}; {}; {}",
                                              static_cast<unsigned>(result.fault),
                                              result.pc,
                                              result.address,
                                              result.value,
                                              static_cast<unsigned>(effects.error()),
                                              devices.clock.ticks(),
+                                             static_cast<unsigned>(diagnostic.expected.kind),
+                                             diagnostic.expected.ticks,
+                                             diagnostic.expected.value,
+                                             static_cast<unsigned>(diagnostic.actual.kind),
+                                             diagnostic.actual.ticks,
+                                             diagnostic.actual.value,
                                              io.error() != nullptr ? io.error() : "no device error",
                                              io.context()));
       }
@@ -151,7 +160,7 @@ struct Machine {
   }
 };
 
-void fused_outputs() {
+void fused_outputs(const bool fine) {
   Machine machine;
   const auto bytes = program();
   machine.image.load(entry, bytes);
@@ -162,10 +171,17 @@ void fused_outputs() {
   const auto memory = machine.memory.save();
   const auto devices = machine.devices.save();
   const auto io = machine.io.save();
-  std::array<Effects::Entry, 256> storage{};
+  std::array<Effects::Entry, 4096> storage{};
   Effects effects(storage, 16);
   const mcu::Output output(effects, machine.devices, machine.core);
   machine.run(effects);
+  const auto finished = machine.core.save();
+  const auto finished_memory = machine.memory.save();
+  const auto finished_time = machine.devices.clock.ticks();
+  std::vector<Effects::Entry> finished_effects;
+  for (const auto &event : effects.entries()) {
+    if (event.kind != Effects::Kind::time) { finished_effects.push_back(event); }
+  }
   require(effects.error() == Effects::Error::none && effects.size() != 0,
           "Fused channel calls append bounded timestamped output records");
   std::uint32_t value = 0;
@@ -194,9 +210,22 @@ void fused_outputs() {
   machine.core.restore(cpu);
   machine.bind(*compiled);
   require(effects.rollback(), "Discard unobserved suffix while retaining the committed prefix");
-  machine.run(effects);
-  require(effects.finish_replay() && machine.midi.time() == committed_time &&
-              machine.peer.dsp_interrupt(true) == 1 &&
+  machine.run(effects, fine ? 1 : 0);
+  const auto replayed_memory = machine.memory.save();
+  std::vector<Effects::Entry> replayed_effects;
+  for (const auto &event : effects.entries()) {
+    if (event.kind != Effects::Kind::time) { replayed_effects.push_back(event); }
+  }
+  require(machine.core.save() == finished && machine.devices.clock.ticks() == finished_time &&
+              replayed_effects == finished_effects &&
+              replayed_memory.system == finished_memory.system &&
+              replayed_memory.system_known == finished_memory.system_known &&
+              replayed_memory.queue == finished_memory.queue &&
+              replayed_memory.queue_known == finished_memory.queue_known &&
+              replayed_memory.mapping == finished_memory.mapping &&
+              replayed_memory.pending == finished_memory.pending &&
+              replayed_memory.written == finished_memory.written && effects.finish_replay() &&
+              machine.midi.time() == committed_time && machine.peer.dsp_interrupt(true) == 1 &&
               machine.peer.sample_mcu_data(machine.devices.clock.ticks()) ==
                   vi::PeerPort::Sample{.mask = all, .known = all, .value = first},
           "Replay regenerates the committed prefix without duplicate IRQs or rewinding host time");
@@ -245,11 +274,24 @@ void prefix_errors() {
   require(next.append(time) && next.apply_before(2, sink) && next.checkpoint(1) &&
               next.append(time) && next.apply_before(2, sink) && delivered == before + 2,
           "The next native instruction may publish at the preceding checkpoint's cycle");
+  std::array<Effects::Entry, 8> shifted_storage{};
+  Effects shifted(shifted_storage, 2);
+  require(shifted.append({.ticks = 2, .value = first, .kind = Effects::Kind::midi}) &&
+              shifted.apply_before(3, sink) && shifted.rollback() && shifted.append(time) &&
+              !shifted.append(original) && shifted.error() == Effects::Error::prefix,
+          "Extra progress cannot authorize a changed timestamp for a committed MIDI byte");
+  std::array<Effects::Entry, 8> progress_storage{};
+  Effects progress(progress_storage, 2);
+  require(progress.append({.ticks = 2, .kind = Effects::Kind::time}) &&
+              progress.apply_before(3, sink) && progress.rollback() && progress.append(time) &&
+              !progress.finish_replay() && progress.error() == Effects::Error::prefix,
+          "Finer progress cannot omit an originally committed progress boundary");
 }
 }
 
 int main() try {
-  fused_outputs();
+  fused_outputs(false);
+  fused_outputs(true);
   prefix_errors();
 } catch (const std::exception &error) {
 
