@@ -255,8 +255,10 @@ Validate DSP-driven MCU inputs against attained DSP history:
 
 - Non-destructive reads of peer data, shared pins, status and interrupt lines use
   the last known DSP output with the actual driver, direction and knownness rules.
-  Record each read's time, signal and value used in a bounded read set. These reads
-  do not wait for the DSP and do not create a new DSP session.
+  Record each read's time, signal and observed mask/value in a bounded read set.
+  Include direction and knownness for the accessed pins. Full-byte and
+  read-modify-write accesses retain all read bits. These reads do not wait for
+  the DSP and do not create a new DSP session.
 - At attained DSP time, confirm and discard the matching read-set prefix. A DSP
   output change at time t invalidates speculation if a read at or after t used a
   different value, or if an interrupt-relevant edge could have interrupted the MCU.

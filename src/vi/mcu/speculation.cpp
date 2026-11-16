@@ -185,11 +185,17 @@ bool Speculation::settle(const std::uint64_t time) noexcept {
 }
 
 bool Speculation::data(PeerPort::Sample &sample) noexcept {
+  return data(sample, byte_mask);
+}
+
+bool Speculation::data(PeerPort::Sample &sample, const std::uint8_t mask) noexcept {
   if (state_.reset.held) {
     sample = {};
     return true;
   }
-  const auto value = input(Epoch::Signal::data, ticks());
+  const auto observed = std::uint64_t{mask} | (std::uint64_t{mask} << known_shift) |
+                        (std::uint64_t{mask} << direction_shift);
+  const auto value = input(Epoch::Signal::data, ticks(), observed);
   if (!value) { return epoch_.refuse(); }
   sample = {.mask = static_cast<std::uint8_t>((*value >> direction_shift) & byte_mask),
             .known = static_cast<std::uint8_t>((*value >> known_shift) & byte_mask),
@@ -205,7 +211,7 @@ bool Speculation::read(const std::uint8_t mask,
     return true;
   }
   const auto direction = static_cast<std::uint8_t>((state_.data >> direction_shift) & byte_mask);
-  if (mask != byte_mask || direction != 0 || !state_.reply) { return data(sample); }
+  if (mask != byte_mask || direction != 0 || !state_.reply) { return data(sample, mask); }
   if (!settle(time)) { return false; }
   const bool accepted = epoch_.consume(time, [&] {
     const auto value = peer_.read_dsp_data({.mask = mask, .direction = direction, .ticks = time});

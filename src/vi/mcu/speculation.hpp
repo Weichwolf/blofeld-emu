@@ -75,6 +75,7 @@ private:
   };
 
   [[nodiscard]] std::uint64_t ticks() const noexcept;
+  [[nodiscard]] bool data(PeerPort::Sample &sample, std::uint8_t mask) noexcept;
   void publish() noexcept;
   [[nodiscard]] bool observe(const Coupling::Input &update) noexcept;
   [[nodiscard]] bool settle(std::uint64_t time) noexcept;

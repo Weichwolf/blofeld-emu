@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "execution.hpp"
+#include "io/coupling.hpp"
 #include "io/dsp_reset.hpp"
+#include "io/execution_time.hpp"
 #include "io/midi_port.hpp"
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
@@ -10,22 +13,27 @@
 #include "mcu/memory.hpp"
 #include "mcu/output.hpp"
 #include "mcu/program.hpp"
+#include "mcu/speculation.hpp"
 #include "mcu/timer.hpp"
 #include "support/mcu.hpp"
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cpu12/core.hpp>
 #include <cpu12/memory.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <format>
+#include <future>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <stop_token>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -161,6 +169,107 @@ struct Machine {
     throw std::runtime_error("Authored MCU output fixture did not reach WAI");
   }
 };
+
+bool input_change(vi::Coupling &coupling,
+                  mcu::Speculation &source,
+                  const std::stop_source &stop,
+                  std::uint64_t &serial,
+                  const std::uint64_t ticks) {
+  std::promise<bool> result;
+  auto ready = result.get_future();
+  const std::jthread producer([&](const std::stop_token &token) {
+    const std::stop_callback cancelled(token, [&] { std::stop_source{stop}.request_stop(); });
+    result.set_value(coupling.outputs(ticks));
+  });
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{1};
+  std::optional<vi::Coupling::Input> change;
+  while (!(change = coupling.input(serial)) && std::chrono::steady_clock::now() < deadline) {
+    if (ready.wait_for(std::chrono::milliseconds{1}) == std::future_status::ready) { break; }
+  }
+  if (!change) {
+    throw std::runtime_error("The actual DSP did not publish the next input observation");
+  }
+  serial = change->serial;
+  const bool accepted = source.poll();
+  if (!accepted) { std::stop_source{stop}.request_stop(); }
+  require(ready.wait_for(std::chrono::seconds{1}) == std::future_status::ready &&
+              ready.get() == accepted,
+          "DSP publication completes only after MCU validation or cancellation");
+  return accepted;
+}
+
+void masked_peer_observations() {
+  constexpr std::uint8_t watched = 0x80;
+  constexpr std::uint8_t other = 1;
+  constexpr std::uint8_t no_other = all ^ other;
+  constexpr std::uint8_t no_watched = all ^ watched;
+
+  struct Case {
+    std::uint8_t mask;
+    vi::PeerPort::Sample changed;
+    bool accepted;
+  };
+
+  constexpr std::array cases{
+      Case{.mask = watched,
+           .changed = {.mask = all, .known = all, .value = other},
+           .accepted = true},
+      Case{.mask = watched, .changed = {.mask = no_other, .known = all}, .accepted = true},
+      Case{.mask = watched, .changed = {.mask = all, .known = no_other}, .accepted = true},
+      Case{.mask = watched,
+           .changed = {.mask = all, .known = all, .value = watched},
+           .accepted = false},
+      Case{.mask = watched, .changed = {.mask = no_watched, .known = all}, .accepted = false},
+      Case{.mask = watched, .changed = {.mask = all, .known = no_watched}, .accepted = false},
+      Case{.mask = all, .changed = {.mask = all, .known = all, .value = other}, .accepted = false},
+      Case{.mask = all, .changed = {.mask = no_other, .known = all}, .accepted = false},
+      Case{.mask = all, .changed = {.mask = all, .known = no_other}, .accepted = false}};
+  constexpr auto code = cpu12::isa::program(cpu12::isa::nop, cpu12::isa::wai);
+  for (const auto &test : cases) {
+    Machine machine;
+    machine.image.load(entry, code);
+    const auto compiled = machine.image.program();
+    machine.core.set_registers({.pc = entry, .sp = stack});
+    machine.bind(*compiled);
+    const auto executed = machine.core.run(1);
+    require(executed.fault == cpu12::Fault::none && executed.retired == 1 &&
+                machine.io.complete_events() && machine.devices.advance(machine.core) &&
+                machine.devices.clock.ticks() > 1,
+            "Actual native execution reaches a later speculative read boundary");
+    vi::ExecutionTime time;
+    const std::stop_source stop;
+    vi::Coupling coupling(machine.peer,
+                          machine.shi,
+                          machine.reset,
+                          time,
+                          machine.midi,
+                          stop.get_token(),
+                          vi::Coupling::default_window);
+    vi::ExecutionReport report;
+    mcu::Speculation source(coupling,
+                            machine.memory,
+                            machine.devices,
+                            machine.io,
+                            machine.core,
+                            *compiled,
+                            machine.peer,
+                            machine.midi,
+                            machine.reset,
+                            report,
+                            nullptr,
+                            nullptr);
+    std::uint64_t serial = 0;
+    constexpr vi::PeerPort::Sample initial{.mask = all, .known = all};
+    machine.peer.dsp_data(initial);
+    require(input_change(coupling, source, stop, serial, 0), "Publish the initial real DSP bus");
+    vi::PeerPort::Sample sample;
+    require(source.read(test.mask, machine.devices.clock.ticks(), sample) && sample == initial,
+            "The actual speculative channel supplies the observed pin values");
+    machine.peer.dsp_data(test.changed);
+    require(input_change(coupling, source, stop, serial, 1) == test.accepted,
+            "Only observed value, direction or knownness bits may invalidate a masked read");
+  }
+}
 
 void fused_outputs(const bool fine) {
   Machine machine;
@@ -321,6 +430,7 @@ void prefix_errors() {
 }
 
 int main() try {
+  masked_peer_observations();
   fused_outputs(false);
   fused_outputs(true);
   unconfirmed_input_admission();
