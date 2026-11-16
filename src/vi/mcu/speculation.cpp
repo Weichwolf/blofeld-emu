@@ -518,12 +518,14 @@ void Speculation::step(const std::uint64_t target) {
   if (coupling_.stopped()) { return; }
   if (result.fault != cpu12::Fault::none) {
     if (epoch_.refusal() == Epoch::Refusal::epoch_invalidated) { return; }
+    static_cast<void>(check());
     throw std::runtime_error(
-        std::format("D2 MCU fault={} PC=${:04x} address=${:04x} value=${:04x}; {}",
+        std::format("D2 MCU fault={} PC=${:04x} address=${:04x} value=${:04x}; reason={}; {}",
                     static_cast<unsigned>(result.fault),
                     result.pc,
                     result.address,
                     result.value,
+                    io_.error() != nullptr ? io_.error() : "device refused access",
                     io_.context()));
   }
   if (!io_.complete_events()) {
