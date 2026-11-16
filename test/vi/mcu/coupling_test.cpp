@@ -3,7 +3,12 @@
 #include "dsp/ports.hpp"
 #include "dsp/program.hpp"
 #include "execution.hpp"
+#include "io/coupling.hpp"
+#include "io/dsp_reset.hpp"
+#include "io/execution_time.hpp"
 #include "io/midi_port.hpp"
+#include "io/peer_port.hpp"
+#include "io/shi.hpp"
 #include "isa.hpp"
 #include "mcu/program.hpp"
 #include "storage/flash_image.hpp"
@@ -23,6 +28,7 @@
 #include <memory>
 #include <span>
 #include <stdexcept>
+#include <stop_token>
 #include <utility>
 #include <vector>
 
@@ -152,6 +158,39 @@ std::vector<dsp56300::Word> dsp_code(const bool dense) {
 }
 
 namespace {
+void streaming_frontier() {
+  constexpr std::uint64_t step = 20;
+  constexpr std::uint64_t end = 2 * step;
+  constexpr std::uint64_t source_frontier = 1000;
+  vi::PeerPort peer;
+  vi::Shi shi;
+  vi::DspReset reset;
+  vi::ExecutionTime time;
+  vi::MidiPort midi(vi::MidiPort::InputMode::stream);
+  std::stop_source stop;
+  vi::Coupling coupling(
+      peer, shi, reset, time, midi, stop.get_token(), vi::Coupling::default_window);
+  coupling.bind();
+  coupling.publish({}, source_frontier);
+  for (const auto ticks : {std::uint64_t{0}, step, end}) {
+    auto result = std::async(std::launch::async,
+                             [&coupling, ticks] { return coupling.receiver({.ticks = ticks}); });
+    if (result.wait_for(std::chrono::milliseconds{1}) == std::future_status::ready) {
+      throw std::runtime_error("DSP passed an unpublished MIDI frontier");
+    }
+    const bool admitted = ticks == end ? midi.finish_input() : midi.advance_input(ticks + step);
+    if (!admitted || result.wait_for(std::chrono::seconds{1}) != std::future_status::ready) {
+      stop.request_stop();
+      throw std::runtime_error("Publishing MIDI knowledge did not wake the DSP receiver");
+    }
+    const auto grant = result.get();
+    if (!grant || grant->kind != vi::Coupling::Grant::Kind::frontier ||
+        grant->until != (ticks == end ? source_frontier : ticks + step)) {
+      throw std::runtime_error("DSP grant differs from the common MCU/MIDI frontier");
+    }
+  }
+}
+
 void exercise(const bool dense) {
   const auto code = dsp_code(dense);
   const std::array spans{dsp56300::CodeSpan{.address = 0xff0000, .words = code}};
@@ -190,6 +229,7 @@ void exercise(const bool dense) {
 }
 
 int main() try {
+  streaming_frontier();
   for (const bool dense : {false, true}) { exercise(dense); }
 } catch (const std::exception &error) {
 

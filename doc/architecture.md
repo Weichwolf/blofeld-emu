@@ -241,12 +241,15 @@ length change processing time only. Neither advances a guest clock or changes
 event ordering. Define ordering at equal timestamps, including real IRQ masks,
 priorities, shadows, WAI/STOP/RTI and REP state.
 
-The target coupling lets the MCU run ahead in bounded windows while the DSP
-consumes its timestamped output. At each window start, save complete MCU core
+Run the MCU ahead in bounded 19200-tick windows while the DSP consumes its
+timestamped output. At each window start, save complete MCU core
 state through the common core contract and consumer-owned RAM, device, clock and
 pending-event state. Retain ordered host inputs for exact replay; never resample
-an external input while replaying. Prepared native code is immutable and shared,
-not part of a checkpoint. An incomplete device snapshot is an explicit failure.
+an external input while replaying. Prepared native code is immutable and shared.
+Checkpoints retain pending declared code transfers through the core Snapshot,
+including their original image ownership and destination variants. Restore an
+unchanged validated binding in place; rebind only after code or mapping revocation.
+An incomplete device snapshot is an explicit failure.
 
 Validate DSP-driven MCU inputs against attained DSP history:
 
@@ -295,8 +298,8 @@ Qualification compares complete original PCM for W1 (held-note polyphony) and
 W2 (SL samples) against the corrected non-speculative controls, with at least two
 different window lengths and changed owner scheduling. Report startup and active
 throughput separately, rollback count, reads and failed validations by signal,
-DSP sessions per frame and bounded storage use. The target coupling replaces
-conservative prefix/certificate machinery only after that gate passes.
+DSP sessions per frame and bounded storage use. Keep one product coupling path;
+the cores execute prepared images without scheduler-specific queries.
 
 Asserted DSP reset immediately disconnects its outputs and pending notification.
 Reset stops the old execution owner before retiring its buffered history and

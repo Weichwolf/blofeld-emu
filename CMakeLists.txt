@@ -365,8 +365,6 @@ if(BUILD_TESTING)
     "blofeld_app_aot;blofeld_vi_execution")
   target_include_directories(vi-dsp-io-promotion-test PRIVATE "${BLOFELD_DSP56300_ROOT}/test/support")
   target_include_directories(vi-dsp-io-test PRIVATE "${BLOFELD_DSP56300_ROOT}/test/support")
-  blofeld_unit(vi-dsp-horizon-test test/vi/dsp/horizon_test.cpp "blofeld_app_aot;blofeld_vi_execution")
-  target_include_directories(vi-dsp-horizon-test PRIVATE "${BLOFELD_DSP56300_ROOT}/test/support")
   target_include_directories(vi-dsp-program-test PRIVATE "${BLOFELD_DSP56300_ROOT}/test/support")
   target_include_directories(vi-dsp-code-source-test PRIVATE test)
   blofeld_unit(vi-update-transport-test test/vi/storage/update_transport_test.cpp
@@ -414,8 +412,6 @@ if(BUILD_TESTING)
   blofeld_unit(vi-sci-test test/vi/io/sci_test.cpp blofeld_vi_execution)
   blofeld_unit(vi-mcu-execute-test test/vi/mcu/execute_test.cpp "blofeld_app_aot;blofeld_vi_execution")
   target_include_directories(vi-mcu-execute-test PRIVATE "${BLOFELD_CPU12_ROOT}/test/support")
-  blofeld_unit(vi-mcu-horizon-test test/vi/mcu/horizon_test.cpp "blofeld_app_aot;blofeld_vi_execution")
-  target_include_directories(vi-mcu-horizon-test PRIVATE "${BLOFELD_CPU12_ROOT}/test/support")
   blofeld_unit(vi-dsp-memory-test test/vi/dsp/memory_test.cpp blofeld_vi_execution)
   blofeld_unit(vi-dsp-boot-rom-test test/vi/dsp/boot_rom_test.cpp blofeld_quality)
   target_include_directories(vi-dsp-boot-rom-test PRIVATE src/vi)
@@ -448,10 +444,9 @@ if(BUILD_TESTING)
   add_test(NAME app-ui-display-test COMMAND "${Python3_EXECUTABLE}" -B
     "${CMAKE_CURRENT_SOURCE_DIR}/test/app/ui/display_test.py" "${CMAKE_CURRENT_BINARY_DIR}/Testing")
   set_tests_properties(app-ui-display-test PROPERTIES TIMEOUT 10)
-  set_tests_properties(vi-mcu-execute-test vi-mcu-horizon-test vi-mcu-midi-test vi-vm-context-test
+  set_tests_properties(vi-mcu-execute-test vi-mcu-midi-test vi-vm-context-test
     PROPERTIES TIMEOUT 60)
   foreach(target app-midi-file-test vi-mcu-midi-test vi-vm-context-test vi-mcu-execute-test
-      vi-mcu-horizon-test
       app-aot-dsp-program-test)
     target_include_directories(${target} PRIVATE test "${BLOFELD_CPU12_ROOT}/test/support")
   endforeach()

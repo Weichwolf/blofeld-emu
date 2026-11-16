@@ -10,7 +10,6 @@
 #include "io/shi.hpp"
 #include "isa.hpp"
 #include "mcu/execute.hpp"
-#include "mcu/program.hpp"
 #include "storage/flash_image.hpp"
 #include "support/mcu.hpp"
 
@@ -21,7 +20,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
-#include <format>
 #include <future>
 #include <iostream>
 #include <limits>
@@ -324,39 +322,11 @@ void native_peer_xirq() {
   peer.dsp_data({.mask = peer_byte_mask, .known = peer_byte_mask, .value = datum});
   require(peer.dsp_ready(true) && peer.dsp_ready(false), "Post an actual external request pulse");
   blofeld::vi::ExecutionTime lifecycle;
-  std::promise<void> sleeping;
-  auto asleep = sleeping.get_future();
-  std::jthread dsp([&](const std::stop_token &stop) {
-    std::uint64_t ticks = 0;
-    while (const auto limit = lifecycle.dsp_limit(ticks, stop)) {
-      if (limit->until == std::numeric_limits<std::uint64_t>::max()) {
-        sleeping.set_value();
-        break;
-      }
-      ticks = limit->until;
-    }
-  });
-  std::promise<blofeld::vi::ExecutionReport> completion;
-  auto completed = completion.get_future();
-  std::jthread mcu([&](const std::stop_token &stop) {
-    try {
-      completion.set_value(blofeld::vi::mcu::execute(
-          *image, *prepared, shi, reset, stop, nullptr, nullptr, &peer, &lifecycle));
-    } catch (...) { completion.set_exception(std::current_exception()); }
-  });
-  const auto sleeping_status = asleep.wait_for(std::chrono::seconds(1));
-  const auto status = completed.wait_for(std::chrono::milliseconds(10));
-  mcu.request_stop();
-  mcu.join();
-  const auto ended = completed.get();
-  dsp.request_stop();
-  dsp.join();
-  require(lifecycle.mcu_wait_time().has_value(),
-          "Only the actual native WAI publishes the initial MCU wait observation");
-  require(sleeping_status == std::future_status::ready && status == std::future_status::timeout,
-          "A waiting MCU with an attached live source remains available for future IRQs");
-  require(!ended.failure && ended.instructions == 3 && !peer.mcu_interrupt(),
-          "An XIRQ pulse that ended before unmasking cannot enter its vector");
+  const auto ended = blofeld::vi::mcu::execute(
+      *image, *prepared, shi, reset, {}, nullptr, nullptr, &peer, &lifecycle);
+  require(lifecycle.mcu_wait_time().has_value() && !ended.failure && ended.instructions == 3 &&
+              !peer.mcu_interrupt(),
+          "The original WAI records readiness and a pulse ending before unmasking cannot vector");
   require(peer.dsp_ready(true), "Keep an actual XIRQ source asserted through MCU admission");
   const auto report =
       blofeld::vi::mcu::execute(*image, *prepared, shi, reset, {}, nullptr, nullptr, &peer);
@@ -387,146 +357,6 @@ void native_peer_xirq() {
   require(pending.failure && pending.failure->address == marker &&
               pending.failure->value == command && announced.mcu_interrupt() == 1,
           "A still-driven report enters the original XIRQ vector after MCU unmasking");
-}
-
-struct WaitingPeer {
-  std::uint64_t pulse;
-  std::chrono::milliseconds delay;
-  std::optional<std::uint64_t> frontier;
-};
-
-void waiting_peer_time(blofeld::vi::FlashImage &image,
-                       const blofeld::vi::mcu::Program &program,
-                       const WaitingPeer input) {
-  constexpr cpu12::Address marker = 0x3000;
-  constexpr std::uint64_t first_wait = 200;
-  const auto frontier = input.frontier.value_or(0);
-  const auto authorized = (frontier / 10) * 10;
-  blofeld::vi::Shi shi;
-  blofeld::vi::DspReset reset;
-  blofeld::vi::PeerPort peer;
-  blofeld::vi::ExecutionTime time;
-  blofeld::vi::MidiPort midi(blofeld::vi::MidiPort::InputMode::stream);
-  if (input.frontier) {
-    require(midi.advance_input(frontier), "Establish a finite original input frontier");
-  }
-  std::promise<blofeld::vi::ExecutionReport> completion;
-  auto done = completion.get_future();
-  std::promise<bool> publication;
-  auto published = publication.get_future();
-  std::jthread mcu([&](const std::stop_token &stop) {
-    try {
-      completion.set_value(blofeld::vi::mcu::execute(image,
-                                                     program,
-                                                     shi,
-                                                     reset,
-                                                     stop,
-                                                     nullptr,
-                                                     nullptr,
-                                                     &peer,
-                                                     &time,
-                                                     input.frontier ? &midi : nullptr));
-    } catch (...) { completion.set_exception(std::current_exception()); }
-  });
-  std::jthread dsp([&](const std::stop_token &stop) {
-    bool posted = false;
-    std::uint64_t ticks = 0;
-    while (const auto limit = time.dsp_limit(ticks, stop)) {
-      if (!posted && limit->until > input.pulse) {
-        std::this_thread::sleep_for(input.delay);
-        const bool woke = peer.dsp_ready(true) && time.wake_mcu(input.pulse);
-        publication.set_value(woke);
-        posted = true;
-        ticks = input.pulse + 7;
-      } else {
-        ticks = limit->until;
-      }
-    }
-  });
-  if (input.frontier) {
-    const auto guard = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (midi.time() < authorized &&
-           done.wait_for(std::chrono::seconds(0)) != std::future_status::ready &&
-           std::chrono::steady_clock::now() < guard) {
-      std::this_thread::yield();
-    }
-    if (done.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-      static_cast<void>(done.get());
-      throw std::runtime_error("The waiting MCU exited at the input frontier");
-    }
-    require(midi.time() == authorized &&
-                done.wait_for(std::chrono::milliseconds(10)) == std::future_status::timeout &&
-                midi.time() == authorized,
-            "WAI awaits a new input frontier without time advance or an empty execution lease");
-    require(midi.advance_input(input.pulse + frontier),
-            "Authorize the later event interval through the actual stream source");
-  }
-  const auto completed = done.wait_for(std::chrono::seconds(2));
-  const auto announced = published.wait_for(std::chrono::seconds(1));
-  mcu.request_stop();
-  dsp.request_stop();
-  mcu.join();
-  dsp.join();
-  const auto result = done.get();
-  // TEN starts at bus10; WAI reuses its frame in6 cycles, before the timer load.
-  const auto expected = (((input.pulse + 9) / 10) + 6 - 10) & 0xffU;
-  const bool posted = announced == std::future_status::ready && published.get();
-  const auto message = std::format("WAI peer timing: pulse={} delay={} frontier={} done={} "
-                                   "announced={} woke={} wait={} retired={} "
-                                   "address={} value={} expected={} exception={}",
-                                   input.pulse,
-                                   input.delay.count(),
-                                   frontier,
-                                   completed == std::future_status::ready,
-                                   announced == std::future_status::ready,
-                                   posted,
-                                   time.mcu_wait_time().value_or(0),
-                                   result.instructions,
-                                   result.failure ? result.failure->address : 0,
-                                   result.failure ? result.failure->value : 0,
-                                   expected,
-                                   bool{result.exception});
-  require(completed == std::future_status::ready && announced == std::future_status::ready &&
-              posted && time.mcu_wait_time() == first_wait && result.instructions == 7 &&
-              !result.exception && result.failure && result.failure->address == marker &&
-              result.failure->value == expected,
-          message.c_str());
-}
-
-void native_waiting_peer_time() {
-  namespace isa = cpu12::isa;
-  constexpr auto setup = isa::program(isa::opcode<isa::Opcode::lds_immediate>(),
-                                      std::array<cpu12::Byte, 2>{0x1f, 0xff},
-                                      isa::opcode<isa::Opcode::ldab_immediate>(),
-                                      std::array<cpu12::Byte, 1>{0x80},
-                                      isa::opcode<isa::Opcode::stab_direct>(),
-                                      std::array<cpu12::Byte, 1>{0x4d},
-                                      isa::opcode<isa::Opcode::stab_direct>(),
-                                      std::array<cpu12::Byte, 1>{0x46},
-                                      isa::opcode<isa::Opcode::andcc_immediate>(),
-                                      std::array<cpu12::Byte, 1>{0xbf},
-                                      isa::wai);
-  constexpr auto handler = isa::program(isa::opcode<isa::Opcode::ldab_direct>(),
-                                        std::array<cpu12::Byte, 1>{0x45},
-                                        isa::opcode<isa::Opcode::stab_extended>(),
-                                        std::array<cpu12::Byte, 2>{0x30, 0});
-  constexpr cpu12::Address entry = 0x8100;
-  blofeld::test::McuImage image;
-  image.load(0x8000, setup);
-  image.load(entry, handler);
-  image->bytes[blofeld::vi::FlashImage::byte_count - 12] = static_cast<cpu12::Byte>(entry >> 8U);
-  image->bytes[blofeld::vi::FlashImage::byte_count - 11] = static_cast<cpu12::Byte>(entry);
-  image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
-  image->bytes.back() = 0;
-  const auto program = image.program();
-  constexpr std::array<std::optional<std::uint64_t>, 3> frontiers{std::nullopt, 1000, 1001};
-  for (const std::uint64_t pulse : {5000U, 5001U, 5009U, 5010U, 655450U, 655461U}) {
-    for (const auto delay : {std::chrono::milliseconds(0), std::chrono::milliseconds(5)}) {
-      for (const auto frontier : frontiers) {
-        waiting_peer_time(*image, *program, {.pulse = pulse, .delay = delay, .frontier = frontier});
-      }
-    }
-  }
 }
 
 void native_pedal_input() {
@@ -662,85 +492,9 @@ void native_queued_data_without_dsp() {
           "Native MCU data and direction writes queue real timestamped values without a DSP wait");
 }
 
-void native_polling_progress(const bool pulse) {
-  namespace isa = cpu12::isa;
-  constexpr cpu12::Address marker = 0x3000;
-  constexpr cpu12::Byte datum = 0x5a;
-  constexpr std::uint64_t peer_time = 1000;
-  constexpr auto setup = isa::program(isa::opcode<isa::Opcode::lds_immediate>(),
-                                      std::array<cpu12::Byte, 2>{0x1f, 0xff},
-                                      isa::opcode<isa::Opcode::andcc_immediate>(),
-                                      std::array<cpu12::Byte, 1>{0xbf},
-                                      isa::opcode<isa::Opcode::ldab_immediate>(),
-                                      std::array<cpu12::Byte, 1>{0x80},
-                                      isa::opcode<isa::Opcode::stab_extended>(),
-                                      std::array<cpu12::Byte, 2>{0, 0x46});
-  constexpr cpu12::Byte repeat_poll = 0xfb;
-  constexpr auto loop = isa::program(isa::opcode<isa::Opcode::ldab_extended>(),
-                                     std::array<cpu12::Byte, 2>{0, 0x44},
-                                     isa::opcode<isa::Opcode::bra_relative>(),
-                                     std::array{repeat_poll});
-  constexpr auto handler = isa::program(isa::opcode<isa::Opcode::ldab_immediate>(),
-                                        std::array{datum},
-                                        isa::opcode<isa::Opcode::stab_extended>(),
-                                        std::array<cpu12::Byte, 2>{0x30, 0});
-  blofeld::test::McuImage image;
-  image->known.fill(1);
-  image.load(0x8000, setup);
-  image.load(static_cast<cpu12::Address>(0x8000 + (static_cast<std::ptrdiff_t>(setup.size()))),
-             loop);
-  const auto offset = setup.size() + loop.size();
-  image.load(static_cast<cpu12::Address>(0x8000 + (static_cast<std::ptrdiff_t>(offset))), handler);
-  constexpr auto entry = static_cast<cpu12::Address>(0x8000 + offset);
-  image->bytes[blofeld::vi::FlashImage::byte_count - 12] = static_cast<cpu12::Byte>(entry >> 8U);
-  image->bytes[blofeld::vi::FlashImage::byte_count - 11] = static_cast<cpu12::Byte>(entry);
-  image->bytes[blofeld::vi::FlashImage::byte_count - 2] = 0x80;
-  image->bytes.back() = 0;
-  const auto prepared = image.program();
-  blofeld::vi::Shi shi;
-  blofeld::vi::DspReset reset;
-  blofeld::vi::PeerPort peer;
-  blofeld::vi::ExecutionTime time;
-  std::promise<blofeld::vi::ExecutionReport> result;
-  auto completed = result.get_future();
-  std::jthread mcu([&](const std::stop_token &stop) {
-    try {
-      result.set_value(blofeld::vi::mcu::execute(
-          *image, *prepared, shi, reset, stop, nullptr, nullptr, &peer, &time));
-    } catch (...) { result.set_exception(std::current_exception()); }
-  });
-  bool posted = false;
-  std::uint64_t posted_at = 0;
-  std::jthread dsp([&](const std::stop_token &stop) {
-    std::uint64_t ticks = 0;
-    while (const auto limit = time.dsp_limit(ticks, stop)) {
-      if (!posted && limit->until > peer_time) {
-        ticks = peer_time;
-        posted = peer.dsp_ready(true) && (!pulse || peer.dsp_ready(false));
-        if (!posted) { return; }
-        posted_at = ticks;
-        static_cast<void>(time.wake_mcu(ticks));
-      } else {
-        ticks = limit->until;
-      }
-    }
-  });
-  const auto ready = completed.wait_for(std::chrono::seconds(1));
-  mcu.request_stop();
-  dsp.request_stop();
-  mcu.join();
-  dsp.join();
-  const auto report = completed.get();
-  require(ready == std::future_status::ready && posted && posted_at == peer_time &&
-              !time.mcu_wait_time() && report.failure && report.failure->address == marker &&
-              report.failure->value == datum,
-          "A native timer-poll loop publishes device time so its peer can deliver the real XIRQ");
-}
-
-void native_panel_sampling(const bool timed_boundary) {
+void native_panel_sampling() {
   namespace isa = cpu12::isa;
   constexpr cpu12::Byte phase_marker = 0x42;
-  constexpr cpu12::Byte response = 0x5a;
   constexpr cpu12::Address marker = 0x3000;
   constexpr cpu12::Byte all_bits = 0xff;
   constexpr cpu12::Byte bank_outputs = 0xc0;
@@ -780,12 +534,6 @@ void native_panel_sampling(const bool timed_boundary) {
     append(isa::program(isa::opcode<isa::Opcode::ldab_extended>(),
                         std::array<cpu12::Byte, 2>{2, data_q}));
   }
-  if (timed_boundary) {
-    append(isa::program(isa::opcode<isa::Opcode::ldab_direct>(),
-                        std::array<cpu12::Byte, 1>{timer_count},
-                        isa::opcode<isa::Opcode::ldab_extended>(),
-                        std::array<cpu12::Byte, 2>{2, data_q}));
-  }
   append(isa::program(isa::opcode<isa::Opcode::stab_extended>(),
                       std::array<cpu12::Byte, 2>{static_cast<cpu12::Byte>(marker >> 8U), 0}));
   blofeld::test::McuImage image;
@@ -798,38 +546,11 @@ void native_panel_sampling(const bool timed_boundary) {
   blofeld::vi::DspReset reset;
   blofeld::vi::PeerPort peer;
   blofeld::vi::ExecutionTime time;
-  std::promise<blofeld::vi::ExecutionReport> result;
-  auto completed = result.get_future();
-  std::jthread mcu([&](const std::stop_token &stop) {
-    try {
-      result.set_value(blofeld::vi::mcu::execute(
-          *image, *prepared, shi, reset, stop, nullptr, nullptr, &peer, &time));
-    } catch (...) { result.set_exception(std::current_exception()); }
-  });
-  bool sampled = false;
-  std::jthread dsp([&](const std::stop_token &stop) {
-    std::uint64_t ticks = 0;
-    while (const auto limit = time.dsp_limit(ticks, stop)) {
-      ticks = limit->until;
-      const auto input = peer.sample_mcu_data(ticks);
-      if (input.mask != 0 || input.value != phase_marker) { continue; }
-      sampled = true;
-      if (timed_boundary) {
-        peer.dsp_data({.mask = all_bits, .known = all_bits, .value = response});
-      }
-    }
-  });
-  const auto ready = completed.wait_for(std::chrono::seconds(1));
-  mcu.request_stop();
-  dsp.request_stop();
-  mcu.join();
-  dsp.join();
-  const auto report = completed.get();
-  const auto expected = timed_boundary ? response : cpu12::Byte{0};
-  require(
-      ready == std::future_status::ready && sampled && report.failure &&
-          report.failure->address == marker && report.failure->value == expected,
-      "Repeated input-bank reads preserve inactive inputs and actual data across a timer access");
+  const auto report =
+      blofeld::vi::mcu::execute(*image, *prepared, shi, reset, {}, nullptr, nullptr, &peer, &time);
+  require(report.failure && report.failure->address == marker && report.failure->value == 0 &&
+              peer.sample_mcu_data(std::numeric_limits<std::uint64_t>::max()).value == phase_marker,
+          "Repeated input-bank reads retain inactive panel levels and the original queued latch");
 }
 
 void native_clock_input_frontier() {
@@ -905,14 +626,10 @@ int main() try {
   native_package_and_peer();
   native_reply_time();
   native_peer_xirq();
-  native_waiting_peer_time();
   native_pedal_input();
   native_local_port_access();
   native_queued_data_without_dsp();
-  native_polling_progress(false);
-  native_polling_progress(true);
-  native_panel_sampling(false);
-  native_panel_sampling(true);
+  native_panel_sampling();
   native_clock_input_frontier();
 } catch (const std::exception &error) {
 

@@ -84,7 +84,6 @@ struct Devices {
   }
 
   bool wait_input(const std::uint64_t ticks) noexcept {
-    if (time != nullptr && !blofeld_mcu_time_publish(time, clock.ticks())) { return false; }
     return blofeld_mcu_midi_await(midi, ticks, stop);
   }
 

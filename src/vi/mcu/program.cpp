@@ -18,21 +18,11 @@
 #include <vector>
 
 namespace blofeld::vi::mcu {
-namespace {
-bool sorted_contains(const std::span<const cpu12::Address> entries, const cpu12::Address pc) {
-  const auto found =
-      std::ranges::partition_point(entries, [pc](const auto entry) { return entry < pc; });
-  return found != entries.end() && *found == pc;
-}
-}
-
-Program::Source::Source(const cpu12::CodeVariant &variant)
-    : id(variant.id), entries(variant.entries.begin(), variant.entries.end()) {
+Program::Source::Source(const cpu12::CodeVariant &variant) : id(variant.id) {
   std::array<cpu12::Byte, cpu12::address_bytes> values{};
   std::bitset<cpu12::address_bytes> known;
   if (variant.code.empty()) { throw std::invalid_argument("MCU program requires source code"); }
   for (const auto span : variant.code) {
-    entries.push_back(span.address);
     if (span.words.empty() || span.words.size() > cpu12::address_bytes) {
       throw std::invalid_argument("Invalid MCU program source extent");
     }
@@ -82,20 +72,13 @@ bool Program::Source::matches(const Memory &memory) const {
   return true;
 }
 
-Program::Program(cpu12::NativeImage image,
-                 const cpu12::CodeImage source,
-                 const std::span<const cpu12::CodeTransition> transitions)
+Program::Program(cpu12::NativeImage image, const cpu12::CodeImage source)
     : image_(std::move(image)) {
   const auto prepared = image_.report();
   if (source.variants.empty() || prepared.prepared_entries == 0 ||
       prepared.unresolved_entries != 0 || prepared.failure.fault != cpu12::Fault::none) {
     throw std::invalid_argument("MCU program requires complete prepared code");
   }
-  handoffs_.reserve(transitions.size());
-  for (const auto &transition : transitions) { handoffs_.push_back(transition.entry); }
-  std::ranges::sort(handoffs_);
-  const auto duplicates = std::ranges::unique(handoffs_);
-  handoffs_.erase(duplicates.begin(), duplicates.end());
   sources_.reserve(source.variants.size());
   std::set<std::uint64_t> ids;
   for (const auto &variant : source.variants) {
@@ -103,13 +86,6 @@ Program::Program(cpu12::NativeImage image,
       throw std::invalid_argument("Duplicate MCU program source");
     }
     sources_.emplace_back(variant);
-    auto &source_entries = sources_.back().entries;
-    for (const auto &transition : transitions) {
-      if (transition.to == variant.id) { source_entries.push_back(transition.entry); }
-    }
-    std::ranges::sort(source_entries);
-    const auto duplicate = std::ranges::unique(source_entries);
-    source_entries.erase(duplicate.begin(), duplicate.end());
   }
 }
 
@@ -134,15 +110,6 @@ std::vector<std::uint64_t> Program::admit(Memory &memory, const cpu12::Address p
     throw std::runtime_error(std::format("No prepared MCU source admits fetch at PC=${:04x}", pc));
   }
   return ids;
-}
-
-bool Program::handoff(const std::span<const std::uint64_t> mounted,
-                      const cpu12::Address pc) const noexcept {
-  if (!sorted_contains(handoffs_, pc)) { return false; }
-  return std::ranges::none_of(sources_, [&](const auto &source) {
-    return std::ranges::find(mounted, source.id) != mounted.end() &&
-           sorted_contains(source.entries, pc);
-  });
 }
 
 void Program::install(cpu12::Core &core, const std::span<const std::uint64_t> mounted) const {

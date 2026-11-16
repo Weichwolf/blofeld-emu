@@ -24,7 +24,9 @@ public:
   struct Census {
     std::array<std::uint64_t, static_cast<std::size_t>(Signal::count)> reads{}, failed{};
     std::uint64_t rollbacks = 0, destructive = 0, pressure = 0;
+#if defined(BLOFELD_CENSUS)
     Signal cause = Signal::count;
+#endif
   };
 
   explicit Epoch(const std::span<Read> storage, const std::size_t reserve) noexcept

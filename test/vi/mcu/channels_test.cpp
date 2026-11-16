@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "io/dsp_reset.hpp"
-#include "io/execution_time.hpp"
 #include "io/midi_port.hpp"
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
@@ -18,7 +17,6 @@
 
 namespace {
 using blofeld::vi::DspReset;
-using blofeld::vi::ExecutionTime;
 using blofeld::vi::MidiPort;
 using blofeld::vi::PeerPort;
 using blofeld::vi::Shi;
@@ -114,7 +112,7 @@ void midi_ownership() {
           "Actual output and end-of-stream admission share the original native channels");
 }
 
-void reset_and_time() {
+void reset_epoch() {
   DspReset reset;
   DspReset::State state;
   blofeld_mcu_reset_state(&reset, state);
@@ -123,16 +121,6 @@ void reset_and_time() {
   blofeld_mcu_reset_state(&reset, state);
   require(state.held && state.epoch == 1 && !reset.acknowledge(2),
           "The binding cannot acknowledge or fabricate a future reset generation");
-  ExecutionTime time;
-  blofeld_mcu_time_hold(&time);
-  constexpr std::uint64_t tick = 37;
-  require(blofeld_mcu_time_publish(&time, tick) && !blofeld_mcu_time_publish(&time, tick - 1) &&
-              blofeld_mcu_time_enter(&time, tick, {}),
-          "Local publication is monotonic and an actually held DSP permits MCU access");
-  blofeld_mcu_time_leave(&time);
-  require(blofeld_mcu_time_enter(&time, tick, {}),
-          "Leaving the real transaction releases ownership even at the same timestamp");
-  blofeld_mcu_time_leave(&time);
 }
 
 void shi_selection() {
@@ -154,7 +142,7 @@ int main() try {
   timed_reply();
   queued_input();
   midi_ownership();
-  reset_and_time();
+  reset_epoch();
   shi_selection();
 } catch (const std::exception &error) {
 

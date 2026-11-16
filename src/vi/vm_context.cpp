@@ -53,10 +53,11 @@ VmContext::VmContext(std::unique_ptr<FlashImage> image,
     state_probe_ = std::make_unique<mcu::StateProbe>(&stop_);
   }
 #endif
-  if (speculation_window != 0) {
-    coupling_ = std::make_unique<Coupling>(
-        peer_, shi_, reset_, time_, midi_, stop_.get_token(), speculation_window);
+  if (speculation_window == 0) {
+    throw std::invalid_argument("A speculative window must be positive");
   }
+  coupling_ = std::make_unique<Coupling>(
+      peer_, shi_, reset_, time_, midi_, stop_.get_token(), speculation_window);
   if (!image_) { throw std::invalid_argument("VM requires a persistent MCU image"); }
   if (!mcu_program_) { throw std::invalid_argument("VM requires a complete prepared MCU program"); }
 }

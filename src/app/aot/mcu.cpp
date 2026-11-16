@@ -24,14 +24,22 @@
 namespace blofeld::app::aot {
 McuBinding::McuBinding() {
   using namespace vi::mcu;
-  constexpr std::array names{
-      "blofeld_mcu_cancelled",    "blofeld_mcu_shi_select",  "blofeld_mcu_peer_interrupt",
-      "blofeld_mcu_peer_data",    "blofeld_mcu_peer_read",   "blofeld_mcu_peer_hold",
-      "blofeld_mcu_peer_publish", "blofeld_mcu_peer_strobe", "blofeld_mcu_time_publish",
-      "blofeld_mcu_time_enter",   "blofeld_mcu_time_leave",  "blofeld_mcu_time_hold",
-      "blofeld_mcu_midi_limit",   "blofeld_mcu_midi_peek",   "blofeld_mcu_midi_pop",
-      "blofeld_mcu_midi_write",   "blofeld_mcu_midi_time",   "blofeld_mcu_midi_await",
-      "blofeld_mcu_reset_state",  "blofeld_mcu_reset_assert"};
+  constexpr std::array names{"blofeld_mcu_cancelled",
+                             "blofeld_mcu_shi_select",
+                             "blofeld_mcu_peer_interrupt",
+                             "blofeld_mcu_peer_data",
+                             "blofeld_mcu_peer_read",
+                             "blofeld_mcu_peer_hold",
+                             "blofeld_mcu_peer_publish",
+                             "blofeld_mcu_peer_strobe",
+                             "blofeld_mcu_midi_limit",
+                             "blofeld_mcu_midi_peek",
+                             "blofeld_mcu_midi_pop",
+                             "blofeld_mcu_midi_write",
+                             "blofeld_mcu_midi_time",
+                             "blofeld_mcu_midi_await",
+                             "blofeld_mcu_reset_state",
+                             "blofeld_mcu_reset_assert"};
   const std::array addresses{reinterpret_cast<const void *>(&blofeld_mcu_cancelled),
                              reinterpret_cast<const void *>(&blofeld_mcu_shi_select),
                              reinterpret_cast<const void *>(&blofeld_mcu_peer_interrupt),
@@ -40,10 +48,6 @@ McuBinding::McuBinding() {
                              reinterpret_cast<const void *>(&blofeld_mcu_peer_hold),
                              reinterpret_cast<const void *>(&blofeld_mcu_peer_publish),
                              reinterpret_cast<const void *>(&blofeld_mcu_peer_strobe),
-                             reinterpret_cast<const void *>(&blofeld_mcu_time_publish),
-                             reinterpret_cast<const void *>(&blofeld_mcu_time_enter),
-                             reinterpret_cast<const void *>(&blofeld_mcu_time_leave),
-                             reinterpret_cast<const void *>(&blofeld_mcu_time_hold),
                              reinterpret_cast<const void *>(&blofeld_mcu_midi_limit),
                              reinterpret_cast<const void *>(&blofeld_mcu_midi_peek),
                              reinterpret_cast<const void *>(&blofeld_mcu_midi_pop),
@@ -123,7 +127,7 @@ cpu12::NativeImage prepare_mcu(const cpu12::CodeImage image,
 vi::mcu::Program prepare_mcu_program(const cpu12::CodeImage image,
                                      const std::span<const cpu12::CodeTransition> transitions,
                                      const std::filesystem::path &cache) {
-  return {prepare_mcu(image, transitions, cache), image, transitions};
+  return {prepare_mcu(image, transitions, cache), image};
 }
 
 }

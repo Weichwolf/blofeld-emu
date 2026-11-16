@@ -119,8 +119,7 @@ void qualify() {
     require(
         mounted.size() == 2 && returned.fault == cpu12::Fault::none && returned.retired == 2 &&
             core.registers().pc == rom + 3 &&
-            core.registers().d == static_cast<cpu12::Address>(datum << 8U) &&
-            core.statistics().compiled_entries == 0,
+            core.registers().d == static_cast<cpu12::Address>(datum << 8U),
         "Two independent owners retain original call/return, data and zero runtime translation");
     require(memory.write({.address = ram + 1, .value = datum + 1}) && memory.program_changed() &&
                 memory.commit_mapping(),

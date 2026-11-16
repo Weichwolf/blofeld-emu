@@ -26,7 +26,7 @@ public:
   [[nodiscard]] std::span<const host::aot::Import> imports() const noexcept { return imports_; }
 
 private:
-  static constexpr std::size_t channel_count = 20;
+  static constexpr std::size_t channel_count = 16;
   std::array<std::string, channel_count> signatures_;
   std::array<host::aot::Import, channel_count> imports_;
 };

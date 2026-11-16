@@ -517,78 +517,11 @@ private:
     return true;
   }
 
-  [[nodiscard]] ExecutionTime::DspBoundary source_boundary() const noexcept {
-    if (clock_.fractional()) { return ExecutionTime::DspBoundary::fractional; }
-    if (!waiting_ || !midi_.known()) { return ExecutionTime::DspBoundary::exact; }
-    const auto next = local_deadline();
-    if ((next && *next <= device_cycles()) ||
-        interrupts_.select(interrupt_sources(), core_->registers().sr)) {
-      return ExecutionTime::DspBoundary::exact;
-    }
-    return ExecutionTime::DspBoundary::quiescent;
-  }
-
-  [[nodiscard]] std::optional<ExecutionTime::DspGrant> source_limit() {
-    if (coupling_ != nullptr) {
-      const auto stamp = timestamp();
-      if (!stamp) { throw std::overflow_error("DSP coupling timestamp overflows"); }
-      return coupling_->receiver(*stamp);
-    }
-    if (waiting_ && !synchronize_midi()) { throw std::runtime_error(error()); }
-    for (;;) {
-      const auto limit = time_->dsp_limit(origin_ + clock_.ticks(),
-                                          stop_,
-                                          source_boundary(),
-                                          {.owner = this, .query = [](void *owner) {
-                                             return static_cast<Io *>(owner)->source_forecast();
-                                           }});
-      if (!limit || limit->kind != ExecutionTime::DspGrant::Kind::current || !waiting_) {
-        return limit;
-      }
-      if (!midi_.await_current(stop_)) { return {}; }
-      if (!synchronize_midi()) { throw std::runtime_error(error()); }
-      if (source_boundary() != ExecutionTime::DspBoundary::quiescent) { return limit; }
-    }
-  }
-
-  [[nodiscard]] std::uint64_t source_forecast() {
-    const auto now = origin_ + clock_.ticks();
-    const auto input = midi_.horizon();
-    if (input <= now) { return 0; }
-    if (!synchronize_midi()) { throw std::runtime_error(error()); }
-    const auto sources = interrupt_sources();
-    if (interrupts_.select(sources, 0) && interrupts_.select(sources, core_->registers().sr)) {
-      return 0;
-    }
-    constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
-    auto next = local_deadline();
-    if (!waiting_) {
-      const auto prefix = core_->foreground_prefix();
-      if (prefix == 0) { return 0; }
-      if (prefix != maximum) {
-        if (prefix > maximum - device_cycles()) { return 0; }
-        const auto boundary = device_cycles() + prefix;
-        if (!next || boundary < *next) { next = boundary; }
-      }
-    }
-    auto until = input;
-    if (next) {
-      if (*next <= device_cycles()) { return 0; }
-      auto projected = clock_;
-      if (!projected.advance(*next)) { return 0; }
-      const auto event = event_time(projected);
-      if (!event) { return 0; }
-      until = std::min(until, *event);
-    }
-    if (const auto bit = midi_.deadline()) { until = std::min(until, *bit); }
-    return until > now ? until : 0;
-  }
-
   bool synchronize_peer() {
     if (!clock_.advance(device_cycles())) {
       throw std::overflow_error("DSP instrument time is not representable or monotonic");
     }
-    if (time_ == nullptr) { return true; }
+    if (coupling_ == nullptr) { return true; }
     if (clock_.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_) {
       throw std::overflow_error("DSP reset origin exceeds instrument time");
     }
@@ -596,9 +529,11 @@ private:
       PeerPort::Sample sample;
       if (!blofeld_dsp_peer_sample(peer_, origin_ + clock_.ticks(), sample)) { return false; }
     }
-    const auto limit = source_limit();
+    const auto stamp = timestamp();
+    if (!stamp) { throw std::overflow_error("DSP coupling timestamp overflows"); }
+    const auto limit = coupling_->receiver(*stamp);
     if (!limit) { return false; }
-    if (limit->kind == ExecutionTime::DspGrant::Kind::current) {
+    if (limit->kind == Coupling::Grant::Kind::current) {
       if (device_cycles() == std::numeric_limits<std::uint64_t>::max()) {
         throw std::overflow_error("DSP current instruction has no representable completion");
       }
@@ -829,16 +764,6 @@ private:
     if ((request.mask & ~request.known & ready) != 0) { return false; }
     const bool active = (request.mask & ready) != 0 && (request.value & ready) == 0;
     if (!blofeld_dsp_peer_ready(peer_, active)) { return false; }
-    if (active && time_ != nullptr) {
-      const auto timestamp = outgoing_time();
-      if (!timestamp) { return false; }
-      if (blofeld_dsp_time_wake(time_, *timestamp)) {
-#if defined(BLOFELD_CENSUS)
-        trace(Census::Event::peer_change);
-#endif
-        core_->request_yield();
-      }
-    }
     return true;
   }
 

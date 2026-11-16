@@ -21,6 +21,15 @@
 namespace blofeld::vi {
 class Coupling {
 public:
+  static constexpr std::uint64_t default_window = 19200;
+
+  struct Grant {
+    enum class Kind : std::uint8_t { frontier, current };
+    std::uint64_t until;
+    Kind kind = Kind::frontier;
+    bool operator==(const Grant &) const = default;
+  };
+
   struct Stamp {
     std::uint64_t ticks = 0;
     bool fractional = false;
@@ -76,7 +85,7 @@ public:
   void wait(std::uint64_t observed) noexcept;
   void notify() noexcept;
 
-  [[nodiscard]] std::optional<ExecutionTime::DspGrant> receiver(Stamp stamp);
+  [[nodiscard]] std::optional<Grant> receiver(Stamp stamp);
   [[nodiscard]] bool service(Stamp stamp);
   [[nodiscard]] bool outputs(std::uint64_t ticks);
 
@@ -97,7 +106,7 @@ private:
   void refresh() noexcept;
   void attained(std::uint64_t exclusive) noexcept;
   [[nodiscard]] bool checkpoint_barrier();
-  [[nodiscard]] ExecutionTime::DspGrant grant(Stamp stamp) const noexcept;
+  [[nodiscard]] Grant grant(Stamp stamp) const noexcept;
 
   PeerPort &peer_;
   Shi &shi_;

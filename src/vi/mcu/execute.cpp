@@ -23,7 +23,6 @@
 #include "mcu/timer.hpp"
 #include "storage/flash_image.hpp"
 
-#include <array>
 #include <cpu12/core.hpp>
 #include <cpu12/memory.hpp>
 #include <cstdint>
@@ -40,9 +39,7 @@ namespace blofeld::vi::mcu {
 namespace {
 constexpr std::uint16_t reset_vector = 0xfffe;
 constexpr std::uint16_t xirq_vector = 0xfff4;
-// An enabled but masked IRQ still needs native CCR/RTI effect boundaries.
-// This unreachable horizon selects that Core path without an execution quantum.
-constexpr auto no_deadline = std::numeric_limits<Timer::Cycle>::max() / 2;
+constexpr Timer::Cycle cancellation_cycles = 65536;
 
 struct PeerAdmission {
   PeerPort *peer;
@@ -73,10 +70,6 @@ bool interrupt(cpu12::Core &core,
                ExecutionReport &report,
                const bool external_due = true) {
   const bool ready = core.interrupt_ready(cpu12::InterruptKind::xirq);
-  if (devices.peer != nullptr && ready && devices.time != nullptr &&
-      !devices.time->settle_dsp(devices.clock.ticks(), devices.stop)) {
-    return false;
-  }
   if (devices.peer != nullptr && !devices.peer->mcu_interrupt_ready(ready)) {
     throw std::overflow_error(devices.peer->error());
   }
@@ -105,8 +98,7 @@ bool interrupt(cpu12::Core &core,
 }
 
 void advance(const cpu12::Core &core, Devices &devices) {
-  if (!devices.advance(core) ||
-      (devices.time != nullptr && !devices.time->publish_mcu(devices.clock.ticks()))) {
+  if (!devices.advance(core)) {
     if (devices.stop.stop_requested()) { return; }
     if (devices.error() != nullptr) { throw std::runtime_error(devices.error()); }
     throw std::overflow_error("MCU device time is not representable or monotonic");
@@ -124,8 +116,6 @@ std::vector<cpu12::Ram> regions(Memory &memory, Usb &usb) {
   return result;
 }
 
-enum class Dispatch : std::uint8_t { run, transaction, again, done };
-
 void bind_memory(cpu12::Core &core,
                  Memory &memory,
                  Usb &usb,
@@ -141,181 +131,8 @@ void bind_memory(cpu12::Core &core,
   auto next = regions(memory, usb);
   core.set_memory(cpu12::Memory::mapped(next));
   program.install(core, selected);
-  constexpr std::uint16_t counter_offset = 0x44;
-  const auto counter =
-      static_cast<std::uint16_t>((unsigned{memory.read_mapping(0x11)} << 8U) + counter_offset);
-  if (memory.locate(counter) == Location{.space = Space::registers, .offset = counter_offset} &&
-      memory.locate(static_cast<std::uint16_t>(counter + 1)) ==
-          Location{.space = Space::registers, .offset = counter_offset + 1}) {
-    constexpr std::uint16_t flags_offset = 0x37;
-    constexpr std::uint16_t scan_output = 0x270;
-    constexpr std::uint16_t led_output = 0x240;
-    const auto flags = static_cast<std::uint16_t>(counter - counter_offset + flags_offset);
-    const std::array accesses{
-        cpu12::LocalAccess{.first = flags, .size = 1, .role = cpu12::LocalAccess::Role::read_write},
-        cpu12::LocalAccess{.first = counter, .size = 2},
-        cpu12::LocalAccess{.first = static_cast<std::uint16_t>(counter + 2),
-                           .size = 1,
-                           .role = cpu12::LocalAccess::Role::read_write},
-        cpu12::LocalAccess{.first =
-                               static_cast<std::uint16_t>(counter - counter_offset + scan_output),
-                           .size = 1,
-                           .role = cpu12::LocalAccess::Role::write},
-        cpu12::LocalAccess{.first =
-                               static_cast<std::uint16_t>(counter - counter_offset + led_output),
-                           .size = 1,
-                           .role = cpu12::LocalAccess::Role::write}};
-    core.isolate_accesses(accesses);
-  }
   grants.swap(next);
   mounted.swap(selected);
-}
-
-std::optional<Timer::Cycle> idle_deadline(Devices &devices, const bool peer_wait) {
-  auto next = devices.deadline();
-  if (!peer_wait || (next && *next == devices.clock.cycles())) { return next; }
-  auto until = std::numeric_limits<std::uint64_t>::max();
-  if (next) {
-    auto projected = devices.clock;
-    if (!projected.advance(*next)) {
-      throw std::overflow_error("MCU idle time is not representable");
-    }
-    until = projected.ticks();
-  }
-  const auto resumed = devices.time->idle_mcu(devices.clock.ticks(), until, devices.stop);
-  if (!resumed) { return {}; }
-  if (!next && *resumed == std::numeric_limits<std::uint64_t>::max()) { return {}; }
-  next = devices.clock.at_ticks(*resumed);
-  if (!next) { throw std::overflow_error("MCU wake time is not representable"); }
-  return next;
-}
-
-std::uint64_t
-running_prefix(cpu12::Core &core, const Devices &devices, const Io &io, const bool peer_event) {
-  const auto local = devices.pending();
-  const std::array incoming{
-      cpu12::InterruptRequest{.vector = xirq_vector, .kind = cpu12::InterruptKind::xirq},
-      cpu12::InterruptRequest{.vector = local.value_or(0)}};
-  const auto first = peer_event ? 0U : 1U;
-  const auto query = [&](const cpu12::ChannelAccess access) {
-    return !peer_event && !local
-               ? core.channel_prefix(cpu12::PrefixScope::foreground, access)
-               : core.channel_prefix(std::span(incoming).subspan(
-                                         first, unsigned{peer_event} + unsigned{local.has_value()}),
-                                     access);
-  };
-  const auto prefix = query({});
-  if (prefix != 0) { return prefix; }
-  const auto reads = io.isolated_reads();
-  const auto writes = io.isolated_writes();
-  return query({.ranges = reads ? std::span(&*reads, 1) : std::span<const cpu12::LocalAccess>{},
-                .writes = writes ? std::span(*writes) : std::span<const cpu12::ByteWrite>{}});
-}
-
-std::optional<Timer::Cycle> running_deadline(cpu12::Core &core,
-                                             Devices &devices,
-                                             const Io &io,
-                                             std::optional<Timer::Cycle> deadline,
-                                             const bool include_interrupts = false) {
-  const auto prefix = running_prefix(core, devices, io, include_interrupts);
-  const auto now = devices.clock.cycles();
-  if (prefix == 0 || now != core.progress().estimated_cycles + devices.idle) {
-    throw std::logic_error(
-        std::format("Uncertified running MCU interval at ${:04x}", core.registers().pc));
-  }
-  constexpr auto infinite = std::numeric_limits<std::uint64_t>::max();
-  if (prefix != infinite) {
-    if (prefix > infinite - now) { throw std::overflow_error("MCU prefix time overflows"); }
-    const auto boundary = now + prefix;
-    if (!deadline || boundary < *deadline) { deadline = boundary; }
-  }
-  auto until = infinite;
-  if (deadline) {
-    auto projected = devices.clock;
-    if (*deadline <= now || !projected.advance(*deadline)) {
-      throw std::logic_error("MCU running interval has no future boundary");
-    }
-    until = projected.ticks();
-  }
-  const auto resumed = devices.time->idle_mcu(
-      devices.clock.ticks(), until, devices.stop, ExecutionTime::McuWork::running);
-  if (!resumed || *resumed == infinite) { return {}; }
-  return devices.clock.at_ticks(*resumed);
-}
-
-Dispatch source_boundary(cpu12::Core &core,
-                         Devices &devices,
-                         const Io &io,
-                         std::optional<Timer::Cycle> &admitted) {
-  if (admitted && *admitted <= devices.clock.cycles()) { admitted.reset(); }
-  if (admitted || devices.peer == nullptr || devices.time == nullptr ||
-      !core.interrupt_ready(cpu12::InterruptKind::xirq)) {
-    return Dispatch::run;
-  }
-  const bool poll = core.state().returned_frame ||
-                    (devices.pending() && core.interrupt_ready(cpu12::InterruptKind::maskable));
-  if (!poll && core.state().execution != cpu12::ExecutionState::running) { return Dispatch::run; }
-  if (!devices.time->wait_for_dsp(devices.clock.ticks(), devices.stop)) { return Dispatch::done; }
-  if (!devices.peer->mcu_interrupt_ready(true)) {
-    throw std::overflow_error(devices.peer->error());
-  }
-  if (devices.peer->mcu_interrupt()) { return Dispatch::run; }
-  if (running_prefix(core, devices, io, poll) != 0) {
-    admitted = running_deadline(core, devices, io, devices.deadline(), poll);
-    return admitted ? Dispatch::run : Dispatch::done;
-  }
-  if (core.state().execution != cpu12::ExecutionState::running) { return Dispatch::run; }
-  return devices.time->settle_dsp(devices.clock.ticks(), devices.stop) ? Dispatch::transaction
-                                                                       : Dispatch::done;
-}
-
-std::optional<cpu12::RunResult> run_interval(cpu12::Core &core,
-                                             Devices &devices,
-                                             const Io &io,
-                                             std::optional<Timer::Cycle> &admitted) {
-  auto deadline = devices.deadline();
-  if (devices.peer != nullptr && devices.time != nullptr &&
-      core.interrupt_ready(cpu12::InterruptKind::xirq)) {
-    if (!admitted) { admitted = running_deadline(core, devices, io, deadline); }
-    deadline = admitted;
-    if (!deadline) { return {}; }
-  }
-  return deadline || devices.interrupts_enabled()
-             ? core.run_until(deadline ? *deadline - devices.idle : no_deadline)
-             : core.run();
-}
-
-Dispatch prepare(cpu12::Core &core,
-                 Devices &devices,
-                 ExecutionReport &report,
-                 const Io &io,
-                 std::optional<Timer::Cycle> &admitted) {
-  advance(core, devices);
-  if (devices.stop.stop_requested()) { return Dispatch::done; }
-  const auto state = core.state().execution;
-  if (state == cpu12::ExecutionState::stopped) { return Dispatch::done; }
-  const bool peer_wait = state == cpu12::ExecutionState::waiting && devices.peer != nullptr &&
-                         devices.time != nullptr &&
-                         core.interrupt_ready(cpu12::InterruptKind::xirq);
-  if (peer_wait && !devices.time->wait_for_dsp(devices.clock.ticks(), devices.stop)) {
-    return Dispatch::done;
-  }
-  const auto boundary = source_boundary(core, devices, io, admitted);
-  if (boundary == Dispatch::done) { return boundary; }
-  const bool external_due = !admitted || *admitted <= devices.clock.cycles();
-  if (interrupt(core, devices, report, external_due)) {
-    devices.activity(cpu12::ExecutionState::running);
-    return Dispatch::again;
-  }
-  if (report.failure) { return Dispatch::done; }
-  if (core.state().returned_frame) { core.close_return_window(); }
-  if (state == cpu12::ExecutionState::waiting) {
-    const auto next = idle_deadline(devices, peer_wait);
-    if (!next) { return Dispatch::done; }
-    devices.idle = *next - core.progress().estimated_cycles;
-    return Dispatch::again;
-  }
-  return boundary;
 }
 
 std::logic_error interval_failure(const cpu12::Core &core,
@@ -361,46 +178,72 @@ void record_interval(const cpu12::Core &core,
 }
 #endif
 
-void execute_intervals(cpu12::Core &core,
-                       Devices &devices,
-                       Memory &memory,
-                       ExecutionReport &report,
-                       const Program &program,
-                       Io &io,
-                       std::vector<cpu12::Ram> &grants,
-                       std::vector<std::uint64_t> &mounted,
-                       std::optional<Timer::Cycle> &admitted,
-                       const std::stop_token &stop) {
+bool complete_local(cpu12::Core &core,
+                    Devices &devices,
+                    ExecutionReport &report,
+                    Io &io,
+                    const cpu12::RunResult &result,
+                    const std::stop_token &stop) {
+  report.instructions += result.retired;
+#if defined(BLOFELD_CENSUS)
+  if (auto *probe = StateProbe::active()) { probe->executed(result.retired, false); }
+#endif
+  if (stop.stop_requested()) { return false; }
+  if (result.fault != cpu12::Fault::none) {
+    report.failure =
+        Failure{.operation = operation(result.fault),
+                .pc = result.pc,
+                .address = result.address,
+                .value = result.value,
+                .code = static_cast<std::uint32_t>(result.fault),
+                .reason = io.error() != nullptr ? io.error()
+                                                : "MCU access or instruction is not implemented"};
+    return false;
+  }
+  if (!io.complete_events()) { return false; }
+  advance(core, devices);
+  devices.activity(result.state);
+
+  return true;
+}
+
+void execute_local(cpu12::Core &core,
+                   Devices &devices,
+                   Memory &memory,
+                   ExecutionReport &report,
+                   const Program &program,
+                   Io &io,
+                   std::vector<cpu12::Ram> &grants,
+                   std::vector<std::uint64_t> &mounted,
+                   const std::stop_token &stop) {
   while (!stop.stop_requested()) {
     bind_memory(core, memory, devices.usb, grants, mounted, program);
-    const auto dispatch = prepare(core, devices, report, io, admitted);
-    if (dispatch == Dispatch::done) { break; }
-    if (dispatch == Dispatch::again) { continue; }
-    const auto result = dispatch == Dispatch::transaction
-                            ? std::optional{core.step()}
-                            : run_interval(core, devices, io, admitted);
-    if (!result) { break; }
-    report.instructions += result->retired;
-#if defined(BLOFELD_CENSUS)
-    if (auto *probe = StateProbe::active()) { probe->executed(result->retired, false); }
-#endif
-    if (stop.stop_requested()) { break; }
-    if (result->fault != cpu12::Fault::none) {
-      report.failure =
-          Failure{.operation = operation(result->fault),
-                  .pc = result->pc,
-                  .address = result->address,
-                  .value = result->value,
-                  .code = static_cast<std::uint32_t>(result->fault),
-                  .reason = io.error() != nullptr ? io.error()
-                                                  : "MCU access or instruction is not implemented"};
+    advance(core, devices);
+    if (stop.stop_requested() || core.state().execution == cpu12::ExecutionState::stopped) {
       break;
     }
-    if (!io.complete_events()) { break; }
-    advance(core, devices);
-    devices.activity(result->state);
+    if (interrupt(core, devices, report)) {
+      devices.activity(cpu12::ExecutionState::running);
+      continue;
+    }
+    if (report.failure) { break; }
+    if (core.state().returned_frame) { core.close_return_window(); }
+    if (core.state().execution == cpu12::ExecutionState::waiting) {
+      const auto next = devices.deadline();
+      if (!next) { break; }
+      devices.idle = *next - core.progress().estimated_cycles;
+      continue;
+    }
+    const auto now = devices.clock.cycles();
+    if (now > std::numeric_limits<Timer::Cycle>::max() - cancellation_cycles) {
+      throw std::overflow_error("MCU cancellation boundary overflows");
+    }
+    auto until = now + cancellation_cycles;
+    if (const auto next = devices.deadline(); next && *next < until) { until = *next; }
+    const auto result = core.run_until(until - devices.idle);
+    if (!complete_local(core, devices, report, io, result, stop)) { break; }
 #if defined(BLOFELD_CENSUS)
-    record_interval(core, memory, devices, io, report, *result);
+    record_interval(core, memory, devices, io, report, result);
 #endif
   }
 }
@@ -427,7 +270,6 @@ ExecutionReport execute(FlashImage &image,
   devices.time = coupling == nullptr ? time : nullptr;
   devices.midi = midi;
   auto grants = regions(memory, devices.usb);
-  std::optional<Timer::Cycle> admitted;
   Io io(memory,
         image,
         devices,
@@ -437,11 +279,10 @@ ExecutionReport execute(FlashImage &image,
         controls,
         coupling == nullptr ? display : nullptr,
         peer);
-  io.input_horizon(admitted);
   auto callbacks = io.callbacks();
   cpu12::Core core(cpu12::Memory::mapped(grants), &callbacks);
   io.bind(core);
-  io.capture_display();
+  if (display != nullptr) { io.capture_display(*display); }
   ExecutionReport report;
   report.prepared_native_bytes = program.report().native_bytes;
   std::vector<std::uint64_t> mounted;
@@ -475,16 +316,12 @@ ExecutionReport execute(FlashImage &image,
                                                    controls);
       session->run();
     } else {
-      execute_intervals(
-          core, devices, memory, report, program, io, grants, mounted, admitted, stop);
+      execute_local(core, devices, memory, report, program, io, grants, mounted, stop);
     }
   } catch (const std::logic_error &error) {
     throw interval_failure(core, devices, reset, io, error);
   }
 
-  if (core.statistics().compiled_entries != 0) {
-    throw std::logic_error("Prepared MCU execution generated runtime code");
-  }
   if (display != nullptr) { display->request(); }
   io.capture_display();
 #if defined(BLOFELD_CENSUS)

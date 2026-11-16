@@ -5,6 +5,7 @@
 #include "dsp/boot_rom.hpp"
 #include "dsp/program.hpp"
 #include "files/read.hpp"
+#include "io/coupling.hpp"
 #include "io/midi_port.hpp"
 #include "mcu/program.hpp"
 #include "options.hpp"
@@ -31,9 +32,13 @@
 #include <vector>
 
 namespace {
-std::vector<std::uint64_t> settings(const std::string_view name, const std::size_t count) {
+std::vector<std::uint64_t>
+settings(const std::string_view name, const std::size_t count, const std::uint64_t fallback = 0) {
   auto text = blofeld::host::inherited_setting(name);
-  if (text.empty()) { return std::vector<std::uint64_t>(count); }
+  if (text.empty()) {
+    std::vector<std::uint64_t> defaults(count, fallback);
+    return defaults;
+  }
   std::vector<std::uint64_t> windows;
   for (;;) {
     const auto comma = text.find(',');
@@ -73,7 +78,8 @@ int main(int argc, char **argv) try {
     workloads.push_back(std::move(options));
     begin = end + 1;
   }
-  const auto windows = settings("BLOFELD_D2", workloads.size());
+  const auto windows =
+      settings("BLOFELD_D2", workloads.size(), blofeld::vi::Coupling::default_window);
 #if defined(BLOFELD_CENSUS)
   const auto bounds = settings("BLOFELD_CENSUS_BOUNDS", 2 * workloads.size());
 #endif

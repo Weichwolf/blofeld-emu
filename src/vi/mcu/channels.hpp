@@ -37,11 +37,6 @@ void blofeld_mcu_peer_hold(PeerPort *channel) noexcept;
                                             std::uint64_t ticks,
                                             const std::stop_token &stop);
 [[nodiscard]] bool blofeld_mcu_peer_strobe(PeerPort *channel, bool active) noexcept;
-[[nodiscard]] bool blofeld_mcu_time_publish(ExecutionTime *channel, std::uint64_t ticks) noexcept;
-[[nodiscard]] bool
-blofeld_mcu_time_enter(ExecutionTime *channel, std::uint64_t ticks, const std::stop_token &stop);
-void blofeld_mcu_time_leave(ExecutionTime *channel) noexcept;
-void blofeld_mcu_time_hold(ExecutionTime *channel) noexcept;
 [[nodiscard]] bool blofeld_mcu_midi_limit(const MidiPort *channel, std::uint64_t &ticks) noexcept;
 [[nodiscard]] bool blofeld_mcu_midi_peek(const MidiPort *channel, MidiPort::Event &event) noexcept;
 void blofeld_mcu_midi_pop(MidiPort *channel) noexcept;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "aot/mcu.hpp"
 #include "io/dsp_reset.hpp"
+#include "io/peer_port.hpp"
 #include "io/shi.hpp"
 #include "isa.hpp"
 #include "mcu/boot_port.hpp"
@@ -175,17 +176,18 @@ void pending_handoff() {
   const auto saved = core.save();
   const auto jumped = core.run(1);
   require(jumped.retired == 1 && jumped.fault == cpu12::Fault::none && core.registers().pc == to &&
-              program.handoff(mounted, to) && !program.handoff(mounted, from),
+              core.save().transfer.has_value(),
           "An actual exit to an unmounted prepared view is a possible pending handoff");
   const auto boundary = core.save();
   const auto pending = core.run(1);
   require(pending.retired == 0 && pending.fault == cpu12::Fault::none && core.save() == boundary,
           "A declared handoff yields without retiring another instruction or inventing a fault");
   core.restore(saved);
-  require(core.run(1).retired == 0 && core.save() == saved,
-          "Processor restoration does not retire the pending prepared-code handoff");
+  require(core.save() == saved && core.run(1).retired == 1,
+          "Restoring the checkpoint clears its discarded future handoff without reinstalling");
+  core.restore(saved);
   program.install(core, both);
-  require(!program.handoff(both, to) && core.run(1).retired == 1 && core.run(1).retired == 1 &&
+  require(core.run(1).retired == 1 && core.run(1).retired == 1 &&
               core.registers().d == (std::uint16_t{1} << 8U),
           "A fresh install clears the stale handoff; an already mounted target remains native");
 }
@@ -296,12 +298,15 @@ struct Machine {
   mcu::Devices devices{stop};
   vi::Shi shi;
   vi::DspReset reset;
-  mcu::Io io{memory, *image, devices, shi, reset, stop, nullptr, nullptr, nullptr};
+  mcu::Io io;
   cpu12::Io callbacks = io.callbacks();
   std::vector<cpu12::Ram> grants;
   cpu12::Core core{cpu12::Memory::external(), &callbacks};
 
-  Machine() { io.bind(core); }
+  explicit Machine(vi::PeerPort *peer = nullptr)
+      : io(memory, *image, devices, shi, reset, stop, nullptr, nullptr, peer) {
+    io.bind(core);
+  }
 
   void write(const cpu12::ByteWrite access) const {
     require(callbacks.write(callbacks.owner, access), "Perform an actual MCU register store");
@@ -434,6 +439,72 @@ void native_continuation(const bool retained) {
               machine.devices.clock.cycles() == completed.progress.estimated_cycles,
           "Prepared host fusion resumes with identical CPU, RAM knowledge, GPIO and device time");
 }
+
+void native_panel_transition() {
+  namespace isa = cpu12::isa;
+  constexpr cpu12::Address entry = 0x8000;
+  constexpr cpu12::Address data = 0x260;
+  constexpr cpu12::Byte marker = 0x42;
+  constexpr cpu12::Byte response = 0x5a;
+  constexpr cpu12::Byte outputs = 0xc0;
+  constexpr cpu12::Byte bank = 0x40;
+  constexpr unsigned setup_instructions = 14;
+  constexpr unsigned samples = 128;
+  vi::PeerPort peer;
+  Machine machine(&peer);
+  std::vector<cpu12::Byte> bytes;
+  const auto append = [&](const auto &part) {
+    bytes.insert(bytes.end(), part.begin(), part.end());
+  };
+  const auto store = [&](const cpu12::Byte value, const cpu12::Byte offset) {
+    append(std::array{isa::opcode<isa::Opcode::ldab_immediate>()[0],
+                      value,
+                      isa::opcode<isa::Opcode::stab_extended>()[0],
+                      cpu12::Byte{2},
+                      offset});
+  };
+  constexpr cpu12::Byte direction_s = 0x72;
+  constexpr cpu12::Byte data_s = 0x70;
+  constexpr cpu12::Byte data_j = 0x50;
+  constexpr cpu12::Byte direction_j = 0x52;
+  constexpr cpu12::Byte pull_q = 0x64;
+  constexpr cpu12::Byte polarity_q = 0x65;
+  constexpr cpu12::Byte data_q = 0x60;
+  store(outputs, direction_s);
+  store(bank, data_s);
+  store(1, data_j);
+  store(1, direction_j);
+  store(all_bits, pull_q);
+  store(all_bits, polarity_q);
+  store(marker, data_q);
+  for (unsigned index = 0; index < samples; ++index) {
+    append(isa::program(isa::opcode<isa::Opcode::ldab_extended>(),
+                        std::array<cpu12::Byte, 2>{data >> 8U, data & all_bits}));
+  }
+  constexpr cpu12::Byte timer_count = 0x44;
+  append(isa::program(isa::opcode<isa::Opcode::ldab_direct>(),
+                      std::array{timer_count},
+                      isa::opcode<isa::Opcode::ldab_extended>(),
+                      std::array<cpu12::Byte, 2>{data >> 8U, data & all_bits}));
+  machine.image.load(entry, bytes);
+  const auto program = machine.image.program();
+  machine.core.set_registers({.pc = entry});
+  machine.bind(*program);
+  unsigned remaining = setup_instructions + samples;
+  while (remaining != 0) {
+    const auto result = machine.core.run(remaining);
+    require(result.fault == cpu12::Fault::none && result.retired != 0,
+            "Execute original native panel setup and repeated bank reads");
+    remaining -= result.retired;
+  }
+  require((machine.core.registers().d & all_bits) == 0,
+          "Inactive panel inputs retain their real bias");
+  peer.dsp_data({.mask = all_bits, .known = all_bits, .value = response});
+  require(machine.core.run(1).retired == 1 && machine.core.run(1).retired == 1 &&
+              (machine.core.registers().d & all_bits) == response,
+          "A real peer-line change survives the native timer access and the next panel read");
+}
+
 }
 
 int main() try {
@@ -446,6 +517,7 @@ int main() try {
   lcd_and_flash();
   native_continuation(false);
   native_continuation(true);
+  native_panel_transition();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

@@ -179,24 +179,6 @@ bool blofeld_mcu_peer_strobe(PeerPort *const channel, const bool active) noexcep
   return channel->mcu_strobe(active);
 }
 
-bool blofeld_mcu_time_publish(ExecutionTime *const channel, const std::uint64_t ticks) noexcept {
-  return channel->publish_mcu(ticks);
-}
-
-bool blofeld_mcu_time_enter(ExecutionTime *const channel,
-                            const std::uint64_t ticks,
-                            const std::stop_token &stop) {
-  return channel->settle_dsp(ticks, stop) && channel->enter_mcu(ticks, stop);
-}
-
-void blofeld_mcu_time_leave(ExecutionTime *const channel) noexcept {
-  channel->leave_mcu();
-}
-
-void blofeld_mcu_time_hold(ExecutionTime *const channel) noexcept {
-  channel->hold_dsp();
-}
-
 bool blofeld_mcu_midi_limit(const MidiPort *const channel, std::uint64_t &ticks) noexcept {
   const auto limit = channel->input_limit();
   if (!limit) { return false; }

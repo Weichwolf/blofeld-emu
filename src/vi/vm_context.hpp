@@ -44,7 +44,7 @@ public:
             PcmOutput output = {},
             MidiPort::InputMode input = MidiPort::InputMode::live,
             std::shared_ptr<const dsp::Program> program = {},
-            std::uint64_t speculation_window = 0);
+            std::uint64_t speculation_window = Coupling::default_window);
   ~VmContext();
   VmContext(const VmContext &) = delete;
   VmContext &operator=(const VmContext &) = delete;

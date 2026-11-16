@@ -99,34 +99,6 @@ public:
 
   void bind(cpu12::Core &core) noexcept { core_ = &core; }
 
-  void input_horizon(const std::optional<Timer::Cycle> &horizon) noexcept { horizon_ = &horizon; }
-
-  [[nodiscard]] std::optional<cpu12::LocalAccess> isolated_reads() const {
-    const auto data = published_data();
-    const auto address = mapped_register(peer_q_data);
-    if (!data || !address || data->direction != all_bits || data->known != all_bits) { return {}; }
-    return cpu12::LocalAccess{.first = *address, .size = 1};
-  }
-
-  [[nodiscard]] std::optional<std::array<cpu12::ByteWrite, 2>> isolated_writes() const {
-    const auto data = published_data();
-    const auto request = ports_.output(Port::j);
-    const auto address = mapped_register(peer_j_data);
-    if (!data || !request || !address || (request->known & 1) == 0 ||
-        ((request->direction & 1) != 0 && (request->value & 1) == 0) ||
-        peer_->dsp_interrupt(false)) {
-      return {};
-    }
-    constexpr unsigned byte_bits = 8;
-    const auto values = core_->registers().d;
-    const auto inactive = request->direction & 1;
-    return std::array{
-        cpu12::ByteWrite{.address = *address,
-                         .value = static_cast<std::uint8_t>((values >> byte_bits) | inactive)},
-        cpu12::ByteWrite{.address = *address,
-                         .value = static_cast<std::uint8_t>(values | inactive)}};
-  }
-
   [[nodiscard]] std::string context() const {
     const auto data = ports_.output(Port::q);
     const auto request = ports_.output(Port::j);
@@ -184,11 +156,7 @@ public:
   bool complete_events() {
     panel_sampled_ = false;
     capture_display();
-    if (!devices_.advance(*core_) ||
-        (devices_.time != nullptr &&
-         !blofeld_mcu_time_publish(devices_.time, devices_.clock.ticks()))) {
-      return false;
-    }
+    if (!devices_.advance(*core_)) { return false; }
     if (release_reset_) {
       if (!blofeld_mcu_reset_release(
               &reset_, peer_, devices_.time, devices_.clock.ticks(), stop_)) {
@@ -206,35 +174,7 @@ public:
   }
 
 private:
-  const std::optional<Timer::Cycle> *horizon_ = nullptr;
-
-  [[nodiscard]] std::optional<cpu12::Address> mapped_register(const cpu12::Address offset) const {
-    const auto address =
-        static_cast<cpu12::Address>((unsigned{memory_.read_mapping(0x11)} << 8U) + offset);
-    return memory_.locate(address) == Location{.space = Space::registers, .offset = offset}
-               ? std::optional{address}
-               : std::nullopt;
-  }
-
-  [[nodiscard]] std::optional<Ports::Output> published_data() const {
-    const auto data = ports_.output(Port::q);
-    if (peer_ == nullptr || peer_->error() != nullptr || display_.error() != nullptr ||
-        ports_.boot_pending() || !data || (data->direction & ~data->known) != 0 ||
-        peer_->mcu_data() !=
-            PeerPort::Sample{.mask = data->direction, .known = data->known, .value = data->value}) {
-      return {};
-    }
-    return data;
-  }
-
   [[nodiscard]] bool peer_interrupt() const noexcept {
-    if (horizon_ != nullptr && *horizon_) {
-      const auto now = core_->progress().estimated_cycles;
-      if (devices_.idle <= std::numeric_limits<Timer::Cycle>::max() - now &&
-          now + devices_.idle < **horizon_) {
-        return false;
-      }
-    }
     std::uint64_t generation = 0;
     return blofeld_mcu_peer_interrupt(peer_, generation);
   }
@@ -254,14 +194,7 @@ private:
 
   template <typename Action> bool shared_access(const Action &action) noexcept {
     panel_sampled_ = false;
-    auto *time = devices_.time;
-    if (time == nullptr) { return action(); }
-    if (!devices_.advance(*core_) || !blofeld_mcu_time_enter(time, devices_.clock.ticks(), stop_)) {
-      return false;
-    }
-    const bool accepted = action();
-    blofeld_mcu_time_leave(time);
-    return accepted;
+    return action();
   }
 
   [[nodiscard]] bool shared_write(const Ports::Write access) const noexcept {
@@ -339,10 +272,6 @@ private:
     const auto deadline = devices_.deadline();
     const auto enabled = devices_.interrupts_enabled();
     if (!devices_.advance(*core_) || !action()) { return false; }
-    if (devices_.time != nullptr &&
-        !blofeld_mcu_time_publish(devices_.time, devices_.clock.ticks())) {
-      return false;
-    }
     if (pending != devices_.pending() || deadline != devices_.deadline() ||
         enabled != devices_.interrupts_enabled()) {
       core_->request_yield();
@@ -500,7 +429,6 @@ private:
       ports_.reset_boot_transfer();
       if (peer_ != nullptr) { blofeld_mcu_peer_hold(peer_); }
       if (!blofeld_mcu_reset_assert(&reset_)) { return false; }
-      if (devices_.time != nullptr) { blofeld_mcu_time_hold(devices_.time); }
     } else if (!held && previous) {
       release_reset_ = true;
       core_->request_yield();

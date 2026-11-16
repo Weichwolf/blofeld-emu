@@ -479,10 +479,12 @@ int main() try {
         image().release(), boot, prepared, {}, {}, blofeld::vi::MidiPort::InputMode::stream);
     context.start();
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    require(!context.finished() && context.midi().time() == 0,
-            "Neither owner runs beyond an unpublished streaming input origin");
+    const bool held = !context.finished();
+    const auto input_time = context.midi().time();
     context.request_stop();
     const auto reports = context.wait();
+    require(held && input_time == 0,
+            "Neither owner runs beyond an unpublished streaming input origin");
     require(!reports[0].exception && !reports[1].exception && !reports[0].failure &&
                 !reports[1].failure && reports[0].instructions == 0 && reports[1].instructions == 0,
             "Shared stop wakes both owners while streaming input is unavailable");

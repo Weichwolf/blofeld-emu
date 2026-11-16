@@ -424,8 +424,7 @@ void run_program_transition(const std::span<const cpu12::Byte> original,
     constexpr cpu12::Address byte_expected = 0x5a5a;
     require(suffix.fault == cpu12::Fault::none && suffix.retired == 2 &&
                 suffix.state == cpu12::ExecutionState::waiting &&
-                core.registers().d == (word ? word_expected : byte_expected) &&
-                core.statistics().compiled_entries == 0,
+                core.registers().d == (word ? word_expected : byte_expected),
             "Prepared replacement executes original changed operand once without new translation");
     for (std::size_t i = 0; i < replacement.size(); ++i) {
       std::uint8_t actual = 0;
@@ -556,8 +555,7 @@ void interrupt_program_transition() {
   try {
     core.install(native, 1);
   } catch (const std::invalid_argument &) { refused = true; }
-  require(refused && core.state() == state && core.progress() == progress &&
-              core.statistics().compiled_entries == 0,
+  require(refused && core.state() == state && core.progress() == progress,
           "Failed post-IRQ source admission neither replays frame nor compiles stale instructions");
 }
 

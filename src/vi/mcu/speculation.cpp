@@ -412,9 +412,8 @@ void Speculation::restore() {
       !effects_.rollback() || !epoch_.rollback()) {
     throw std::logic_error("MCU rollback has no coherent retained prefix");
   }
-  const bool retained = checkpoint_->binding == binding_ &&
-                        !program_.handoff(mounted_, core_.registers().pc) &&
-                        memory_.restore_bound(checkpoint_->memory);
+  const bool retained =
+      checkpoint_->binding == binding_ && memory_.restore_bound(checkpoint_->memory);
 #if defined(BLOFELD_CENSUS)
   constexpr std::array causes{Census::Event::data,
                               Census::Event::interrupt,

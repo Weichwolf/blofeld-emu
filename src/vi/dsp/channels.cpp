@@ -8,7 +8,6 @@
 #include "dsp/coupling.hpp"
 #include "dsp/io.hpp"
 #include "io/coupling.hpp"
-#include "io/execution_time.hpp"
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
 
@@ -112,11 +111,6 @@ bool blofeld_dsp_peer_ready(PeerPort *const channel, const bool active) noexcept
     if (const auto *coupled = Coupled::current()) { return coupled->changed(); }
   }
   return accepted;
-}
-
-bool blofeld_dsp_time_wake(ExecutionTime *const channel, const std::uint64_t ticks) noexcept {
-  if (Coupled::current() != nullptr) { return false; }
-  return channel->wake_mcu(ticks);
 }
 
 bool blofeld_dsp_peer_interrupt(const PeerPort *const channel,

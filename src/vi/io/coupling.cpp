@@ -11,6 +11,7 @@
 #include "mcu/input_history.hpp"
 #include "mcu/output.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -207,7 +208,6 @@ bool Coupling::apply(const mcu::Effects::Entry &entry) {
       if (!reset_.assert_reset() || reset_.state().epoch != entry.value) {
         return fail("Staged DSP reset assertion diverged from its actual epoch");
       }
-      time_.hold_dsp();
       return true;
     case Kind::reset_release:
       if (!reset_.quiescent()) { return false; }
@@ -263,8 +263,9 @@ bool Coupling::checkpoint_barrier() {
   return true;
 }
 
-ExecutionTime::DspGrant Coupling::grant(const Stamp stamp) const noexcept {
+Coupling::Grant Coupling::grant(const Stamp stamp) const noexcept {
   auto until = frontier_.load(std::memory_order_acquire);
+  if (const auto input = midi_.input_limit()) { until = std::min(until, *input); }
   const auto count = published_.load(std::memory_order_acquire);
   const bool strobe = peer_.dsp_interrupt(false).has_value();
   for (auto index = cursor_; index < count; ++index) {
@@ -281,12 +282,12 @@ ExecutionTime::DspGrant Coupling::grant(const Stamp stamp) const noexcept {
     break;
   }
   if (until <= stamp.ticks) {
-    return {.until = stamp.ticks + 1, .kind = ExecutionTime::DspGrant::Kind::current};
+    return {.until = stamp.ticks + 1, .kind = Coupling::Grant::Kind::current};
   }
   return {.until = until};
 }
 
-std::optional<ExecutionTime::DspGrant> Coupling::receiver(const Stamp stamp) {
+std::optional<Coupling::Grant> Coupling::receiver(const Stamp stamp) {
   while (!stopped()) {
     const auto observed = observation();
     if (!service(stamp)) { return {}; }
@@ -294,7 +295,8 @@ std::optional<ExecutionTime::DspGrant> Coupling::receiver(const Stamp stamp) {
     if (reset_.state().held) { return {}; }
     if (checkpoint_barrier()) { continue; }
     const auto frontier = frontier_.load(std::memory_order_acquire);
-    if (bound_.load(std::memory_order_acquire) &&
+    const auto input = midi_.input_limit();
+    if ((!input || *input > stamp.ticks) && bound_.load(std::memory_order_acquire) &&
         (frontier > stamp.ticks || (frontier == stamp.ticks && !stamp.fractional))) {
       return grant(stamp);
     }

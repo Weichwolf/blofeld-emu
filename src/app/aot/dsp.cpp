@@ -34,7 +34,6 @@ public:
                                "blofeld_dsp_peer_data",
                                "blofeld_dsp_peer_write",
                                "blofeld_dsp_peer_ready",
-                               "blofeld_dsp_time_wake",
                                "blofeld_dsp_peer_interrupt"};
     const std::array addresses{reinterpret_cast<const void *>(&blofeld_dsp_shi_read),
                                reinterpret_cast<const void *>(&blofeld_dsp_shi_write),
@@ -42,7 +41,6 @@ public:
                                reinterpret_cast<const void *>(&blofeld_dsp_peer_data),
                                reinterpret_cast<const void *>(&blofeld_dsp_peer_write),
                                reinterpret_cast<const void *>(&blofeld_dsp_peer_ready),
-                               reinterpret_cast<const void *>(&blofeld_dsp_time_wake),
                                reinterpret_cast<const void *>(&blofeld_dsp_peer_interrupt)};
     const native::detail::Owner<LLVMContextRef, LLVMContextDispose> context(LLVMContextCreate());
     native::detail::Exports exports;
@@ -63,8 +61,8 @@ public:
   [[nodiscard]] std::span<const native::Import> entries() const noexcept { return entries_; }
 
 private:
-  std::array<std::string, 8> signatures_;
-  std::array<native::Import, 8> entries_;
+  std::array<std::string, 7> signatures_;
+  std::array<native::Import, 7> entries_;
 };
 }
 
