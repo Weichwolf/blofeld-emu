@@ -3,12 +3,10 @@
 
 #include "execution.hpp"
 
-#include <chrono>
 #include <cstddef>
 #include <exception>
 #include <ios>
 #include <iostream>
-#include <ratio>
 #include <span>
 
 namespace blofeld::app {
@@ -37,16 +35,8 @@ bool report_execution(const std::span<const vi::ExecutionReport> reports) {
     if (report.stopped_pc) {
       std::cerr << " stopped-pc=0x" << std::hex << *report.stopped_pc << std::dec;
     }
-    if (report.preparation_nanoseconds != 0) {
-      const auto seconds = std::chrono::duration<double>(std::chrono::duration<double, std::nano>(
-                                                             report.preparation_nanoseconds))
-                               .count();
-      std::cerr << " preparation=" << seconds << "s native-bytes=" << report.prepared_native_bytes;
-    }
-    if (report.preparation_diagnostic) {
-      const auto &diagnostic = *report.preparation_diagnostic;
-      std::cerr << " preparation-pc=0x" << std::hex << diagnostic.pc << std::dec
-                << " preparation-code=" << diagnostic.code;
+    if (report.prepared_native_bytes != 0) {
+      std::cerr << " native-bytes=" << report.prepared_native_bytes;
     }
     if (report.failure) {
       valid = false;

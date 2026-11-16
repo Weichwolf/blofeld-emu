@@ -116,7 +116,7 @@ void publication() {
                                        nullptr,
                                        nullptr,
                                        &program);
-  require(!result.failure && !result.exception && !result.preparation_diagnostic &&
+  require(!result.failure && !result.exception &&
               result.instructions == producer_instructions + low_x_words + low_y_words &&
               result.stopped_pc == handoff + 2 &&
               result.prepared_native_bytes == program.report().native_bytes,

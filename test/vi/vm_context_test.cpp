@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "aot/dsp.hpp"
 #include "display/st7565.hpp"
+#include "dsp/boot_rom.hpp"
 #include "dsp/execute.hpp"
+#include "dsp/program.hpp"
 #include "execution.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/midi_port.hpp"
@@ -16,11 +19,14 @@
 #include <chrono>
 #include <cpu12/memory.hpp>
 #include <cstdint>
+#include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
 #include <exception>
 #include <ios>
 #include <iostream>
 #include <memory>
+#include <optional>
+#include <span>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -37,6 +43,38 @@ void executed(const blofeld::vi::ExecutionReport &report, const char *message) {
               << " value=0x" << failure.value << std::dec << " fault=" << failure.code << '\n';
   }
   require(!report.failure, message);
+}
+
+blofeld::vi::dsp::Program prepare_dsp(const std::span<const dsp56300::Word> words,
+                                      const std::optional<dsp56300::Word> failed = {}) {
+  constexpr std::array entries{blofeld::vi::dsp::BootRom::main_first};
+  const std::array code{dsp56300::CodeSpan{.address = entries[0], .words = words}};
+  const std::array variants{dsp56300::CodeVariant{
+      .id = 0,
+      .code = code,
+      .entries = entries,
+      .failed_fetches = failed ? std::span(&*failed, 1) : std::span<const dsp56300::Word>{}}};
+  const std::array choices{
+      blofeld::vi::dsp::ProgramChoice{.variant = 0, .resumes = entries, .words = {}}};
+  return blofeld::app::aot::prepare_dsp_program({.variants = variants}, choices);
+}
+
+blofeld::vi::ExecutionReport execute_dsp(const std::span<const dsp56300::Word> words,
+                                         blofeld::vi::Shi &shi,
+                                         blofeld::vi::DspReset &reset,
+                                         const std::optional<dsp56300::Word> failed = {}) {
+  const auto prepared = prepare_dsp(words, failed);
+  return blofeld::vi::dsp::execute({.main = words, .eeprom = {}},
+                                   shi,
+                                   reset,
+                                   {},
+                                   nullptr,
+                                   {},
+                                   nullptr,
+                                   nullptr,
+                                   nullptr,
+                                   nullptr,
+                                   &prepared);
 }
 
 blofeld::test::McuImage image() {
@@ -72,10 +110,10 @@ void debug_output() {
   constexpr auto program = isa::program(std::array{load, output}, isa::stop);
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
-  const auto result = blofeld::vi::dsp::execute({.main = program, .eeprom = {}}, shi, reset, {});
+  const auto result = execute_dsp(program, shi, reset);
   require(!result.failure && result.instructions == 3, "The DSP can write its OnCE output latch");
   constexpr auto reading = isa::program(std::array{input}, isa::stop);
-  const auto refused = blofeld::vi::dsp::execute({.main = reading, .eeprom = {}}, shi, reset, {});
+  const auto refused = execute_dsp(reading, shi, reset);
   require(refused.failure && refused.failure->operation == blofeld::vi::Access::read &&
               refused.failure->space == 'X' && refused.failure->address == once_address,
           "OnCE data is readable only through JTAG, never a fabricated DSP readback");
@@ -133,12 +171,37 @@ void boot_transfer() {
           "Configure the real receive FIFO");
   const auto sent = blofeld::vi::mcu::execute(*flash, *flash.program(), shi, reset, {});
   executed(sent, "Native MCU stores deliver complete boot words");
-  const auto loaded = blofeld::vi::dsp::execute({.main = reader, .eeprom = {}}, shi, reset, {});
+  constexpr std::array loader_entries{blofeld::vi::dsp::BootRom::main_first};
+  constexpr std::array payload_entries{dsp56300::Word{0}};
+  const std::array loader_code{dsp56300::CodeSpan{.address = loader_entries[0], .words = reader}};
+  const std::array payload_code{dsp56300::CodeSpan{.address = 0, .words = payload}};
+  const std::array variants{
+      dsp56300::CodeVariant{
+          .id = 0, .code = loader_code, .entries = loader_entries, .failed_fetches = {}},
+      dsp56300::CodeVariant{
+          .id = 1, .code = payload_code, .entries = payload_entries, .failed_fetches = {}}};
+  const std::array choices{
+      blofeld::vi::dsp::ProgramChoice{.variant = 0, .resumes = loader_entries, .words = {}},
+      blofeld::vi::dsp::ProgramChoice{.variant = 1, .resumes = payload_entries, .words = {}}};
+  constexpr std::array transfers{dsp56300::CodeTransition{.from = 0, .to = 1, .entry = 0}};
+  const auto prepared =
+      blofeld::app::aot::prepare_dsp_program({.variants = variants}, choices, {}, {}, transfers);
+  const auto loaded = blofeld::vi::dsp::execute({.main = reader, .eeprom = {}},
+                                                shi,
+                                                reset,
+                                                {},
+                                                nullptr,
+                                                {},
+                                                nullptr,
+                                                nullptr,
+                                                nullptr,
+                                                nullptr,
+                                                &prepared);
   executed(loaded, "Native DSP loads the delivered code");
   require(!loaded.failure && loaded.instructions == 5,
           "Native DSP receives, writes PRAM, jumps and executes the transmitted program");
   constexpr auto jump = dsp::opcode<dsp::Opcode::jmp_absolute_short>();
-  const auto missing = blofeld::vi::dsp::execute({.main = jump, .eeprom = {}}, shi, reset, {});
+  const auto missing = execute_dsp(jump, shi, reset, payload_entries[0]);
   require(missing.failure && missing.failure->space == 'P' && missing.failure->address == 0,
           "A new DSP cannot execute uninitialized program RAM as zero-filled NOPs");
 }
@@ -470,13 +533,29 @@ int main() try {
   blofeld::vi::Shi shi;
   blofeld::vi::DspReset reset;
   const auto mcu = blofeld::vi::mcu::execute(*flash, *flash.program(), shi, reset, {});
-  const auto dsp = blofeld::vi::dsp::execute({.main = boot, .eeprom = {}}, shi, reset, {});
+  const auto dsp_program = std::make_shared<blofeld::vi::dsp::Program>(prepare_dsp(boot));
+  const auto dsp = blofeld::vi::dsp::execute({.main = boot, .eeprom = {}},
+                                             shi,
+                                             reset,
+                                             {},
+                                             nullptr,
+                                             {},
+                                             nullptr,
+                                             nullptr,
+                                             nullptr,
+                                             nullptr,
+                                             dsp_program.get());
   require(!mcu.failure && mcu.instructions == 3, "MCU owner performs real reset and native STOP");
   require(!dsp.failure && dsp.instructions == 2, "DSP owner executes its native ROM instructions");
   const auto prepared = flash.program();
   {
-    blofeld::vi::VmContext context(
-        image().release(), boot, prepared, {}, {}, blofeld::vi::MidiPort::InputMode::stream);
+    blofeld::vi::VmContext context(image().release(),
+                                   boot,
+                                   prepared,
+                                   {},
+                                   {},
+                                   blofeld::vi::MidiPort::InputMode::stream,
+                                   dsp_program);
     context.start();
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
     const bool held = !context.finished();
@@ -490,7 +569,13 @@ int main() try {
             "Shared stop wakes both owners while streaming input is unavailable");
   }
   {
-    blofeld::vi::VmContext context(image().release(), boot, prepared);
+    blofeld::vi::VmContext context(image().release(),
+                                   boot,
+                                   prepared,
+                                   {},
+                                   {},
+                                   blofeld::vi::MidiPort::InputMode::live,
+                                   dsp_program);
     require(!context.take_display(), "No display snapshot precedes device initialization");
     context.request_display();
     context.request_stop();
@@ -503,7 +588,13 @@ int main() try {
             "The MCU owner publishes its actual reset display before joining");
   }
   for (unsigned iteration = 0; iteration < 8; ++iteration) {
-    blofeld::vi::VmContext context(image().release(), boot, prepared);
+    blofeld::vi::VmContext context(image().release(),
+                                   boot,
+                                   prepared,
+                                   {},
+                                   {},
+                                   blofeld::vi::MidiPort::InputMode::live,
+                                   dsp_program);
     const auto reports = context.run();
     require(!reports[0].exception && !reports[1].exception && !reports[0].failure &&
                 !reports[1].failure,

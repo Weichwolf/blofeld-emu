@@ -22,6 +22,7 @@
 #include <memory>
 #include <span>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -75,6 +76,21 @@ vi::dsp::Program prepare(const std::span<const Word> boot_words) {
   return blofeld::app::aot::prepare_dsp_program({.variants = variants}, choices, {}, {}, transfers);
 }
 
+void missing_program() {
+  vi::Shi shi;
+  vi::DspReset reset;
+  const auto before = reset.state();
+  bool refused = false;
+  try {
+    static_cast<void>(vi::dsp::execute({.main = changed, .eeprom = {}}, shi, reset, {}));
+  } catch (const std::invalid_argument &error) {
+    refused = std::string_view(error.what()).contains("complete prepared program");
+  }
+  const auto after = reset.state();
+  require(refused && after.epoch == before.epoch && after.held == before.held,
+          "Even executable STOP input requires a prepared program before device startup");
+}
+
 void normal_owner() {
   const auto words = bootstrap();
   auto program = std::make_shared<vi::dsp::Program>(prepare(words));
@@ -92,8 +108,8 @@ void normal_owner() {
                                          nullptr,
                                          nullptr,
                                          program.get());
-    require(!report.failure && !report.exception && !report.preparation_diagnostic &&
-                report.instructions == 15 && report.stopped_pc == 1 &&
+    require(!report.failure && !report.exception && report.instructions == 15 &&
+                report.stopped_pc == 1 &&
                 report.prepared_native_bytes == program->report().native_bytes,
             "The normal DSP owner loads RAM, admits a transfer and selects a real changed-code "
             "image without guest replay");
@@ -104,8 +120,16 @@ void normal_owner() {
     blofeld::test::McuImage mcu;
     constexpr std::array<cpu12::Byte, 2> stopped{0x20, 0xfe};
     mcu.load(0x8000, stopped);
+    const auto mcu_program = mcu.program();
+    bool refused = false;
+    try {
+      const vi::VmContext incomplete(std::make_unique<vi::FlashImage>(), words, mcu_program);
+    } catch (const std::invalid_argument &error) {
+      refused = std::string_view(error.what()).contains("complete prepared DSP program");
+    }
+    require(refused, "A VM with no prepared DSP refuses before either execution owner starts");
     const vi::VmContext vm(
-        std::move(image), words, mcu.program(), {}, {}, vi::MidiPort::InputMode::live, program);
+        std::move(image), words, mcu_program, {}, {}, vi::MidiPort::InputMode::live, program);
     program.reset();
     require(!retained.expired(), "The VM owns prepared code independently of the producer");
   }
@@ -113,7 +137,10 @@ void normal_owner() {
 }
 }
 
-int main() try { normal_owner(); } catch (const std::exception &error) {
+int main() try {
+  missing_program();
+  normal_owner();
+} catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';
   return 1;

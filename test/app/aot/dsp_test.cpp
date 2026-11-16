@@ -3,6 +3,7 @@
 #include "dsp/boot_rom.hpp"
 #include "dsp/code_source.hpp"
 #include "dsp/io.hpp"
+#include "dsp/program.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/pcm_output.hpp"
 #include "io/shi.hpp"
@@ -77,6 +78,12 @@ void execute(const NativeImage &native, const Action action, const Word payload)
   const std::stop_token stop;
   const bool write = action == Action::write;
   const auto words = write ? std::span(write_words) : std::span(read_words);
+  constexpr std::array entries{entry};
+  const std::array spans{CodeSpan{.address = entry, .words = words}};
+  const CodeVariant variant{
+      .id = write ? 1U : 0U, .code = spans, .entries = entries, .failed_fetches = {}};
+  const vi::dsp::ProgramChoice choice{.variant = variant.id, .resumes = entries, .words = {}};
+  const vi::dsp::Program program(native, {.variants = {&variant, 1}}, {&choice, 1}, {});
   const auto io = std::make_unique<vi::dsp::Io>(vi::dsp::BootRom{.main = words, .eeprom = {}},
                                                 shi,
                                                 reset,
@@ -86,7 +93,8 @@ void execute(const NativeImage &native, const Action action, const Word payload)
                                                 nullptr,
                                                 nullptr,
                                                 nullptr,
-                                                nullptr);
+                                                nullptr,
+                                                program);
   Core core(Memory::external(), io.get());
   io->bind(core, 0);
   core.reset();

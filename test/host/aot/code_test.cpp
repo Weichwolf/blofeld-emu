@@ -156,11 +156,13 @@ template <unsigned Instance> std::shared_ptr<const Code> imported_code() {
   return std::make_shared<const Code>(inputs.modules(), inputs.imports);
 }
 
-std::vector<std::filesystem::path> cache_files(const std::filesystem::path &root) {
+std::vector<std::filesystem::path> cache_files(const std::filesystem::path &root,
+                                               const std::string_view extension = ".bc") {
   std::vector<std::filesystem::path> files;
   for (const auto &entry : std::filesystem::directory_iterator(root)) {
-    require(entry.path().extension() == ".bc", "A cache exposes only complete artifacts");
-    files.push_back(entry.path());
+    const auto suffix = entry.path().extension();
+    require(suffix == ".bc" || suffix == ".o", "A cache exposes only complete artifacts");
+    if (suffix == extension) { files.push_back(entry.path()); }
   }
   return files;
 }
@@ -204,26 +206,10 @@ void cached_globals(const std::filesystem::path &root) {
   require(finished.load() == ended + 2, "Each cached native-global instance finalizes once");
 }
 
-void cached_code() {
-  const std::filesystem::path root(BLOFELD_AOT_CACHE_TEST);
-  std::filesystem::remove_all(root);
-  const auto before = calls().optimizations;
-  cached_imports<0>(root);
-  const auto optimized = calls().optimizations;
-  require(optimized > before, "A cold artifact is produced by the actual LLVM optimizer");
-  const auto files = cache_files(root);
-  require(files.size() == 1, "Cold preparation publishes one complete optimized module");
+void damaged_artifacts(const std::filesystem::path &path) {
+  const auto root = path.parent_path();
   constexpr std::size_t limit = std::size_t{1} << 24U;
-  const auto original = blofeld::host::read_file(files.front(), limit);
-  const auto modified = std::filesystem::last_write_time(files.front());
-  cached_imports<1>(root);
-  require(cache_files(root).size() == 1 &&
-              blofeld::host::read_file(files.front(), limit) == original &&
-              std::filesystem::last_write_time(files.front()) == modified &&
-              calls().optimizations == optimized,
-          "A warm instance reuses the same immutable artifact across native import providers");
-  const ImportInputs input;
-  const auto begun = native_started[0].load();
+  const auto original = blofeld::host::read_file(path, limit);
   for (const unsigned failure : {0U, 1U, 2U}) {
     auto corrupt = original;
     if (failure == 2) {
@@ -234,19 +220,47 @@ void cached_code() {
     }
     {
       const blofeld::host::Directory directory(root);
-      directory.replace(files.front().filename().string(), corrupt);
+      directory.replace(path.filename().string(), corrupt);
     }
-    bool refused = false;
-    try {
-      const Code code(input.modules(), input.imports, root);
-    } catch (const std::invalid_argument &) { refused = true; }
-    require(refused && native_started[0].load() == begun,
-            "Wrong identity, payload corruption and truncation fail before native initialization");
+    const auto passes = calls().optimizations;
+    cached_imports<0>(root);
+    require(blofeld::host::read_file(path, limit) == original,
+            "Wrong identity, corruption and truncation rebuild the exact valid artifact");
+    require(path.extension() == ".o" ? calls().optimizations == passes
+                                     : calls().optimizations > passes,
+            "Only damaged bitcode needs O3; damaged objects reuse the valid optimized module");
   }
-  {
-    const blofeld::host::Directory directory(root);
-    directory.replace(files.front().filename().string(), original);
-  }
+}
+
+void cached_code() {
+  const std::filesystem::path root(BLOFELD_AOT_CACHE_TEST);
+  std::filesystem::remove_all(root);
+  const auto before = calls().optimizations;
+  cached_imports<0>(root);
+  const auto optimized = calls().optimizations;
+  require(optimized > before, "A cold artifact is produced by the actual LLVM optimizer");
+  const auto files = cache_files(root);
+  const auto objects = cache_files(root, ".o");
+  require(files.size() == 1 && objects.size() == 1 &&
+              files.front().stem() == objects.front().stem(),
+          "Cold preparation publishes optimized bitcode and a relocatable object under one key");
+  constexpr std::size_t limit = std::size_t{1} << 24U;
+  const auto original = blofeld::host::read_file(files.front(), limit);
+  const auto modified = std::filesystem::last_write_time(files.front());
+  const auto object = blofeld::host::read_file(objects.front(), limit);
+  const auto object_modified = std::filesystem::last_write_time(objects.front());
+  cached_imports<1>(root);
+  require(cache_files(root).size() == 1 &&
+              blofeld::host::read_file(files.front(), limit) == original &&
+              std::filesystem::last_write_time(files.front()) == modified &&
+              blofeld::host::read_file(objects.front(), limit) == object &&
+              std::filesystem::last_write_time(objects.front()) == object_modified &&
+              calls().optimizations == optimized,
+          "A warm instance reuses both immutable artifacts without O3 or native compilation");
+  damaged_artifacts(files.front());
+  damaged_artifacts(objects.front());
+  const ImportInputs input;
+  const auto begun = native_started[0].load();
   auto invalid = input;
   invalid.imports[0].abi = "wrong";
   bool refused = false;

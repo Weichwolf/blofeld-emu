@@ -116,11 +116,11 @@ void qualify() {
     grants.swap(next);
     prepared.install(core, mounted);
     const auto returned = core.run(2);
-    require(
-        mounted.size() == 2 && returned.fault == cpu12::Fault::none && returned.retired == 2 &&
-            core.registers().pc == rom + 3 &&
-            core.registers().d == static_cast<cpu12::Address>(datum << 8U),
-        "Two independent owners retain original call/return, data and zero runtime translation");
+    require(mounted.size() == 2 && returned.fault == cpu12::Fault::none && returned.retired == 2 &&
+                core.registers().pc == rom + 3 &&
+                core.registers().d == static_cast<cpu12::Address>(datum << 8U),
+            "Two independent owners execute installed code with the original call/return and data "
+            "effects");
     require(memory.write({.address = ram + 1, .value = datum + 1}) && memory.program_changed() &&
                 memory.commit_mapping(),
             "A genuine operand write invalidates the immutable source");

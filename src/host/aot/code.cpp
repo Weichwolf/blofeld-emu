@@ -11,6 +11,9 @@
 #include "llvm-c/Orc.h"
 #include "llvm-c/TargetMachine.h"
 #include "llvm-c/Types.h"
+#include "llvm/ExecutionEngine/ObjectCache.h"
+#include "llvm/ExecutionEngine/Orc/CompileUtils.h"
+#include "llvm/ExecutionEngine/Orc/IRCompileLayer.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/Support/Error.h"
 
@@ -66,9 +69,13 @@ LLVMErrorRef measure(void *owner, LLVMMemoryBufferRef *buffer) noexcept {
   }
 }
 
-void platform(LLVMOrcLLJITBuilderRef builder, std::uint64_t &bytes) {
+void platform(LLVMOrcLLJITBuilderRef builder, std::uint64_t &bytes, llvm::ObjectCache *cache) {
   auto &native_builder = *reinterpret_cast<llvm::orc::LLJITBuilder *>(builder);
-  native_builder.setPrePlatformSetup([&bytes](llvm::orc::LLJIT &jit) {
+  native_builder.setNumCompileThreads(0).setSupportConcurrentCompilation(false);
+  native_builder.setPrePlatformSetup([&bytes, cache](llvm::orc::LLJIT &jit) {
+    // LLVM19 selects SimpleCompiler when concurrent compilation is disabled.
+    static_cast<llvm::orc::SimpleCompiler &>(jit.getIRCompileLayer().getCompiler())
+        .setObjectCache(cache);
     auto *handle = reinterpret_cast<LLVMOrcLLJITRef>(&jit);
     LLVMOrcObjectTransformLayerSetTransform(
         LLVMOrcLLJITGetObjTransformLayer(handle), measure, &bytes);
@@ -110,6 +117,7 @@ public:
   }
 
   std::uint64_t bytes = 0;
+  std::unique_ptr<llvm::ObjectCache> objects;
   Owner<LLVMOrcLLJITRef, dispose> jit;
   std::map<std::string, const void *, std::less<>> symbols;
   Phase phase = Phase::assembling;
@@ -144,9 +152,9 @@ Code::Code(const std::span<const Module> modules,
   detail::validate_imports(module.get(), bindings);
   detail::validate_symbols(module.get(), bindings);
   Owner<LLVMTargetMachineRef, LLVMDisposeTargetMachine> machine(detail::target(module.get()));
-  detail::optimize(module, machine.get(), exports, bindings, cache);
+  impl_->objects = detail::optimize(module, machine.get(), exports, bindings, cache);
   Owner<LLVMOrcLLJITBuilderRef, LLVMOrcDisposeLLJITBuilder> builder(LLVMOrcCreateLLJITBuilder());
-  platform(builder.get(), impl_->bytes);
+  platform(builder.get(), impl_->bytes, impl_->objects.get());
   LLVMOrcLLJITBuilderSetJITTargetMachineBuilder(
       builder.get(), LLVMOrcJITTargetMachineBuilderCreateFromTargetMachine(machine.release()));
   LLVMOrcLLJITRef raw_jit = nullptr;
