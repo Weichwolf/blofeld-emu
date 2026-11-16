@@ -3,6 +3,7 @@
 
 #include "aot/code.hpp"
 #include "aot/llvm.hpp"
+#include "aot/semantic.hpp"
 #include "dsp/channels.hpp"
 #include "dsp/program.hpp"
 #include "dsp_bindings.hpp"
@@ -82,12 +83,13 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
       CallbackBinding{.role = CallbackRole::reset, .symbol = "blofeld_dsp_reset"},
       CallbackBinding{.role = CallbackRole::pending, .symbol = "blofeld_dsp_pending"},
       CallbackBinding{.role = CallbackRole::revision, .symbol = "blofeld_dsp_revision"}};
-  const auto semantic = dsp56300::Core::lower(image,
-                                              {.memory = memory,
-                                               .interrupts = interrupts,
-                                               .transitions = transitions,
-                                               .callbacks = callbacks,
-                                               .bindings = {}});
+  const dsp56300::CompileOptions options{.memory = memory,
+                                         .interrupts = interrupts,
+                                         .transitions = transitions,
+                                         .callbacks = callbacks,
+                                         .bindings = {}};
+  const auto semantic =
+      detail::prepare_semantic<dsp56300::Core>(image, options, detail::dsp_bindings, cache);
   std::vector<native::Export> exports;
   for (const auto symbol : semantic.exports()) {
     exports.push_back({.name = symbol.name, .abi = symbol.abi});

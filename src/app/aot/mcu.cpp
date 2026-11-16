@@ -3,6 +3,7 @@
 
 #include "aot/code.hpp"
 #include "aot/llvm.hpp"
+#include "aot/semantic.hpp"
 #include "mcu/channels.hpp"
 #include "mcu/program.hpp"
 #include "mcu_bindings.hpp"
@@ -99,13 +100,14 @@ cpu12::NativeImage prepare_mcu(const cpu12::CodeImage image,
       0xffd6, 0xffd4, 0xffd2, 0xffd0, 0xffbe, 0xffce, 0xffcc, 0xffca, 0xffc8, 0xffc4, 0xffc2};
   interrupts.reserve(vectors.size() + 1);
   for (const auto vector : vectors) { interrupts.push_back({.vector = vector}); }
-  const auto semantic = cpu12::Core::lower(image,
-                                           {.memory = {},
-                                            .interrupts = interrupts,
-                                            .transitions = transitions,
-                                            .callbacks = callbacks,
-                                            .bindings = {},
-                                            .topology = cpu12::MemoryTopology::dynamic});
+  const cpu12::CompileOptions options{.memory = {},
+                                      .interrupts = interrupts,
+                                      .transitions = transitions,
+                                      .callbacks = callbacks,
+                                      .bindings = {},
+                                      .topology = cpu12::MemoryTopology::dynamic};
+  const auto semantic =
+      detail::prepare_semantic<cpu12::Core>(image, options, McuBinding::bitcode(), cache);
   namespace native = host::aot;
   const McuBinding binding;
   std::vector<native::Export> exports;

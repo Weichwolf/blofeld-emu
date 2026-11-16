@@ -266,6 +266,12 @@ if(BUILD_TESTING)
   blofeld_unit(host-audio-buffer-test test/host/audio/buffer_test.cpp blofeld_host_audio)
   blofeld_unit(vi-dsp-midi-test test/vi/dsp/midi_test.cpp blofeld_vi_execution)
   blofeld_unit(app-boot-test test/app/boot_rom_test.cpp blofeld_app_boot)
+  blofeld_unit(app-aot-semantic-cache-test test/app/aot/semantic_test.cpp "blofeld_app_aot;cpu12::core;LLVM;${CMAKE_DL_LIBS}")
+  target_include_directories(app-aot-semantic-cache-test SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
+  target_compile_definitions(app-aot-semantic-cache-test PRIVATE
+    CPU12_TEST_ISA="${BLOFELD_CPU12_ROOT}/test/support/isa.hpp"
+    DSP56300_TEST_ISA="${BLOFELD_DSP56300_ROOT}/test/support/isa.hpp")
+  set_tests_properties(app-aot-semantic-cache-test PROPERTIES TIMEOUT 30)
   blofeld_unit(app-aot-mcu-catalogue-test test/app/aot/mcu_catalogue_test.cpp "blofeld_app_aot;blofeld_vi_execution;LLVM")
   target_include_directories(app-aot-mcu-catalogue-test PRIVATE "${BLOFELD_CPU12_ROOT}/test/support")
   target_include_directories(app-aot-mcu-catalogue-test SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
