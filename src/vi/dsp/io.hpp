@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
-
+#if defined(BLOFELD_CENSUS)
+#include "census.hpp"
+#endif
 #include "dsp/audio.hpp"
 #include "dsp/boot_rom.hpp"
 #include "dsp/channels.hpp"
@@ -225,8 +227,20 @@ public:
     }
     return {};
   }
+#if defined(BLOFELD_CENSUS)
+  void trace_enabled(const bool enabled) noexcept { trace_enabled_ = enabled; }
+
+  void trace(const Census::Event event) noexcept {
+    if (trace_enabled_) { endings_ |= std::uint64_t{1} << static_cast<unsigned>(event); }
+  }
+
+  [[nodiscard]] std::uint64_t endings() const noexcept { return endings_; }
+#endif
 
   [[nodiscard]] dsp56300::RunResult run() {
+#if defined(BLOFELD_CENSUS)
+    endings_ = 0;
+#endif
     if (coupling_ != nullptr && coupling_->error() != nullptr) {
       throw std::runtime_error(coupling_->error());
     }
@@ -238,6 +252,9 @@ public:
     if (!synchronize_midi()) { throw std::runtime_error(error()); }
     advance_waiting();
     if (peer_deadline_ && device_cycles() >= *peer_deadline_) {
+#if defined(BLOFELD_CENSUS)
+      trace(Census::Event::peer_due);
+#endif
       return completed(core_->run_until(core_->progress().estimated_cycles));
     }
     const auto sources = interrupt_sources();
@@ -262,13 +279,33 @@ public:
           }
         }
         // An eligible request still observes REP completion and the interrupt shadow.
+#if defined(BLOFELD_CENSUS)
+        trace(Census::Event::irq_step);
+#endif
         return completed(core_->step());
       }
       // Masked requests do not turn ordinary execution into single stepping.
       // The Core returns at a real mask change before another instruction runs.
     }
     const auto next = deadline();
-    return completed(next ? core_->run_until(*next - idle_) : core_->run());
+#if defined(BLOFELD_CENSUS)
+    std::uint64_t deadlines = 0;
+    if (trace_enabled_ && next) {
+      const auto reached = [&](const Census::Event event) {
+        deadlines |= std::uint64_t{1} << static_cast<unsigned>(event);
+      };
+      if (timers_.deadline() == next) { reached(Census::Event::timer_deadline); }
+      if (media_deadline_ == next) { reached(Census::Event::media_deadline); }
+      if (audio_.deadline() == next) { reached(Census::Event::audio_deadline); }
+      if (midi_deadline_ == next) { reached(Census::Event::midi_deadline); }
+      if (peer_deadline_ == next) { reached(Census::Event::peer_deadline); }
+    }
+#endif
+    const auto result = completed(next ? core_->run_until(*next - idle_) : core_->run());
+#if defined(BLOFELD_CENSUS)
+    if (next && device_cycles() >= *next) { endings_ |= deadlines; }
+#endif
+    return result;
   }
 
   [[nodiscard]] bool waiting_event() const noexcept {
@@ -450,6 +487,9 @@ private:
 
   void audio_changed() noexcept {
     audio_dirty_ = true;
+#if defined(BLOFELD_CENSUS)
+    trace(Census::Event::audio_change);
+#endif
     core_->request_yield();
   }
 
@@ -653,6 +693,9 @@ private:
     static_cast<void>(interrupts_.read(access.address, current));
     // Prepared images already contain their declared priority/vector contexts.
     if (program_ == nullptr) { preparation_requested_ |= previous != current; }
+#if defined(BLOFELD_CENSUS)
+    trace(Census::Event::priority_change);
+#endif
     core_->request_yield();
     return true;
   }
@@ -661,7 +704,12 @@ private:
     if (!timers_.advance(device_cycles())) { return false; }
     bool ready = false;
     if (controller_.ready(ready) && !timers_.input(1, ready)) { return false; }
-    if (in_callback && (timers_.requests() != 0 || timers_.interrupt())) { core_->request_yield(); }
+    if (in_callback && (timers_.requests() != 0 || timers_.interrupt())) {
+#if defined(BLOFELD_CENSUS)
+      trace(Census::Event::pending_interrupt);
+#endif
+      core_->request_yield();
+    }
     return true;
   }
 
@@ -670,7 +718,12 @@ private:
     const auto next = timers_.deadline();
     const auto interrupt = timers_.interrupt();
     if (!timers_.write(access)) { return false; }
-    if (next != timers_.deadline() || interrupt != timers_.interrupt()) { core_->request_yield(); }
+    if (next != timers_.deadline() || interrupt != timers_.interrupt()) {
+#if defined(BLOFELD_CENSUS)
+      trace(Census::Event::timer_change);
+#endif
+      core_->request_yield();
+    }
     return true;
   }
 
@@ -679,6 +732,9 @@ private:
     trigger_audio_requests();
     if (dma_.pending() || dma_.interrupts() != 0) {
       dma_pc_ = pc;
+#if defined(BLOFELD_CENSUS)
+      trace(Census::Event::dma_change);
+#endif
       core_->request_yield();
     }
     return true;
@@ -739,6 +795,9 @@ private:
                              .address = access.address,
                              .value = access.value,
                              .space = access.space == dsp56300::Space::x ? 'X' : 'Y'};
+#if defined(BLOFELD_CENSUS)
+      trace(Census::Event::media_change);
+#endif
       core_->request_yield();
     }
     return true;
@@ -773,7 +832,12 @@ private:
     if (active && time_ != nullptr) {
       const auto timestamp = outgoing_time();
       if (!timestamp) { return false; }
-      if (blofeld_dsp_time_wake(time_, *timestamp)) { core_->request_yield(); }
+      if (blofeld_dsp_time_wake(time_, *timestamp)) {
+#if defined(BLOFELD_CENSUS)
+        trace(Census::Event::peer_change);
+#endif
+        core_->request_yield();
+      }
     }
     return true;
   }
@@ -833,15 +897,24 @@ private:
     if (peer_interrupt()) {
       constexpr std::array<dsp56300::Word, 1> source{0x10};
       if (interrupts_.select(source, 0) && interrupts_.select(source, core_->registers().sr)) {
+#if defined(BLOFELD_CENSUS)
+        trace(Census::Event::pending_interrupt);
+#endif
         core_->request_yield();
       }
     }
     if (stop_.stop_requested()) {
+#if defined(BLOFELD_CENSUS)
+      trace(Census::Event::stopping);
+#endif
       core_->request_yield();
       return true;
     }
     if (!reset_.pending(epoch_)) { return false; }
     reset_interrupted_ = true;
+#if defined(BLOFELD_CENSUS)
+    trace(Census::Event::resetting);
+#endif
     core_->request_yield();
     return true;
   }
@@ -887,5 +960,9 @@ private:
   std::uint64_t origin_ = 0;
   std::optional<std::uint64_t> peer_deadline_;
   Failure completion_failure_;
+#if defined(BLOFELD_CENSUS)
+  std::uint64_t endings_ = 0;
+  bool trace_enabled_ = false;
+#endif
 };
 }

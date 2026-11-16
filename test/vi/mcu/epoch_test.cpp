@@ -260,6 +260,7 @@ void native_cancellation_and_commit(const cpu12::NativeImage &image) {
             "The actual shared reply cursor retains every remaining byte exactly once");
   }
   require(machine.epoch.census().destructive == 1 && machine.epoch.census().rollbacks == 2 &&
+              machine.epoch.census().cause == Epoch::Signal::data &&
               machine.epoch.census().failed[static_cast<std::size_t>(Epoch::Signal::data)] == 2 &&
               machine.peer.error() == nullptr,
           "The frontier census distinguishes actual consumption, failed validations and replay");
@@ -294,6 +295,7 @@ void pressure_restart() {
               speculative.refusal() == Epoch::Refusal::epoch_invalidated,
           "Input pressure cancels an ordinary epoch before any destructive access");
   require(speculative.rollback() && !speculative.cancelled() &&
+              speculative.census().cause == Epoch::Signal::count &&
               speculative.census().pressure == 1 && speculative.census().rollbacks == 1,
           "A pressure restart retains its independent census and resumes from the checkpoint");
   Epoch atomic(storage, 2);

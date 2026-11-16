@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstdint>
+#include <iosfwd>
 #include <memory>
 #include <span>
 
@@ -15,6 +16,53 @@ class Census {
 
 public:
   enum class Actor : std::uint8_t { mcu, dsp };
+  enum class Event : std::uint8_t {
+    rollback,
+    discarded,
+    reinstall,
+    destructive,
+    data,
+    interrupt,
+    mode,
+    reply,
+    generation,
+    announce,
+    pressure,
+    session,
+    retired,
+    empty,
+    yielded,
+    waiting,
+    fault,
+    peer_due,
+    irq_step,
+    timer_deadline,
+    media_deadline,
+    audio_deadline,
+    midi_deadline,
+    peer_deadline,
+    dma_change,
+    priority_change,
+    timer_change,
+    pending_interrupt,
+    audio_change,
+    media_change,
+    peer_change,
+    stopping,
+    resetting,
+    coupling_service,
+    coupling_output,
+    other_return,
+    count
+  };
+  enum class Phase : std::uint8_t { startup, active, after, crossing, count };
+  using Counts = std::array<std::uint64_t, static_cast<unsigned>(Event::count)>;
+  using Intervals = std::array<Counts, static_cast<unsigned>(Phase::count)>;
+
+  struct NativeSession {
+    std::uint64_t begin = 0, end = 0, endings = 0;
+    std::uint32_t retired = 0;
+  };
 
   struct Guest {
     std::uint64_t instructions = 0, cycles = 0, idle = 0, epoch = 0;
@@ -55,6 +103,13 @@ public:
 
   [[nodiscard]] Snapshot capture() const noexcept;
   [[nodiscard]] Sessions sessions(Actor actor) const noexcept;
+  void interval(std::uint64_t begin, std::uint64_t end);
+  void validate_interval(std::uint64_t begin, std::uint64_t end) const;
+  [[nodiscard]] const Intervals &intervals(Actor actor) const;
+  void report_intervals(std::ostream &output) const;
+  [[nodiscard]] static bool tracing() noexcept;
+  static void event(Event event, std::uint64_t ticks, std::uint64_t amount = 1) noexcept;
+  static void native_session(NativeSession session) noexcept;
 
   class Scope {
   public:

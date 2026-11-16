@@ -67,6 +67,8 @@ public:
   [[nodiscard]] std::optional<St7565> take_display() { return display_.take(); }
 
 #if defined(BLOFELD_CENSUS)
+  [[nodiscard]] Census &census() noexcept { return census_; }
+
   [[nodiscard]] const Census &census() const noexcept { return census_; }
 
   [[nodiscard]] mcu::StateProbe *state_probe() noexcept { return state_probe_.get(); }

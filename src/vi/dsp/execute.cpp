@@ -108,6 +108,37 @@ void Io::prepare_code(ExecutionReport &report) {
 }
 
 namespace {
+#if defined(BLOFELD_CENSUS)
+void trace_session(Io &io,
+                   const std::optional<Coupling::Stamp> begun,
+                   const dsp56300::RunResult &result) {
+  const auto ended = io.timestamp();
+  if (!begun || !ended || ended->ticks < begun->ticks) {
+    throw std::runtime_error("DSP census has no monotonic owner-clock interval");
+  }
+  auto endings = io.endings();
+  const auto mark = [&](const Census::Event event) {
+    endings |= std::uint64_t{1} << static_cast<unsigned>(event);
+  };
+  if (endings == 0) { mark(Census::Event::other_return); }
+  if (result.yielded) { mark(Census::Event::yielded); }
+  if (result.state == dsp56300::ExecutionState::waiting) { mark(Census::Event::waiting); }
+  if (result.fault.kind != dsp56300::FaultKind::none) { mark(Census::Event::fault); }
+  Census::native_session(
+      {.begin = begun->ticks, .end = ended->ticks, .endings = endings, .retired = result.retired});
+}
+
+dsp56300::RunResult run_observed(Io &io) {
+  const auto observed_session = Census::session_begin();
+  const bool tracing = Census::tracing();
+  const auto begun = tracing ? io.timestamp() : std::nullopt;
+  const auto result = io.run();
+  Census::session_end(observed_session, result.retired);
+  if (tracing) { trace_session(io, begun, result); }
+  return result;
+}
+#endif
+
 bool run_instance(Io &io,
                   DspReset &reset,
                   const std::uint64_t epoch,
@@ -124,6 +155,8 @@ bool run_instance(Io &io,
   registers.omr = reset_mode;
   core.set_registers(registers);
 #if defined(BLOFELD_CENSUS)
+  io.trace_enabled(Census::tracing());
+
   struct Sample {
     dsp56300::Core &core;
     Io &io;
@@ -147,11 +180,9 @@ bool run_instance(Io &io,
     }
     io.prepare_code(report);
 #if defined(BLOFELD_CENSUS)
-    const auto observed_session = Census::session_begin();
-#endif
+    const auto result = run_observed(io);
+#else
     const auto result = io.run();
-#if defined(BLOFELD_CENSUS)
-    Census::session_end(observed_session, result.retired);
 #endif
     report.instructions += result.retired;
     if (stop.stop_requested()) { break; }

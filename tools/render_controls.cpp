@@ -31,8 +31,8 @@
 #include <vector>
 
 namespace {
-std::vector<std::uint64_t> speculation_windows(const std::size_t count) {
-  auto text = blofeld::host::inherited_setting("BLOFELD_D2");
+std::vector<std::uint64_t> settings(const std::string_view name, const std::size_t count) {
+  auto text = blofeld::host::inherited_setting(name);
   if (text.empty()) { return std::vector<std::uint64_t>(count); }
   std::vector<std::uint64_t> windows;
   for (;;) {
@@ -41,7 +41,7 @@ std::vector<std::uint64_t> speculation_windows(const std::size_t count) {
     std::uint64_t window = 0;
     const auto parsed = std::from_chars(item.data(), item.data() + item.size(), window);
     if (parsed.ec != std::errc{} || parsed.ptr != item.data() + item.size()) {
-      throw std::invalid_argument("BLOFELD_D2 requires nonnegative MCU tick windows");
+      throw std::invalid_argument("Diagnostic settings require nonnegative integer lists");
     }
     windows.push_back(window);
     if (comma == std::string_view::npos) { break; }
@@ -52,7 +52,7 @@ std::vector<std::uint64_t> speculation_windows(const std::size_t count) {
     windows.assign(count, window);
   }
   if (windows.size() != count) {
-    throw std::invalid_argument("BLOFELD_D2 window count differs from workloads");
+    throw std::invalid_argument("Diagnostic setting count differs from workloads");
   }
   return windows;
 }
@@ -73,7 +73,10 @@ int main(int argc, char **argv) try {
     workloads.push_back(std::move(options));
     begin = end + 1;
   }
-  const auto windows = speculation_windows(workloads.size());
+  const auto windows = settings("BLOFELD_D2", workloads.size());
+#if defined(BLOFELD_CENSUS)
+  const auto bounds = settings("BLOFELD_CENSUS_BOUNDS", 2 * workloads.size());
+#endif
   const auto profile = blofeld::app::load_profile(workloads.front().profile);
   const auto boot = blofeld::app::load_boot_rom(profile.boot_rom, profile.boot_format);
   const auto mcu_started = std::chrono::steady_clock::now();
@@ -103,9 +106,16 @@ int main(int argc, char **argv) try {
                               blofeld::vi::MidiPort::InputMode::stream,
                               dsp,
                               windows[workload]);
+#if defined(BLOFELD_CENSUS)
+    const auto boundary = 2 * workload;
+    if (bounds[boundary] != 0 || bounds[boundary + 1] != 0) {
+      vm.census().interval(bounds[boundary], bounds[boundary + 1]);
+    }
+#endif
     std::cerr << "CONTROL_WORKLOAD=" << ++workload << '\n';
     const auto result = render.run(vm, signals, instantiated);
 #if defined(BLOFELD_CENSUS)
+    vm.census().report_intervals(std::cerr);
     if (const auto *probe = vm.state_probe()) { probe->report(std::cerr); }
 #endif
     if (result != 0) { return result; }

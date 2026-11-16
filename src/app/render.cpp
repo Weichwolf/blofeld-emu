@@ -135,6 +135,7 @@ void OfflineRender::feed(vi::MidiPort &port,
   }
   // Publish the output boundary before releasing the exclusive MIDI EOF barrier.
 #if defined(BLOFELD_CENSUS)
+  vm_->census().validate_interval(origin, *end + tail_);
   if (auto *probe = vm_->state_probe()) { probe->end_at(*end + tail_); }
 #endif
   wav_.end_at(*end + tail_);

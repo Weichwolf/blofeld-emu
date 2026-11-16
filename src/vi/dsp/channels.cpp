@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dsp/channels.hpp"
 
+#if defined(BLOFELD_CENSUS)
+#include "census.hpp"
+#endif
+
 #include "dsp/coupling.hpp"
 #include "dsp/io.hpp"
 #include "io/coupling.hpp"
@@ -36,7 +40,12 @@ bool Coupled::service() const noexcept {
   const auto before = coupling_->revision();
   const auto stamp = io_.timestamp();
   const bool accepted = stamp && coupling_->service(*stamp) && !io_.coupling_interrupted();
-  if (!accepted || coupling_->revision() != before) { core_.request_yield(); }
+  if (!accepted || coupling_->revision() != before) {
+#if defined(BLOFELD_CENSUS)
+    io_.trace(Census::Event::coupling_service);
+#endif
+    core_.request_yield();
+  }
   return accepted;
 }
 
@@ -44,7 +53,12 @@ bool Coupled::changed() const noexcept {
   const auto before = coupling_->revision();
   const auto stamp = io_.timestamp();
   const bool accepted = stamp && coupling_->outputs(stamp->ceil());
-  if (!accepted || coupling_->revision() != before) { core_.request_yield(); }
+  if (!accepted || coupling_->revision() != before) {
+#if defined(BLOFELD_CENSUS)
+    io_.trace(Census::Event::coupling_output);
+#endif
+    core_.request_yield();
+  }
   return accepted;
 }
 

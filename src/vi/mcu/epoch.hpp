@@ -24,6 +24,7 @@ public:
   struct Census {
     std::array<std::uint64_t, static_cast<std::size_t>(Signal::count)> reads{}, failed{};
     std::uint64_t rollbacks = 0, destructive = 0, pressure = 0;
+    Signal cause = Signal::count;
   };
 
   explicit Epoch(const std::span<Read> storage, const std::size_t reserve) noexcept
@@ -63,6 +64,7 @@ public:
         conflict_ = change.ticks;
 #if defined(BLOFELD_CENSUS)
         ++census_.failed[static_cast<std::size_t>(read.signal)];
+        census_.cause = read.signal;
 #endif
       }
       phase_ = Phase::invalidated;
@@ -125,6 +127,7 @@ public:
       conflict_ = ticks;
 #if defined(BLOFELD_CENSUS)
       ++census_.pressure;
+      census_.cause = Signal::count;
 #endif
     }
     return false;

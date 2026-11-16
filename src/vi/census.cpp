@@ -13,6 +13,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <ostream>
+#include <stdexcept>
 
 namespace blofeld::vi {
 namespace {
@@ -44,11 +46,18 @@ struct alignas(64) Census::Slot {
   std::array<std::uint64_t, histogram_limit + 1> bins{};
   std::uint64_t sessions = 0, retired = 0;
   std::uint32_t maximum = 0;
+  Intervals intervals{};
 };
 
 struct Census::Impl {
-  host::diagnostics::ThreadUsageReader reader;
   std::array<Slot, 2> slots;
+  std::uint64_t begin = 0, end = 0;
+  host::diagnostics::ThreadUsageReader reader;
+
+  [[nodiscard]] unsigned phase(const std::uint64_t ticks) const noexcept {
+    if (ticks < begin) { return static_cast<unsigned>(Phase::startup); }
+    return static_cast<unsigned>(ticks < end ? Phase::active : Phase::after);
+  }
 };
 
 Census::Census() : Census(host::inherited_setting("BLOFELD_CENSUS") == "1") {}
@@ -56,6 +65,110 @@ Census::Census() : Census(host::inherited_setting("BLOFELD_CENSUS") == "1") {}
 Census::Census(const bool enabled) : impl_(enabled ? std::make_unique<Impl>() : nullptr) {}
 
 Census::~Census() = default;
+
+void Census::interval(const std::uint64_t begin, const std::uint64_t end) {
+  if (!impl_ || begin == 0 || begin >= end || impl_->end != 0 ||
+      impl_->slots[0].registered.load() || impl_->slots[1].registered.load()) {
+    throw std::logic_error(
+        "Census interval requires an enabled, unstarted owner pair and ordered bounds");
+  }
+  impl_->begin = begin;
+  impl_->end = end;
+}
+
+const Census::Intervals &Census::intervals(const Actor actor) const {
+  if (!impl_) { throw std::logic_error("No census interval storage"); }
+  return impl_->slots[static_cast<unsigned>(actor)].intervals;
+}
+
+void Census::validate_interval(const std::uint64_t begin, const std::uint64_t end) const {
+  if (impl_ && impl_->end != 0 && (impl_->begin != begin || impl_->end != end)) {
+    throw std::runtime_error("Census bounds disagree with the actual musical interval");
+  }
+}
+
+bool Census::tracing() noexcept {
+  return current.census != nullptr && current.census->impl_->end != 0;
+}
+
+void Census::event(const Event event,
+                   const std::uint64_t ticks,
+                   const std::uint64_t amount) noexcept {
+  if (!tracing()) { return; }
+  auto &owner = *current.census->impl_;
+  owner.slots[current.actor].intervals[owner.phase(ticks)][static_cast<unsigned>(event)] += amount;
+}
+
+void Census::native_session(const NativeSession session) noexcept {
+  if (!tracing()) { return; }
+  auto &owner = *current.census->impl_;
+  const auto phase = owner.phase(session.begin) == owner.phase(session.end)
+                         ? owner.phase(session.end)
+                         : static_cast<unsigned>(Phase::crossing);
+  auto &counts = owner.slots[current.actor].intervals[phase];
+  ++counts[static_cast<unsigned>(Event::session)];
+  counts[static_cast<unsigned>(Event::retired)] += session.retired;
+  if (session.retired == 0) { ++counts[static_cast<unsigned>(Event::empty)]; }
+  for (auto index = static_cast<unsigned>(Event::yielded);
+       index < static_cast<unsigned>(Event::count);
+       ++index) {
+    if ((session.endings & (std::uint64_t{1} << index)) != 0) { ++counts[index]; }
+  }
+}
+
+void Census::report_intervals(std::ostream &output) const {
+  if (!impl_ || impl_->end == 0) { return; }
+  constexpr std::array names{"rollback",
+                             "discarded",
+                             "reinstall",
+                             "destructive",
+                             "data",
+                             "interrupt",
+                             "mode",
+                             "reply",
+                             "generation",
+                             "announce",
+                             "pressure",
+                             "session",
+                             "retired",
+                             "empty",
+                             "yielded",
+                             "waiting",
+                             "fault",
+                             "peer-due",
+                             "irq-step",
+                             "timer-deadline",
+                             "media-deadline",
+                             "audio-deadline",
+                             "midi-deadline",
+                             "peer-deadline",
+                             "dma-change",
+                             "priority-change",
+                             "timer-change",
+                             "pending-interrupt",
+                             "audio-change",
+                             "media-change",
+                             "peer-change",
+                             "stopping",
+                             "resetting",
+                             "coupling-service",
+                             "coupling-output",
+                             "other-return"};
+  static_assert(names.size() == static_cast<unsigned>(Event::count));
+  constexpr std::array actors{"mcu", "dsp"};
+  constexpr std::array phases{"startup", "active", "after", "crossing"};
+  for (unsigned actor = 0; actor < actors.size(); ++actor) {
+    for (unsigned phase = 0; phase < phases.size(); ++phase) {
+      output << "INTERVAL actor=" << actors[actor] << " phase=" << phases[phase]
+             << " begin=" << impl_->begin << " end=" << impl_->end;
+      const auto &counts = impl_->slots[actor].intervals[phase];
+      for (unsigned index = 0; index < names.size(); ++index) {
+        output << ' ' << names[index] << '=' << counts[index];
+      }
+      output << '\n';
+    }
+  }
+}
 
 Census::Scope::Scope(Census &census, const Actor actor) noexcept {
   assert(current.census == nullptr);

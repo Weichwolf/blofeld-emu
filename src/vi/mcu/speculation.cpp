@@ -2,7 +2,10 @@
 #include "mcu/speculation.hpp"
 
 #if defined(BLOFELD_CENSUS)
+#include "census.hpp"
 #include "mcu/state_probe.hpp"
+
+#include <array>
 #endif
 
 #include "display/state.hpp"
@@ -222,6 +225,9 @@ bool Speculation::read(const std::uint8_t mask,
     return true;
   });
   if (accepted) {
+#if defined(BLOFELD_CENSUS)
+    Census::event(Census::Event::destructive, time);
+#endif
     action_ = Action::confirm;
     core_.request_yield();
   }
@@ -397,6 +403,11 @@ void Speculation::save() {
 }
 
 void Speculation::restore() {
+#if defined(BLOFELD_CENSUS)
+  const auto conflict = epoch_.conflict();
+  if (!conflict) { throw std::logic_error("MCU rollback census has no conflict timestamp"); }
+  const auto cause = epoch_.census().cause;
+#endif
   if (!checkpoint_ || !effects_.acknowledge(coupling_.consumed(), coupling_.cut()) ||
       !effects_.rollback() || !epoch_.rollback()) {
     throw std::logic_error("MCU rollback has no coherent retained prefix");
@@ -405,6 +416,19 @@ void Speculation::restore() {
                         !program_.handoff(mounted_, core_.registers().pc) &&
                         memory_.restore_bound(checkpoint_->memory);
 #if defined(BLOFELD_CENSUS)
+  constexpr std::array causes{Census::Event::data,
+                              Census::Event::interrupt,
+                              Census::Event::mode,
+                              Census::Event::reply,
+                              Census::Event::generation,
+                              Census::Event::announce,
+                              Census::Event::pressure};
+  Census::event(Census::Event::rollback, conflict.value());
+  Census::event(Census::Event::discarded,
+                conflict.value(),
+                report_.instructions - checkpoint_->state.instructions);
+  Census::event(causes[static_cast<unsigned>(cause)], conflict.value());
+  if (!retained) { Census::event(Census::Event::reinstall, conflict.value()); }
   if (auto *probe = StateProbe::active()) {
     probe->rollback(report_.instructions - checkpoint_->state.instructions, retained);
   }

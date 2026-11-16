@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dsp/execute.hpp"
+#if defined(BLOFELD_CENSUS)
+#include "census.hpp"
+#endif
 #include "dsp/ports.hpp"
 #include "execution.hpp"
 #include "files/read.hpp"
@@ -33,6 +36,12 @@ void require(const bool condition, const char *message) {
 }
 
 void native_clock_register() {
+#if defined(BLOFELD_CENSUS)
+  using blofeld::vi::Census;
+  Census census(true);
+  census.interval(1, std::numeric_limits<std::uint64_t>::max());
+  const Census::Scope owner(census, Census::Actor::dsp);
+#endif
   namespace isa = dsp56300::isa;
   constexpr dsp56300::Word control = 0x03620f;
   constexpr dsp56300::Word expected = 0x03620d;
@@ -60,6 +69,16 @@ void native_clock_register() {
               report.failure->space == 'P' && report.failure->address == unmapped &&
               report.failure->value == expected,
           "Native MOVEP/BCLR share PCTL and native RAM stores/loads retain its actual value");
+#if defined(BLOFELD_CENSUS)
+  Census::Counts counts{};
+  for (const auto &phase : census.intervals(Census::Actor::dsp)) {
+    for (unsigned index = 0; index < counts.size(); ++index) { counts[index] += phase[index]; }
+  }
+  require(counts[static_cast<unsigned>(Census::Event::retired)] == report.instructions &&
+              counts[static_cast<unsigned>(Census::Event::fault)] == 1 &&
+              counts[static_cast<unsigned>(Census::Event::audio_change)] >= 1,
+          "Actual native I/O yields and faults retain exact whole-run retirement accounting");
+#endif
 }
 
 void native_timed_peer_input() {
