@@ -15,6 +15,10 @@
 #include <string>
 #include <type_traits>
 
+namespace llvm {
+class ObjectCache;
+}
+
 namespace blofeld::host::aot::detail {
 template <auto Dispose> struct Delete {
   void operator()(auto *value) const noexcept { Dispose(value); }
@@ -35,11 +39,12 @@ void validate_symbols(LLVMModuleRef module, const Imports &imports);
 [[nodiscard]] LLVMModuleRef parse(LLVMContextRef context, const Module &source, Exports &exports);
 void merge(LLVMModuleRef destination, Owner<LLVMModuleRef, LLVMDisposeModule> module);
 void optimize(LLVMModuleRef module, LLVMTargetMachineRef machine, const Exports &exports);
-void optimize(Owner<LLVMModuleRef, LLVMDisposeModule> &module,
-              LLVMTargetMachineRef machine,
-              const Exports &exports,
-              const Imports &imports,
-              const std::filesystem::path &cache);
+[[nodiscard]] std::unique_ptr<llvm::ObjectCache>
+optimize(Owner<LLVMModuleRef, LLVMDisposeModule> &module,
+         LLVMTargetMachineRef machine,
+         const Exports &exports,
+         const Imports &imports,
+         const std::filesystem::path &cache);
 [[nodiscard]] LLVMTargetMachineRef target(LLVMModuleRef module);
 [[nodiscard]] std::uint64_t text_bytes(LLVMMemoryBufferRef object);
 void initialize();
