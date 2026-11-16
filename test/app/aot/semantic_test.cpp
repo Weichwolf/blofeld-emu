@@ -128,6 +128,25 @@ void stale(std::vector<std::uint8_t> &bytes, const std::string_view compiler) {
   std::ranges::copy(outer, bytes.begin() + digest_bytes);
 }
 
+template <class Input> void region_modes(const std::filesystem::path &root) {
+  Input input;
+  auto options = input.options();
+  if constexpr (requires { options.region_modes; }) {
+    using Core = typename Input::Core;
+    const std::array selected{dsp56300::Word{0}};
+    const auto all = aot::prepare_semantic<Core>(input.image(), options, {}, root);
+    options.region_modes = selected;
+    const auto hinted = aot::prepare_semantic<Core>(input.image(), options, {}, root);
+    require(all.identity() != hinted.identity() && records(root).size() == 2,
+            "Distinct fast-mode hints retain separate semantic cache records");
+    const auto before = builders + passes;
+    const auto warm = aot::prepare_semantic<Core>(input.image(), options, {}, root);
+    require(warm.identity() == hinted.identity() && before == builders + passes &&
+                records(root).size() == 2,
+            "A matching fast-mode hint restores without lowering or overwriting another mode");
+  }
+}
+
 template <class Input> void lifecycle(const std::filesystem::path &root) {
   using Core = typename Input::Core;
   Input input;
@@ -211,6 +230,7 @@ int main(const int argc, const char *const *const argv) try {
   std::filesystem::remove_all(root);
   lifecycle<CpuInput>(root / "cpu12");
   lifecycle<DspInput>(root / "dsp56300");
+  region_modes<DspInput>(root / "region-modes");
   std::cout << "Verified actual cold/warm semantic reuse and deterministic rejection/rebuild for "
                "both cores.\n";
 } catch (const std::exception &error) {

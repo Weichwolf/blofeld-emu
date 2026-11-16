@@ -87,6 +87,10 @@ inline Inputs semantic_inputs(const auto image,
   if constexpr (requires { options.topology; }) {
     key.number(static_cast<std::uint64_t>(options.topology));
   }
+  if constexpr (requires { options.region_modes; }) {
+    key.number(options.region_modes.has_value());
+    if (options.region_modes) { key.bytes(std::as_bytes(*options.region_modes)); }
+  }
   key.bytes(binding_ir);
   return key;
 }
