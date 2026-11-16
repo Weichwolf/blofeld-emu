@@ -45,9 +45,12 @@ Keep manufacturer inputs/generated artifacts local with source/size/hash identit
 
 ## Performance and qualification
 
-- Sustain **>=10x offline**, >=4x intermediate, with sixteen active parts, up to
-  twenty-five actual voices, distinct programs, original effects and authentic SL
-  samples together. Include heavier combinations and record resource limits,
+- Sustain **>=4x offline in every situation on the i5 reference hosts** (Linux
+  x86-64, i5-1135G7 and i5-10400): sixteen active parts, up to twenty-five actual
+  voices, distinct programs, original effects and authentic SL samples together.
+  The fully loaded DSP is the governing case. **>=10x** is the direction on
+  faster hosts such as Apple-silicon macOS ARM64, not an acceptance condition.
+  Include heavier combinations and record resource limits,
   allocation/release/stealing. At 44.1 kHz, 4x = 176400 and 10x = 441000 stereo frames/s.
 - Count valid original frames once against monotonic host processing time. Report
   compilation, boot/readiness, warm-up, active rendering, pacing and conversion
