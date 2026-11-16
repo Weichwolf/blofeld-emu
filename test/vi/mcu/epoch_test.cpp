@@ -286,6 +286,22 @@ void genuine_fault(const cpu12::NativeImage &image, const bool conflict) {
           "Unexplained failures are never retried or converted to speculative cancellation");
 }
 
+void pressure_restart() {
+  std::array<Epoch::Read, 8> storage{};
+  Epoch speculative(storage, 2);
+  require(speculative.record({.ticks = 10, .value = 0, .mask = 1}) && !speculative.restart(4) &&
+              speculative.cancelled() && speculative.conflict() == 4 && !speculative.refuse() &&
+              speculative.refusal() == Epoch::Refusal::epoch_invalidated,
+          "Input pressure cancels an ordinary epoch before any destructive access");
+  require(speculative.rollback() && !speculative.cancelled() &&
+              speculative.census().pressure == 1 && speculative.census().rollbacks == 1,
+          "A pressure restart retains its independent census and resumes from the checkpoint");
+  Epoch atomic(storage, 2);
+  require(atomic.attained(4) && atomic.consume(3, [] { return true; }) && !atomic.restart(4) &&
+              !atomic.cancelled() && atomic.error() == Epoch::Error::phase,
+          "Input pressure cannot discard a consumed device transaction");
+}
+
 void held_reset_boundary() {
   std::array<Epoch::Read, 8> storage{};
   Epoch empty(storage, 2);
@@ -350,6 +366,7 @@ int main() try {
   genuine_fault(image, true);
   bounded_read_set();
   held_reset_boundary();
+  pressure_restart();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

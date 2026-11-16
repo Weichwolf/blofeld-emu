@@ -72,31 +72,42 @@ void Speculation::publish() noexcept {
   coupling_.publish(effects_.entries(), ticks());
 }
 
+bool Speculation::observe(const Coupling::Input &update) noexcept {
+  bool valid = true;
+  const auto now = ticks();
+  if (state_.ready && !epoch_.atomic() && update.ticks >= state_.irq_window &&
+      update.ticks <= now) {
+    for (const auto signal : {Epoch::Signal::interrupt, Epoch::Signal::announce}) {
+      const auto before = history_.at(now, signal);
+      if (!before ||
+          !epoch_.record(
+              {.ticks = now, .value = *before, .mask = ~std::uint64_t{0}, .signal = signal})) {
+        return false;
+      }
+    }
+  }
+  for (std::size_t index = 0; index < update.values.size(); ++index) {
+    const Epoch::Read change{.ticks = update.ticks,
+                             .value = update.values[index],
+                             .mask = ~std::uint64_t{0},
+                             .signal = static_cast<Epoch::Signal>(index)};
+    if (!history_.write(change)) { return false; }
+    valid = epoch_.changed(change) && valid;
+  }
+  if (history_.yield() || epoch_.yield()) {
+    action_ = Action::confirm;
+    core_.request_yield();
+    if (valid && !epoch_.atomic()) { valid = epoch_.restart(update.ticks); }
+  }
+  return valid;
+}
+
 bool Speculation::poll() noexcept {
   if (coupling_.stopped()) { return false; }
   if (const auto update = coupling_.input(seen_)) {
     seen_ = update->serial;
     pending_ = update;
-    bool valid = true;
-    const auto now = ticks();
-    if (state_.ready && update->ticks >= state_.irq_window && update->ticks <= now) {
-      for (const auto signal : {Epoch::Signal::interrupt, Epoch::Signal::announce}) {
-        const auto before = history_.at(now, signal);
-        if (!before ||
-            !epoch_.record(
-                {.ticks = now, .value = *before, .mask = ~std::uint64_t{0}, .signal = signal})) {
-          return false;
-        }
-      }
-    }
-    for (std::size_t index = 0; index < update->values.size(); ++index) {
-      const Epoch::Read change{.ticks = update->ticks,
-                               .value = update->values[index],
-                               .mask = ~std::uint64_t{0},
-                               .signal = static_cast<Epoch::Signal>(index)};
-      if (!history_.write(change)) { return false; }
-      valid = epoch_.changed(change) && valid;
-    }
+    const bool valid = observe(*update);
     if (valid) {
       coupling_.acknowledge(update->serial);
       pending_.reset();
@@ -206,7 +217,10 @@ bool Speculation::read(const std::uint8_t mask,
     state_.reply = peer_.view().reply;
     return true;
   });
-  if (accepted) { core_.request_yield(); }
+  if (accepted) {
+    action_ = Action::confirm;
+    core_.request_yield();
+  }
   return accepted;
 }
 
@@ -280,6 +294,7 @@ bool Speculation::assert_reset() noexcept {
     if (state_.reset.epoch == std::numeric_limits<std::uint64_t>::max()) { return false; }
     ++state_.reset.epoch;
     state_.reset.held = true;
+    state_.irq_window = ticks();
   }
   return emit(Effects::Kind::reset_hold, state_.reset.epoch, ticks());
 }
@@ -405,6 +420,7 @@ void Speculation::confirm() {
     if (!coupling_.pause_after(time)) { coupling_.wait(observed); }
   }
   if (!check()) { return; }
+  ready();
   if (!effects_.acknowledge(coupling_.consumed(), coupling_.cut()) || !effects_.checkpoint(time) ||
       !epoch_.attained(coupling_.known()) ||
       !(state_.reset.held && coupling_.known() == time ? epoch_.checkpoint_quiescent(time)
@@ -417,6 +433,7 @@ void Speculation::confirm() {
   if (display_ != nullptr) { io_.capture_display(*display_); }
   save();
   coupling_.replace(time);
+  action_ = Action::run;
 }
 
 void Speculation::recover() {
@@ -557,12 +574,19 @@ void Speculation::run() {
   coupling_.bind();
   publish();
   while (check()) {
+    if (action_ == Action::confirm || history_.yield()) {
+      confirm();
+      continue;
+    }
     const auto origin = ticks();
     if (coupling_.window() > std::numeric_limits<std::uint64_t>::max() - origin) {
       throw std::overflow_error("MCU speculative window exceeds its clock domain");
     }
     const auto target = origin + coupling_.window();
-    while (check() && ticks() < target && !effects_.yield() && !epoch_.yield()) { step(target); }
+    while (check() && ticks() < target && !effects_.yield() && !epoch_.yield() &&
+           !history_.yield()) {
+      step(target);
+    }
     if (epoch_.cancelled()) {
       recover();
       continue;

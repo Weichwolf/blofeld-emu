@@ -14,8 +14,12 @@ class InputHistory {
 public:
   using Values = std::array<std::uint64_t, static_cast<std::size_t>(Epoch::Signal::count)>;
 
-  explicit InputHistory(const std::span<Epoch::Read> storage, const Values initial = {}) noexcept
-      : storage_(storage), baseline_(initial), current_(initial) {}
+  explicit InputHistory(const std::span<Epoch::Read> storage,
+                        const Values initial = {},
+                        const std::size_t reserve = 0) noexcept
+      : storage_(storage), baseline_(initial), current_(initial), reserve_(reserve) {
+    if (storage.size() <= reserve) { error_ = Epoch::Error::exhausted; }
+  }
 
   [[nodiscard]] bool write(Epoch::Read change) noexcept {
     if (error_ != Epoch::Error::none) { return false; }
@@ -54,7 +58,9 @@ public:
     if (ticks < origin_) { return fail(Epoch::Error::time); }
     while (size_ != 0 && storage_[first_].ticks <= ticks) {
       const auto &change = storage_[first_];
-      baseline_[static_cast<std::size_t>(change.signal)] = change.value;
+      const auto signal = static_cast<std::size_t>(change.signal);
+      baseline_[signal] = change.value;
+      if (change.value != 0) { raised_[signal] = change.ticks; }
       first_ = (first_ + 1) % storage_.size();
       --size_;
     }
@@ -65,6 +71,9 @@ public:
   [[nodiscard]] bool raised(const Epoch::Signal signal,
                             const std::uint64_t since,
                             const std::uint64_t through) const noexcept {
+    if (signal >= Epoch::Signal::count) { return false; }
+    const auto &retained = raised_[static_cast<std::size_t>(signal)];
+    if (retained && *retained > since && *retained <= through) { return true; }
     for (std::size_t index = 0; index < size_; ++index) {
       const auto &change = storage_[(first_ + index) % storage_.size()];
       if (change.ticks > through) { break; }
@@ -84,6 +93,8 @@ public:
     return {};
   }
 
+  [[nodiscard]] bool yield() const noexcept { return storage_.size() - size_ <= reserve_; }
+
   [[nodiscard]] Epoch::Error error() const noexcept { return error_; }
 
 private:
@@ -94,7 +105,9 @@ private:
 
   std::span<Epoch::Read> storage_;
   Values baseline_, current_;
-  std::size_t first_ = 0, size_ = 0;
+  std::array<std::optional<std::uint64_t>, static_cast<std::size_t>(Epoch::Signal::count)>
+      raised_{};
+  std::size_t reserve_, first_ = 0, size_ = 0;
   std::uint64_t origin_ = 0, source_ = 0;
   Epoch::Error error_ = Epoch::Error::none;
 };

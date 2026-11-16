@@ -23,7 +23,7 @@ public:
 
   struct Census {
     std::array<std::uint64_t, static_cast<std::size_t>(Signal::count)> reads{}, failed{};
-    std::uint64_t rollbacks = 0, destructive = 0;
+    std::uint64_t rollbacks = 0, destructive = 0, pressure = 0;
   };
 
   explicit Epoch(const std::span<Read> storage, const std::size_t reserve) noexcept
@@ -114,6 +114,20 @@ public:
     checkpoint_ = position_ = ticks;
     refusal_ = Refusal::device;
     return true;
+  }
+
+  [[nodiscard]] bool restart(const std::uint64_t ticks) noexcept {
+    if (error_ != Error::none) { return false; }
+    if (phase_ == Phase::atomic) { return fail(Error::phase); }
+    if (ticks < attained_ || ticks < source_) { return fail(Error::time); }
+    if (phase_ != Phase::invalidated) {
+      phase_ = Phase::invalidated;
+      conflict_ = ticks;
+#if defined(BLOFELD_CENSUS)
+      ++census_.pressure;
+#endif
+    }
+    return false;
   }
 
   [[nodiscard]] bool rollback() noexcept {

@@ -55,6 +55,8 @@ public:
   [[nodiscard]] bool release_reset() noexcept;
 
 private:
+  enum class Action : std::uint8_t { run, confirm };
+
   struct State {
     DspReset::State reset;
     std::uint64_t input_cursor = 0, accepted_announcement = 0, irq_window = 0;
@@ -73,6 +75,7 @@ private:
 
   [[nodiscard]] std::uint64_t ticks() const noexcept;
   void publish() noexcept;
+  [[nodiscard]] bool observe(const Coupling::Input &update) noexcept;
   [[nodiscard]] bool settle(std::uint64_t time) noexcept;
   [[nodiscard]] std::optional<std::uint64_t>
   input(Epoch::Signal signal, std::uint64_t time, std::uint64_t mask = ~std::uint64_t{0}) noexcept;
@@ -102,7 +105,7 @@ private:
   const Controls *controls_;
   std::array<Epoch::Read, 4096> reads_{}, changes_{};
   Epoch epoch_{reads_, 64};
-  InputHistory history_{changes_};
+  InputHistory history_{changes_, {}, changes_.size() / 2};
   Effects effects_;
   State state_;
   std::optional<Checkpoint> checkpoint_;
@@ -111,6 +114,7 @@ private:
   std::optional<Coupling::Input> pending_;
   std::uint64_t seen_ = 0;
   const char *refused_ = nullptr;
+  Action action_ = Action::run;
   bool active_ = false, replaying_ = false, pedal_ = false;
 };
 }

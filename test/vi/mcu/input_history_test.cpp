@@ -71,6 +71,34 @@ void retained_replay() {
           "A real protocol error takes priority over an earlier cancellation flag");
 }
 
+void retained_irq_edge() {
+  std::array<Epoch::Read, 8> storage{};
+  InputHistory history(storage);
+  require(
+      history.write({.ticks = 3, .value = 1, .mask = 1, .signal = Epoch::Signal::interrupt}) &&
+          history.write({.ticks = 4, .value = 0, .mask = 1, .signal = Epoch::Signal::interrupt}) &&
+          history.raised(Epoch::Signal::interrupt, 2, 5),
+      "An eligible IRQ pulse remains pending after its line was released");
+  require(history.retire(5) && history.at(5, Epoch::Signal::interrupt) == 0 &&
+              history.raised(Epoch::Signal::interrupt, 2, 5) &&
+              !history.raised(Epoch::Signal::interrupt, 5, 6),
+          "Checkpoint retirement preserves the pulse until its MCU eligibility window closes");
+}
+
+void input_pressure() {
+  std::array<Epoch::Read, 8> storage{};
+  InputHistory history(storage, {}, 3);
+  require(!history.yield(), "A fresh source history has room for speculative input");
+  for (std::uint64_t tick = 1; tick <= 5; ++tick) {
+    require(history.write({.ticks = tick, .value = tick, .mask = byte}),
+            "Retain actual transitions");
+  }
+  require(history.yield() && history.error() == Epoch::Error::none,
+          "Reserve remaining slots before the real input history is exhausted");
+  require(history.retire(5) && !history.yield() && history.at(5, Epoch::Signal::data) == 5,
+          "Confirmed retirement frees history while preserving the actual source value");
+}
+
 void bounded_history() {
   std::array<Epoch::Read, 2> storage{};
   InputHistory history(storage);
@@ -93,6 +121,8 @@ int main() try {
   receiving_time();
   retained_replay();
   bounded_history();
+  input_pressure();
+  retained_irq_edge();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';
