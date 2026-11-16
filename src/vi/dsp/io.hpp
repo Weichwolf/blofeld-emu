@@ -283,17 +283,7 @@ public:
     }
     const auto next = deadline();
 #if defined(BLOFELD_CENSUS)
-    std::uint64_t deadlines = 0;
-    if (trace_enabled_ && next) {
-      const auto reached = [&](const Census::Event event) {
-        deadlines |= std::uint64_t{1} << static_cast<unsigned>(event);
-      };
-      if (timers_.deadline() == next) { reached(Census::Event::timer_deadline); }
-      if (media_deadline_ == next) { reached(Census::Event::media_deadline); }
-      if (audio_.deadline() == next) { reached(Census::Event::audio_deadline); }
-      if (midi_deadline_ == next) { reached(Census::Event::midi_deadline); }
-      if (peer_deadline_ == next) { reached(Census::Event::peer_deadline); }
-    }
+    const auto deadlines = deadline_endings(next);
 #endif
     const auto result = completed(next ? core_->run_until(*next - idle_) : core_->run());
 #if defined(BLOFELD_CENSUS)
@@ -440,6 +430,23 @@ public:
   }
 
 private:
+#if defined(BLOFELD_CENSUS)
+  [[nodiscard]] std::uint64_t
+  deadline_endings(const std::optional<std::uint64_t> next) const noexcept {
+    if (!trace_enabled_ || !next) { return 0; }
+    std::uint64_t result = 0;
+    const auto reached = [&](const Census::Event event) {
+      result |= std::uint64_t{1} << static_cast<unsigned>(event);
+    };
+    if (timers_.deadline() == next) { reached(Census::Event::timer_deadline); }
+    if (media_deadline_ == next) { reached(Census::Event::media_deadline); }
+    if (audio_.deadline() == next) { reached(Census::Event::audio_deadline); }
+    if (midi_deadline_ == next) { reached(Census::Event::midi_deadline); }
+    if (peer_deadline_ == next) { reached(Census::Event::peer_deadline); }
+    return result;
+  }
+#endif
+
   void advance_waiting() {
     if (!waiting_ || interrupts_.select(interrupt_sources(), core_->registers().sr)) { return; }
     if (const auto next = deadline()) {

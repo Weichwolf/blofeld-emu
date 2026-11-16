@@ -86,7 +86,6 @@ public:
 
 private:
   void join_owners();
-  ExecutionTime time_;
   PeerPort peer_;
   std::unique_ptr<FlashImage> image_;
   std::unique_ptr<MediaImage> media_;
@@ -95,6 +94,7 @@ private:
   std::shared_ptr<const dsp::Program> program_;
   std::jthread mcu_;
   std::jthread dsp_;
+  ExecutionTime time_;
   std::vector<dsp56300::Word> boot_;
   PcmOutput output_;
   PreparationClock preparation_;
