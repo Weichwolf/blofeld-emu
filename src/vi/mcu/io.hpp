@@ -130,7 +130,8 @@ public:
     const auto data = ports_.output(Port::q);
     const auto request = ports_.output(Port::j);
     if (!data || !request) { return "Missing MCU port descriptors"; }
-    const auto input = peer_ == nullptr ? PeerPort::Sample{} : peer_data();
+    const auto input =
+        peer_ == nullptr ? PeerPort::Sample{} : peer_data().value_or(PeerPort::Sample{});
     return std::format("Q direction=${:02x} known=${:02x} latch=${:02x}; "
                        "J direction=${:02x} known=${:02x} latch=${:02x}; "
                        "DSP mask=${:02x} known=${:02x} data=${:02x}",
@@ -177,6 +178,8 @@ public:
     if (display_state_ != nullptr) { display_state_->capture(display_.controller()); }
   }
 
+  void capture_display(DisplayState &state) const { state.capture(display_.controller()); }
+
   bool complete_events() {
     panel_sampled_ = false;
     capture_display();
@@ -186,11 +189,10 @@ public:
       return false;
     }
     if (release_reset_) {
-      if (peer_ != nullptr && !peer_->release_mcu_data(devices_.clock.ticks(), stop_)) {
+      if (!blofeld_mcu_reset_release(
+              &reset_, peer_, devices_.time, devices_.clock.ticks(), stop_)) {
         return false;
       }
-      if (devices_.time != nullptr) { devices_.time->release_dsp(devices_.clock.ticks()); }
-      if (!reset_.release(stop_)) { return false; }
       release_reset_ = false;
     }
     if (!ports_.boot_pending()) { return true; }
@@ -236,9 +238,9 @@ private:
     return blofeld_mcu_peer_interrupt(peer_, generation);
   }
 
-  [[nodiscard]] PeerPort::Sample peer_data() const noexcept {
+  [[nodiscard]] std::optional<PeerPort::Sample> peer_data() const noexcept {
     PeerPort::Sample sample;
-    blofeld_mcu_peer_data(peer_, sample);
+    if (!blofeld_mcu_peer_data(peer_, sample)) { return {}; }
     return sample;
   }
 
@@ -300,10 +302,17 @@ private:
       input = !output || (output->direction & mask) != mask;
     }
     if (!input) { return action(); }
-    if (panel_sampled_ && (peer_data().mask & mask) == 0) { return action(); }
+    if (panel_sampled_) {
+      const auto sample = peer_data();
+      if (!sample) { return false; }
+      if ((sample->mask & mask) == 0) { return action(); }
+    }
     const bool accepted = shared_access(action);
-    panel_sampled_ = accepted && peer_ != nullptr && local_input_bank() && peer_data().mask == 0 &&
-                     !peer_interrupt();
+    if (accepted && peer_ != nullptr && local_input_bank()) {
+      const auto sample = peer_data();
+      if (!sample) { return false; }
+      panel_sampled_ = sample->mask == 0 && !peer_interrupt();
+    }
     return accepted;
   }
 
@@ -341,6 +350,10 @@ private:
   }
 
   bool interrupted() noexcept {
+    if (blofeld_mcu_cancelled()) {
+      core_->request_yield();
+      return true;
+    }
     if (peer_ != nullptr && peer_interrupt()) {
       panel_sampled_ = false;
       core_->request_yield();
@@ -406,8 +419,7 @@ private:
     if (peer_ != nullptr && (offset == peer_q_data || offset == peer_q_input)) {
       const auto ticks = devices_.timestamp(*core_);
       if (!ticks) { return false; }
-      const auto sample =
-          offset == peer_q_data ? read_peer(mask, *ticks) : std::optional{peer_data()};
+      const auto sample = offset == peer_q_data ? read_peer(mask, *ticks) : peer_data();
       if (!sample) { return false; }
       // DSP56371UM Table 2-8 documents internal pull-downs on PC0..7,
       // including reset-disconnected GPIO. They are not active reply data.

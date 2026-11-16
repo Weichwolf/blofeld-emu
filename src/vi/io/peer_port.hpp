@@ -22,8 +22,17 @@ public:
 
   struct Read {
     std::uint8_t mask = 0;
+    std::optional<std::uint8_t> direction = {};
     std::uint64_t ticks = 0;
   };
+
+  struct View {
+    Sample data;
+    std::uint64_t generation = 0;
+    bool ready = false, announced = false, reply = false;
+  };
+
+  [[nodiscard]] View view() const noexcept;
 
   // MCU owner publishes ordered data/direction changes; full transport waits
   // for actual space without advancing device time. Equal states need no slot.

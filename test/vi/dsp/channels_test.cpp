@@ -83,14 +83,14 @@ void timed_input() {
   require(peer.mcu_data(first, first_tick) && peer.mcu_data(second, second_tick),
           "Publish two actual timestamped producer changes");
   PeerPort::Sample sample = second;
-  blofeld_dsp_peer_sample(&peer, first_tick - 1, sample);
-  require(sample == PeerPort::Sample{}, "Native imports cannot read future producer state");
-  blofeld_dsp_peer_sample(&peer, first_tick, sample);
-  require(sample == first, "The binding retains mask, unknown bits and the actual value");
-  blofeld_dsp_peer_sample(&peer, second_tick - 1, sample);
-  require(sample == first, "Repeated input sampling does not consume a future transaction");
-  blofeld_dsp_peer_sample(&peer, second_tick, sample);
-  require(sample == second, "Only the actual instrument frontier admits the next input");
+  require(blofeld_dsp_peer_sample(&peer, first_tick - 1, sample) && sample == PeerPort::Sample{},
+          "Native imports cannot read future producer state");
+  require(blofeld_dsp_peer_sample(&peer, first_tick, sample) && sample == first,
+          "The binding retains mask, unknown bits and the actual value");
+  require(blofeld_dsp_peer_sample(&peer, second_tick - 1, sample) && sample == first,
+          "Repeated input sampling does not consume a future transaction");
+  require(blofeld_dsp_peer_sample(&peer, second_tick, sample) && sample == second,
+          "Only the actual instrument frontier admits the next input");
 }
 
 void report_output() {

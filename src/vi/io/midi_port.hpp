@@ -30,6 +30,11 @@ public:
 
   explicit MidiPort(InputMode input = InputMode::live) noexcept : input_mode_(input) {}
 
+  void wake(void *owner, void (*notify)(void *) noexcept) noexcept {
+    wake_owner_ = owner;
+    wake_notify_ = notify;
+  }
+
   // Input producer: packets are serialized on this DIN input, without reordering.
   [[nodiscard]] bool write_input(std::span<const std::uint8_t> bytes, std::uint64_t ticks) noexcept;
   [[nodiscard]] bool write_input(std::span<const std::uint8_t> bytes,
@@ -51,7 +56,8 @@ public:
   }
 
   // Each receiver owner retires only its own input observations.
-  [[nodiscard]] std::optional<Event> peek_input(Receiver receiver = Receiver::mcu) const noexcept;
+  [[nodiscard]] std::optional<Event> peek_input(Receiver receiver = Receiver::mcu,
+                                                std::uint64_t offset = 0) const noexcept;
   void pop_input(Receiver receiver = Receiver::mcu) noexcept;
   // MCU owner: only actual SCI character completions publish output.
   [[nodiscard]] bool write_output(Event event) noexcept;
@@ -69,7 +75,7 @@ private:
   struct Input {
     std::array<Event, capacity> events{};
     std::atomic<std::uint64_t> mcu{0}, dsp{0}, written{0};
-    [[nodiscard]] std::optional<Event> peek(Receiver receiver) const noexcept;
+    [[nodiscard]] std::optional<Event> peek(Receiver receiver, std::uint64_t offset) const noexcept;
     void pop(Receiver receiver) noexcept;
   };
 
@@ -89,6 +95,8 @@ private:
                            std::uint64_t ticks,
                            const std::stop_token *stop) noexcept;
   [[nodiscard]] bool fail(const char *message) noexcept;
+  void *wake_owner_ = nullptr;
+  void (*wake_notify_)(void *) noexcept = nullptr;
   const InputMode input_mode_;
   std::atomic<Phase> phase_{Phase::active};
   Input input_;

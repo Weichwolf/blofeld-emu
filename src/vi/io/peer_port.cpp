@@ -145,6 +145,15 @@ void PeerPort::dsp_data(const Sample value) noexcept {
   }
 }
 
+PeerPort::View PeerPort::view() const noexcept {
+  return {.data = dsp_data(),
+          .generation = to_mcu_.posted.load(std::memory_order_acquire),
+          .ready = !dsp_held_.load(std::memory_order_acquire) &&
+                   to_mcu_.active.load(std::memory_order_acquire),
+          .announced = reply_.announced.load(std::memory_order_acquire),
+          .reply = reply_.active.load(std::memory_order_acquire)};
+}
+
 PeerPort::Sample PeerPort::mcu_data() const noexcept {
   return decode(mcu_.load(std::memory_order_acquire));
 }
@@ -187,7 +196,7 @@ bool PeerPort::dsp_write(const Sample value, const std::uint64_t ticks) noexcept
 std::optional<PeerPort::Sample> PeerPort::read_dsp_data(const Read access) noexcept {
   if (dsp_held_.load(std::memory_order_acquire)) { return Sample{}; }
   constexpr std::uint8_t byte_mask = 0xff;
-  if (access.mask != byte_mask || mcu_data().mask != 0 ||
+  if (access.mask != byte_mask || access.direction.value_or(mcu_data().mask) != 0 ||
       !reply_.active.load(std::memory_order_acquire)) {
     return dsp_data();
   }

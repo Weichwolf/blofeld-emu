@@ -19,10 +19,14 @@ class Shi;
 
 namespace blofeld::vi::mcu {
 struct Devices;
+class Speculation;
 
 class Output {
 public:
-  Output(Effects &effects, const Devices &devices, cpu12::Core &core);
+  Output(Effects &effects,
+         const Devices &devices,
+         cpu12::Core &core,
+         Speculation *speculation = nullptr);
   ~Output();
   Output(const Output &) = delete;
   Output &operator=(const Output &) = delete;
@@ -32,10 +36,13 @@ public:
                          std::optional<std::uint64_t> ticks = {}) const noexcept;
   [[nodiscard]] static const Output *current() noexcept;
 
+  [[nodiscard]] Speculation *speculation() const noexcept { return speculation_; }
+
 private:
   Effects &effects_;
   const Devices &devices_;
   cpu12::Core &core_;
+  Speculation *speculation_;
 };
 
 [[nodiscard]] bool deliver(const Effects::Entry &entry,

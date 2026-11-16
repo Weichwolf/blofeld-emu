@@ -15,9 +15,8 @@ extern "C" {
 blofeld_dsp_shi_read(Shi *channel, std::uint32_t address, std::uint32_t &value) noexcept;
 [[nodiscard]] bool
 blofeld_dsp_shi_write(Shi *channel, std::uint32_t address, std::uint32_t value) noexcept;
-void blofeld_dsp_peer_sample(PeerPort *channel,
-                             std::uint64_t ticks,
-                             PeerPort::Sample &sample) noexcept;
+[[nodiscard]] bool
+blofeld_dsp_peer_sample(PeerPort *channel, std::uint64_t ticks, PeerPort::Sample &sample) noexcept;
 void blofeld_dsp_peer_data(PeerPort *channel,
                            std::uint8_t mask,
                            std::uint8_t known,

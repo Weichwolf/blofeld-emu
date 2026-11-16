@@ -8,6 +8,7 @@
 #include "io/midi_port.hpp"
 #include "mcu/program.hpp"
 #include "options.hpp"
+#include "process/configuration.hpp"
 #include "process/signals.hpp"
 #include "profile.hpp"
 #include "render.hpp"
@@ -15,16 +16,47 @@
 #include "storage/media_image.hpp"
 #include "vm_context.hpp"
 
+#include <charconv>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <iostream>
 #include <memory>
 #include <span>
 #include <stdexcept>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
+
+namespace {
+std::vector<std::uint64_t> speculation_windows(const std::size_t count) {
+  auto text = blofeld::host::inherited_setting("BLOFELD_D2");
+  if (text.empty()) { return std::vector<std::uint64_t>(count); }
+  std::vector<std::uint64_t> windows;
+  for (;;) {
+    const auto comma = text.find(',');
+    const auto item = text.substr(0, comma);
+    std::uint64_t window = 0;
+    const auto parsed = std::from_chars(item.data(), item.data() + item.size(), window);
+    if (parsed.ec != std::errc{} || parsed.ptr != item.data() + item.size() || window == 0) {
+      throw std::invalid_argument("BLOFELD_D2 requires positive MCU tick windows");
+    }
+    windows.push_back(window);
+    if (comma == std::string_view::npos) { break; }
+    text.remove_prefix(comma + 1);
+  }
+  if (windows.size() == 1) {
+    const auto window = windows.front();
+    windows.assign(count, window);
+  }
+  if (windows.size() != count) {
+    throw std::invalid_argument("BLOFELD_D2 window count differs from workloads");
+  }
+  return windows;
+}
+}
 
 int main(int argc, char **argv) try {
   const blofeld::host::Signals signals;
@@ -41,6 +73,7 @@ int main(int argc, char **argv) try {
     workloads.push_back(std::move(options));
     begin = end + 1;
   }
+  const auto windows = speculation_windows(workloads.size());
   const auto profile = blofeld::app::load_profile(workloads.front().profile);
   const auto boot = blofeld::app::load_boot_rom(profile.boot_rom, profile.boot_format);
   const auto mcu_started = std::chrono::steady_clock::now();
@@ -68,7 +101,8 @@ int main(int argc, char **argv) try {
                               std::move(media),
                               render.output(),
                               blofeld::vi::MidiPort::InputMode::stream,
-                              dsp);
+                              dsp,
+                              windows[workload]);
     std::cerr << "CONTROL_WORKLOAD=" << ++workload << '\n';
     const auto result = render.run(vm, signals, instantiated);
     if (result != 0) { return result; }

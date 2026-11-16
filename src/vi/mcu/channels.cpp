@@ -9,6 +9,7 @@
 #include "mcu/devices.hpp"
 #include "mcu/effects.hpp"
 #include "mcu/output.hpp"
+#include "mcu/speculation.hpp"
 
 #include <cpu12/core.hpp>
 #include <cstdint>
@@ -19,12 +20,20 @@
 namespace blofeld::vi::mcu {
 namespace {
 thread_local const Output *current_output = nullptr;
+
+Speculation *speculation() noexcept {
+  return current_output == nullptr ? nullptr : current_output->speculation();
+}
+
 constexpr unsigned known_shift = 8, direction_shift = 16;
 constexpr std::uint64_t byte_mask = 0xff;
 }
 
-Output::Output(Effects &effects, const Devices &devices, cpu12::Core &core)
-    : effects_(effects), devices_(devices), core_(core) {
+Output::Output(Effects &effects,
+               const Devices &devices,
+               cpu12::Core &core,
+               Speculation *speculation)
+    : effects_(effects), devices_(devices), core_(core), speculation_(speculation) {
   if (current_output != nullptr) { throw std::logic_error("Nested MCU output ownership"); }
   current_output = this;
 }
@@ -42,6 +51,7 @@ bool Output::put(const Effects::Kind kind,
                  const std::optional<std::uint64_t> ticks) const noexcept {
   const auto time = ticks ? ticks : devices_.timestamp(core_);
   if (!time) { return effects_.fail(Effects::Error::time); }
+  if (speculation_ != nullptr) { return speculation_->emit(kind, value, *time); }
   const bool accepted = effects_.append({.ticks = *time, .value = value, .kind = kind});
   if (effects_.yield()) { core_.request_yield(); }
   return accepted;
@@ -67,13 +77,33 @@ bool deliver(const Effects::Entry &entry,
       return midi.write_output(
           {.ticks = entry.ticks, .byte = static_cast<std::uint8_t>(entry.value)});
     case Effects::Kind::time: midi.publish_time(entry.ticks); return true;
+    case Effects::Kind::reset_hold:
+    case Effects::Kind::reset_release:
+    case Effects::Kind::wait:
+    case Effects::Kind::acknowledge:
     default: return false;
   }
+}
+
+bool blofeld_mcu_cancelled() noexcept {
+  return speculation() != nullptr && speculation()->cancelled();
+}
+
+bool blofeld_mcu_reset_release(DspReset *const channel,
+                               PeerPort *const peer,
+                               ExecutionTime *const time,
+                               const std::uint64_t ticks,
+                               const std::stop_token &stop) {
+  if (auto *session = speculation()) { return session->release_reset(); }
+  if (peer != nullptr && !peer->release_mcu_data(ticks, stop)) { return false; }
+  if (time != nullptr) { time->release_dsp(ticks); }
+  return channel->release(stop);
 }
 
 bool blofeld_mcu_shi_select(Shi *const channel, const bool active, Shi::Mode &mode) noexcept {
   if (const auto *output = Output::current()) {
     if (!output->put(Effects::Kind::select, std::uint64_t{active})) { return false; }
+    if (auto *session = speculation()) { return session->mode(active, false, mode); }
     const auto configured = channel->configuration(active);
     if (!configured) { return false; }
     mode = *configured;
@@ -86,6 +116,7 @@ bool blofeld_mcu_shi_select(Shi *const channel, const bool active, Shi::Mode &mo
 }
 
 bool blofeld_mcu_shi_mode(Shi *const channel, Shi::Mode &mode, const std::stop_token &stop) {
+  if (auto *session = speculation()) { return session->mode(true, true, mode); }
   const auto selected =
       Output::current() != nullptr ? channel->configuration(true) : channel->wait_mode(stop);
   if (!selected) { return false; }
@@ -101,20 +132,24 @@ bool blofeld_mcu_shi_submit(Shi *const channel,
 }
 
 bool blofeld_mcu_peer_interrupt(const PeerPort *const channel, std::uint64_t &generation) noexcept {
+  if (auto *session = speculation()) { return session->irq(generation); }
   const auto pending = channel->mcu_interrupt();
   if (!pending) { return false; }
   generation = *pending;
   return true;
 }
 
-void blofeld_mcu_peer_data(const PeerPort *const channel, PeerPort::Sample &sample) noexcept {
+bool blofeld_mcu_peer_data(const PeerPort *const channel, PeerPort::Sample &sample) noexcept {
+  if (auto *session = speculation()) { return session->data(sample); }
   sample = channel->dsp_data();
+  return true;
 }
 
 bool blofeld_mcu_peer_read(PeerPort *const channel,
                            const std::uint8_t mask,
                            const std::uint64_t ticks,
                            PeerPort::Sample &sample) noexcept {
+  if (auto *session = speculation()) { return session->read(mask, ticks, sample); }
   const auto next = channel->read_dsp_data({.mask = mask, .ticks = ticks});
   if (!next) { return false; }
   sample = *next;
@@ -122,7 +157,7 @@ bool blofeld_mcu_peer_read(PeerPort *const channel,
 }
 
 void blofeld_mcu_peer_hold(PeerPort *const channel) noexcept {
-  channel->hold_reset();
+  if (speculation() == nullptr) { channel->hold_reset(); }
 }
 
 bool blofeld_mcu_peer_publish(PeerPort *const channel,
@@ -170,6 +205,7 @@ bool blofeld_mcu_midi_limit(const MidiPort *const channel, std::uint64_t &ticks)
 }
 
 bool blofeld_mcu_midi_peek(const MidiPort *const channel, MidiPort::Event &event) noexcept {
+  if (auto *session = speculation()) { return session->midi(event); }
   const auto next = channel->peek_input();
   if (!next) { return false; }
   event = *next;
@@ -177,6 +213,10 @@ bool blofeld_mcu_midi_peek(const MidiPort *const channel, MidiPort::Event &event
 }
 
 void blofeld_mcu_midi_pop(MidiPort *const channel) noexcept {
+  if (auto *session = speculation()) {
+    session->pop_midi();
+    return;
+  }
   channel->pop_input();
 }
 
@@ -196,14 +236,16 @@ bool blofeld_mcu_midi_time(MidiPort *const channel, const std::uint64_t ticks) n
 bool blofeld_mcu_midi_await(MidiPort *const channel,
                             const std::uint64_t ticks,
                             const std::stop_token &stop) noexcept {
+  if (auto *session = speculation()) { return session->await_midi(ticks); }
   return channel->await_input(ticks, stop);
 }
 
 void blofeld_mcu_reset_state(const DspReset *const channel, DspReset::State &state) noexcept {
-  state = channel->state();
+  state = speculation() != nullptr ? speculation()->reset_state() : channel->state();
 }
 
 bool blofeld_mcu_reset_assert(DspReset *const channel) noexcept {
+  if (auto *session = speculation()) { return session->assert_reset(); }
   return channel->assert_reset();
 }
 }

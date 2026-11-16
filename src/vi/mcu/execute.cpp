@@ -4,6 +4,7 @@
 #include "display/state.hpp"
 #include "execution.hpp"
 #include "io/controls.hpp"
+#include "io/coupling.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/execution_time.hpp"
 #include "io/midi_port.hpp"
@@ -14,6 +15,7 @@
 #include "mcu/io.hpp"
 #include "mcu/memory.hpp"
 #include "mcu/program.hpp"
+#include "mcu/speculation.hpp"
 #include "mcu/timer.hpp"
 #include "storage/flash_image.hpp"
 
@@ -23,6 +25,7 @@
 #include <cstdint>
 #include <format>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -337,6 +340,44 @@ std::logic_error interval_failure(const cpu12::Core &core,
       devices.peer != nullptr && devices.peer->mcu_interrupt().has_value(),
       io.context()));
 }
+
+void execute_intervals(cpu12::Core &core,
+                       Devices &devices,
+                       Memory &memory,
+                       ExecutionReport &report,
+                       const Program &program,
+                       Io &io,
+                       std::vector<cpu12::Ram> &grants,
+                       std::vector<std::uint64_t> &mounted,
+                       std::optional<Timer::Cycle> &admitted,
+                       const std::stop_token &stop) {
+  while (!stop.stop_requested()) {
+    bind_memory(core, memory, devices.usb, grants, mounted, program);
+    const auto dispatch = prepare(core, devices, report, io, admitted);
+    if (dispatch == Dispatch::done) { break; }
+    if (dispatch == Dispatch::again) { continue; }
+    const auto result = dispatch == Dispatch::transaction
+                            ? std::optional{core.step()}
+                            : run_interval(core, devices, io, admitted);
+    if (!result) { break; }
+    report.instructions += result->retired;
+    if (stop.stop_requested()) { break; }
+    if (result->fault != cpu12::Fault::none) {
+      report.failure =
+          Failure{.operation = operation(result->fault),
+                  .pc = result->pc,
+                  .address = result->address,
+                  .value = result->value,
+                  .code = static_cast<std::uint32_t>(result->fault),
+                  .reason = io.error() != nullptr ? io.error()
+                                                  : "MCU access or instruction is not implemented"};
+      break;
+    }
+    if (!io.complete_events()) { break; }
+    advance(core, devices);
+    devices.activity(result->state);
+  }
+}
 }
 
 ExecutionReport execute(FlashImage &image,
@@ -348,7 +389,8 @@ ExecutionReport execute(FlashImage &image,
                         DisplayState *display,
                         PeerPort *peer,
                         ExecutionTime *time,
-                        MidiPort *midi) {
+                        MidiPort *midi,
+                        Coupling *coupling) {
   const PeerAdmission admission{peer};
   if (peer != nullptr && !peer->mcu_interrupt_ready(false)) {
     throw std::overflow_error(peer->error());
@@ -356,11 +398,19 @@ ExecutionReport execute(FlashImage &image,
   Memory memory(image);
   Devices devices(stop);
   devices.peer = peer;
-  devices.time = time;
+  devices.time = coupling == nullptr ? time : nullptr;
   devices.midi = midi;
   auto grants = regions(memory, devices.usb);
   std::optional<Timer::Cycle> admitted;
-  Io io(memory, image, devices, shi, reset, stop, controls, display, peer);
+  Io io(memory,
+        image,
+        devices,
+        shi,
+        reset,
+        stop,
+        controls,
+        coupling == nullptr ? display : nullptr,
+        peer);
   io.input_horizon(admitted);
   auto callbacks = io.callbacks();
   cpu12::Core core(cpu12::Memory::mapped(grants), &callbacks);
@@ -381,31 +431,26 @@ ExecutionReport execute(FlashImage &image,
   }
   bind_memory(core, memory, devices.usb, grants, mounted, program);
   try {
-    while (!stop.stop_requested()) {
-      bind_memory(core, memory, devices.usb, grants, mounted, program);
-      const auto dispatch = prepare(core, devices, report, io, admitted);
-      if (dispatch == Dispatch::done) { break; }
-      if (dispatch == Dispatch::again) { continue; }
-      const auto result = dispatch == Dispatch::transaction
-                              ? std::optional{core.step()}
-                              : run_interval(core, devices, io, admitted);
-      if (!result) { break; }
-      report.instructions += result->retired;
-      if (stop.stop_requested()) { break; }
-      if (result->fault != cpu12::Fault::none) {
-        report.failure = Failure{.operation = operation(result->fault),
-                                 .pc = result->pc,
-                                 .address = result->address,
-                                 .value = result->value,
-                                 .code = static_cast<std::uint32_t>(result->fault),
-                                 .reason = io.error() != nullptr
-                                               ? io.error()
-                                               : "MCU access or instruction is not implemented"};
-        break;
+    if (coupling != nullptr) {
+      if (peer == nullptr || midi == nullptr) {
+        throw std::logic_error("D2 requires board channels");
       }
-      if (!io.complete_events()) { break; }
-      advance(core, devices);
-      devices.activity(result->state);
+      auto session = std::make_unique<Speculation>(*coupling,
+                                                   memory,
+                                                   devices,
+                                                   io,
+                                                   core,
+                                                   program,
+                                                   *peer,
+                                                   *midi,
+                                                   reset,
+                                                   report,
+                                                   display,
+                                                   controls);
+      session->run();
+    } else {
+      execute_intervals(
+          core, devices, memory, report, program, io, grants, mounted, admitted, stop);
     }
   } catch (const std::logic_error &error) {
     throw interval_failure(core, devices, reset, io, error);

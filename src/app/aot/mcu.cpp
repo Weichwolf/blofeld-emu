@@ -24,26 +24,16 @@
 namespace blofeld::app::aot {
 McuBinding::McuBinding() {
   using namespace vi::mcu;
-  constexpr std::array names{"blofeld_mcu_shi_select",
-                             "blofeld_mcu_peer_interrupt",
-                             "blofeld_mcu_peer_data",
-                             "blofeld_mcu_peer_read",
-                             "blofeld_mcu_peer_hold",
-                             "blofeld_mcu_peer_publish",
-                             "blofeld_mcu_peer_strobe",
-                             "blofeld_mcu_time_publish",
-                             "blofeld_mcu_time_enter",
-                             "blofeld_mcu_time_leave",
-                             "blofeld_mcu_time_hold",
-                             "blofeld_mcu_midi_limit",
-                             "blofeld_mcu_midi_peek",
-                             "blofeld_mcu_midi_pop",
-                             "blofeld_mcu_midi_write",
-                             "blofeld_mcu_midi_time",
-                             "blofeld_mcu_midi_await",
-                             "blofeld_mcu_reset_state",
-                             "blofeld_mcu_reset_assert"};
-  const std::array addresses{reinterpret_cast<const void *>(&blofeld_mcu_shi_select),
+  constexpr std::array names{
+      "blofeld_mcu_cancelled",    "blofeld_mcu_shi_select",  "blofeld_mcu_peer_interrupt",
+      "blofeld_mcu_peer_data",    "blofeld_mcu_peer_read",   "blofeld_mcu_peer_hold",
+      "blofeld_mcu_peer_publish", "blofeld_mcu_peer_strobe", "blofeld_mcu_time_publish",
+      "blofeld_mcu_time_enter",   "blofeld_mcu_time_leave",  "blofeld_mcu_time_hold",
+      "blofeld_mcu_midi_limit",   "blofeld_mcu_midi_peek",   "blofeld_mcu_midi_pop",
+      "blofeld_mcu_midi_write",   "blofeld_mcu_midi_time",   "blofeld_mcu_midi_await",
+      "blofeld_mcu_reset_state",  "blofeld_mcu_reset_assert"};
+  const std::array addresses{reinterpret_cast<const void *>(&blofeld_mcu_cancelled),
+                             reinterpret_cast<const void *>(&blofeld_mcu_shi_select),
                              reinterpret_cast<const void *>(&blofeld_mcu_peer_interrupt),
                              reinterpret_cast<const void *>(&blofeld_mcu_peer_data),
                              reinterpret_cast<const void *>(&blofeld_mcu_peer_read),

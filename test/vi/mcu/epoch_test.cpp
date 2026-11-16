@@ -286,6 +286,25 @@ void genuine_fault(const cpu12::NativeImage &image, const bool conflict) {
           "Unexplained failures are never retried or converted to speculative cancellation");
 }
 
+void held_reset_boundary() {
+  std::array<Epoch::Read, 8> storage{};
+  Epoch empty(storage, 2);
+  require(
+      empty.attained(10) && empty.checkpoint_quiescent(10),
+      "An externally proved quiescent source commits an empty read-set at its attained instant");
+  require(empty.record({.ticks = 10, .value = 0, .mask = 1}) &&
+              !empty.changed({.ticks = 10, .value = 1, .mask = 1}) && empty.cancelled(),
+          "Quiescent checkpoint does not invent knowledge about new inputs at the same instant");
+  Epoch pending(storage, 2);
+  require(pending.record({.ticks = 10, .value = 0, .mask = 1}) &&
+              !pending.checkpoint_quiescent(10) && pending.error() == Epoch::Error::unsettled,
+          "Quiescence cannot discard an outstanding speculative read");
+  Epoch atomic(storage, 2);
+  require(atomic.attained(10) && atomic.consume(9, [] { return true; }) &&
+              !atomic.checkpoint_quiescent(10) && atomic.error() == Epoch::Error::unsettled,
+          "Quiescence cannot replace confirmation after a destructive native instruction");
+}
+
 void bounded_read_set() {
   std::array<Epoch::Read, 8> storage{};
   Epoch epoch(storage, 2);
@@ -330,6 +349,7 @@ int main() try {
   genuine_fault(image, false);
   genuine_fault(image, true);
   bounded_read_set();
+  held_reset_boundary();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

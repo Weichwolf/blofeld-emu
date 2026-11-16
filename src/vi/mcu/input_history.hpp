@@ -62,6 +62,28 @@ public:
     return true;
   }
 
+  [[nodiscard]] bool raised(const Epoch::Signal signal,
+                            const std::uint64_t since,
+                            const std::uint64_t through) const noexcept {
+    for (std::size_t index = 0; index < size_; ++index) {
+      const auto &change = storage_[(first_ + index) % storage_.size()];
+      if (change.ticks > through) { break; }
+      if (change.ticks > since && change.signal == signal && change.value != 0) { return true; }
+    }
+    return false;
+  }
+
+  [[nodiscard]] std::optional<std::uint64_t> next_irq(const std::uint64_t after) const noexcept {
+    for (std::size_t index = 0; index < size_; ++index) {
+      const auto &change = storage_[(first_ + index) % storage_.size()];
+      if (change.ticks > after && change.value != 0 &&
+          (change.signal == Epoch::Signal::interrupt || change.signal == Epoch::Signal::announce)) {
+        return change.ticks;
+      }
+    }
+    return {};
+  }
+
   [[nodiscard]] Epoch::Error error() const noexcept { return error_; }
 
 private:

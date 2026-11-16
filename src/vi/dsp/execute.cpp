@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dsp/execute.hpp"
+
+#include "dsp/coupling.hpp"
 #if defined(BLOFELD_CENSUS)
 #include "census.hpp"
 #endif
@@ -7,6 +9,7 @@
 #include "dsp/boot_rom.hpp"
 #include "dsp/io.hpp"
 #include "execution.hpp"
+#include "io/coupling.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/execution_time.hpp"
 #include "io/midi_port.hpp"
@@ -20,6 +23,7 @@
 #include <cstdint>
 #include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
+#include <optional>
 #include <stdexcept>
 #include <stop_token>
 
@@ -108,9 +112,11 @@ bool run_instance(Io &io,
                   DspReset &reset,
                   const std::uint64_t epoch,
                   const std::stop_token &stop,
-                  ExecutionReport &report) {
+                  ExecutionReport &report,
+                  Coupling *coupling) {
   dsp56300::Core core(dsp56300::Memory::external(), &io);
   io.bind(core, epoch);
+  const Coupled connected(coupling, io, core);
   core.reset();
   auto registers = core.registers();
   registers.pc = boot_first;
@@ -182,6 +188,24 @@ bool run_instance(Io &io,
   io.finish(report);
   return restart;
 }
+
+bool retire_reset(const DspReset::State state,
+                  std::uint64_t &applied,
+                  DspReset &reset,
+                  Shi &shi,
+                  PeerPort *peer,
+                  Coupling *coupling) {
+  if (state.epoch != applied) {
+    // run_instance has destroyed the previous Core before peripherals change.
+    // Reset retains SRAM; its known bytes remain owned by this execution Io.
+    shi.reset();
+    if (peer != nullptr) { peer->retire_mcu_data(); }
+    applied = state.epoch;
+    if (!reset.acknowledge(applied)) { throw std::logic_error("Invalid DSP reset epoch"); }
+    if (coupling != nullptr && !coupling->outputs(coupling->known())) { return false; }
+  }
+  return true;
+}
 }
 
 ExecutionReport execute(const BootRom boot,
@@ -194,30 +218,28 @@ ExecutionReport execute(const BootRom boot,
                         ExecutionTime *time,
                         MidiPort *midi,
                         PreparationClock *preparation,
-                        const Program *program) {
+                        const Program *program,
+                        Coupling *coupling) {
   if (!boot.valid()) {
     throw std::invalid_argument("DSP boot ROM has invalid or overlapping bounds");
   }
   const OutputOwner owner{output};
-  Io io(boot, shi, reset, stop, image, output, peer, time, midi, preparation, program);
+  Io io(boot, shi, reset, stop, image, output, peer, time, midi, preparation, program, coupling);
   ExecutionReport report;
   if (program != nullptr) { report.prepared_native_bytes = program->report().native_bytes; }
   std::uint64_t applied = 0;
   while (!stop.stop_requested()) {
     const auto state = reset.state();
-    if (state.epoch != applied) {
-      // run_instance has destroyed the previous Core before peripherals change.
-      // Reset retains SRAM; its known bytes remain owned by this execution Io.
-      shi.reset();
-      if (peer != nullptr) { peer->retire_mcu_data(); }
-      applied = state.epoch;
-      if (!reset.acknowledge(applied)) { throw std::logic_error("Invalid DSP reset epoch"); }
-    }
+    if (!retire_reset(state, applied, reset, shi, peer, coupling)) { break; }
     if (state.held) {
-      if (!reset.wait_release(stop)) { break; }
+      if (coupling != nullptr) {
+        if (!coupling->held()) { break; }
+      } else if (!reset.wait_release(stop)) {
+        break;
+      }
       continue;
     }
-    if (!run_instance(io, reset, applied, stop, report)) { break; }
+    if (!run_instance(io, reset, applied, stop, report, coupling)) { break; }
   }
   return report;
 }

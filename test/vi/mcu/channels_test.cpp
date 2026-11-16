@@ -47,7 +47,7 @@ void timed_reply() {
               blofeld_mcu_peer_read(&peer, report.mask, tick, sample) && sample == untouched,
           "A rejected early read preserves both output and queued payload for its actual time");
   peer.dsp_data(untouched);
-  blofeld_mcu_peer_data(&peer, sample);
+  require(blofeld_mcu_peer_data(&peer, sample), "Read actual peer sample");
   require(sample == untouched, "Raw latch views retain mask, unknown bits and value");
 }
 

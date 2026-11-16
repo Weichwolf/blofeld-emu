@@ -15,6 +15,7 @@
 #include "dsp/program.hpp"
 #include "dsp/timers.hpp"
 #include "execution.hpp"
+#include "io/coupling.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/execution_time.hpp"
 #include "io/memory_controller.hpp"
@@ -70,8 +71,10 @@ public:
      ExecutionTime *time,
      MidiPort *midi,
      PreparationClock *preparation,
-     const Program *program = nullptr)
-      : program_(program),
+     const Program *program = nullptr,
+     Coupling *coupling = nullptr)
+      : coupling_(coupling),
+        program_(program),
         boot_(boot),
         shi_(shi),
         reset_(reset),
@@ -83,7 +86,17 @@ public:
         midi_(midi),
         preparation_(preparation) {}
 
-  void bind(dsp56300::Core &core, const std::uint64_t epoch) noexcept {
+  [[nodiscard]] std::optional<Coupling::Stamp> timestamp() const noexcept {
+    auto projected = clock_;
+    if (!projected.advance(device_cycles()) ||
+        projected.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_ - 1) {
+      return {};
+    }
+    return Coupling::Stamp{.ticks = origin_ + projected.ticks(),
+                           .fractional = projected.fractional()};
+  }
+
+  void bind(dsp56300::Core &core, const std::uint64_t epoch) {
     core_ = &core;
     epoch_ = epoch;
     reset_interrupted_ = false;
@@ -112,6 +125,9 @@ public:
     memory_.configure(0);
     ports_.reset();
     if (peer_ != nullptr) { peer_->reset_dsp(); }
+    if (coupling_ != nullptr && !coupling_->outputs(origin_)) {
+      throw std::runtime_error("DSP reset publication failed");
+    }
     controller_.reset();
     bool ready = false;
     if (controller_.ready(ready)) { static_cast<void>(timers_.input(1, ready)); }
@@ -194,6 +210,7 @@ public:
   }
 
   [[nodiscard]] const char *error() const noexcept {
+    if (coupling_ != nullptr && coupling_->error() != nullptr) { return coupling_->error(); }
     if (peer_ != nullptr && peer_->error() != nullptr) { return peer_->error(); }
     if (audio_.error() != nullptr) { return audio_.error(); }
     if (media_error_ != nullptr) { return media_error_; }
@@ -210,6 +227,9 @@ public:
   }
 
   [[nodiscard]] dsp56300::RunResult run() {
+    if (coupling_ != nullptr && coupling_->error() != nullptr) {
+      throw std::runtime_error(coupling_->error());
+    }
     if (!synchronize_peer()) {
       dsp56300::RunResult stopped;
       stopped.yielded = true;
@@ -254,6 +274,8 @@ public:
   [[nodiscard]] bool waiting_event() const noexcept {
     return waiting_ && (deadline() || interrupts_.select(interrupt_sources(), 0));
   }
+
+  [[nodiscard]] bool coupling_interrupted() noexcept { return interrupted(); }
 
   [[nodiscard]] bool reset_interrupted() const noexcept { return reset_interrupted_; }
 
@@ -467,6 +489,11 @@ private:
   }
 
   [[nodiscard]] std::optional<ExecutionTime::DspGrant> source_limit() {
+    if (coupling_ != nullptr) {
+      const auto stamp = timestamp();
+      if (!stamp) { throw std::overflow_error("DSP coupling timestamp overflows"); }
+      return coupling_->receiver(*stamp);
+    }
     if (waiting_ && !synchronize_midi()) { throw std::runtime_error(error()); }
     for (;;) {
       const auto limit = time_->dsp_limit(origin_ + clock_.ticks(),
@@ -527,7 +554,7 @@ private:
     }
     if (peer_ != nullptr) {
       PeerPort::Sample sample;
-      blofeld_dsp_peer_sample(peer_, origin_ + clock_.ticks(), sample);
+      if (!blofeld_dsp_peer_sample(peer_, origin_ + clock_.ticks(), sample)) { return false; }
     }
     const auto limit = source_limit();
     if (!limit) { return false; }
@@ -724,7 +751,7 @@ private:
         return false;
       }
       PeerPort::Sample input;
-      blofeld_dsp_peer_sample(peer_, origin_ + clock_.ticks(), input);
+      if (!blofeld_dsp_peer_sample(peer_, origin_ + clock_.ticks(), input)) { return false; }
       ports_.input(Port::c, {.mask = input.mask, .known = input.known, .value = input.value});
     }
     return ports_.read(space, address, value);
@@ -819,6 +846,7 @@ private:
     return true;
   }
 
+  Coupling *coupling_;
   const Program *program_ = nullptr;
   std::optional<std::uint64_t> installed_program_;
   BootRom boot_;

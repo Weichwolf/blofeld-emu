@@ -9,6 +9,7 @@
 #include "dsp/program.hpp"
 #include "execution.hpp"
 #include "io/controls.hpp"
+#include "io/coupling.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/execution_time.hpp"
 #include "io/midi_port.hpp"
@@ -41,7 +42,8 @@ public:
             std::unique_ptr<MediaImage> media = {},
             PcmOutput output = {},
             MidiPort::InputMode input = MidiPort::InputMode::live,
-            std::shared_ptr<const dsp::Program> program = {});
+            std::shared_ptr<const dsp::Program> program = {},
+            std::uint64_t speculation_window = 0);
   ~VmContext();
   VmContext(const VmContext &) = delete;
   VmContext &operator=(const VmContext &) = delete;
@@ -99,6 +101,7 @@ private:
 #if defined(BLOFELD_CENSUS)
   Census census_;
 #endif
+  std::unique_ptr<Coupling> coupling_;
   bool started_ = false;
 };
 }

@@ -11,7 +11,7 @@
 namespace blofeld::vi::mcu {
 class Epoch {
 public:
-  enum class Signal : std::uint8_t { data, interrupt, mode, reply, count };
+  enum class Signal : std::uint8_t { data, interrupt, mode, reply, generation, announce, count };
   enum class Error : std::uint8_t { none, exhausted, time, phase, unsettled };
   enum class Phase : std::uint8_t { speculative, invalidated, atomic };
   enum class Refusal : std::uint8_t { device, epoch_invalidated };
@@ -102,6 +102,16 @@ public:
     if (ticks < position_ || !settled(ticks) || size_ != 0) { return fail(Error::unsettled); }
     checkpoint_ = position_ = ticks;
     phase_ = Phase::speculative;
+    refusal_ = Refusal::device;
+    return true;
+  }
+
+  [[nodiscard]] bool checkpoint_quiescent(const std::uint64_t ticks) noexcept {
+    if (error_ != Error::none || phase_ != Phase::speculative || size_ != 0 || ticks < position_ ||
+        ticks < attained_) {
+      return fail(Error::unsettled);
+    }
+    checkpoint_ = position_ = ticks;
     refusal_ = Refusal::device;
     return true;
   }

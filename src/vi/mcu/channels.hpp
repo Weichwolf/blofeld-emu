@@ -12,6 +12,12 @@
 
 namespace blofeld::vi::mcu {
 extern "C" {
+[[nodiscard]] bool blofeld_mcu_cancelled() noexcept;
+[[nodiscard]] bool blofeld_mcu_reset_release(DspReset *channel,
+                                             PeerPort *peer,
+                                             ExecutionTime *time,
+                                             std::uint64_t ticks,
+                                             const std::stop_token &stop);
 [[nodiscard]] bool blofeld_mcu_shi_select(Shi *channel, bool active, Shi::Mode &mode) noexcept;
 [[nodiscard]] bool blofeld_mcu_shi_mode(Shi *channel, Shi::Mode &mode, const std::stop_token &stop);
 [[nodiscard]] bool
@@ -19,7 +25,8 @@ blofeld_mcu_shi_submit(Shi *channel, std::uint32_t word, const std::stop_token &
 
 [[nodiscard]] bool blofeld_mcu_peer_interrupt(const PeerPort *channel,
                                               std::uint64_t &generation) noexcept;
-void blofeld_mcu_peer_data(const PeerPort *channel, PeerPort::Sample &sample) noexcept;
+[[nodiscard]] bool blofeld_mcu_peer_data(const PeerPort *channel,
+                                         PeerPort::Sample &sample) noexcept;
 [[nodiscard]] bool blofeld_mcu_peer_read(PeerPort *channel,
                                          std::uint8_t mask,
                                          std::uint64_t ticks,

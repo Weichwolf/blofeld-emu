@@ -11,6 +11,7 @@
 #include "dsp/execute.hpp"
 #include "dsp/program.hpp"
 #include "execution.hpp"
+#include "io/coupling.hpp"
 #include "io/midi_port.hpp"
 #include "io/pcm_output.hpp"
 #include "mcu/execute.hpp"
@@ -19,6 +20,7 @@
 
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <dsp56300/memory.hpp>
 #include <exception>
 #include <memory>
@@ -35,7 +37,8 @@ VmContext::VmContext(std::unique_ptr<FlashImage> image,
                      std::unique_ptr<MediaImage> media,
                      const PcmOutput output,
                      const MidiPort::InputMode input,
-                     std::shared_ptr<const dsp::Program> program)
+                     std::shared_ptr<const dsp::Program> program,
+                     const std::uint64_t speculation_window)
     : image_(std::move(image)),
       media_(std::move(media)),
       mcu_program_(std::move(mcu_program)),
@@ -43,6 +46,10 @@ VmContext::VmContext(std::unique_ptr<FlashImage> image,
       boot_(std::move(boot)),
       output_(output),
       midi_(input) {
+  if (speculation_window != 0) {
+    coupling_ = std::make_unique<Coupling>(
+        peer_, shi_, reset_, time_, midi_, stop_.get_token(), speculation_window);
+  }
   if (!image_) { throw std::invalid_argument("VM requires a persistent MCU image"); }
   if (!mcu_program_) { throw std::invalid_argument("VM requires a complete prepared MCU program"); }
 }
@@ -79,7 +86,8 @@ void VmContext::start() {
                                  &display_,
                                  &peer_,
                                  &time_,
-                                 &midi_);
+                                 &midi_,
+                                 coupling_.get());
     } catch (...) { reports_[0].exception = std::current_exception(); }
     completed_.fetch_add(1, std::memory_order_release);
     completed_.notify_one();
@@ -100,7 +108,8 @@ void VmContext::start() {
                                  &time_,
                                  &midi_,
                                  &preparation_,
-                                 program_.get());
+                                 program_.get(),
+                                 coupling_.get());
     } catch (...) { reports_[1].exception = std::current_exception(); }
     completed_.fetch_add(1, std::memory_order_release);
     completed_.notify_one();

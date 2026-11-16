@@ -33,9 +33,12 @@ struct Waiting {
 };
 }
 
-std::optional<MidiPort::Event> MidiPort::Input::peek(const Receiver receiver) const noexcept {
-  const auto at = (receiver == Receiver::mcu ? mcu : dsp).load(std::memory_order_relaxed);
-  if (at == written.load(std::memory_order_acquire)) { return {}; }
+std::optional<MidiPort::Event> MidiPort::Input::peek(const Receiver receiver,
+                                                     const std::uint64_t offset) const noexcept {
+  const auto base = (receiver == Receiver::mcu ? mcu : dsp).load(std::memory_order_relaxed);
+  const auto end = written.load(std::memory_order_acquire);
+  if (offset >= end - base) { return {}; }
+  const auto at = base + offset;
   return events[at & index_mask];
 }
 
@@ -55,11 +58,13 @@ void MidiPort::Queue::pop() noexcept {
 }
 
 void MidiPort::signal() noexcept {
+  if (wake_notify_ != nullptr) { wake_notify_(wake_owner_); }
   changed_.fetch_add(1, std::memory_order_seq_cst);
   changed_.notify_all();
 }
 
 void MidiPort::notify() noexcept {
+  if (wake_notify_ != nullptr) { wake_notify_(wake_owner_); }
   if (input_waiters_.load(std::memory_order_seq_cst) != 0 ||
       space_waiters_.load(std::memory_order_seq_cst) != 0 ||
       output_waiters_.load(std::memory_order_seq_cst) != 0) {
@@ -201,8 +206,9 @@ bool MidiPort::await_input(const std::uint64_t ticks, const std::stop_token &sto
   });
 }
 
-std::optional<MidiPort::Event> MidiPort::peek_input(const Receiver receiver) const noexcept {
-  return input_.peek(receiver);
+std::optional<MidiPort::Event> MidiPort::peek_input(const Receiver receiver,
+                                                    const std::uint64_t offset) const noexcept {
+  return input_.peek(receiver, offset);
 }
 
 void MidiPort::pop_input(const Receiver receiver) noexcept {

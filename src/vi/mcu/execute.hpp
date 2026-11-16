@@ -4,6 +4,7 @@
 #include "display/state.hpp"
 #include "execution.hpp"
 #include "io/controls.hpp"
+#include "io/coupling.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/execution_time.hpp"
 #include "io/midi_port.hpp"
@@ -24,5 +25,6 @@ namespace blofeld::vi::mcu {
                                       DisplayState *display = nullptr,
                                       PeerPort *peer = nullptr,
                                       ExecutionTime *time = nullptr,
-                                      MidiPort *midi = nullptr);
+                                      MidiPort *midi = nullptr,
+                                      Coupling *coupling = nullptr);
 }
