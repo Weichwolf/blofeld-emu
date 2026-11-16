@@ -139,10 +139,10 @@ void data_and_equal_writes(const vi::dsp::Program &program, const std::span<cons
                               Transfer{.destination = target, .value = nop}}) {
     const auto report = execute(program, words, transfer);
     const bool valid =
-        report.failure && !report.exception && !report.preparation_diagnostic &&
-        report.failure->operation == vi::Access::write && report.failure->space == 'P' &&
-        report.failure->pc == fault_pc && report.failure->address == marker &&
-        report.failure->value == transfer.value && report.instructions == fault_instructions;
+        report.failure && !report.exception && report.failure->operation == vi::Access::write &&
+        report.failure->space == 'P' && report.failure->pc == fault_pc &&
+        report.failure->address == marker && report.failure->value == transfer.value &&
+        report.instructions == fault_instructions;
     if (!valid && report.failure) {
       const auto &failure = *report.failure;
       std::cerr << "DMA destination=" << transfer.destination << " retired=" << report.instructions
@@ -158,8 +158,8 @@ void data_and_equal_writes(const vi::dsp::Program &program, const std::span<cons
 
 void changed_code(const vi::dsp::Program &program, const std::span<const Word> words) {
   const auto report = execute(program, words, {.destination = target, .value = stop});
-  require(!report.failure && !report.exception && !report.preparation_diagnostic &&
-              report.instructions == stop_instructions && report.stopped_pc == target + 1,
+  require(!report.failure && !report.exception && report.instructions == stop_instructions &&
+              report.stopped_pc == target + 1,
           "A changed executable DMA store installs the prepared version at the real next PC; "
           "the new STOP executes before the old image's intentional fault");
 }
@@ -231,8 +231,8 @@ void native_idle_wake() {
           "The native source resumes after a new grant");
   dsp.join();
   const auto report = completed.get();
-  require(!report.failure && !report.exception && !report.preparation_diagnostic &&
-              report.instructions == 11 && !peer.mcu_interrupt(),
+  require(!report.failure && !report.exception && report.instructions == 11 &&
+              !peer.mcu_interrupt(),
           "The fully AOT source executes the real withdrawal and STOP exactly once");
 }
 }

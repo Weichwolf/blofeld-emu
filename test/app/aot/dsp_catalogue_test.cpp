@@ -196,8 +196,8 @@ void normal_owner(const Fixture &fixture, const bool fixed = false, const bool u
                                        nullptr,
                                        nullptr,
                                        &program);
-  require(!result.failure && !result.exception && !result.preparation_diagnostic &&
-              result.instructions == 15 && result.stopped_pc == 1 &&
+  require(!result.failure && !result.exception && result.instructions == 15 &&
+              result.stopped_pc == 1 &&
               result.prepared_native_bytes == program.report().native_bytes,
           "An input-bound catalogue runs its prepared variants through the normal DSP owner");
 }
@@ -233,8 +233,7 @@ void failed_entry() {
                                        nullptr,
                                        &program);
   if (!result.failure) { throw std::runtime_error("The unreadable destination did not fault"); }
-  require(!result.exception && !result.preparation_diagnostic && result.instructions == 11 &&
-              result.stopped_pc == absent &&
+  require(!result.exception && result.instructions == 11 && result.stopped_pc == absent &&
               result.prepared_native_bytes == program.report().native_bytes,
           "A declared unreadable destination preserves the real loader and native handoff");
   const auto &fault = *result.failure;
@@ -302,8 +301,8 @@ void execute_owner(const Fixture &fixture,
                                        nullptr,
                                        nullptr,
                                        &program);
-  require(!result.failure && !result.exception && !result.preparation_diagnostic &&
-              result.instructions == instructions && result.stopped_pc == stopped_pc &&
+  require(!result.failure && !result.exception && result.instructions == instructions &&
+              result.stopped_pc == stopped_pc &&
               result.prepared_native_bytes == program.report().native_bytes,
           "A prepared catalogue executes its exact native instruction/STOP prefix through the "
           "normal owner with its bound code size");

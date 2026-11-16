@@ -45,6 +45,7 @@ VmContext::VmContext(std::unique_ptr<FlashImage> image,
       midi_(input) {
   if (!image_) { throw std::invalid_argument("VM requires a persistent MCU image"); }
   if (!mcu_program_) { throw std::invalid_argument("VM requires a complete prepared MCU program"); }
+  if (!program_) { throw std::invalid_argument("VM requires a complete prepared DSP program"); }
 }
 
 VmContext::~VmContext() {

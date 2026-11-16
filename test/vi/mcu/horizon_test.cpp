@@ -490,7 +490,7 @@ void settled_reads(const bool rmw, const cpu12::Byte known) {
     fixture.core.set_registers({.pc = entry, .ccr = masks});
     const auto before = fixture.core.state();
     const auto progress = fixture.core.progress();
-    const auto result = fixture.core.step();
+    const auto result = fixture.core.run(1);
     if (value == future && known != all_bits) {
       exact = exact && result.fault == cpu12::Fault::memory_read && result.retired == 0 &&
               result.address == port_q && result.pc == entry &&
@@ -801,7 +801,7 @@ void native_peer(const blofeld::vi::dsp::Program &program,
                  &time,
                  nullptr,
                  nullptr,
-                 &program);
+                 program);
   dsp56300::Core core(dsp56300::Memory::external(), &io);
   io.bind(core, 0);
   core.set_registers({.x = std::uint64_t{ready} << word_bits,
@@ -816,7 +816,7 @@ void native_peer(const blofeld::vi::dsp::Program &program,
   }
   vi::ExecutionReport source_report;
   if (!io.complete_events(source_report)) { throw std::runtime_error("Prepare native source"); }
-  io.prepare_code(source_report);
+  io.prepare_code();
   std::promise<vi::ExecutionReport> completion;
   auto done = completion.get_future();
   std::exception_ptr failure;

@@ -387,7 +387,7 @@ ExecutionReport execute(FlashImage &image,
       if (dispatch == Dispatch::done) { break; }
       if (dispatch == Dispatch::again) { continue; }
       const auto result = dispatch == Dispatch::transaction
-                              ? std::optional{core.step()}
+                              ? std::optional{core.run(1)}
                               : run_interval(core, devices, io, admitted);
       if (!result) { break; }
       report.instructions += result->retired;
@@ -411,9 +411,6 @@ ExecutionReport execute(FlashImage &image,
     throw interval_failure(core, devices, reset, io, error);
   }
 
-  if (core.statistics().compiled_entries != 0) {
-    throw std::logic_error("Prepared MCU execution generated runtime code");
-  }
   if (display != nullptr) { display->request(); }
   io.capture_display();
   report.stopped_pc = core.registers().pc;

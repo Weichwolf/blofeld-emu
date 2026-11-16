@@ -85,7 +85,7 @@ void forecast_boundary(const vi::dsp::Program &program, const ForecastInput inpu
                  &time,
                  input == ForecastInput::absent ? nullptr : &midi,
                  nullptr,
-                 &program);
+                 program);
   Core core(Memory::external(), &io);
   io.bind(core, 0);
   core.set_registers({.pc = boot});
@@ -101,7 +101,7 @@ void forecast_boundary(const vi::dsp::Program &program, const ForecastInput inpu
   }
   vi::ExecutionReport report;
   if (!io.complete_events(report)) { throw std::runtime_error("Prepare native forecast devices"); }
-  io.prepare_code(report);
+  io.prepare_code();
   std::promise<std::optional<std::uint64_t>> completion;
   auto receiver = completion.get_future();
   constexpr std::uint64_t receiver_until = 1000;
@@ -190,7 +190,7 @@ void fractional_port_boundary(const FractionalCase input) {
                  &time,
                  nullptr,
                  nullptr,
-                 &program);
+                 program);
   Core core(Memory::external(), &io);
   io.bind(core, 0);
   core.set_registers({.x = payload, .pc = boot});
@@ -201,7 +201,7 @@ void fractional_port_boundary(const FractionalCase input) {
   }
   vi::ExecutionReport report;
   if (!io.complete_events(report)) { throw std::runtime_error("Prepare actual DSP devices"); }
-  io.prepare_code(report);
+  io.prepare_code();
   constexpr std::uint64_t reference_top = 3125;
   constexpr std::uint64_t reference_bottom = 588;
   vi::dsp::Clock clock;
@@ -271,13 +271,13 @@ void quiescent_boundary(const bool delayed_input) {
                  &time,
                  delayed_input ? &midi : nullptr,
                  nullptr,
-                 &program);
+                 program);
   Core core(Memory::external(), &io);
   io.bind(core, 0);
   core.set_registers({.pc = boot});
   vi::ExecutionReport report;
   if (!io.complete_events(report)) { throw std::runtime_error("Prepare inactive DSP peripherals"); }
-  io.prepare_code(report);
+  io.prepare_code();
   constexpr std::uint64_t cycles = 4263;
   vi::dsp::Clock clock;
   if (!clock.advance(cycles) || clock.fractional() || !time.publish_mcu(clock.ticks())) {
@@ -356,7 +356,7 @@ void waiting_boundary() {
                  &time,
                  nullptr,
                  nullptr,
-                 &program);
+                 program);
   Core core(Memory::external(), &io);
   io.bind(core, 0);
   core.set_registers({.pc = boot});
@@ -376,7 +376,7 @@ void waiting_boundary() {
   write(Space::x, vi::dsp::Interrupts::peripheral_address, timer_priority);
   vi::ExecutionReport report;
   if (!io.complete_events(report)) { throw std::runtime_error("DSP timer preparation"); }
-  io.prepare_code(report);
+  io.prepare_code();
   constexpr std::uint64_t deadline = 32;
   vi::dsp::Clock clock;
   if (!clock.advance(deadline) || clock.deadline(clock.ticks()) != deadline ||

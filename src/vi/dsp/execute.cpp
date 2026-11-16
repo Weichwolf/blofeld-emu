@@ -16,7 +16,6 @@
 #include "preparation_clock.hpp"
 #include "storage/media_image.hpp"
 
-#include <chrono>
 #include <cstdint>
 #include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
@@ -57,50 +56,16 @@ Access operation(const dsp56300::FaultKind fault) {
 
 }
 
-void Io::prepare_code(ExecutionReport &report) {
-  if (program_ == nullptr && !preparation_requested_) { return; }
+void Io::prepare_code() {
   const auto registers = core_->registers();
-  const bool transfer =
-      program_ != nullptr && installed_program_ &&
-      program_->transition({.variant = *installed_program_, .address = registers.pc});
+  const bool transfer = installed_program_ && program_.transition({.variant = *installed_program_,
+                                                                   .address = registers.pc});
   if (!preparation_requested_ && !transfer) { return; }
-  if (program_ != nullptr) {
-    memory_.configure(registers.omr);
-    const PreparationClock::Scope phase(preparation_);
-    installed_program_ = program_->install(*core_, *this);
-    prepared_mode_ = registers.omr;
-    prepared_vba_ = registers.vba & vector_base_mask;
-    preparation_requested_ = false;
-    return;
-  }
-  // Reset, reached code and configured vectors establish entries, not a ROM scan.
-  auto entries = interrupts_.entries(registers.vba);
-  entries.insert(entries.end(), {0, boot_first, registers.pc});
+  memory_.configure(registers.omr);
   const PreparationClock::Scope phase(preparation_);
-  const auto begun = std::chrono::steady_clock::now();
-  const auto prepared = core_->prepare(entries);
-  const auto elapsed =
-      std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - begun)
-          .count();
-  report.preparation_nanoseconds += static_cast<std::uint64_t>(elapsed);
-  report.prepared_native_bytes += prepared.native_bytes;
+  installed_program_ = program_.install(*core_, *this);
   prepared_mode_ = registers.omr;
-  prepared_vba_ = registers.vba & vector_base_mask;
   preparation_requested_ = false;
-  if (prepared.failure.kind != dsp56300::FaultKind::none) {
-    const auto &fault = prepared.failure;
-    char space = 'P';
-    if (fault.space == dsp56300::Space::x) { space = 'X'; }
-    if (fault.space == dsp56300::Space::y) { space = 'Y'; }
-    report.preparation_diagnostic = Failure{
-        .operation = operation(fault.kind),
-        .pc = fault.pc,
-        .address = fault.address,
-        .value = fault.value,
-        .code = static_cast<std::uint32_t>(fault.kind),
-        .space = space,
-        .reason = "DSP preparation incomplete; remaining entries use retained native execution"};
-  }
 }
 
 namespace {
@@ -139,7 +104,7 @@ bool run_instance(Io &io,
       restart = true;
       break;
     }
-    io.prepare_code(report);
+    io.prepare_code();
 #if defined(BLOFELD_CENSUS)
     const auto observed_session = Census::session_begin();
 #endif
@@ -195,13 +160,16 @@ ExecutionReport execute(const BootRom boot,
                         MidiPort *midi,
                         PreparationClock *preparation,
                         const Program *program) {
+  if (program == nullptr) {
+    throw std::invalid_argument("DSP execution requires a complete prepared program");
+  }
   if (!boot.valid()) {
     throw std::invalid_argument("DSP boot ROM has invalid or overlapping bounds");
   }
   const OutputOwner owner{output};
-  Io io(boot, shi, reset, stop, image, output, peer, time, midi, preparation, program);
+  Io io(boot, shi, reset, stop, image, output, peer, time, midi, preparation, *program);
   ExecutionReport report;
-  if (program != nullptr) { report.prepared_native_bytes = program->report().native_bytes; }
+  report.prepared_native_bytes = program->report().native_bytes;
   std::uint64_t applied = 0;
   while (!stop.stop_requested()) {
     const auto state = reset.state();

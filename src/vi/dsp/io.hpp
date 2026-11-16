@@ -70,7 +70,7 @@ public:
      ExecutionTime *time,
      MidiPort *midi,
      PreparationClock *preparation,
-     const Program *program = nullptr)
+     const Program &program)
       : program_(program),
         boot_(boot),
         shi_(shi),
@@ -126,7 +126,7 @@ public:
 
   [[nodiscard]] std::uint64_t idle_cycles() const noexcept { return idle_; }
 
-  void prepare_code(ExecutionReport &report);
+  void prepare_code();
 
   bool complete_events(ExecutionReport &report) {
     if (media_deadline_ && device_cycles() >= *media_deadline_) {
@@ -225,12 +225,6 @@ public:
       const auto state = core_->registers();
       const auto request = interrupts_.select(sources, state.sr);
       if (request) {
-        if (program_ == nullptr && (state.vba & vector_base_mask) != prepared_vba_) {
-          preparation_requested_ = true;
-          dsp56300::RunResult pending;
-          pending.yielded = true;
-          return pending;
-        }
         if (core_->interrupt_ready()) {
           const auto external =
               peer_ != nullptr && request->vector == 0x10 ? peer_interrupt() : std::nullopt;
@@ -242,7 +236,7 @@ public:
           }
         }
         // An eligible request still observes REP completion and the interrupt shadow.
-        return completed(core_->step());
+        return completed(core_->run(1));
       }
       // Masked requests do not turn ordinary execution into single stepping.
       // The Core returns at a real mask change before another instruction runs.
@@ -296,9 +290,8 @@ public:
              const dsp56300::Word pc,
              const dsp56300::Word value) noexcept override {
     if (interrupted()) { return false; }
-    const bool watched = space == dsp56300::Space::program && program_ != nullptr &&
-                         installed_program_ &&
-                         program_->contains({.variant = *installed_program_, .address = address});
+    const bool watched = space == dsp56300::Space::program && installed_program_ &&
+                         program_.contains({.variant = *installed_program_, .address = address});
     const auto previous = watched ? inspect_program(address) : std::nullopt;
     if (memory_.write({.space = space, .address = address, .value = value})) {
       preparation_requested_ |= watched && previous != value;
@@ -619,13 +612,7 @@ private:
   }
 
   bool write_priority(const Interrupts::Write access) noexcept {
-    dsp56300::Word previous = 0;
-    static_cast<void>(interrupts_.read(access.address, previous));
     if (!interrupts_.write(access)) { return false; }
-    dsp56300::Word current = 0;
-    static_cast<void>(interrupts_.read(access.address, current));
-    // Prepared images already contain their declared priority/vector contexts.
-    if (program_ == nullptr) { preparation_requested_ |= previous != current; }
     core_->request_yield();
     return true;
   }
@@ -685,12 +672,10 @@ private:
       return access.space == dsp56300::Space::x && access.address == shi_transmit &&
              blofeld_dsp_shi_write(&shi_, access.address, value);
     }
-    bool changed = access.space == dsp56300::Space::program;
-    if (changed && program_ != nullptr) {
-      changed = installed_program_ &&
-                program_->contains({.variant = *installed_program_, .address = access.address}) &&
-                inspect_program(access.address) != value;
-    }
+    const bool changed =
+        access.space == dsp56300::Space::program && installed_program_ &&
+        program_.contains({.variant = *installed_program_, .address = access.address}) &&
+        inspect_program(access.address) != value;
     if (!memory_.write({.space = access.space, .address = access.address, .value = value})) {
       return false;
     }
@@ -819,7 +804,7 @@ private:
     return true;
   }
 
-  const Program *program_ = nullptr;
+  const Program &program_;
   std::optional<std::uint64_t> installed_program_;
   BootRom boot_;
   Shi &shi_;
@@ -830,7 +815,6 @@ private:
   bool audio_dirty_ = true;
   bool preparation_requested_ = true;
   dsp56300::Word prepared_mode_ = 0;
-  dsp56300::Word prepared_vba_ = 0;
   bool waiting_ = false;
   std::uint64_t idle_ = 0;
   std::uint64_t media_epoch_ = 0;
