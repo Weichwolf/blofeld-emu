@@ -14,6 +14,7 @@
 #include <array>
 #include <cstddef>
 #include <dsp56300/core.hpp>
+#include <dsp56300/memory.hpp>
 #include <filesystem>
 #include <memory>
 #include <span>
@@ -81,11 +82,13 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
       CallbackBinding{.role = CallbackRole::reset, .symbol = "blofeld_dsp_reset"},
       CallbackBinding{.role = CallbackRole::pending, .symbol = "blofeld_dsp_pending"},
       CallbackBinding{.role = CallbackRole::revision, .symbol = "blofeld_dsp_revision"}};
+  constexpr std::array region_modes{dsp56300::Word{0}, dsp56300::Word{1} << 11};
   const dsp56300::CompileOptions options{.memory = memory,
                                          .interrupts = interrupts,
                                          .transitions = transitions,
                                          .callbacks = callbacks,
-                                         .bindings = {}};
+                                         .bindings = {},
+                                         .region_modes = region_modes};
   const auto semantic =
       detail::prepare_semantic<dsp56300::Core>(image, options, detail::dsp_bindings, cache);
   std::vector<native::Export> exports;
