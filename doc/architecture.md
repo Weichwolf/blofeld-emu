@@ -233,7 +233,10 @@ P/E affinity. Host placement never changes guest time or ISA semantics.
 
 Relate nominal core progress to 60 MHz instrument units, retaining fractional
 clock phase and exact instruction crossings. Distinguish speculative MCU progress,
-attained DSP progress and committed instrument effects. Host scheduling and window
+attained DSP progress and committed instrument effects. Qualify final MCU instructions, base cycles, RAM and device state at the same
+confirmed guest boundary. Report discarded and replayed execution separately; a
+host-triggered stop alone is not a deterministic guest boundary.
+Host scheduling and window
 length change processing time only. Neither advances a guest clock or changes
 event ordering. Define ordering at equal timestamps, including real IRQ masks,
 priorities, shadows, WAI/STOP/RTI and REP state.

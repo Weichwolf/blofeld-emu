@@ -5,6 +5,8 @@
 
 #if defined(BLOFELD_CENSUS)
 #include "census.hpp"
+#include "mcu/state_probe.hpp"
+#include "process/configuration.hpp"
 #endif
 
 #include "dsp/boot_rom.hpp"
@@ -46,6 +48,11 @@ VmContext::VmContext(std::unique_ptr<FlashImage> image,
       boot_(std::move(boot)),
       output_(output),
       midi_(input) {
+#if defined(BLOFELD_CENSUS)
+  if (host::inherited_setting("BLOFELD_MCU_STATE_PROBE") == "1") {
+    state_probe_ = std::make_unique<mcu::StateProbe>(&stop_);
+  }
+#endif
   if (speculation_window != 0) {
     coupling_ = std::make_unique<Coupling>(
         peer_, shi_, reset_, time_, midi_, stop_.get_token(), speculation_window);
@@ -76,6 +83,7 @@ void VmContext::start() {
     try {
 #if defined(BLOFELD_CENSUS)
       const Census::Scope observed(census_, Census::Actor::mcu);
+      const mcu::StateProbe::Scope probed(state_probe_.get());
 #endif
       reports_[0] = mcu::execute(*image_,
                                  *mcu_program_,

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "mcu/state_probe_fwd.hpp"
+
 #include <cstdint>
 #include <optional>
 
@@ -9,6 +11,8 @@ namespace blofeld::vi::mcu {
 // nominal 60 MHz PHY output. Time is advanced analytically by the MCU owner.
 // A stable-source qualification window is functional, not an analog PLL model.
 class Clock {
+  friend class ::blofeld::vi::mcu::StateProbe;
+
 public:
   using Cycle = std::uint64_t;
   enum class Activity : std::uint8_t { running, waiting, stopped };

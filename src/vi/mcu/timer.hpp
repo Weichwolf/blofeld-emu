@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "mcu/state_probe_fwd.hpp"
+
 #include <array>
 #include <cstdint>
 #include <optional>
@@ -9,6 +11,8 @@ namespace blofeld::vi::mcu {
 // TIM16B8CV1: free-running counter, capture/compare flags and IRQ requests.
 // All operations belong to the MCU owner. Time is absolute nominal bus cycles.
 class Timer {
+  friend class ::blofeld::vi::mcu::StateProbe;
+
 public:
   using Cycle = std::uint64_t;
   enum class Activity : std::uint8_t { running, waiting, stopped };

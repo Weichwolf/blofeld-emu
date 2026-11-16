@@ -40,8 +40,8 @@ std::vector<std::uint64_t> speculation_windows(const std::size_t count) {
     const auto item = text.substr(0, comma);
     std::uint64_t window = 0;
     const auto parsed = std::from_chars(item.data(), item.data() + item.size(), window);
-    if (parsed.ec != std::errc{} || parsed.ptr != item.data() + item.size() || window == 0) {
-      throw std::invalid_argument("BLOFELD_D2 requires positive MCU tick windows");
+    if (parsed.ec != std::errc{} || parsed.ptr != item.data() + item.size()) {
+      throw std::invalid_argument("BLOFELD_D2 requires nonnegative MCU tick windows");
     }
     windows.push_back(window);
     if (comma == std::string_view::npos) { break; }
@@ -105,6 +105,9 @@ int main(int argc, char **argv) try {
                               windows[workload]);
     std::cerr << "CONTROL_WORKLOAD=" << ++workload << '\n';
     const auto result = render.run(vm, signals, instantiated);
+#if defined(BLOFELD_CENSUS)
+    if (const auto *probe = vm.state_probe()) { probe->report(std::cerr); }
+#endif
     if (result != 0) { return result; }
   }
   return 0;

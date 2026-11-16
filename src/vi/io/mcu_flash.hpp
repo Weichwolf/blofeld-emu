@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "mcu/state_probe_fwd.hpp"
 #include "storage/flash_image.hpp"
 
 #include <cstdint>
@@ -11,6 +12,8 @@ namespace blofeld::vi {
 // Clocked program/erase, security-key access and IRQ delivery are not yet bound;
 // attempts to enter those paths fail instead of reporting command completion.
 class McuFlash {
+  friend class ::blofeld::vi::mcu::StateProbe;
+
 public:
   struct Write {
     std::uint16_t offset = 0;

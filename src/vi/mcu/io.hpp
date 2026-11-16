@@ -31,6 +31,7 @@
 
 namespace blofeld::vi::mcu {
 class Io {
+  friend class StateProbe;
   static constexpr std::uint16_t peer_q_data = 0x260;
   static constexpr std::uint16_t peer_q_input = 0x261;
   static constexpr std::uint16_t peer_q_direction = 0x262;

@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "mcu/speculation.hpp"
 
+#if defined(BLOFELD_CENSUS)
+#include "mcu/state_probe.hpp"
+#endif
+
 #include "display/state.hpp"
 #include "execution.hpp"
 #include "io/controls.hpp"
@@ -392,6 +396,11 @@ void Speculation::restore() {
       !effects_.rollback() || !epoch_.rollback()) {
     throw std::logic_error("MCU rollback has no coherent retained prefix");
   }
+#if defined(BLOFELD_CENSUS)
+  if (auto *probe = StateProbe::active()) {
+    probe->rollback(report_.instructions - checkpoint_->state.instructions);
+  }
+#endif
   memory_.restore(checkpoint_->memory);
   devices_.restore(checkpoint_->devices);
   io_.restore(checkpoint_->io);
@@ -432,6 +441,11 @@ void Speculation::confirm() {
   state_.input_cursor = 0;
   if (display_ != nullptr) { io_.capture_display(*display_); }
   save();
+#if defined(BLOFELD_CENSUS)
+  if (auto *probe = StateProbe::active()) {
+    probe->commit(report_.instructions, core_.progress(), time);
+  }
+#endif
   coupling_.replace(time);
   action_ = Action::run;
 }
@@ -532,6 +546,9 @@ void Speculation::step(const std::uint64_t target) {
   const auto result = core_.run_until(until - devices_.idle);
   active_ = false;
   report_.instructions += result.retired;
+#if defined(BLOFELD_CENSUS)
+  if (auto *probe = StateProbe::active()) { probe->executed(result.retired, replaying_); }
+#endif
   if (coupling_.stopped()) { return; }
   if (result.fault != cpu12::Fault::none) {
     if (epoch_.refusal() == Epoch::Refusal::epoch_invalidated) { return; }
@@ -562,9 +579,23 @@ void Speculation::step(const std::uint64_t target) {
     static_cast<void>(emit(Effects::Kind::wait, 0, devices_.clock.ticks()));
   }
   devices_.activity(result.state);
+#if defined(BLOFELD_CENSUS)
+  record_wait(result);
+#endif
   publish();
   if (epoch_.atomic() && !replaying_) { confirm(); }
 }
+
+#if defined(BLOFELD_CENSUS)
+void Speculation::record_wait(const cpu12::RunResult &result) {
+  if (result.state == cpu12::ExecutionState::waiting && result.retired != 0) {
+    if (auto *probe = StateProbe::active()) {
+      probe->wait(StateProbe::capture(core_, memory_, devices_, io_, report_.instructions), true);
+      if (!replaying_ && probe->stopping(ticks())) { confirm(); }
+    }
+  }
+}
+#endif
 
 void Speculation::run() {
   bind();

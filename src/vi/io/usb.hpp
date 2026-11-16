@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "mcu/state_probe_fwd.hpp"
+
 #include <array>
 #include <cpu12/memory.hpp>
 #include <cstddef>
@@ -12,6 +14,8 @@ namespace blofeld::vi {
 // One MCU owner; UMCR clock/control storage remains with its clock owner.
 // Host transactions, IQUE transfers and enumeration are not yet connected.
 class Usb {
+  friend class ::blofeld::vi::mcu::StateProbe;
+
 public:
   struct Read {
     std::uint16_t offset = 0;

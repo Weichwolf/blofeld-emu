@@ -3,6 +3,7 @@
 
 #if defined(BLOFELD_CENSUS)
 #include "census.hpp"
+#include "mcu/state_probe.hpp"
 #endif
 #include "display/st7565.hpp"
 #include "display/state.hpp"
@@ -67,6 +68,10 @@ public:
 
 #if defined(BLOFELD_CENSUS)
   [[nodiscard]] const Census &census() const noexcept { return census_; }
+
+  [[nodiscard]] mcu::StateProbe *state_probe() noexcept { return state_probe_.get(); }
+
+  [[nodiscard]] const mcu::StateProbe *state_probe() const noexcept { return state_probe_.get(); }
 #endif
   void start();
 
@@ -100,6 +105,7 @@ private:
   Controls controls_;
 #if defined(BLOFELD_CENSUS)
   Census census_;
+  std::unique_ptr<mcu::StateProbe> state_probe_;
 #endif
   std::unique_ptr<Coupling> coupling_;
   bool started_ = false;

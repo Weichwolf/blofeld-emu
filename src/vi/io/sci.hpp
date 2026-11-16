@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "mcu/state_probe_fwd.hpp"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -11,6 +13,8 @@ namespace blofeld::vi {
 // All operations, including receive/take_output, belong to the MCU owner. A host
 // adapter must deliver ordered frame starts at device time, never mutate registers.
 class Sci {
+  friend class ::blofeld::vi::mcu::StateProbe;
+
 public:
   using Cycle = std::uint64_t;
   static constexpr std::size_t output_capacity = 64;

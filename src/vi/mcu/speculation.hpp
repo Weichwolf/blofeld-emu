@@ -89,6 +89,9 @@ private:
   [[nodiscard]] bool interrupt();
   [[nodiscard]] std::uint64_t deadline(std::uint64_t target) const;
   void step(std::uint64_t target);
+#if defined(BLOFELD_CENSUS)
+  void record_wait(const cpu12::RunResult &result);
+#endif
   void recover();
   [[nodiscard]] bool check() const;
 

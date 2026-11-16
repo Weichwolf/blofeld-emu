@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "mcu/execute.hpp"
 
+#if defined(BLOFELD_CENSUS)
+#include "mcu/state_probe.hpp"
+#endif
+
 #include "display/state.hpp"
 #include "execution.hpp"
 #include "io/controls.hpp"
@@ -341,6 +345,22 @@ std::logic_error interval_failure(const cpu12::Core &core,
       io.context()));
 }
 
+#if defined(BLOFELD_CENSUS)
+void record_interval(const cpu12::Core &core,
+                     const Memory &memory,
+                     const Devices &devices,
+                     const Io &io,
+                     const ExecutionReport &report,
+                     const cpu12::RunResult &result) {
+  if (auto *probe = StateProbe::active()) {
+    if (result.state == cpu12::ExecutionState::waiting && result.retired != 0) {
+      probe->wait(StateProbe::capture(core, memory, devices, io, report.instructions), false);
+    }
+    probe->commit(report.instructions, core.progress(), devices.clock.ticks());
+  }
+}
+#endif
+
 void execute_intervals(cpu12::Core &core,
                        Devices &devices,
                        Memory &memory,
@@ -361,6 +381,9 @@ void execute_intervals(cpu12::Core &core,
                             : run_interval(core, devices, io, admitted);
     if (!result) { break; }
     report.instructions += result->retired;
+#if defined(BLOFELD_CENSUS)
+    if (auto *probe = StateProbe::active()) { probe->executed(result->retired, false); }
+#endif
     if (stop.stop_requested()) { break; }
     if (result->fault != cpu12::Fault::none) {
       report.failure =
@@ -376,6 +399,9 @@ void execute_intervals(cpu12::Core &core,
     if (!io.complete_events()) { break; }
     advance(core, devices);
     devices.activity(result->state);
+#if defined(BLOFELD_CENSUS)
+    record_interval(core, memory, devices, io, report, *result);
+#endif
   }
 }
 }
@@ -461,6 +487,11 @@ ExecutionReport execute(FlashImage &image,
   }
   if (display != nullptr) { display->request(); }
   io.capture_display();
+#if defined(BLOFELD_CENSUS)
+  if (auto *probe = StateProbe::active()) {
+    probe->finish(StateProbe::capture(core, memory, devices, io, report.instructions));
+  }
+#endif
   report.stopped_pc = core.registers().pc;
   return report;
 }

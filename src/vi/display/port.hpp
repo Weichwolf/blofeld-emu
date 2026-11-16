@@ -3,6 +3,7 @@
 
 #include "display/st7565.hpp"
 #include "mcu/ports.hpp"
+#include "mcu/state_probe_fwd.hpp"
 
 #include <cstdint>
 
@@ -10,6 +11,8 @@ namespace blofeld::vi {
 // Decode the firmware's A/B/E register transactions, without pad/timing replay.
 // E4 latch writes delimit accesses even when the firmware releases DDRE.
 class DisplayPort {
+  friend class ::blofeld::vi::mcu::StateProbe;
+
 public:
   DisplayPort();
   [[nodiscard]] bool write(const mcu::Ports &ports, mcu::Ports::Write access) noexcept;

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "mcu/state_probe_fwd.hpp"
+
 #include <array>
 #include <bitset>
 #include <cstddef>
@@ -35,6 +37,8 @@ struct St7565State {
 
 // Register/data contract for completed LCD transactions. Owned by the MCU thread.
 class St7565 {
+  friend class ::blofeld::vi::mcu::StateProbe;
+
 public:
   static constexpr unsigned columns = 132;
   static constexpr unsigned pages = 9;

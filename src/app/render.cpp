@@ -67,7 +67,15 @@ vi::PcmOutput OfflineRender::output() noexcept {
 #if defined(BLOFELD_CENSUS)
                 render.census_.observe(render.vm_->census(), render.wav_);
 #endif
-                if (render.wav_.complete()) { render.vm_->request_stop(); }
+                if (render.wav_.complete()) {
+#if defined(BLOFELD_CENSUS)
+                  if (auto *probe = render.vm_->state_probe()) {
+                    probe->pcm_complete();
+                    return accepted;
+                  }
+#endif
+                  render.vm_->request_stop();
+                }
                 return accepted;
               },
           .close =
@@ -126,6 +134,9 @@ void OfflineRender::feed(vi::MidiPort &port,
     throw std::overflow_error("MIDI duration and render tail exceed the instrument timeline");
   }
   // Publish the output boundary before releasing the exclusive MIDI EOF barrier.
+#if defined(BLOFELD_CENSUS)
+  if (auto *probe = vm_->state_probe()) { probe->end_at(*end + tail_); }
+#endif
   wav_.end_at(*end + tail_);
   if (!port.finish_input()) { throw std::runtime_error("Cannot finish offline MIDI input"); }
 }
