@@ -1,9 +1,10 @@
 # blofeld-emu
 
 Goal: OBJECTIVE.md. Target design: doc/architecture.md. Build the complete
-Blofeld Desktop SL instrument from unchanged original 1.25 firmware at >=10x
-offline (>=4x intermediate) and 2-5 ms live latency (max 10 ms) on Linux x86-64
-and macOS ARM64. Decide everything else yourself.
+Blofeld Desktop SL instrument from unchanged original 1.25 firmware at >=4x
+offline in every situation on the i5 reference hosts (>=10x as direction on
+faster hosts) and 2-5 ms live latency (max 10 ms) on Linux x86-64 and macOS
+ARM64. Decide everything else yourself.
 
 ## Fixed limits
 
