@@ -167,7 +167,7 @@ void streaming_frontier() {
   vi::DspReset reset;
   vi::ExecutionTime time;
   vi::MidiPort midi(vi::MidiPort::InputMode::stream);
-  std::stop_source stop;
+  const std::stop_source stop;
   vi::Coupling coupling(
       peer, shi, reset, time, midi, stop.get_token(), vi::Coupling::default_window);
   coupling.bind();

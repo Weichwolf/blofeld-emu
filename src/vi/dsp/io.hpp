@@ -748,8 +748,7 @@ private:
     const auto request = ports_.output(Port::e);
     if ((request.mask & ~request.known & ready) != 0) { return false; }
     const bool active = (request.mask & ready) != 0 && (request.value & ready) == 0;
-    if (!blofeld_dsp_peer_ready(peer_, active)) { return false; }
-    return true;
+    return blofeld_dsp_peer_ready(peer_, active);
   }
 
   [[nodiscard]] std::optional<std::uint64_t> outgoing_time() noexcept {

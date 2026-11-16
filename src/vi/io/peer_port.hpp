@@ -22,7 +22,7 @@ public:
 
   struct Read {
     std::uint8_t mask = 0;
-    std::optional<std::uint8_t> direction = {};
+    std::optional<std::uint8_t> direction = std::nullopt;
     std::uint64_t ticks = 0;
   };
 

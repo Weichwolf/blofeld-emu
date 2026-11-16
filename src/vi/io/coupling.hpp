@@ -120,12 +120,17 @@ private:
   mcu::InputHistory::Values previous_{};
   std::size_t cursor_ = 0;
   std::uint64_t receiver_generation_ = 0, serial_ = 0;
-  alignas(128) std::atomic<std::uint64_t> frontier_{0}, generation_{0};
+  alignas(128) std::atomic<std::uint64_t> frontier_{0};
+  // Preserve the existing cache-line separation explicitly.
+  [[maybe_unused]] std::array<std::byte, 128 - sizeof(frontier_)> frontier_padding_;
+  alignas(128) std::atomic<std::uint64_t> generation_{0};
   std::atomic<std::size_t> published_{0};
   std::atomic<bool> bound_{false};
   std::atomic<std::uint64_t> checkpoint_ticks_{0}, checkpoint_request_{0}, checkpoint_ready_{0};
   std::uint64_t checkpoint_sequence_ = 0;
-  alignas(128) std::atomic<std::uint64_t> known_{0}, cut_{0}, message_{0};
+  alignas(128) std::atomic<std::uint64_t> known_{0};
+  [[maybe_unused]] std::array<std::byte, 128 - sizeof(known_)> known_padding_;
+  alignas(128) std::atomic<std::uint64_t> cut_{0}, message_{0};
   std::atomic<std::size_t> consumed_{0};
   alignas(128) std::atomic<std::uint64_t> changed_{0};
   std::atomic<unsigned> waiting_{0};

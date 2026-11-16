@@ -94,11 +94,11 @@ public:
     if (!settled(ticks)) { return fail(Error::unsettled); }
     position_ = ticks;
     phase_ = Phase::atomic;
-    if (!std::forward<Action>(action)()) { return false; }
+    const bool accepted = std::forward<Action>(action)();
 #if defined(BLOFELD_CENSUS)
-    ++census_.destructive;
+    if (accepted) { ++census_.destructive; }
 #endif
-    return true;
+    return accepted;
   }
 
   [[nodiscard]] bool checkpoint(const std::uint64_t ticks) noexcept {
