@@ -76,7 +76,6 @@ bool deliver(const Effects::Entry &entry,
     case Effects::Kind::midi:
       return midi.write_output(
           {.ticks = entry.ticks, .byte = static_cast<std::uint8_t>(entry.value)});
-    case Effects::Kind::time: midi.publish_time(entry.ticks); return true;
     case Effects::Kind::reset_hold:
     case Effects::Kind::reset_release:
     case Effects::Kind::wait:
@@ -210,7 +209,7 @@ bool blofeld_mcu_midi_write(MidiPort *const channel, const MidiPort::Event &even
 }
 
 bool blofeld_mcu_midi_time(MidiPort *const channel, const std::uint64_t ticks) noexcept {
-  if (const auto *output = Output::current()) { return output->put(Effects::Kind::time, 0, ticks); }
+  if (Output::current() != nullptr) { return true; }
   channel->publish_time(ticks);
   return true;
 }

@@ -60,7 +60,7 @@ private:
   struct State {
     DspReset::State reset;
     std::uint64_t input_cursor = 0, accepted_announcement = 0, irq_window = 0;
-    std::uint64_t instructions = 0, midi_time = 0;
+    std::uint64_t instructions = 0;
     std::uint32_t data = 0;
     bool strobe = false, reply = false, ready = false;
   };

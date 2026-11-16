@@ -3,10 +3,14 @@
 #include "midi/startup.hpp"
 
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <exception>
 #include <iostream>
 #include <stdexcept>
+#include <stop_token>
+#include <thread>
 
 namespace {
 using blofeld::app::MidiStartup;
@@ -51,6 +55,28 @@ void startup_silence() {
   require(!startup.poll(port, {.application = true, .pcm = true}) && port.peek_input() &&
               startup.observations().queries == 1,
           "Only actual application entry and PCM enable the ordinary identity query");
+}
+
+void requested_input() {
+  MidiPort port(MidiPort::InputMode::stream);
+  MidiStartup startup;
+  static_cast<void>(startup.poll(port, {}));
+  constexpr auto confirmed = interval - (2 * character_ticks);
+  port.publish_time(confirmed);
+  std::atomic<bool> resumed{false};
+  std::jthread source([&](const std::stop_token &stop) {
+    resumed.store(port.await_input(interval, stop), std::memory_order_release);
+  });
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{1};
+  while (!resumed.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < deadline) {
+    static_cast<void>(startup.poll(port, {}));
+    std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  }
+  source.request_stop();
+  source.join();
+  require(resumed.load(std::memory_order_acquire) && port.time() == confirmed &&
+              port.input_limit() == interval * 2 && startup.observations().queries == 0,
+          "Input demand refills startup knowledge without publishing speculative MCU time");
 }
 
 struct ConcurrentReadiness {
@@ -145,6 +171,7 @@ void invalid_identity() {
 
 int main() try {
   startup_silence();
+  requested_input();
   concurrent_readiness();
   readiness();
   invalid_identity();

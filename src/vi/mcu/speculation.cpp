@@ -152,17 +152,7 @@ bool Speculation::emit(const Effects::Kind kind,
                        const std::uint64_t value,
                        const std::uint64_t time) noexcept {
   if (!poll()) { return epoch_.refuse(); }
-  if (kind != Effects::Kind::midi && kind != Effects::Kind::time && !devices_.advance(core_)) {
-    return epoch_.refuse();
-  }
-  if (kind == Effects::Kind::time) {
-    if (time < state_.midi_time) {
-      refused_ = "MCU MIDI time moved backwards";
-      return false;
-    }
-    if (time == state_.midi_time) { return true; }
-    state_.midi_time = time;
-  }
+  if (kind != Effects::Kind::midi && !devices_.advance(core_)) { return epoch_.refuse(); }
   if (kind == Effects::Kind::data) { state_.data = static_cast<std::uint32_t>(value); }
   if (kind == Effects::Kind::strobe) {
     const bool next = value != 0;
@@ -279,6 +269,7 @@ bool Speculation::await_midi(const std::uint64_t time) noexcept {
     if (!poll()) { return epoch_.refuse(); }
     const auto limit = midi_.input_limit();
     if (!limit || *limit > time) { return true; }
+    midi_.request_input(time);
     coupling_.wait(observed);
   }
   return false;
@@ -468,6 +459,7 @@ void Speculation::confirm() {
       !history_.retire(time)) {
     throw std::logic_error("MCU commit did not confirm the complete native boundary");
   }
+  midi_.publish_time(time);
   for (std::uint64_t count = 0; count < state_.input_cursor; ++count) { midi_.pop_input(); }
   state_.input_cursor = 0;
   if (display_ != nullptr) { io_.capture_display(*display_); }
@@ -544,11 +536,6 @@ std::uint64_t Speculation::deadline(const std::uint64_t target) const {
   if (const auto input_change = history_.next_irq(devices_.clock.ticks());
       input_change && *input_change < target) {
     if (const auto at = devices_.clock.at_ticks(*input_change); at && *at < *deadline) {
-      deadline = at;
-    }
-  }
-  if (const auto publication = effects_.replay_deadline(ticks())) {
-    if (const auto at = devices_.clock.at_ticks(*publication); at && *at < *deadline) {
       deadline = at;
     }
   }

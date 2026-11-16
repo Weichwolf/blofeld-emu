@@ -99,7 +99,7 @@ struct Machine {
   blofeld::test::McuImage image;
   mcu::Memory memory{*image};
   const std::stop_token stop;
-  vi::MidiPort midi{vi::MidiPort::InputMode::stream};
+  vi::MidiPort midi;
   mcu::Devices devices{stop};
   vi::Shi shi;
   vi::DspReset reset;
@@ -108,12 +108,14 @@ struct Machine {
   std::vector<cpu12::Ram> grants;
   cpu12::Core core{cpu12::Memory::external(), &callbacks};
 
-  Machine() {
+  explicit Machine(const vi::MidiPort::InputMode mode = vi::MidiPort::InputMode::stream)
+      : midi(mode) {
     devices.peer = &peer;
     devices.midi = &midi;
     io.bind(core);
-    require(midi.finish_input() && shi.write({.address = control, .value = fifo24}),
-            "Use real configured SPI and a complete empty MIDI input stream");
+    require((mode != vi::MidiPort::InputMode::stream || midi.finish_input()) &&
+                shi.write({.address = control, .value = fifo24}),
+            "Configure real SPI and the selected MIDI input mode");
   }
 
   void bind(const mcu::Program &compiled) {
@@ -178,10 +180,8 @@ void fused_outputs(const bool fine) {
   const auto finished = machine.core.save();
   const auto finished_memory = machine.memory.save();
   const auto finished_time = machine.devices.clock.ticks();
-  std::vector<Effects::Entry> finished_effects;
-  for (const auto &event : effects.entries()) {
-    if (event.kind != Effects::Kind::time) { finished_effects.push_back(event); }
-  }
+  const std::vector<Effects::Entry> finished_effects(effects.entries().begin(),
+                                                     effects.entries().end());
   require(effects.error() == Effects::Error::none && effects.size() != 0,
           "Fused channel calls append bounded timestamped output records");
   std::uint32_t value = 0;
@@ -204,6 +204,7 @@ void fused_outputs(const bool fine) {
                   vi::PeerPort::Sample{.mask = all, .known = all, .value = first},
           "Commit earlier real GPIO effects while withholding SS at the exact same instant");
   const auto committed_time = machine.midi.time();
+  require(committed_time == 0, "Receiver consumption does not confirm source progress");
   machine.memory.restore(memory);
   machine.devices.restore(devices);
   machine.io.restore(io);
@@ -212,10 +213,8 @@ void fused_outputs(const bool fine) {
   require(effects.rollback(), "Discard unobserved suffix while retaining the committed prefix");
   machine.run(effects, fine ? 1 : 0);
   const auto replayed_memory = machine.memory.save();
-  std::vector<Effects::Entry> replayed_effects;
-  for (const auto &event : effects.entries()) {
-    if (event.kind != Effects::Kind::time) { replayed_effects.push_back(event); }
-  }
+  const std::vector<Effects::Entry> replayed_effects(effects.entries().begin(),
+                                                     effects.entries().end());
   require(machine.core.save() == finished && machine.devices.clock.ticks() == finished_time &&
               replayed_effects == finished_effects &&
               replayed_memory.system == finished_memory.system &&
@@ -237,10 +236,48 @@ void fused_outputs(const bool fine) {
               machine.peer.dsp_interrupt(true) == 1 && machine.shi.read(receive, value) &&
               value == word && !machine.shi.read(receive, value),
           "The validated suffix delivers actual GPIO and exactly one original 24-bit word");
+  require(machine.midi.time() == committed_time, "Receiver delivery cannot advance confirmed time");
+  machine.midi.publish_time(end);
   const auto sent = machine.midi.read_output();
   require(sent && sent->byte == transmitted && !machine.midi.read_output() &&
               machine.midi.time() == end && effects.size() == 0,
           "Exactly one original SCI character and its validated final time reach the host");
+}
+
+void unconfirmed_input_admission() {
+  Machine machine(vi::MidiPort::InputMode::live);
+  const auto bytes = program();
+  machine.image.load(entry, bytes);
+  const auto compiled = machine.image.program();
+  machine.core.set_registers({.pc = entry, .sp = stack});
+  machine.bind(*compiled);
+  const auto cpu = machine.core.save();
+  const auto memory = machine.memory.save();
+  const auto devices = machine.devices.save();
+  const auto io = machine.io.save();
+  std::array<Effects::Entry, 4096> storage{};
+  Effects effects(storage, 16);
+  const mcu::Output output(effects, machine.devices, machine.core);
+  machine.run(effects);
+  require(
+      machine.devices.clock.ticks() > 0 &&
+          effects.apply_before(machine.devices.clock.ticks() + 1,
+                               [&](const auto &event) {
+                                 return mcu::deliver(
+                                     event, machine.peer, machine.shi, machine.midi, machine.stop);
+                               }),
+      "The real receiver consumes native device effects before epoch confirmation");
+  require(machine.midi.time() == 0,
+          "Consuming speculative outputs does not publish an unconfirmed MIDI frontier");
+  machine.memory.restore(memory);
+  machine.devices.restore(devices);
+  machine.io.restore(io);
+  machine.core.restore(cpu);
+  machine.bind(*compiled);
+  constexpr std::array message{std::uint8_t{0x90}, std::uint8_t{60}, std::uint8_t{127}};
+  require(effects.rollback() && machine.midi.write_input(message, 0) &&
+              machine.midi.peek_input() == vi::MidiPort::Event{.ticks = 0, .byte = message[0]},
+          "Rollback retains admission for live input legal at the confirmed origin");
 }
 
 void prefix_errors() {
@@ -269,29 +306,24 @@ void prefix_errors() {
           "New output cannot be inserted into already attained receiver history");
   std::array<Effects::Entry, 8> next_storage{};
   Effects next(next_storage, 2);
-  constexpr Effects::Entry time{.ticks = 1, .kind = Effects::Kind::time};
+  constexpr Effects::Entry strobe{.ticks = 1, .value = 1, .kind = Effects::Kind::strobe};
   const auto before = delivered;
-  require(next.append(time) && next.apply_before(2, sink) && next.checkpoint(1) &&
-              next.append(time) && next.apply_before(2, sink) && delivered == before + 2,
-          "The next native instruction may publish at the preceding checkpoint's cycle");
+  require(next.append(strobe) && next.apply_before(2, sink) && next.checkpoint(1) &&
+              next.append(strobe) && next.apply_before(2, sink) && delivered == before + 2,
+          "The next native instruction may strobe at the preceding checkpoint's cycle");
   std::array<Effects::Entry, 8> shifted_storage{};
   Effects shifted(shifted_storage, 2);
   require(shifted.append({.ticks = 2, .value = first, .kind = Effects::Kind::midi}) &&
-              shifted.apply_before(3, sink) && shifted.rollback() && shifted.append(time) &&
-              !shifted.append(original) && shifted.error() == Effects::Error::prefix,
-          "Extra progress cannot authorize a changed timestamp for a committed MIDI byte");
-  std::array<Effects::Entry, 8> progress_storage{};
-  Effects progress(progress_storage, 2);
-  require(progress.append({.ticks = 2, .kind = Effects::Kind::time}) &&
-              progress.apply_before(3, sink) && progress.rollback() && progress.append(time) &&
-              !progress.finish_replay() && progress.error() == Effects::Error::prefix,
-          "Finer progress cannot omit an originally committed progress boundary");
+              shifted.apply_before(3, sink) && shifted.rollback() && !shifted.append(original) &&
+              shifted.error() == Effects::Error::prefix,
+          "Replay cannot change the timestamp of a committed MIDI byte");
 }
 }
 
 int main() try {
   fused_outputs(false);
   fused_outputs(true);
+  unconfirmed_input_admission();
   prefix_errors();
 } catch (const std::exception &error) {
 

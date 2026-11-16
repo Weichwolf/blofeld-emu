@@ -180,7 +180,7 @@ void streaming_frontier() {
     }
     const bool admitted = ticks == end ? midi.finish_input() : midi.advance_input(ticks + step);
     if (!admitted || result.wait_for(std::chrono::seconds{1}) != std::future_status::ready) {
-      stop.request_stop();
+      std::stop_source{stop}.request_stop();
       throw std::runtime_error("Publishing MIDI knowledge did not wake the DSP receiver");
     }
     const auto grant = result.get();

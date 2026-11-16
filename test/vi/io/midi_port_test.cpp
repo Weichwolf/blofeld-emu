@@ -32,6 +32,21 @@ void wait_for(auto ready, const char *message_text) {
   }
 }
 
+void confirmed_time() {
+  MidiPort live;
+  constexpr std::uint64_t confirmed = 100;
+  live.publish_time(confirmed);
+  live.publish_time(confirmed - 1);
+  live.request_input(confirmed * 2);
+  require(live.requested_input() == confirmed * 2 && live.time() == confirmed &&
+              live.write_input(message, confirmed),
+          "Future input demand preserves monotonic confirmed time and legal live admission");
+  MidiPort late;
+  late.publish_time(confirmed);
+  require(!late.write_input(message, confirmed - 1) && !late.peek_input(),
+          "Live input before confirmed time is rejected without admission");
+}
+
 void stream_frontiers() {
   MidiPort live;
   require(!live.input_limit() && live.input_knowledge() == 0 &&
@@ -438,6 +453,7 @@ void concurrent_exchange() {
 }
 
 int main() try {
+  confirmed_time();
   ordered_packets();
   wrap_and_overload();
   invalid_times();

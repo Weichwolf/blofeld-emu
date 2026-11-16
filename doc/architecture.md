@@ -263,9 +263,11 @@ Validate DSP-driven MCU inputs against attained DSP history:
   Stop the DSP before it consumes the invalid MCU suffix, restore the MCU window
   and replay to the exact receiving boundary. Admit the real input and regenerate
   the suffix. Preserve already committed effects without publishing them twice.
-  Treat published progress as monotone knowledge: replay may add earlier progress
-  observations while retaining each committed boundary. Compare actual device
-  effects and their timestamps exactly; preserve published host time.
+  Publish confirmed MCU time as a monotonic frontier after successful epoch
+  validation. Keep progress outside the device event log. MIDI input admission
+  uses confirmed time; speculative execution and receiver consumption preserve it.
+  Refill streamed MIDI knowledge on explicit receiver demand independently of
+  confirmed progress, so an unconfirmed epoch can reach its confirmation boundary.
 - Destructive reads, including reply-byte consumption and FIFO pops, wait for
   attained DSP time. Publish preceding source transactions before waiting, end
   the speculative window and commit the validated prefix. Perform the real read

@@ -200,10 +200,18 @@ void MidiPort::abort_input() noexcept {
 
 bool MidiPort::await_input(const std::uint64_t ticks, const std::stop_token &stop) noexcept {
   if (input_mode_ == InputMode::live) { return !stop.stop_requested() && error() == nullptr; }
+  request_input(ticks);
   return await(input_waiters_, stop, [&] {
     return phase_.load(std::memory_order_seq_cst) == Phase::ended ||
            input_until_.load(std::memory_order_seq_cst) > ticks;
   });
+}
+
+void MidiPort::request_input(const std::uint64_t ticks) noexcept {
+  auto previous = input_requested_.load(std::memory_order_relaxed);
+  while (previous < ticks &&
+         !input_requested_.compare_exchange_weak(
+             previous, ticks, std::memory_order_release, std::memory_order_relaxed)) {}
 }
 
 std::optional<MidiPort::Event> MidiPort::peek_input(const Receiver receiver,

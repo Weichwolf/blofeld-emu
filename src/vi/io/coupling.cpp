@@ -221,7 +221,6 @@ bool Coupling::apply(const mcu::Effects::Entry &entry) {
     case Kind::select:
     case Kind::word:
     case Kind::midi:
-    case Kind::time:
     default: return mcu::deliver(entry, peer_, shi_, midi_, stop_);
   }
 }
@@ -273,8 +272,7 @@ Coupling::Grant Coupling::grant(const Stamp stamp) const noexcept {
     if (entry.ticks >= until) { break; }
     const bool ordinary =
         entry.kind == mcu::Effects::Kind::data || entry.kind == mcu::Effects::Kind::midi ||
-        entry.kind == mcu::Effects::Kind::time || entry.kind == mcu::Effects::Kind::wait ||
-        entry.kind == mcu::Effects::Kind::acknowledge;
+        entry.kind == mcu::Effects::Kind::wait || entry.kind == mcu::Effects::Kind::acknowledge;
     if (ordinary || (entry.kind == mcu::Effects::Kind::strobe && (entry.value != 0) == strobe)) {
       continue;
     }
@@ -296,6 +294,7 @@ std::optional<Coupling::Grant> Coupling::receiver(const Stamp stamp) {
     if (checkpoint_barrier()) { continue; }
     const auto frontier = frontier_.load(std::memory_order_acquire);
     const auto input = midi_.input_limit();
+    if (input && *input <= stamp.ticks) { midi_.request_input(stamp.ceil()); }
     if ((!input || *input > stamp.ticks) && bound_.load(std::memory_order_acquire) &&
         (frontier > stamp.ticks || (frontier == stamp.ticks && !stamp.fractional))) {
       return grant(stamp);

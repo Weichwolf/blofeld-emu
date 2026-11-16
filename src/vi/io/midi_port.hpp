@@ -62,8 +62,17 @@ public:
   // MCU owner: only actual SCI character completions publish output.
   [[nodiscard]] bool write_output(Event event) noexcept;
   [[nodiscard]] bool await_input(std::uint64_t ticks, const std::stop_token &stop) noexcept;
+  void request_input(std::uint64_t ticks) noexcept;
 
-  void publish_time(std::uint64_t ticks) noexcept { time_.store(ticks, std::memory_order_release); }
+  [[nodiscard]] std::uint64_t requested_input() const noexcept {
+    return input_requested_.load(std::memory_order_acquire);
+  }
+
+  void publish_time(std::uint64_t ticks) noexcept {
+    if (ticks > time_.load(std::memory_order_relaxed)) {
+      time_.store(ticks, std::memory_order_release);
+    }
+  }
 
   [[nodiscard]] const char *error() const noexcept {
     return error_.load(std::memory_order_acquire);
@@ -106,5 +115,6 @@ private:
   std::atomic<unsigned> input_waiters_{0}, space_waiters_{0}, output_waiters_{0};
   std::atomic<std::uint64_t> time_{0};
   std::atomic<const char *> error_{nullptr};
+  std::atomic<std::uint64_t> input_requested_{0};
 };
 }

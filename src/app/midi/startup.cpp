@@ -46,6 +46,7 @@ std::optional<std::uint64_t>
 MidiStartup::poll(vi::MidiPort &port, void *owner, const ReadinessSource source) {
   // Newer progress must not admit input using an older readiness snapshot.
   const auto time = port.time();
+  const auto requested = port.requested_input();
   const auto readiness = source(owner);
   while (const auto event = port.read_output()) {
     ++observations_.output_bytes;
@@ -60,7 +61,9 @@ MidiStartup::poll(vi::MidiPort &port, void *owner, const ReadinessSource source)
     origin_ = frontier;
     return origin_;
   }
-  if (time < *frontier && *frontier - time > vi::MidiPort::byte_ticks) { return {}; }
+  if (requested < *frontier && time < *frontier && *frontier - time > vi::MidiPort::byte_ticks) {
+    return {};
+  }
   if (*frontier > std::numeric_limits<std::uint64_t>::max() - interval) {
     throw std::overflow_error("Startup MIDI timeline is exhausted");
   }

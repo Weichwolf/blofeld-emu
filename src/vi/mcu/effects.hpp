@@ -3,7 +3,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 #include <span>
 
 namespace blofeld::vi::mcu {
@@ -15,7 +14,6 @@ public:
     select,
     word,
     midi,
-    time,
     reset_hold,
     reset_release,
     wait,
@@ -54,12 +52,6 @@ public:
     if (entry.ticks < position_) { return fail(Error::time); }
     position_ = entry.ticks;
     if (replaying_) {
-      const auto &expected = storage_[replayed_];
-      // Finer native deadlines may add progress publications while replaying the same instructions.
-      if (entry.kind == Kind::time && entry.value == 0 && entry.ticks <= expected.ticks &&
-          (expected.kind != Kind::time || entry.ticks < expected.ticks)) {
-        return true;
-      }
       if (storage_[replayed_] != entry) {
         expected_ = storage_[replayed_];
         refused_ = entry;
@@ -70,7 +62,6 @@ public:
       return true;
     }
     if (entry.ticks < attained_) {
-      if (entry.kind == Kind::time && entry.value == 0) { return true; }
       refused_ = entry;
       return fail(Error::prefix);
     }
@@ -130,17 +121,6 @@ public:
     attained_ = ticks;
     written_ = applied_ = replayed_ = 0;
     return true;
-  }
-
-  [[nodiscard]] std::optional<std::uint64_t>
-  replay_deadline(const std::uint64_t after) const noexcept {
-    if (!replaying_) { return {}; }
-    for (auto index = replayed_; index < applied_; ++index) {
-      if (storage_[index].kind == Kind::time && storage_[index].ticks > after) {
-        return storage_[index].ticks;
-      }
-    }
-    return {};
   }
 
   [[nodiscard]] bool yield() const noexcept { return storage_.size() - written_ <= reserve_; }
