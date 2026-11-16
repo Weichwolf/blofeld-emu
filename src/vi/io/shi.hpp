@@ -34,6 +34,7 @@ public:
   [[nodiscard]] bool read(std::uint32_t address, std::uint32_t &value) noexcept;
   [[nodiscard]] bool write(Write access) noexcept;
   [[nodiscard]] std::optional<Mode> select(bool active) noexcept;
+  [[nodiscard]] std::optional<Mode> configuration(bool selected) noexcept;
   // MCU owner, outside native callbacks: wait for the DSP-written receive mode.
   [[nodiscard]] std::optional<Mode> wait_mode(const std::stop_token &stop);
   [[nodiscard]] Transfer transfer(std::uint32_t word) noexcept;
@@ -50,6 +51,7 @@ private:
   [[nodiscard]] bool valid_transfer(std::uint32_t word) const noexcept;
   [[nodiscard]] Transfer transfer_locked(std::uint32_t word) noexcept;
   [[nodiscard]] std::optional<Mode> mode() const noexcept;
+  [[nodiscard]] std::optional<Mode> mode(bool selected) const noexcept;
   std::mutex mutex_;
   std::condition_variable_any ready_;
   std::array<std::uint32_t, 10> fifo_{};

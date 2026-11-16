@@ -13,6 +13,10 @@
 namespace blofeld::vi::mcu {
 extern "C" {
 [[nodiscard]] bool blofeld_mcu_shi_select(Shi *channel, bool active, Shi::Mode &mode) noexcept;
+[[nodiscard]] bool blofeld_mcu_shi_mode(Shi *channel, Shi::Mode &mode, const std::stop_token &stop);
+[[nodiscard]] bool
+blofeld_mcu_shi_submit(Shi *channel, std::uint32_t word, const std::stop_token &stop);
+
 [[nodiscard]] bool blofeld_mcu_peer_interrupt(const PeerPort *channel,
                                               std::uint64_t &generation) noexcept;
 void blofeld_mcu_peer_data(const PeerPort *channel, PeerPort::Sample &sample) noexcept;
@@ -35,6 +39,7 @@ void blofeld_mcu_time_hold(ExecutionTime *channel) noexcept;
 [[nodiscard]] bool blofeld_mcu_midi_peek(const MidiPort *channel, MidiPort::Event &event) noexcept;
 void blofeld_mcu_midi_pop(MidiPort *channel) noexcept;
 [[nodiscard]] bool blofeld_mcu_midi_write(MidiPort *channel, const MidiPort::Event &event) noexcept;
+[[nodiscard]] bool blofeld_mcu_midi_time(MidiPort *channel, std::uint64_t ticks) noexcept;
 [[nodiscard]] bool blofeld_mcu_midi_await(MidiPort *channel,
                                           std::uint64_t ticks,
                                           const std::stop_token &stop) noexcept;

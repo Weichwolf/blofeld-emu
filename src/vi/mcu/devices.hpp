@@ -121,8 +121,7 @@ struct Devices {
       }
       blofeld_mcu_midi_pop(midi);
     }
-    midi->publish_time(clock.ticks());
-    return midi->error() == nullptr;
+    return blofeld_mcu_midi_time(midi, clock.ticks()) && midi->error() == nullptr;
   }
 
   bool input_point(const Timer::Cycle now) noexcept {

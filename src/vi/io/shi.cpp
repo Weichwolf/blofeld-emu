@@ -140,8 +140,17 @@ std::optional<Shi::Mode> Shi::select(const bool active) noexcept {
   return mode();
 }
 
+std::optional<Shi::Mode> Shi::configuration(const bool selected) noexcept {
+  const std::lock_guard lock(mutex_);
+  return mode(selected);
+}
+
 std::optional<Shi::Mode> Shi::mode() const noexcept {
-  if (!selected_ || (control_ & enabled) == 0) { return {}; }
+  return mode(selected_);
+}
+
+std::optional<Shi::Mode> Shi::mode(const bool selected) const noexcept {
+  if (!selected || (control_ & enabled) == 0) { return {}; }
   // SPI samples the leading edge for CPHA=0, trailing for CPHA=1.
   const bool phase = (clock_ & 1) != 0;
   const bool polarity = (clock_ & 2) != 0;

@@ -39,6 +39,7 @@ McuBinding::McuBinding() {
                              "blofeld_mcu_midi_peek",
                              "blofeld_mcu_midi_pop",
                              "blofeld_mcu_midi_write",
+                             "blofeld_mcu_midi_time",
                              "blofeld_mcu_midi_await",
                              "blofeld_mcu_reset_state",
                              "blofeld_mcu_reset_assert"};
@@ -57,6 +58,7 @@ McuBinding::McuBinding() {
                              reinterpret_cast<const void *>(&blofeld_mcu_midi_peek),
                              reinterpret_cast<const void *>(&blofeld_mcu_midi_pop),
                              reinterpret_cast<const void *>(&blofeld_mcu_midi_write),
+                             reinterpret_cast<const void *>(&blofeld_mcu_midi_time),
                              reinterpret_cast<const void *>(&blofeld_mcu_midi_await),
                              reinterpret_cast<const void *>(&blofeld_mcu_reset_state),
                              reinterpret_cast<const void *>(&blofeld_mcu_reset_assert)};

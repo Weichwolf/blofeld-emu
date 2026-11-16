@@ -24,11 +24,12 @@ void BootPort::reset() noexcept {
 bool BootPort::complete(const std::stop_token &stop) {
   if (!pending()) { return true; }
   if (!state_.mode) {
-    state_.mode = shi_.wait_mode(stop);
-    if (!state_.mode) { return false; }
+    Shi::Mode mode;
+    if (!blofeld_mcu_shi_mode(&shi_, mode, stop)) { return false; }
+    state_.mode = mode;
   }
   if (!state_.pending_word) { return true; }
-  if (!shi_.submit(state_.word, stop).accepted) { return false; }
+  if (!blofeld_mcu_shi_submit(&shi_, state_.word, stop)) { return false; }
   state_.pending_word = false;
   if (state_.mode->continuous) {
     state_.bits = 0;
