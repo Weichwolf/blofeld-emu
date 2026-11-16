@@ -81,7 +81,11 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
       CallbackBinding{.role = CallbackRole::bit, .symbol = "blofeld_dsp_bit"},
       CallbackBinding{.role = CallbackRole::reset, .symbol = "blofeld_dsp_reset"},
       CallbackBinding{.role = CallbackRole::pending, .symbol = "blofeld_dsp_pending"},
-      CallbackBinding{.role = CallbackRole::revision, .symbol = "blofeld_dsp_revision"}};
+      CallbackBinding{.role = CallbackRole::revision, .symbol = "blofeld_dsp_revision"},
+#if defined(BLOFELD_CENSUS)
+      CallbackBinding{.role = CallbackRole::retired, .symbol = "blofeld_dsp_retired"},
+#endif
+  };
   constexpr std::array region_modes{dsp56300::Word{0}, dsp56300::Word{1} << 11};
   const dsp56300::CompileOptions options{.memory = memory,
                                          .interrupts = interrupts,

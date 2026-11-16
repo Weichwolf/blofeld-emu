@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 include("${CMAKE_CURRENT_LIST_DIR}/DeviceBindings.cmake")
-set(blofeld_dsp_exports "blofeld_dsp_read,blofeld_dsp_write,blofeld_dsp_bit,blofeld_dsp_reset,blofeld_dsp_pending,blofeld_dsp_revision")
+set(blofeld_dsp_exports "blofeld_dsp_read,blofeld_dsp_write,blofeld_dsp_bit,blofeld_dsp_reset,blofeld_dsp_pending,blofeld_dsp_revision,blofeld_dsp_retired")
 blofeld_device_binding(dsp "${blofeld_dsp_exports}"
   src/vi/dsp/bindings.cpp src/vi/dsp/program.cpp src/vi/dsp/audio.cpp src/vi/dsp/clock.cpp
   src/vi/dsp/dax.cpp src/vi/dsp/dma.cpp src/vi/dsp/esai.cpp

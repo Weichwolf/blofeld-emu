@@ -30,7 +30,8 @@ void snapshot(std::ostream &out, const vi::Census::Snapshot &sample) {
       << R"(,"closed_ns":)" << sample.closed << R"(,"guest":{"instructions":)"
       << sample.guest.instructions << R"(,"cycles":)" << sample.guest.cycles << R"(,"idle":)"
       << sample.guest.idle << R"(,"epoch":)" << sample.guest.epoch << R"(,"pc":)" << sample.guest.pc
-      << R"(},"owners":[)";
+      << R"(,"region_instructions":)" << sample.guest.region_instructions
+      << R"(,"precise_instructions":)" << sample.guest.precise_instructions << R"(},"owners":[)";
   for (unsigned i = 0; i < sample.owners.size(); ++i) {
     if (i != 0) { out << ','; }
     usage(out, sample.owners[i]);

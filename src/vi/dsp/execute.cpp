@@ -125,15 +125,20 @@ bool run_instance(Io &io,
   struct Sample {
     dsp56300::Core &core;
     Io &io;
+    std::uint64_t region_base, precise_base;
   };
 
-  Sample sample{.core = core, .io = io};
+  const auto origin = io.retirement();
+  Sample sample{.core = core, .io = io, .region_base = origin[0], .precise_base = origin[1]};
   const Census::GuestScope observed(&sample, [](void *context) noexcept {
     const auto &value = *static_cast<Sample *>(context);
     const auto progress = value.core.progress();
+    const auto retired = value.io.retirement();
     return Census::Guest{.instructions = progress.instructions,
                          .cycles = progress.estimated_cycles,
                          .idle = value.io.idle_cycles(),
+                         .region_instructions = retired[0] - value.region_base,
+                         .precise_instructions = retired[1] - value.precise_base,
                          .pc = value.core.registers().pc};
   });
 #endif

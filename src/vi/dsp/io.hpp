@@ -144,6 +144,12 @@ public:
 
   [[nodiscard]] std::uint64_t idle_cycles() const noexcept { return idle_; }
 
+  void retired(const std::uint32_t count, const bool region) noexcept {
+    retirement_[region ? 0 : 1] += count;
+  }
+
+  [[nodiscard]] std::array<std::uint64_t, 2> retirement() const noexcept { return retirement_; }
+
   void prepare_code();
 
   bool complete_events(ExecutionReport &report) {
@@ -875,6 +881,7 @@ private:
   std::uint64_t origin_ = 0;
   std::optional<std::uint64_t> peer_deadline_;
   Failure completion_failure_;
+  std::array<std::uint64_t, 2> retirement_{};
 #if defined(BLOFELD_CENSUS)
   std::uint64_t endings_ = 0;
   bool trace_enabled_ = false;

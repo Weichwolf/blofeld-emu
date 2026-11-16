@@ -66,6 +66,7 @@ public:
 
   struct Guest {
     std::uint64_t instructions = 0, cycles = 0, idle = 0, epoch = 0;
+    std::uint64_t region_instructions = 0, precise_instructions = 0;
     std::uint32_t pc = 0;
   };
 
