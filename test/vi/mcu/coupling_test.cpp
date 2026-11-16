@@ -10,6 +10,7 @@
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
 #include "isa.hpp"
+#include "mcu/effects.hpp"
 #include "mcu/program.hpp"
 #include "storage/flash_image.hpp"
 #include "support/isa.hpp"
@@ -26,9 +27,11 @@
 #include <future>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <stop_token>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -158,6 +161,67 @@ std::vector<dsp56300::Word> dsp_code(const bool dense) {
 }
 
 namespace {
+void live_input_demand() {
+  constexpr std::uint64_t known = 20;
+  constexpr std::uint64_t needed = 40;
+  constexpr std::uint64_t source_frontier = 1000;
+  vi::PeerPort peer;
+  vi::Shi shi;
+  vi::DspReset reset;
+  vi::ExecutionTime time;
+  vi::MidiPort midi(vi::MidiPort::InputMode::stream);
+  const std::stop_source stop;
+  vi::Coupling coupling(
+      peer, shi, reset, time, midi, stop.get_token(), vi::Coupling::default_window);
+  if (!midi.advance_input(known)) { throw std::runtime_error("Initial live knowledge refused"); }
+  coupling.bind();
+  auto storage = coupling.source_storage();
+  storage[0] = {.ticks = known / 2,
+                .value = (std::uint64_t{byte_mask} << 16U) | (std::uint64_t{byte_mask} << 8U) |
+                         byte_mask,
+                .kind = vi::mcu::Effects::Kind::data};
+  coupling.publish(storage.first(1), source_frontier);
+  std::promise<bool> mcu_result;
+  auto mcu_ready = mcu_result.get_future();
+  const std::jthread mcu(
+      [&](const std::stop_token &token) { mcu_result.set_value(midi.await_input(needed, token)); });
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{1};
+  while (midi.requested_input() < needed && std::chrono::steady_clock::now() < deadline) {
+    static_cast<void>(mcu_ready.wait_for(std::chrono::milliseconds{1}));
+  }
+  const auto grant = coupling.receiver({.ticks = known - 1});
+  if (midi.requested_input() != needed || midi.time() != 0 || !grant || grant->until != known ||
+      peer.mcu_data() !=
+          vi::PeerPort::Sample{.mask = byte_mask, .known = byte_mask, .value = byte_mask}) {
+    throw std::runtime_error("DSP must consume published effects while MCU waits for real input");
+  }
+  std::promise<std::optional<vi::Coupling::Grant>> dsp_result;
+  auto dsp_ready = dsp_result.get_future();
+  const std::jthread dsp([&](const std::stop_token &token) {
+    const std::stop_callback cancelled(token, [&] { std::stop_source{stop}.request_stop(); });
+    dsp_result.set_value(coupling.receiver({.ticks = known}));
+  });
+  if (dsp_ready.wait_for(std::chrono::milliseconds{1}) == std::future_status::ready ||
+      mcu_ready.wait_for(std::chrono::milliseconds{1}) == std::future_status::ready ||
+      midi.input_limit() != known || midi.time() != 0) {
+    throw std::runtime_error("Future demand cannot manufacture live input knowledge or progress");
+  }
+  if (!midi.advance_input(needed) ||
+      dsp_ready.wait_for(std::chrono::seconds{1}) != std::future_status::ready ||
+      dsp_ready.get() != vi::Coupling::Grant{.until = needed} ||
+      mcu_ready.wait_for(std::chrono::milliseconds{1}) == std::future_status::ready) {
+    throw std::runtime_error("Real silence releases only the exclusive horizon it establishes");
+  }
+  constexpr std::array<std::uint8_t, 3> note{0x90, 60, 127};
+  if (!midi.write_input(note, needed) ||
+      mcu_ready.wait_for(std::chrono::seconds{1}) != std::future_status::ready ||
+      !mcu_ready.get() || midi.time() != 0 ||
+      midi.peek_input() != vi::MidiPort::Event{.ticks = needed, .byte = note.front()}) {
+    throw std::runtime_error(
+        "The real arriving note releases the MCU without speculative admission");
+  }
+}
+
 void streaming_frontier() {
   constexpr std::uint64_t step = 20;
   constexpr std::uint64_t end = 2 * step;
@@ -229,6 +293,7 @@ void exercise(const bool dense) {
 }
 
 int main() try {
+  live_input_demand();
   streaming_frontier();
   for (const bool dense : {false, true}) { exercise(dense); }
 } catch (const std::exception &error) {
