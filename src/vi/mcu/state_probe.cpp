@@ -379,6 +379,11 @@ void StateProbe::commit(const std::uint64_t instructions,
                         const std::uint64_t ticks) {
   for (std::size_t index = 0; index < pending_count_; ++index) { append(pending_[index]); }
   pending_count_ = 0;
+  if (first_ && boot_ticks_ == 0) {
+    boot_rollbacks_ = rollbacks_;
+    boot_reinstalls_ = reinstalls_;
+    boot_ticks_ = ticks;
+  }
   confirmed_instructions_ = instructions;
   confirmed_cycles_ = progress.estimated_cycles;
   confirmed_ticks_ = ticks;
@@ -392,7 +397,9 @@ void StateProbe::commit(const std::uint64_t instructions,
   }
 }
 
-void StateProbe::rollback(const std::uint64_t discarded) noexcept {
+void StateProbe::rollback(const std::uint64_t discarded, const bool binding_retained) noexcept {
+  ++rollbacks_;
+  if (!binding_retained) { ++reinstalls_; }
   discarded_ += discarded;
   pending_count_ = 0;
   ending_.reset();
@@ -405,7 +412,9 @@ void StateProbe::finish(Record record) noexcept {
 void StateProbe::report(std::ostream &output) const {
   constexpr std::array names{"core", "ram", "timer", "clock", "sci", "usb", "gpio", "flash", "lcd"};
   output << "MCU_PROBE executed=" << executed_ << " discarded=" << discarded_
-         << " replay-executed=" << replayed_
+         << " rollbacks=" << rollbacks_ << " reinstalls=" << reinstalls_
+         << " boot-rollbacks=" << boot_rollbacks_ << " boot-reinstalls=" << boot_reinstalls_
+         << " boot-ticks=" << boot_ticks_ << " replay-executed=" << replayed_
          << " confirmed-instructions=" << confirmed_instructions_
          << " confirmed-cycles=" << confirmed_cycles_ << " confirmed-ticks=" << confirmed_ticks_
          << " waits=" << count_ << " pending-waits=" << pending_count_

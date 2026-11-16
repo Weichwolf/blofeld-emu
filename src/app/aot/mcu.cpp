@@ -123,7 +123,7 @@ cpu12::NativeImage prepare_mcu(const cpu12::CodeImage image,
 vi::mcu::Program prepare_mcu_program(const cpu12::CodeImage image,
                                      const std::span<const cpu12::CodeTransition> transitions,
                                      const std::filesystem::path &cache) {
-  return {prepare_mcu(image, transitions, cache), image};
+  return {prepare_mcu(image, transitions, cache), image, transitions};
 }
 
 }

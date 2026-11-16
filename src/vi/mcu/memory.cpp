@@ -27,6 +27,12 @@ void Memory::restore(const Snapshot &snapshot) noexcept {
   program_changed_ = true;
 }
 
+bool Memory::restore_bound(const Snapshot &snapshot) noexcept {
+  if (program_changed_ || state_.mapping != snapshot.mapping) { return false; }
+  state_ = snapshot;
+  return true;
+}
+
 namespace {
 constexpr unsigned register_bytes = 1024;
 constexpr unsigned register_mask = 0x78;

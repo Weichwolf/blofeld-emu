@@ -47,6 +47,8 @@ public:
   [[nodiscard]] Snapshot save() const noexcept;
   // Identical storage addresses can name different code after restoration.
   void restore(const Snapshot &snapshot) noexcept;
+  // The owner also proves that the installed Core/image binding did not change.
+  [[nodiscard]] bool restore_bound(const Snapshot &snapshot) noexcept;
 
   explicit Memory(FlashImage &flash);
   Memory(const Memory &) = delete;

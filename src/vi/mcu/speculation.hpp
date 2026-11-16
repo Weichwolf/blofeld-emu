@@ -71,6 +71,7 @@ private:
     Devices::Snapshot devices;
     Io::Snapshot io;
     State state;
+    std::uint64_t binding = 0;
   };
 
   [[nodiscard]] std::uint64_t ticks() const noexcept;
@@ -115,7 +116,7 @@ private:
   std::vector<cpu12::Ram> grants_;
   std::vector<std::uint64_t> mounted_;
   std::optional<Coupling::Input> pending_;
-  std::uint64_t seen_ = 0;
+  std::uint64_t seen_ = 0, binding_ = 0;
   const char *refused_ = nullptr;
   Action action_ = Action::run;
   bool active_ = false, replaying_ = false, pedal_ = false;

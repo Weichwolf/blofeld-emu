@@ -51,7 +51,7 @@ public:
   void executed(std::uint32_t instructions, bool replaying) noexcept;
   void wait(Record record, bool speculative);
   void commit(std::uint64_t instructions, cpu12::Progress progress, std::uint64_t ticks);
-  void rollback(std::uint64_t discarded) noexcept;
+  void rollback(std::uint64_t discarded, bool binding_retained) noexcept;
   void finish(Record record) noexcept;
   void report(std::ostream &output) const;
 
@@ -77,6 +77,8 @@ private:
   Digest chain_{};
   std::size_t pending_count_ = 0;
   std::uint64_t count_ = 0, executed_ = 0, discarded_ = 0, replayed_ = 0;
+  std::uint64_t rollbacks_ = 0, reinstalls_ = 0;
+  std::uint64_t boot_rollbacks_ = 0, boot_reinstalls_ = 0, boot_ticks_ = 0;
   std::uint64_t confirmed_instructions_ = 0, confirmed_cycles_ = 0, confirmed_ticks_ = 0;
 };
 }

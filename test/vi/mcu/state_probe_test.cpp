@@ -116,7 +116,7 @@ void transactions() {
     probe.executed(2, false);
     probe.wait(first, true);
     require(probe.count() == 0 && probe.pending() == 1, "Speculative state is not published");
-    probe.rollback(1);
+    probe.rollback(1, true);
     require(probe.count() == 0 && probe.pending() == 0, "Rollback discards unconfirmed state");
     probe.executed(1, true);
     probe.wait(first, true);
@@ -130,7 +130,9 @@ void transactions() {
   require(StateProbe::active() == nullptr, "Leaving the owner clears diagnostic context");
   std::ostringstream output;
   probe.report(output);
-  require(output.str().contains("executed=3 discarded=1 replay-executed=1") &&
+  require(output.str().contains("executed=3 discarded=1") &&
+              output.str().contains("rollbacks=1 reinstalls=0") &&
+              output.str().contains("replay-executed=1") &&
               output.str().contains("waits=2 pending-waits=0") &&
               output.str().contains("MCU_WAIT ordinal=2 instructions=2") &&
               output.str().contains("MCU_EXIT"),
@@ -147,7 +149,7 @@ void common_stop() {
   const StateProbe::Record boundary{.instructions = 1, .cycles = 2, .ticks = cut};
   probe.wait(boundary, true);
   require(!stop.stop_requested(), "An unconfirmed ending cannot stop either owner");
-  probe.rollback(1);
+  probe.rollback(1, true);
   probe.commit(0, {}, 0);
   require(!stop.stop_requested(), "Rollback revokes an ending candidate");
   probe.wait(boundary, true);

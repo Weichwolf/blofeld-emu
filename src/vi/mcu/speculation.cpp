@@ -361,6 +361,10 @@ void Speculation::bind() {
   }
   core_.set_memory(cpu12::Memory::mapped(next));
   program_.install(core_, selected);
+  if (binding_ == std::numeric_limits<std::uint64_t>::max()) {
+    throw std::overflow_error("MCU binding generation exhausted");
+  }
+  ++binding_;
   grants_.swap(next);
   mounted_.swap(selected);
 }
@@ -388,7 +392,8 @@ void Speculation::save() {
                                  .memory = memory_.save(),
                                  .devices = devices_.save(),
                                  .io = io_.save(),
-                                 .state = state_});
+                                 .state = state_,
+                                 .binding = binding_});
 }
 
 void Speculation::restore() {
@@ -396,18 +401,21 @@ void Speculation::restore() {
       !effects_.rollback() || !epoch_.rollback()) {
     throw std::logic_error("MCU rollback has no coherent retained prefix");
   }
+  const bool retained = checkpoint_->binding == binding_ &&
+                        !program_.handoff(mounted_, core_.registers().pc) &&
+                        memory_.restore_bound(checkpoint_->memory);
 #if defined(BLOFELD_CENSUS)
   if (auto *probe = StateProbe::active()) {
-    probe->rollback(report_.instructions - checkpoint_->state.instructions);
+    probe->rollback(report_.instructions - checkpoint_->state.instructions, retained);
   }
 #endif
-  memory_.restore(checkpoint_->memory);
+  if (!retained) { memory_.restore(checkpoint_->memory); }
   devices_.restore(checkpoint_->devices);
   io_.restore(checkpoint_->io);
   core_.restore(checkpoint_->cpu);
   state_ = checkpoint_->state;
   report_.instructions = state_.instructions;
-  bind();
+  if (!retained) { bind(); }
   publish();
 }
 

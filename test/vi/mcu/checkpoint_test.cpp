@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "aot/mcu.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/shi.hpp"
 #include "isa.hpp"
@@ -10,6 +11,7 @@
 #include "storage/flash_image.hpp"
 #include "support/mcu.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cpu12/core.hpp>
 #include <cpu12/memory.hpp>
@@ -95,6 +97,97 @@ void code_binding() {
           "Restore requires a new owner binding before the RAM code is executable again");
   require(memory.write({.address = system, .value = corrupt}) && memory.program_changed(),
           "The restored binding still detects later code changes");
+}
+
+void retained_code_binding() {
+  vi::FlashImage flash;
+  mcu::Memory memory(flash);
+  constexpr auto nop = cpu12::isa::nop;
+  constexpr cpu12::Address data = system + 16;
+  require(memory.write({.address = system, .value = nop[0]}), "Initialize actual RAM code");
+  const std::array spans{cpu12::CodeSpan{.address = system, .words = nop}};
+  const std::array bindings{mcu::CodeBinding{.identity = 1, .code = spans}};
+  require(memory.bind_program(bindings), "Bind a real protected code extent");
+  const auto saved = memory.save();
+  const auto grants = memory.regions();
+  require(memory.write({.address = data, .value = datum}) && memory.restore_bound(saved) &&
+              !memory.program_changed() && !memory.commit_mapping(),
+          "Data rollback retains the established code protection and actual mapping");
+  const auto restored = memory.regions();
+  require(std::ranges::equal(grants,
+                             restored,
+                             [](const auto &a, const auto &b) {
+                               return a.first == b.first && a.bytes.data() == b.bytes.data() &&
+                                      a.bytes.size() == b.bytes.size() &&
+                                      a.known.data() == b.known.data() &&
+                                      a.known.size() == b.known.size() &&
+                                      a.writable == b.writable && a.identity == b.identity;
+                             }),
+          "Every retained code/data/knowledge descriptor has identical storage and rights");
+  require(memory.write({.address = system, .value = other}) && memory.program_changed(),
+          "A later real code write still revokes the retained binding");
+  const auto changed = observe_ram(memory);
+  require(!memory.restore_bound(saved) && observe_ram(memory) == changed &&
+              memory.program_changed(),
+          "An invalidated code binding refuses transactionally before restoring any byte");
+  memory.restore(saved);
+  require(memory.commit_mapping() && memory.bind_program(bindings) &&
+              memory.write_mapping({.address = initmq, .value = queue_map}) &&
+              memory.commit_mapping(),
+          "Commit an actual queue remap");
+  const auto remap = observe_ram(memory);
+  require(!memory.restore_bound(saved) && observe_ram(memory) == remap,
+          "An active mapping change cannot retain the old Core descriptors");
+}
+
+void pending_handoff() {
+  namespace isa = cpu12::isa;
+  constexpr cpu12::Address from = 0x8000;
+  constexpr cpu12::Address to = 0x8100;
+  constexpr std::uint64_t first_id = 7;
+  constexpr std::uint64_t second_id = 9;
+  constexpr auto jump = isa::program(isa::opcode<isa::Opcode::jmp_extended>(),
+                                     std::array<cpu12::Byte, 2>{to >> 8U, to & all_bits});
+  constexpr auto target =
+      isa::program(isa::opcode<isa::Opcode::inca>(), std::array<cpu12::Byte, 2>{0x20, 0xfe});
+  blofeld::test::McuImage image;
+  image.load(from, jump);
+  image.load(to, target);
+  const std::array first_code{cpu12::CodeSpan{.address = from, .words = jump}};
+  const std::array second_code{cpu12::CodeSpan{.address = to, .words = target}};
+  const std::array first_entries{from};
+  const std::array<cpu12::Address, 2> second_entries{to, to + 1};
+  const std::array variants{
+      cpu12::CodeVariant{.id = first_id, .code = first_code, .entries = first_entries},
+      cpu12::CodeVariant{.id = second_id, .code = second_code, .entries = second_entries}};
+  const std::array transitions{
+      cpu12::CodeTransition{.from = first_id, .to = second_id, .entry = to},
+      cpu12::CodeTransition{.from = first_id, .to = second_id, .entry = to + 1},
+      cpu12::CodeTransition{.from = second_id, .to = first_id, .entry = from}};
+  const auto program = blofeld::app::aot::prepare_mcu_program({.variants = variants}, transitions);
+  mcu::Memory memory(*image);
+  const auto grants = memory.regions();
+  cpu12::Core core(cpu12::Memory::mapped(grants));
+  const std::array mounted{first_id};
+  const std::array both{first_id, second_id};
+  core.set_registers({.pc = from});
+  program.install(core, mounted);
+  const auto saved = core.save();
+  const auto jumped = core.run(1);
+  require(jumped.retired == 1 && jumped.fault == cpu12::Fault::none && core.registers().pc == to &&
+              program.handoff(mounted, to) && !program.handoff(mounted, from),
+          "An actual exit to an unmounted prepared view is a possible pending handoff");
+  const auto boundary = core.save();
+  const auto pending = core.run(1);
+  require(pending.retired == 0 && pending.fault == cpu12::Fault::none && core.save() == boundary,
+          "A declared handoff yields without retiring another instruction or inventing a fault");
+  core.restore(saved);
+  require(core.run(1).retired == 0 && core.save() == saved,
+          "Processor restoration does not retire the pending prepared-code handoff");
+  program.install(core, both);
+  require(!program.handoff(both, to) && core.run(1).retired == 1 && core.run(1).retired == 1 &&
+              core.registers().d == (std::uint16_t{1} << 8U),
+          "A fresh install clears the stale handoff; an already mounted target remains native");
 }
 
 void boot_shifter() {
@@ -281,7 +374,7 @@ void lcd_and_flash() {
           "The restored LCD dummy-read completes once at the saved column");
 }
 
-void native_continuation() {
+void native_continuation(const bool retained) {
   namespace isa = cpu12::isa;
   using Opcode = isa::Opcode;
   constexpr cpu12::Address entry = 0x8000;
@@ -325,12 +418,16 @@ void native_continuation() {
   resume();
   const auto completed = machine.core.save();
   const auto observed = observe_ram(machine.memory);
-  machine.memory.power_on();
-  machine.memory.restore(memory);
+  if (retained) {
+    require(machine.memory.restore_bound(memory), "Restore data without replacing a valid binding");
+  } else {
+    machine.memory.power_on();
+    machine.memory.restore(memory);
+  }
   machine.devices.restore(devices);
   machine.io.restore(io);
   machine.core.restore(cpu);
-  machine.bind(*program);
+  if (!retained) { machine.bind(*program); }
   resume();
   require(machine.core.save() == completed && observe_ram(machine.memory) == observed &&
               machine.read(port) == second &&
@@ -342,10 +439,13 @@ void native_continuation() {
 int main() try {
   memory_state();
   code_binding();
+  retained_code_binding();
+  pending_handoff();
   boot_shifter();
   device_continuations();
   lcd_and_flash();
-  native_continuation();
+  native_continuation(false);
+  native_continuation(true);
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';
