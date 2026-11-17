@@ -15,6 +15,9 @@ public:
   struct Write {
     dsp56300::Space space = dsp56300::Space::program;
     dsp56300::Word address = 0, value = 0;
+#if defined(BLOFELD_CENSUS)
+    dsp56300::Word pc = 0;
+#endif
   };
 
   // Borrowed immutable ROM contents; native grants never permit stores.

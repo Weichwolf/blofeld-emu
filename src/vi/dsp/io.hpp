@@ -147,6 +147,14 @@ public:
   void retired(const std::uint32_t count,
                const bool region,
                [[maybe_unused]] const std::uint64_t site) noexcept {
+#if defined(BLOFELD_CENSUS)
+    constexpr auto unit_entry = std::uint64_t{1} << 26;
+    if (region && (site & unit_entry) != 0) {
+      Census::unit_entry();
+      return;
+    }
+    if (region) { Census::unit_retired(count); }
+#endif
     retirement_[region ? 0 : 1] += count;
 #if defined(BLOFELD_CENSUS)
     constexpr unsigned batch_shift = 24;
@@ -359,7 +367,14 @@ public:
     const bool watched = space == dsp56300::Space::program && installed_program_ &&
                          program_.contains({.variant = *installed_program_, .address = address});
     const auto previous = watched ? inspect_program(address) : std::nullopt;
-    if (memory_.write({.space = space, .address = address, .value = value})) {
+    if (memory_.write({
+            .space = space,
+            .address = address,
+            .value = value,
+#if defined(BLOFELD_CENSUS)
+            .pc = pc,
+#endif
+        })) {
       preparation_requested_ |= watched && previous != value;
       return true;
     }
@@ -419,7 +434,14 @@ public:
       case dsp56300::BitAction::change: value ^= mask; break;
       default: return false;
     }
-    if (memory_.write({.space = request.space, .address = request.address, .value = value})) {
+    if (memory_.write({
+            .space = request.space,
+            .address = request.address,
+            .value = value,
+#if defined(BLOFELD_CENSUS)
+            .pc = request.pc,
+#endif
+        })) {
       return true;
     }
     if (Ports::contains(request.space, request.address)) {
@@ -718,7 +740,14 @@ private:
         access.space == dsp56300::Space::program && installed_program_ &&
         program_.contains({.variant = *installed_program_, .address = access.address}) &&
         inspect_program(access.address) != value;
-    if (!memory_.write({.space = access.space, .address = access.address, .value = value})) {
+    if (!memory_.write({
+            .space = access.space,
+            .address = access.address,
+            .value = value,
+#if defined(BLOFELD_CENSUS)
+            .pc = core_->registers().pc,
+#endif
+        })) {
       return false;
     }
     program_changed_ |= changed;

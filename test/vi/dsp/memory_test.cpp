@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dsp/memory.hpp"
+#if defined(BLOFELD_CENSUS)
+#include "census.hpp"
+#endif
 
 #include <array>
 #include <cstddef>
@@ -256,6 +259,61 @@ void rom_and_reserved() {
   require(rejected, "Reject data ROM words wider than 24 bits before native execution");
 }
 
+#if defined(BLOFELD_CENSUS)
+void discarded_writes() {
+  using blofeld::vi::Census;
+  constexpr Word rom_value = 0x123456;
+  constexpr Word boot = 0xff0000;
+  constexpr Word rom_address = 0x4000;
+  constexpr Word hole = 0x3000;
+  constexpr Word extra_hole = 0x5000;
+  constexpr Word reserved_y = 0x16000;
+  constexpr Word unknown_program = 0x7000;
+  constexpr Word peripheral = 0xffff80;
+  constexpr Word oversized = 0x1000000;
+  constexpr Word first_pc = 0x11;
+  Census census(true);
+  std::array<Word, 1> rom{rom_value};
+  Memory memory({.x = rom, .y = rom});
+  {
+    const Census::Scope owner(census, Census::Actor::dsp);
+    require(memory.write({.space = Space::x, .address = 0, .value = 3, .pc = 0x10}),
+            "Ordinary writable RAM is accepted without becoming a discarded store");
+    const std::array<Memory::Write, 6> writes{
+        Memory::Write{.space = Space::program, .address = boot, .value = 1, .pc = first_pc},
+        Memory::Write{.space = Space::x, .address = rom_address, .value = 2, .pc = first_pc + 1},
+        Memory::Write{.space = Space::x, .address = hole, .value = 3, .pc = first_pc + 2},
+        Memory::Write{.space = Space::y, .address = rom_address, .value = 4, .pc = first_pc + 3},
+        Memory::Write{.space = Space::y, .address = reserved_y, .value = 5, .pc = first_pc + 4},
+        Memory::Write{.space = Space::x, .address = extra_hole, .value = 6, .pc = first_pc + 5}};
+    for (const auto write : writes) {
+      require(memory.write(write), "The audit observes successful declared discarded stores");
+    }
+    require(!memory.write({.space = Space::program, .address = unknown_program, .value = 0}) &&
+                !memory.write({.space = Space::x, .address = peripheral, .value = 0}) &&
+                !memory.write({.space = Space::x, .address = hole, .value = oversized}),
+            "Unknown program/peripheral accesses and invalid-width values are not successes");
+  }
+  const auto records = census.discarded_writes();
+  const std::array<Word, 5> addresses{boot, rom_address, hole, rom_address, reserved_y};
+  require(records.size() == addresses.size(), "Each discarded address class has one record");
+  for (std::size_t i = 0; i < records.size(); ++i) {
+    const auto &record = records[i];
+    require(record.count == (i == 2 ? 2U : 1U) && record.first == addresses[i] &&
+                record.minimum == addresses[i] &&
+                record.maximum == (i == 2 ? extra_hole : addresses[i]) &&
+                record.pc == first_pc + i && record.value == i + 1,
+            "Independent class totals retain the first store and its actual address extent");
+  }
+  Word value = 0;
+  require(memory.read(Space::x, rom_address, value) && value == rom[0] &&
+              memory.read(Space::y, rom_address, value) && value == rom[0] &&
+              !memory.read(Space::x, hole, value) && !memory.read(Space::x, extra_hole, value) &&
+              memory.read(Space::y, reserved_y, value) && value == 0,
+          "Counting discarded writes never changes ROM, unknown holes or declared zero reads");
+}
+#endif
+
 void reserved_y_read() {
   Memory memory;
   constexpr Word canary = 0x654321;
@@ -297,6 +355,9 @@ int main() try {
   retained_aliases();
   rom_and_reserved();
   reserved_y_read();
+#if defined(BLOFELD_CENSUS)
+  discarded_writes();
+#endif
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

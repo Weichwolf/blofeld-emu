@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "census.hpp"
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -30,9 +31,49 @@ void disabled() {
   Census::recording(true);
   const auto active = Census::session_begin();
   Census::session_end(active, 1);
+  Census::unit_entry();
+  Census::unit_retired(7);
+  Census::unit_exit();
   require(!census.enabled() && !census.capture().valid &&
-              census.sessions(Census::Actor::dsp).count == 0,
+              census.sessions(Census::Actor::dsp).count == 0 && census.units().histogram.count == 0,
           "Disabled diagnostics never read a guest or accumulate sessions");
+}
+
+void native_units() {
+  constexpr std::uint32_t long_unit = 33;
+  constexpr std::uint64_t total = 80;
+  constexpr std::uint64_t middle_weight = 40;
+  Census census(true);
+  {
+    const Census::Scope owner(census, Census::Actor::dsp);
+    Census::recording(true);
+    for (const std::uint32_t count : {0U, 7U, 8U, 32U, long_unit}) {
+      Census::unit_entry();
+      Census::unit_retired(count);
+    }
+    Census::unit_exit();
+    Census::recording(false);
+  }
+  const auto units = census.units();
+  const auto &histogram = units.histogram;
+  require(histogram.count == 5 && histogram.sum == total && histogram.maximum == long_unit &&
+              histogram.bins[0] == 1 && histogram.bins[7] == 1 && histogram.bins[8] == 1 &&
+              histogram.bins[32] == 1 && histogram.bins[long_unit] == 1 &&
+              units.region_retirements ==
+                  std::array<std::uint64_t, 3>{7, middle_weight, long_unit} &&
+              units.boundary_crossings == 0 && units.unattributed == 0,
+          "Actual unit entries include empty units and retain independently weighted size bands");
+  Census bad(true);
+  {
+    const Census::Scope owner(bad, Census::Actor::dsp);
+    Census::recording(true);
+    Census::unit_retired(4);
+    Census::unit_entry();
+    Census::unit_retired(2);
+    Census::recording(false);
+  }
+  require(bad.units().unattributed == 4 && bad.units().boundary_crossings == 1,
+          "Missing entries and recording across a live unit are explicit qualification failures");
 }
 
 void interval_boundaries() {
@@ -166,6 +207,7 @@ int main() {
     disabled();
     owner_window();
     interval_boundaries();
+    native_units();
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

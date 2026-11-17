@@ -7,6 +7,9 @@
 #include "dsp/channels.hpp"
 #include "dsp/program.hpp"
 #include "dsp_bindings.hpp"
+#if defined(BLOFELD_CENSUS)
+#include "census.hpp"
+#endif
 
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
@@ -30,20 +33,20 @@ class Channels {
 public:
   explicit Channels(const std::span<const std::byte> bitcode) {
     using namespace vi::dsp;
-    constexpr std::array names{"blofeld_dsp_shi_read",
-                               "blofeld_dsp_shi_write",
-                               "blofeld_dsp_peer_sample",
-                               "blofeld_dsp_peer_data",
-                               "blofeld_dsp_peer_write",
-                               "blofeld_dsp_peer_ready",
-                               "blofeld_dsp_peer_interrupt"};
-    const std::array addresses{reinterpret_cast<const void *>(&blofeld_dsp_shi_read),
-                               reinterpret_cast<const void *>(&blofeld_dsp_shi_write),
-                               reinterpret_cast<const void *>(&blofeld_dsp_peer_sample),
-                               reinterpret_cast<const void *>(&blofeld_dsp_peer_data),
-                               reinterpret_cast<const void *>(&blofeld_dsp_peer_write),
-                               reinterpret_cast<const void *>(&blofeld_dsp_peer_ready),
-                               reinterpret_cast<const void *>(&blofeld_dsp_peer_interrupt)};
+    const std::array addresses{
+        reinterpret_cast<const void *>(&blofeld_dsp_shi_read),
+        reinterpret_cast<const void *>(&blofeld_dsp_shi_write),
+        reinterpret_cast<const void *>(&blofeld_dsp_peer_sample),
+        reinterpret_cast<const void *>(&blofeld_dsp_peer_data),
+        reinterpret_cast<const void *>(&blofeld_dsp_peer_write),
+        reinterpret_cast<const void *>(&blofeld_dsp_peer_ready),
+        reinterpret_cast<const void *>(&blofeld_dsp_peer_interrupt),
+#if defined(BLOFELD_CENSUS)
+        reinterpret_cast<const void *>(&vi::Census::unit_entry),
+        reinterpret_cast<const void *>(&vi::Census::unit_retired),
+        reinterpret_cast<const void *>(&vi::Census::discarded_write),
+#endif
+    };
     const native::detail::Owner<LLVMContextRef, LLVMContextDispose> context(LLVMContextCreate());
     native::detail::Exports exports;
     const native::detail::Owner<LLVMModuleRef, LLVMDisposeModule> module(
@@ -63,8 +66,22 @@ public:
   [[nodiscard]] std::span<const native::Import> entries() const noexcept { return entries_; }
 
 private:
-  std::array<std::string, 7> signatures_;
-  std::array<native::Import, 7> entries_;
+  static constexpr std::array names{
+      "blofeld_dsp_shi_read",
+      "blofeld_dsp_shi_write",
+      "blofeld_dsp_peer_sample",
+      "blofeld_dsp_peer_data",
+      "blofeld_dsp_peer_write",
+      "blofeld_dsp_peer_ready",
+      "blofeld_dsp_peer_interrupt",
+#if defined(BLOFELD_CENSUS)
+      "blofeld_census_unit_entry",
+      "blofeld_census_unit_retired",
+      "blofeld_census_discarded_write",
+#endif
+  };
+  std::array<std::string, names.size()> signatures_;
+  std::array<native::Import, names.size()> entries_;
 };
 }
 

@@ -89,11 +89,31 @@ public:
     bool valid = false;
   };
 
+  struct DiscardedWrite {
+    std::uint64_t count = 0;
+    std::uint32_t first = 0, minimum = 0, maximum = 0, pc = 0, value = 0;
+  };
+
+  struct Store {
+    std::uint32_t address = 0, pc = 0, value = 0;
+  };
+
   struct Sessions {
     std::span<const std::uint64_t> bins;
     std::uint64_t count = 0, sum = 0;
     std::uint32_t maximum = 0;
   };
+
+  struct Units {
+    Sessions histogram;
+    std::array<std::uint64_t, 3> region_retirements{};
+    std::uint64_t boundary_crossings = 0, unattributed = 0;
+  };
+
+  [[nodiscard]] Units units() const noexcept;
+  static void unit_entry() noexcept asm("blofeld_census_unit_entry");
+  static void unit_retired(std::uint32_t count) noexcept asm("blofeld_census_unit_retired");
+  static void unit_exit() noexcept;
 
   Census();
   explicit Census(bool enabled);
@@ -105,6 +125,9 @@ public:
 
   [[nodiscard]] Snapshot capture() const noexcept;
   [[nodiscard]] Sessions sessions(Actor actor) const noexcept;
+  [[nodiscard]] std::span<const DiscardedWrite> discarded_writes() const noexcept;
+  static void discarded_write(unsigned space, bool readonly, Store store) noexcept
+      asm("blofeld_census_discarded_write");
   void interval(std::uint64_t begin, std::uint64_t end);
   void validate_interval(std::uint64_t begin, std::uint64_t end) const;
   [[nodiscard]] const Intervals &intervals(Actor actor) const;

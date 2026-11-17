@@ -98,6 +98,7 @@ dsp56300::RunResult run_observed(Io &io) {
   const bool tracing = Census::tracing();
   const auto begun = tracing ? io.timestamp() : std::nullopt;
   const auto result = io.run();
+  Census::unit_exit();
   Census::session_end(observed_session, result.retired);
   if (tracing) { trace_session(io, begun, result); }
   return result;

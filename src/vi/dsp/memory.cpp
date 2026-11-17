@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dsp/memory.hpp"
+#if defined(BLOFELD_CENSUS)
+#include "census.hpp"
+#endif
 
 #include <algorithm>
 #include <array>
@@ -122,12 +125,22 @@ bool Memory::write(const Write access) noexcept {
     if (cell->known != nullptr) { *cell->known = 1; }
     return true;
   }
+  bool discarded = false;
   switch (access.space) {
     case dsp56300::Space::x:
-    case dsp56300::Space::y: return access.address < boot_first;
-    case dsp56300::Space::program: return access.address >= boot_first;
-    default: return false;
+    case dsp56300::Space::y: discarded = access.address < boot_first; break;
+    case dsp56300::Space::program: discarded = access.address >= boot_first; break;
+    default: break;
   }
+#if defined(BLOFELD_CENSUS)
+  if (discarded) {
+    const auto cell = locate(access.space, access.address);
+    Census::discarded_write(static_cast<unsigned>(access.space),
+                            cell && !cell->writable,
+                            {.address = access.address, .pc = access.pc, .value = access.value});
+  }
+#endif
+  return discarded;
 }
 
 std::span<const dsp56300::MemoryWindow> Memory::windows(const dsp56300::Space space) noexcept {

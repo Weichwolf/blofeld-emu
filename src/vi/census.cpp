@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <memory>
 #include <ostream>
+#include <span>
 #include <stdexcept>
 
 namespace blofeld::vi {
@@ -26,7 +27,8 @@ struct Context {
   void *guest = nullptr;
   Census::GuestScope::Read read = nullptr;
   std::uint64_t epoch = 0;
-  bool recording = false;
+  bool recording = false, unit_open = false;
+  std::uint32_t unit_retired = 0;
 };
 
 thread_local Context current;
@@ -39,14 +41,17 @@ std::uint64_t now() noexcept {
 }
 
 struct alignas(64) Census::Slot {
-  host::diagnostics::ThreadUsageReader::ThreadId thread;
-  std::atomic<bool> registered{false};
   std::atomic<std::uint64_t> sequence{0}, calls{0}, wait_nanoseconds{0}, entered{0};
-  int naming_error = 0;
-  std::array<std::uint64_t, histogram_limit + 1> bins{};
   std::uint64_t sessions = 0, retired = 0;
-  std::uint32_t maximum = 0;
+  std::uint64_t unit_count = 0, unit_sum = 0, unit_crossings = 0, unit_unattributed = 0;
+  host::diagnostics::ThreadUsageReader::ThreadId thread;
+  std::array<std::uint64_t, 3> unit_weights{};
+  std::array<DiscardedWrite, 5> discarded_writes{};
   Intervals intervals{};
+  std::array<std::uint64_t, histogram_limit + 1> bins{}, unit_bins{};
+  int naming_error = 0;
+  std::uint32_t maximum = 0, unit_maximum = 0;
+  std::atomic<bool> registered{false};
 };
 
 struct Census::Impl {
@@ -184,6 +189,7 @@ Census::Scope::Scope(Census &census, const Actor actor) noexcept {
 }
 
 Census::Scope::~Scope() {
+  unit_exit();
   current = {};
 }
 
@@ -255,7 +261,70 @@ Census::Snapshot Census::capture() const noexcept {
   return result;
 }
 
+void Census::discarded_write(const unsigned space,
+                             const bool readonly,
+                             const Store store) noexcept {
+  if (current.census == nullptr || space > 2) { return; }
+  const auto index = space == 0 ? 0U : (2U * space) - (readonly ? 1U : 0U);
+  auto &record = current.census->impl_->slots[current.actor].discarded_writes[index];
+  if (record.count++ == 0) {
+    record.first = record.minimum = record.maximum = store.address;
+    record.pc = store.pc;
+    record.value = store.value;
+  }
+  record.minimum = std::min(record.minimum, store.address);
+  record.maximum = std::max(record.maximum, store.address);
+}
+
+std::span<const Census::DiscardedWrite> Census::discarded_writes() const noexcept {
+  if (!impl_) { return {}; }
+  return impl_->slots[static_cast<unsigned>(Actor::dsp)].discarded_writes;
+}
+
+void Census::unit_entry() noexcept {
+  unit_exit();
+  current.unit_open = current.census != nullptr && current.recording;
+  current.unit_retired = 0;
+}
+
+void Census::unit_retired(const std::uint32_t count) noexcept {
+  if (current.unit_open) {
+    current.unit_retired += count;
+  } else if (current.census != nullptr && current.recording) {
+    current.census->impl_->slots[current.actor].unit_unattributed += count;
+  }
+}
+
+void Census::unit_exit() noexcept {
+  if (!current.unit_open) { return; }
+  auto &slot = current.census->impl_->slots[current.actor];
+  const auto count = current.unit_retired;
+  ++slot.unit_count;
+  slot.unit_sum += count;
+  slot.unit_maximum = std::max(slot.unit_maximum, count);
+  ++slot.unit_bins[std::min<std::size_t>(count, histogram_limit)];
+  const auto band = count <= 32 ? 1U : 2U;
+  slot.unit_weights[count < 8 ? 0U : band] += count;
+  current.unit_open = false;
+}
+
+Census::Units Census::units() const noexcept {
+  if (!impl_) { return {}; }
+  const auto &slot = impl_->slots[static_cast<unsigned>(Actor::dsp)];
+  return {.histogram = {.bins = slot.unit_bins,
+                        .count = slot.unit_count,
+                        .sum = slot.unit_sum,
+                        .maximum = slot.unit_maximum},
+          .region_retirements = slot.unit_weights,
+          .boundary_crossings = slot.unit_crossings,
+          .unattributed = slot.unit_unattributed};
+}
+
 void Census::recording(const bool active) noexcept {
+  if (current.unit_open && current.recording != active) {
+    ++current.census->impl_->slots[current.actor].unit_crossings;
+    unit_exit();
+  }
   current.recording = active;
 }
 
