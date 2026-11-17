@@ -34,7 +34,7 @@ public:
 
   [[nodiscard]] std::uint64_t ticks() const noexcept { return ticks_; }
 
-  [[nodiscard]] bool fractional() const noexcept { return phase_ != 0 || residue_ != 0; }
+  [[nodiscard]] bool fractional() const noexcept { return fraction_ != 0; }
 
   [[nodiscard]] std::optional<std::uint64_t> deadline(std::uint64_t ticks) const noexcept;
 
@@ -42,6 +42,7 @@ private:
   dsp56300::Word control_ = 0;
   Ratio ratio_;
   std::uint64_t cycles_ = 0, ticks_ = 0;
-  std::uint32_t phase_ = 0, residue_ = 0;
+  std::uint64_t fraction_ = 0;
+  std::uint64_t top_ = 1, bottom_ = 1, advance_limit_ = 0, deadline_limit_ = 0;
 };
 }

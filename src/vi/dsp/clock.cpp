@@ -41,7 +41,7 @@ std::optional<std::uint64_t> scaled(const std::uint64_t value,
 
 void Clock::reset(const bool pinit) noexcept {
   cycles_ = ticks_ = 0;
-  phase_ = residue_ = 0;
+  fraction_ = 0;
   // The reset fields have a valid nominal ratio for either PINIT level.
   static_cast<void>(write(reset_control | (pinit ? enable : 0)));
 }
@@ -65,7 +65,13 @@ bool Clock::write(const dsp56300::Word value) noexcept {
     ratio.numerator /= common;
     ratio.denominator /= common;
   }
-  if (ratio != ratio_) { residue_ = 0; }
+  const auto bottom = reference_bottom * ratio.numerator;
+  if (ratio != ratio_) { fraction_ = (fraction_ / bottom_) * bottom; }
+  top_ = reference_top * ratio.denominator;
+  bottom_ = bottom;
+  constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+  advance_limit_ = (maximum - ((bottom_ * phase_unit) - 1)) / (top_ * phase_unit);
+  deadline_limit_ = maximum / (bottom_ * phase_unit);
   control_ = next;
   ratio_ = ratio;
   return true;
@@ -73,42 +79,52 @@ bool Clock::write(const dsp56300::Word value) noexcept {
 
 bool Clock::advance(const std::uint64_t cycles) noexcept {
   if (cycles < cycles_) { return false; }
-  const auto top = reference_top * ratio_.denominator;
-  const auto bottom = reference_bottom * ratio_.numerator;
   const auto elapsed = cycles - cycles_;
-  const auto whole = scaled(elapsed, top, bottom);
-  if (!whole) { return false; }
-  const auto partial = ((((elapsed % bottom) * top) % bottom) * phase_unit) + residue_;
-  const auto phase = std::uint64_t{phase_} + (partial / bottom);
-  const auto carry = phase >> phase_bits;
+  auto scaled_fraction = fraction_;
+  std::uint64_t whole = 0;
+  if (elapsed <= advance_limit_) {
+    scaled_fraction += elapsed * (top_ * phase_unit);
+  } else {
+    const auto integral = scaled(elapsed, top_, bottom_);
+    if (!integral) { return false; }
+    whole = *integral;
+    scaled_fraction += (((elapsed % bottom_) * top_) % bottom_) * phase_unit;
+  }
+  // This numerator retains both the Q32 fraction and its exact rational residue.
+  const auto divisor = bottom_ * phase_unit;
+  const auto carry = scaled_fraction / divisor;
   const auto maximum = std::numeric_limits<std::uint64_t>::max();
-  if (*whole > maximum - ticks_ || carry > maximum - ticks_ - *whole) { return false; }
-  ticks_ += *whole + carry;
-  phase_ = static_cast<std::uint32_t>(phase % phase_unit);
-  residue_ = static_cast<std::uint32_t>(partial % bottom);
+  if (whole > maximum - ticks_ || carry > maximum - ticks_ - whole) { return false; }
+  ticks_ += whole + carry;
+  fraction_ = scaled_fraction % divisor;
   cycles_ = cycles;
   return true;
 }
 
 std::optional<std::uint64_t> Clock::deadline(const std::uint64_t ticks) const noexcept {
   if (ticks <= ticks_) { return cycles_; }
-  const auto top = reference_top * ratio_.denominator;
-  const auto bottom = reference_bottom * ratio_.numerator;
   const auto elapsed = ticks - ticks_;
-  const auto whole = scaled(elapsed, bottom, top);
-  if (!whole) { return {}; }
-  const auto partial = (((elapsed % top) * bottom) % top) * phase_unit;
-  const auto phase = (std::uint64_t{phase_} * bottom) + residue_;
-  const auto numerator = static_cast<std::int64_t>(partial) - static_cast<std::int64_t>(phase);
-  const auto divisor = static_cast<std::int64_t>(top * phase_unit);
-  const auto adjustment = (numerator / divisor) + (numerator % divisor > 0 ? 1 : 0);
-  if (adjustment > 0 &&
-      static_cast<std::uint64_t>(adjustment) > std::numeric_limits<std::uint64_t>::max() - *whole) {
-    return {};
+  std::uint64_t delta = 0;
+  if (elapsed <= deadline_limit_) {
+    const auto numerator = (elapsed * (bottom_ * phase_unit)) - fraction_;
+    const auto divisor = top_ * phase_unit;
+    delta = (numerator / divisor) + std::uint64_t{numerator % divisor != 0};
+  } else {
+    const auto whole = scaled(elapsed, bottom_, top_);
+    if (!whole) { return {}; }
+    const auto partial = (((elapsed % top_) * bottom_) % top_) * phase_unit;
+    const auto numerator =
+        static_cast<std::int64_t>(partial) - static_cast<std::int64_t>(fraction_);
+    const auto divisor = static_cast<std::int64_t>(top_ * phase_unit);
+    const auto adjustment = (numerator / divisor) + (numerator % divisor > 0 ? 1 : 0);
+    if (adjustment > 0 && static_cast<std::uint64_t>(adjustment) >
+                              std::numeric_limits<std::uint64_t>::max() - *whole) {
+      return {};
+    }
+    if (adjustment < 0 && static_cast<std::uint64_t>(-adjustment) > *whole) { return {}; }
+    delta = adjustment < 0 ? *whole - static_cast<std::uint64_t>(-adjustment)
+                           : *whole + static_cast<std::uint64_t>(adjustment);
   }
-  if (adjustment < 0 && static_cast<std::uint64_t>(-adjustment) > *whole) { return {}; }
-  const auto delta = adjustment < 0 ? *whole - static_cast<std::uint64_t>(-adjustment)
-                                    : *whole + static_cast<std::uint64_t>(adjustment);
   if (delta > std::numeric_limits<std::uint64_t>::max() - cycles_) { return {}; }
   return cycles_ + delta;
 }

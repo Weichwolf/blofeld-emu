@@ -119,6 +119,28 @@ void instrument_time() {
   }
 }
 
+void large_advances_and_deadlines() {
+  Clock clock;
+  constexpr dsp56300::Word full_output = 0x02a012;
+  constexpr std::uint64_t top = 3125;
+  constexpr std::uint64_t bottom = 10584;
+  constexpr std::uint64_t maximum = std::numeric_limits<std::uint64_t>::max();
+  constexpr unsigned phase_bits = 32;
+  constexpr auto short_deadline = (maximum >> phase_bits) / bottom;
+  require(clock.write(full_output), "Select the native firmware run clock");
+  for (const auto target : {short_deadline - 1, short_deadline, short_deadline + 1}) {
+    const auto first_cycle = ((target * bottom) + top - 1) / top;
+    require(clock.deadline(target) == first_cycle,
+            "The rounding of a representable deadline is independent of its magnitude");
+  }
+  constexpr auto tail = (maximum % bottom) * top;
+  constexpr auto expected = ((maximum / bottom) * top) + (tail / bottom);
+  require(clock.advance(maximum) && clock.ticks() == expected &&
+              clock.fractional() == (tail % bottom != 0) && clock.deadline(expected) == maximum &&
+              !clock.deadline(expected + 1),
+          "The last base cycle remains representable without overflowing reference time");
+}
+
 void instrument_clock_changes() {
   Clock clock;
   constexpr dsp56300::Word full_output = 0x02a012;
@@ -143,6 +165,7 @@ int main() try {
   nominal_factors();
   all_dividers();
   instrument_time();
+  large_advances_and_deadlines();
   instrument_clock_changes();
 } catch (const std::exception &error) {
 
