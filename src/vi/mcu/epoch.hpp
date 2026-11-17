@@ -165,6 +165,8 @@ public:
 
   [[nodiscard]] bool atomic() const noexcept { return phase_ == Phase::atomic; }
 
+  [[nodiscard]] bool settled(const std::uint64_t ticks) const noexcept { return ticks < attained_; }
+
   [[nodiscard]] Error error() const noexcept { return error_; }
 
   [[nodiscard]] std::optional<std::uint64_t> conflict() const noexcept { return conflict_; }
@@ -172,8 +174,6 @@ public:
   [[nodiscard]] const Census &census() const noexcept { return census_; }
 
 private:
-  [[nodiscard]] bool settled(const std::uint64_t ticks) const noexcept { return ticks < attained_; }
-
   bool fail(const Error error) noexcept {
     if (error_ == Error::none) { error_ = error; }
     return false;

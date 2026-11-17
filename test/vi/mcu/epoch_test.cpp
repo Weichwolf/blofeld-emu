@@ -343,6 +343,8 @@ void bounded_read_set() {
   std::array<Epoch::Read, 8> other{};
   Epoch unsettled(other, 2);
   unsigned calls = 0;
+  require(unsettled.attained(1) && !unsettled.settled(1),
+          "The attained frontier is exclusive at the destructive read boundary");
   const bool consumed = unsettled.consume(1, [&] {
     ++calls;
     return true;
@@ -350,6 +352,15 @@ void bounded_read_set() {
   require(!consumed && calls == 0 && !unsettled.cancelled() &&
               unsettled.error() == Epoch::Error::unsettled,
           "A destructive read cannot touch its device before attained DSP time");
+  Epoch advanced(other, 2);
+  require(advanced.attained(1) && !advanced.settled(1),
+          "The receiver waits until the validated epoch advances");
+  const bool allowed = advanced.attained(2) && advanced.settled(1) && advanced.consume(1, [&] {
+    ++calls;
+    return true;
+  });
+  require(allowed && calls == 1,
+          "Destructive read admission uses the same validated frontier as consumption");
 }
 }
 

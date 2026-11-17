@@ -178,7 +178,7 @@ bool Speculation::settle(const std::uint64_t time) noexcept {
   while (!coupling_.stopped()) {
     const auto observed = coupling_.observation();
     if (!poll()) { return epoch_.refuse(); }
-    if (coupling_.known() > time) { return true; }
+    if (epoch_.settled(time)) { return true; }
     coupling_.wait(observed);
   }
   return false;
