@@ -147,6 +147,18 @@ template <class Input> void region_modes(const std::filesystem::path &root) {
   }
 }
 
+void dsp_memory_modes() {
+  const DspInput input;
+  auto options = input.options();
+  const auto checked =
+      aot::semantic_inputs(input.image(), options, DspInput::Core::compiler_identity(), {});
+  options.memory_mode = dsp56300::CompileOptions::MemoryMode::direct;
+  const auto direct =
+      aot::semantic_inputs(input.image(), options, DspInput::Core::compiler_identity(), {});
+  require(checked.data != direct.data,
+          "Exact and direct DSP memory cannot overwrite each other's semantic cache entries");
+}
+
 template <class Input> void lifecycle(const std::filesystem::path &root) {
   using Core = typename Input::Core;
   Input input;
@@ -225,6 +237,7 @@ int main(const int argc, const char *const *const argv) try {
   lifecycle<CpuInput>(root / "cpu12");
   lifecycle<DspInput>(root / "dsp56300");
   region_modes<DspInput>(root / "region-modes");
+  dsp_memory_modes();
   std::cout << "Verified actual cold/warm semantic reuse and deterministic rejection/rebuild for "
                "both cores.\n";
 } catch (const std::exception &error) {

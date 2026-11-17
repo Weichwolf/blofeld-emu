@@ -82,6 +82,9 @@ semantic_inputs(const auto image, const auto options, const std::string_view com
     key.text(binding.symbol);
   });
   key.bytes(options.bindings);
+  if constexpr (requires { options.memory_mode; }) {
+    key.number(static_cast<std::uint64_t>(options.memory_mode));
+  }
   if constexpr (requires { options.topology; }) {
     key.number(static_cast<std::uint64_t>(options.topology));
   }
