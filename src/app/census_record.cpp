@@ -123,5 +123,14 @@ void CensusRecord::report(const vi::Census &census) const {
     out << '}';
   }
   out << "]\n";
+  out << "PreciseOperations: [";
+  const auto operations = census.precise_operations();
+  bool first = true;
+  for (std::size_t i = 0; i < operations.size(); ++i) {
+    if (operations[i] == 0) { continue; }
+    out << (first ? "" : ",") << R"({"kind":)" << i << R"(,"retired":)" << operations[i] << '}';
+    first = false;
+  }
+  out << "]\n";
 }
 }

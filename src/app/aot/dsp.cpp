@@ -45,6 +45,7 @@ public:
         reinterpret_cast<const void *>(&vi::Census::unit_entry),
         reinterpret_cast<const void *>(&vi::Census::unit_retired),
         reinterpret_cast<const void *>(&vi::Census::discarded_write),
+        reinterpret_cast<const void *>(&vi::Census::precise_retired),
 #endif
     };
     const native::detail::Owner<LLVMContextRef, LLVMContextDispose> context(LLVMContextCreate());
@@ -84,6 +85,7 @@ private:
       "blofeld_census_unit_entry",
       "blofeld_census_unit_retired",
       "blofeld_census_discarded_write",
+      "blofeld_census_precise_retired",
 #endif
   };
   std::array<std::string, names.size()> names_, signatures_;

@@ -114,6 +114,9 @@ public:
   static void unit_entry() noexcept asm("blofeld_census_unit_entry");
   static void unit_retired(std::uint32_t count) noexcept asm("blofeld_census_unit_retired");
   static void unit_exit() noexcept;
+  [[nodiscard]] std::span<const std::uint64_t> precise_operations() const noexcept;
+  static void precise_retired(std::uint32_t count, std::uint8_t kind) noexcept
+      asm("blofeld_census_precise_retired");
 
   Census();
   explicit Census(bool enabled);

@@ -47,6 +47,7 @@ struct alignas(64) Census::Slot {
   host::diagnostics::ThreadUsageReader::ThreadId thread;
   std::array<std::uint64_t, 3> unit_weights{};
   std::array<DiscardedWrite, 5> discarded_writes{};
+  std::array<std::uint64_t, 256> precise_operations{};
   Intervals intervals{};
   std::array<std::uint64_t, histogram_limit + 1> bins{}, unit_bins{};
   int naming_error = 0;
@@ -285,6 +286,17 @@ void Census::unit_entry() noexcept {
   unit_exit();
   current.unit_open = current.census != nullptr && current.recording;
   current.unit_retired = 0;
+}
+
+void Census::precise_retired(const std::uint32_t count, const std::uint8_t kind) noexcept {
+  if (current.census != nullptr && current.recording) {
+    current.census->impl_->slots[current.actor].precise_operations[kind] += count;
+  }
+}
+
+std::span<const std::uint64_t> Census::precise_operations() const noexcept {
+  if (!impl_) { return {}; }
+  return impl_->slots[static_cast<unsigned>(Actor::dsp)].precise_operations;
 }
 
 void Census::unit_retired(const std::uint32_t count) noexcept {

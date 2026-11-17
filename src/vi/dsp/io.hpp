@@ -153,7 +153,12 @@ public:
       Census::unit_entry();
       return;
     }
-    if (region) { Census::unit_retired(count); }
+    if (region) {
+      Census::unit_retired(count);
+    } else {
+      constexpr unsigned kind_shift = 48;
+      Census::precise_retired(count, static_cast<std::uint8_t>(site >> kind_shift));
+    }
 #endif
     retirement_[region ? 0 : 1] += count;
 #if defined(BLOFELD_CENSUS)

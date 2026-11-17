@@ -33,10 +33,38 @@ void disabled() {
   Census::session_end(active, 1);
   Census::unit_entry();
   Census::unit_retired(7);
+  Census::precise_retired(7, 0);
   Census::unit_exit();
   require(!census.enabled() && !census.capture().valid &&
-              census.sessions(Census::Actor::dsp).count == 0 && census.units().histogram.count == 0,
+              census.sessions(Census::Actor::dsp).count == 0 &&
+              census.units().histogram.count == 0 && census.precise_operations().empty(),
           "Disabled diagnostics never read a guest or accumulate sessions");
+}
+
+void precise_operations() {
+  constexpr std::uint8_t last_kind = 255;
+  Census census(true);
+  {
+    const Census::Scope owner(census, Census::Actor::mcu);
+    Census::recording(true);
+    Census::precise_retired(11, 0);
+  }
+  {
+    const Census::Scope owner(census, Census::Actor::dsp);
+    Census::precise_retired(11, 0);
+    Census::recording(true);
+    Census::precise_retired(2, 0);
+    Census::precise_retired(3, last_kind);
+    Census::precise_retired(5, last_kind);
+    Census::recording(false);
+    Census::precise_retired(13, last_kind);
+  }
+  Census::precise_retired(13, 0);
+  const auto operations = census.precise_operations();
+  std::uint64_t total = 0;
+  for (const auto count : operations) { total += count; }
+  require(operations[0] == 2 && operations[last_kind] == 8 && total == 10,
+          "Precise operation counts cover the full encoded kind range, only on the recorded DSP");
 }
 
 void native_units() {
@@ -208,6 +236,7 @@ int main() {
     owner_window();
     interval_boundaries();
     native_units();
+    precise_operations();
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
