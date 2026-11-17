@@ -24,7 +24,31 @@ constexpr dsp56300::Word reserved_y_last = 0xffffff;
 constexpr dsp56300::Word reserved_y_boundary = 0x16000;
 }
 
-Memory::Memory(const Rom rom) : rom_(rom) {
+Memory::Memory(const Rom rom, const Storage storage)
+    : rom_(rom), storage_(storage), owned_(storage.physical.empty() ? physical_words : 0) {
+  auto remaining = storage_.physical.empty() ? std::span(owned_) : storage_.physical;
+  if (remaining.size() != physical_words ||
+      (direct() && (storage_.physical.empty() || storage_.mappings.size() != mapping_count))) {
+    throw std::invalid_argument(
+        "DSP storage requires all physical banks and complete mapping sets");
+  }
+  const auto bind = [&remaining](auto &block) {
+    block.words = remaining.first(block.known.size());
+    remaining = remaining.subspan(block.known.size());
+  };
+  bind(program_);
+  bind(x_);
+  bind(y_);
+  bind(high_x_);
+  bind(high_y_);
+  if (direct()) {
+    // Real data RAM starts zeroed; only the loader's low-P code inventory is unknown.
+    x_.known.fill(1);
+    y_.known.fill(1);
+    high_x_.known.fill(1);
+    high_y_.known.fill(1);
+    initialized_x_ = initialized_y_ = true;
+  }
   for (const auto words : {rom.x, rom.y}) {
     if (words.size() > high_first - rom_first ||
         std::ranges::any_of(words, [](const auto word) { return word > dsp56300::word_mask; })) {
@@ -63,6 +87,11 @@ void Memory::configure(const dsp56300::Word omr) noexcept {
   bind(y_windows_, y_, high_y_, rom_.y, y_size);
   if (initialized_x_) { x_windows_[0].known = {}; }
   if (initialized_y_) { y_windows_[0].known = {}; }
+  if (direct()) {
+    for (auto *pages : {&x_windows_, &y_windows_}) {
+      for (auto &page : *pages) { page.known = {}; }
+    }
+  }
   program_windows_[1] = {.address = 0x1000,
                          .words = std::span(high_x_.words).subspan(switched_x_words),
                          .known = std::span(high_x_.known).subspan(switched_x_words),
@@ -112,7 +141,7 @@ bool Memory::read(const dsp56300::Space space,
   }
   const auto cell = locate(space, address);
   if (!cell || (cell->known != nullptr && *cell->known == 0)) { return false; }
-  value = *cell->value;
+  value = *static_cast<const volatile dsp56300::Word *>(cell->value);
   return true;
 }
 
@@ -121,7 +150,7 @@ bool Memory::write(const Write access) noexcept {
     return false;
   }
   if (const auto cell = locate(access.space, access.address); cell && cell->writable) {
-    *cell->value = access.value;
+    *static_cast<volatile dsp56300::Word *>(cell->value) = access.value;
     if (cell->known != nullptr) { *cell->known = 1; }
     return true;
   }
@@ -146,6 +175,23 @@ bool Memory::write(const Write access) noexcept {
 std::span<const dsp56300::MemoryWindow> Memory::windows(const dsp56300::Space space) noexcept {
   return space == dsp56300::Space::program ? std::span<const dsp56300::MemoryWindow>{}
                                            : view(space);
+}
+
+dsp56300::Memory Memory::loan() {
+  if (!direct()) { return dsp56300::Memory::external(); }
+  const auto &mapping = storage_.mappings[mapping_index(mapping_)];
+  const auto bind = [&](const dsp56300::Space space, auto &native) {
+    const auto source = view(space);
+    for (std::size_t index = 0; index < source.size(); ++index) {
+      native[index] = source[index];
+      native[index].words = mapping.views[static_cast<std::size_t>(space)].read.data.subspan(
+          source[index].address, source[index].words.size());
+    }
+    return std::span<const dsp56300::MemoryWindow>(native).first(source.size());
+  };
+  return dsp56300::Memory::complete(
+      {mapping.program, bind(dsp56300::Space::x, native_x_), bind(dsp56300::Space::y, native_y_)},
+      mapping.views);
 }
 
 bool Memory::promote_initialized() noexcept {

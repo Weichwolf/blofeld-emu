@@ -97,7 +97,8 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
                                   const std::span<const dsp56300::VariantLayout> memory,
                                   const std::span<const dsp56300::InterruptRequest> interrupts,
                                   const std::span<const dsp56300::CodeTransition> transitions,
-                                  const std::filesystem::path &cache) {
+                                  const std::filesystem::path &cache,
+                                  const dsp56300::CompileOptions::MemoryMode mode) {
   using dsp56300::CallbackBinding;
   using dsp56300::CallbackRole;
   constexpr std::array callbacks{
@@ -112,11 +113,15 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
 #endif
   };
   constexpr std::array region_modes{dsp56300::Word{0}, dsp56300::Word{1} << 11};
-  const dsp56300::CompileOptions options{.memory = memory,
+  const auto layouts = mode == dsp56300::CompileOptions::MemoryMode::direct
+                           ? std::span<const dsp56300::VariantLayout>{}
+                           : memory;
+  const dsp56300::CompileOptions options{.memory = layouts,
                                          .interrupts = interrupts,
                                          .transitions = transitions,
                                          .callbacks = callbacks,
                                          .bindings = {},
+                                         .memory_mode = mode,
                                          .region_modes = region_modes};
   const auto semantic = detail::prepare_semantic<dsp56300::Core>(image, options, cache);
   std::vector<native::Export> exports;
@@ -158,12 +163,15 @@ vi::dsp::Program prepare_dsp_program(const dsp56300::CodeImage image,
                                      const std::span<const dsp56300::VariantLayout> memory,
                                      const std::span<const dsp56300::InterruptRequest> interrupts,
                                      const std::span<const dsp56300::CodeTransition> transitions,
-                                     const std::filesystem::path &cache) {
-  return {prepare_dsp(image, memory, interrupts, transitions, cache),
+                                     const std::filesystem::path &cache,
+                                     const dsp56300::CompileOptions::MemoryMode mode) {
+  return {prepare_dsp(image, memory, interrupts, transitions, cache, mode),
           image,
           choices,
           transitions,
-          memory};
+          mode == dsp56300::CompileOptions::MemoryMode::direct
+              ? std::span<const dsp56300::VariantLayout>{}
+              : memory};
 }
 
 }

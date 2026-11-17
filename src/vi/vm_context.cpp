@@ -11,6 +11,7 @@
 
 #include "dsp/boot_rom.hpp"
 #include "dsp/execute.hpp"
+#include "dsp/memory.hpp"
 #include "dsp/program.hpp"
 #include "execution.hpp"
 #include "io/coupling.hpp"
@@ -41,11 +42,13 @@ VmContext::VmContext(std::unique_ptr<FlashImage> image,
                      const PcmOutput output,
                      const MidiPort::InputMode input,
                      std::shared_ptr<const dsp::Program> program,
-                     const std::uint64_t speculation_window)
+                     const std::uint64_t speculation_window,
+                     const dsp::Memory::Storage dsp_memory)
     : image_(std::move(image)),
       media_(std::move(media)),
       mcu_program_(std::move(mcu_program)),
       program_(std::move(program)),
+      dsp_memory_(dsp_memory),
       boot_(std::move(boot)),
       output_(output),
       midi_(input) {
@@ -120,7 +123,8 @@ void VmContext::start() {
                                  &midi_,
                                  &preparation_,
                                  program_.get(),
-                                 coupling_.get());
+                                 coupling_.get(),
+                                 dsp_memory_);
     } catch (...) { reports_[1].exception = std::current_exception(); }
     completed_.fetch_add(1, std::memory_order_release);
     completed_.notify_one();

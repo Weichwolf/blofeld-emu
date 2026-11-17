@@ -6,10 +6,12 @@ extern "C" {
 }
 
 #include "memory/address_space.hpp"
+#include "memory/faults.hpp"
 
 #include <array>
 #include <cerrno>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <iostream>
 #include <stdexcept>
@@ -85,6 +87,7 @@ void mappings(const std::size_t page) {
 }
 
 int main() try {
+  const Faults faults([](std::uintptr_t, bool, std::uintptr_t) noexcept { return false; });
   const auto page = sysconf(_SC_PAGESIZE);
   require(page > 1, "Query the actual native host page size");
   mappings(static_cast<std::size_t>(page));

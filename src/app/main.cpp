@@ -3,17 +3,21 @@
 #include "aot/mcu.hpp"
 #include "boot_rom.hpp"
 #include "dsp/boot_rom.hpp"
+#include "dsp/memory.hpp"
 #include "dsp/program.hpp"
+#include "dsp_memory.hpp"
 #include "files/read.hpp"
+#include "io/coupling.hpp"
 #include "io/midi_port.hpp"
 #include "mcu/program.hpp"
+#include "memory/faults.hpp"
 #include "options.hpp"
+#include "process/configuration.hpp"
 #if defined(BLOFELD_NATIVE_MIDI)
 #include "audio/playback.hpp"
 #include "display/publication.hpp"
 #include "files/directory.hpp"
 #include "live.hpp"
-#include "process/configuration.hpp"
 
 #include <filesystem>
 #endif
@@ -27,10 +31,13 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <dsp56300/core.hpp>
 #include <exception>
 #include <iostream>
 #include <memory>
 #include <span>
+#include <stdexcept>
+#include <string>
 #include <utility>
 
 #if defined(BLOFELD_NATIVE_MIDI)
@@ -61,10 +68,23 @@ int main(const int argc, char **argv) try {
   auto media = std::make_unique<blofeld::vi::MediaImage>(blofeld::host::read_file(
       profile.storage, blofeld::vi::MediaImage::max_bytes, offline ? nullptr : &media_revision));
   auto boot = blofeld::app::load_boot_rom(profile.boot_rom, profile.boot_format);
+  const auto memory_setting = blofeld::host::inherited_setting("BLOFELD_DSP_MEMORY");
+  if (!memory_setting.empty() && memory_setting != "direct" && memory_setting != "exact") {
+    throw std::invalid_argument("BLOFELD_DSP_MEMORY must be direct or exact");
+  }
+  const auto mode = memory_setting == "exact" ? dsp56300::CompileOptions::MemoryMode::exact
+                                              : dsp56300::CompileOptions::MemoryMode::direct;
+  const auto memory =
+      mode == dsp56300::CompileOptions::MemoryMode::direct
+          ? std::make_unique<blofeld::app::DspMemory>(blofeld::vi::dsp::BootRom::document(boot))
+          : nullptr;
+  const auto dsp_storage = memory ? memory->storage() : blofeld::vi::dsp::Memory::Storage{};
+  const blofeld::host::memory::Faults faults(dsp56300::Core::host_fault);
   const auto mcu_program =
       std::make_shared<blofeld::vi::mcu::Program>(blofeld::app::aot::load_mcu_program(profile));
-  const auto program = std::make_shared<blofeld::vi::dsp::Program>(
-      blofeld::app::aot::load_dsp_program(profile, blofeld::vi::dsp::BootRom::document(boot)));
+  const auto program =
+      std::make_shared<blofeld::vi::dsp::Program>(blofeld::app::aot::load_dsp_program(
+          profile, blofeld::vi::dsp::BootRom::document(boot), mode));
   if (offline) {
     blofeld::app::OfflineRender render(options);
     blofeld::vi::VmContext vm(std::move(image),
@@ -73,7 +93,9 @@ int main(const int argc, char **argv) try {
                               std::move(media),
                               render.output(),
                               blofeld::vi::MidiPort::InputMode::stream,
-                              program);
+                              program,
+                              blofeld::vi::Coupling::default_window,
+                              dsp_storage);
     return render.run(vm, signals, launched);
   }
 #if defined(BLOFELD_NATIVE_MIDI)
@@ -90,7 +112,9 @@ int main(const int argc, char **argv) try {
                             std::move(media),
                             live.output(),
                             blofeld::vi::MidiPort::InputMode::stream,
-                            program);
+                            program,
+                            blofeld::vi::Coupling::default_window,
+                            dsp_storage);
   const auto result = live.run(vm, signals);
   if (result.save_storage) {
     const auto storage = vm.stopped_storage();

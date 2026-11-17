@@ -365,7 +365,8 @@ vi::dsp::Program prepare(const Object &root,
                          const vi::FirmwareUpdate &firmware,
                          const vi::dsp::BootRom boot,
                          const std::span<const DspSource> sources,
-                         const std::filesystem::path &cache) {
+                         const std::filesystem::path &cache,
+                         const dsp56300::CompileOptions::MemoryMode mode) {
   std::vector<Variant> owned;
   std::vector<dsp56300::VariantLayout> layouts;
   for (const auto &value : array(root, "variants")) {
@@ -417,7 +418,7 @@ vi::dsp::Program prepare(const Object &root,
     }
   }
   return prepare_dsp_program(
-      {.variants = source}, choices, layouts, interrupts, transitions, cache);
+      {.variants = source}, choices, layouts, interrupts, transitions, cache, mode);
 }
 }
 
@@ -425,12 +426,13 @@ vi::dsp::Program prepare_dsp_catalogue(const std::string_view document,
                                        const vi::FirmwareUpdate &firmware,
                                        const vi::dsp::BootRom boot,
                                        const std::span<const DspSource> sources,
-                                       const std::filesystem::path &cache) {
+                                       const std::filesystem::path &cache,
+                                       const dsp56300::CompileOptions::MemoryMode mode) {
   auto parsed = llvm::json::parse(document);
   if (!parsed) { throw std::invalid_argument(llvm::toString(parsed.takeError())); }
   const auto &root = object(*parsed);
   if (number(root, "format") != 1) { invalid("format"); }
   inputs(root, firmware, boot, sources);
-  return prepare(root, firmware, boot, sources, cache);
+  return prepare(root, firmware, boot, sources, cache, mode);
 }
 }
