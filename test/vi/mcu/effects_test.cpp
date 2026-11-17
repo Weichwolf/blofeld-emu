@@ -22,7 +22,6 @@
 #include <chrono>
 #include <cpu12/core.hpp>
 #include <cpu12/memory.hpp>
-#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <format>
