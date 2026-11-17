@@ -246,8 +246,12 @@ bool Coupling::service(const Stamp stamp) {
     ++cursor_;
     consumed_.store(cursor_, std::memory_order_release);
     cut_.store(exclusive, std::memory_order_release);
-    if (!outputs(stamp.ceil())) { return false; }
-    if (reset_.state().held) { break; }
+    if (!outputs(exclusive)) { return false; }
+    if (reset_.state().held) {
+      // Reset leaves native execution without going through receiver().
+      attained(exclusive);
+      break;
+    }
   }
   return !stopped();
 }
