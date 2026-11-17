@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "io/coupling.hpp"
 
+#if defined(BLOFELD_CENSUS)
+#include "census.hpp"
+#endif
+
 #include "io/dsp_reset.hpp"
 #include "io/execution_time.hpp"
 #include "io/midi_port.hpp"
@@ -63,7 +67,12 @@ void Coupling::notify() noexcept {
 
 void Coupling::wait(const std::uint64_t observed) noexcept {
   waiting_.fetch_add(1, std::memory_order_seq_cst);
-  if (!stopped()) { changed_.wait(observed, std::memory_order_acquire); }
+  if (!stopped()) {
+#if defined(BLOFELD_CENSUS)
+    const Census::Wait observed_wait;
+#endif
+    changed_.wait(observed, std::memory_order_acquire);
+  }
   waiting_.fetch_sub(1, std::memory_order_seq_cst);
 }
 

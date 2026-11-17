@@ -144,9 +144,20 @@ public:
 
   [[nodiscard]] std::uint64_t idle_cycles() const noexcept { return idle_; }
 
-  void retired(const std::uint32_t count, const bool region) noexcept {
+  void retired(const std::uint32_t count,
+               const bool region,
+               [[maybe_unused]] const std::uint64_t site) noexcept {
     retirement_[region ? 0 : 1] += count;
+#if defined(BLOFELD_CENSUS)
+    constexpr unsigned batch_shift = 24;
+    constexpr unsigned deferred_shift = 25;
+    if (region && (site & (std::uint64_t{1} << batch_shift)) != 0) { batches_[0] += count; }
+    if (region && (site & (std::uint64_t{1} << deferred_shift)) != 0) { batches_[1] += count; }
+#endif
   }
+#if defined(BLOFELD_CENSUS)
+  [[nodiscard]] std::array<std::uint64_t, 2> batches() const noexcept { return batches_; }
+#endif
 
   [[nodiscard]] std::array<std::uint64_t, 2> retirement() const noexcept { return retirement_; }
 
@@ -883,6 +894,7 @@ private:
   Failure completion_failure_;
   std::array<std::uint64_t, 2> retirement_{};
 #if defined(BLOFELD_CENSUS)
+  std::array<std::uint64_t, 2> batches_{};
   std::uint64_t endings_ = 0;
   bool trace_enabled_ = false;
 #endif

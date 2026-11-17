@@ -31,7 +31,9 @@ void snapshot(std::ostream &out, const vi::Census::Snapshot &sample) {
       << sample.guest.instructions << R"(,"cycles":)" << sample.guest.cycles << R"(,"idle":)"
       << sample.guest.idle << R"(,"epoch":)" << sample.guest.epoch << R"(,"pc":)" << sample.guest.pc
       << R"(,"region_instructions":)" << sample.guest.region_instructions
-      << R"(,"precise_instructions":)" << sample.guest.precise_instructions << R"(},"owners":[)";
+      << R"(,"precise_instructions":)" << sample.guest.precise_instructions
+      << R"(,"batched_instructions":)" << sample.guest.batched_instructions
+      << R"(,"deferred_instructions":)" << sample.guest.deferred_instructions << R"(},"owners":[)";
   for (unsigned i = 0; i < sample.owners.size(); ++i) {
     if (i != 0) { out << ','; }
     usage(out, sample.owners[i]);
