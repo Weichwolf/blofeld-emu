@@ -1,7 +1,7 @@
 {
   "independent_dsp56300": {
     "source": "https://github.com/Weichwolf/dsp56300",
-    "revision": "2e07aa2d51c55d4e0fdb4badd6ef474ef043df15",
+    "revision": "ddfe04c94742e4d20b4c344c56c111a0bf79444c",
     "license": "GPL-3.0-only"
   },
   "dsp56300_assembly_tool": {
