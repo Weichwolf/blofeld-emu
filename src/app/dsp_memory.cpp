@@ -57,8 +57,9 @@ DspMemory::DspMemory(const vi::dsp::BootRom boot)
   std::ranges::copy(boot.main, physical.subspan(ram_words).begin());
   std::ranges::copy(boot.eeprom,
                     physical.subspan(ram_words + ((page_ + tail) / sizeof(Word))).begin());
+  const bool has_eeprom = !boot.eeprom.empty();
   for (std::size_t index = 0; index < mappings_.size(); ++index) {
-    mapping(index);
+    mapping(index, has_eeprom);
     const auto p = mappings_[index].views[0].read.data;
     program_[index] = {{{.address = vi::dsp::BootRom::main_first,
                          .words = p.subspan(vi::dsp::BootRom::main_first, boot.main.size()),
@@ -66,11 +67,11 @@ DspMemory::DspMemory(const vi::dsp::BootRom boot)
                         {.address = vi::dsp::BootRom::eeprom_first,
                          .words = p.subspan(vi::dsp::BootRom::eeprom_first, boot.eeprom.size()),
                          .known = {}}}};
-    mappings_[index].program = program_[index];
+    mappings_[index].program = std::span(program_[index]).first(has_eeprom ? 2U : 1U);
   }
 }
 
-void DspMemory::mapping(const std::size_t index) {
+void DspMemory::mapping(const std::size_t index, const bool has_eeprom) {
   auto &mapping = mappings_[index];
   for (std::size_t bank = 0; bank < mapping.views.size(); ++bank) {
     for (const bool writing : {false, true}) {
@@ -119,10 +120,12 @@ void DspMemory::mapping(const std::size_t index) {
          .offset = ram_words * sizeof(Word),
          .size = page_},
         &backing_);
-  p.map({.address = (vi::dsp::BootRom::eeprom_first * sizeof(Word)) & ~(page_ - 1),
-         .offset = (ram_words * sizeof(Word)) + page_,
-         .size = page_},
-        &backing_);
+  if (has_eeprom) {
+    p.map({.address = (vi::dsp::BootRom::eeprom_first * sizeof(Word)) & ~(page_ - 1),
+           .offset = (ram_words * sizeof(Word)) + page_,
+           .size = page_},
+          &backing_);
+  }
   auto &y = *spaces_[(index * 6) + 4];
   for (const auto address : {reserved_y, std::size_t{dsp56300::word_mask}}) {
     y.map({.address = (address * sizeof(Word)) & ~(page_ - 1), .size = page_});

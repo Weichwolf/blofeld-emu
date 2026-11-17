@@ -20,7 +20,7 @@ public:
   [[nodiscard]] vi::dsp::Memory::Storage storage() const noexcept;
 
 private:
-  void mapping(std::size_t index);
+  void mapping(std::size_t index, bool has_eeprom);
   std::size_t page_;
   host::memory::Backing backing_;
   std::array<std::unique_ptr<host::memory::AddressSpace>, vi::dsp::Memory::mapping_count * 6>

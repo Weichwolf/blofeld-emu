@@ -109,7 +109,7 @@ product default. The only coarser read pages contain these declared contents:
 | Contents | 4 KiB host page (DSP words) | 16 KiB host page (DSP words) |
 |---|---|---|
 | P:`ff0000..ff00bf`, main ROM | `ff0000..ff03ff` | `ff0000..ff0fff` |
-| P:`ffff00..ffff50`, EEPROM ROM | `fffc00..ffffff` | `fff000..ffffff` |
+| P:`ffff00..ffff50`, EEPROM ROM when present | `fffc00..ffffff` | `fff000..ffffff` |
 | Y:`016000`, zero | `016000..0163ff` | `016000..016fff` |
 | Y:`ffffff`, zero | `fffc00..ffffff` | `fff000..ffffff` |
 

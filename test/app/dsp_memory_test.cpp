@@ -8,6 +8,7 @@
 #include <dsp56300/memory.hpp>
 #include <exception>
 #include <iostream>
+#include <span>
 #include <stdexcept>
 
 namespace {
@@ -73,6 +74,13 @@ int main() try {
   }
   require(!memory.read(Space::x, vi::dsp::Memory::bank_words[1], result),
           "Reserved write ranges never become readable RAM");
+  const app::DspMemory main_only(
+      vi::dsp::BootRom::document(std::span(words).first(vi::dsp::BootRom::main_words)));
+  vi::dsp::Memory main_only_memory({}, main_only.storage());
+  for (const auto mode : modes) {
+    main_only_memory.configure(mode);
+    static_cast<void>(main_only_memory.loan());
+  }
   std::cout << "DSP shared physical banks, five OMR loans, ROM and scratch isolation passed\n";
 } catch (const std::exception &error) {
 
