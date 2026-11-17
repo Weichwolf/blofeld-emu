@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <dsp56300/core.hpp>
 #include <filesystem>
 #include <map>
 #include <optional>

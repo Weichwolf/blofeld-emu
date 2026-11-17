@@ -94,22 +94,42 @@ short block. Fully initialized, stably mapped RAM uses direct loads/stores witho
 per-word initialization checks. Removing a check requires a proof covering every
 reachable use and every operation that can invalidate it.
 
-Dynamic addresses, MMIO, conditional initialization and observable faults retain
-their exact semantics unless analysis proves their outcome. Keep unavoidable
-selection and cold failure paths small. OS page protection does not establish
-DSP address-space validity, initialization or device behavior. Range proofs must
-also respect real storage aliases; non-overlap does not establish distinct
-outermost allocations for LLVM noalias guarantees.
+The product lends complete P/X/Y read and write views with host protection.
+Real zero-initialized RAM has shared physical backing across both roles and all
+five OMR layouts. Typed volatile guest accesses preserve ordering across virtual
+aliases; registers and flags remain ordinary SSA. Peripherals retain their
+architectural decode and callbacks. P stores outside ordinary grants retain the
+consumer's real loader/code-inventory effects. Native access faults terminate the
+owner; only fault diagnostics and last completed-return progress are defined.
+The consumer owns signal handlers; the escape stays below C++ execution scopes.
+
+`BLOFELD_DSP_MEMORY=exact` selects the checked per-word reference; `direct` is the
+product default. The only coarser read pages contain these declared contents:
+
+| Contents | 4 KiB host page (DSP words) | 16 KiB host page (DSP words) |
+|---|---|---|
+| P:`ff0000..ff00bf`, main ROM | `ff0000..ff03ff` | `ff0000..ff0fff` |
+| P:`ffff00..ffff50`, EEPROM ROM | `fffc00..ffffff` | `fff000..ffffff` |
+| Y:`016000`, zero | `016000..0163ff` | `016000..016fff` |
+| Y:`ffffff`, zero | `fffc00..ffffff` | `fff000..ffffff` |
+
+Read-view padding is zero; peripheral decode still takes priority on X/Y's last
+page. Reserved writes use separate scratch and never create readable RAM or
+change ROM/constants. Other holes remain inaccessible. The checked reference
+must report no undeclared read in the qualifying workloads. Code inventory and
+load completion stay separate from RAM's initial contents; loading is performed
+by the original firmware, never inferred from a prepared native image.
 
 Generated code follows the host build's Debug/Release policy. Debug supplies
 assertions and diagnostic instrumentation. Release omits optional debug checks,
 sanitizer work and telemetry. The current final pipeline uses O3. Select the
-level per image by measuring whole-instrument throughput with exact PCM. Required instrument semantics
-and fault boundaries are identical. Sanitizers insert runtime checks during
-compilation; apply selected instrumentation to our host/generated code, never
-packaged foreign libraries or runtime-generated platform helpers. Verify IR and
-binding contracts during preparation. Include mode/instrumentation in artifact
-identity and inspect emitted code to qualify the Release path.
+level per image by measuring whole-instrument throughput with exact PCM. Preserve
+instrument behavior, including the specified page granularity for direct faults.
+Apply selected sanitizer checks during compilation of our host and generated
+code, and leave packaged libraries and runtime-generated platform helpers
+uninstrumented. Verify IR and binding contracts during preparation. Include
+mode and instrumentation in artifact identity and inspect emitted code to
+qualify the Release path.
 
 ## Linking, bindings and artifacts
 

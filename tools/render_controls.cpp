@@ -3,11 +3,14 @@
 #include "aot/mcu.hpp"
 #include "boot_rom.hpp"
 #include "dsp/boot_rom.hpp"
+#include "dsp/memory.hpp"
 #include "dsp/program.hpp"
+#include "dsp_memory.hpp"
 #include "files/read.hpp"
 #include "io/coupling.hpp"
 #include "io/midi_port.hpp"
 #include "mcu/program.hpp"
+#include "memory/faults.hpp"
 #include "options.hpp"
 #include "process/configuration.hpp"
 #include "process/signals.hpp"
@@ -21,6 +24,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <dsp56300/core.hpp>
 #include <exception>
 #include <iostream>
 #include <memory>
@@ -88,11 +92,13 @@ int main(int argc, char **argv) try {
   const auto mcu_started = std::chrono::steady_clock::now();
   const auto mcu =
       std::make_shared<blofeld::vi::mcu::Program>(blofeld::app::aot::load_mcu_program(profile));
+  const auto mode = blofeld::app::dsp_memory_mode();
+  const blofeld::host::memory::Faults faults(dsp56300::Core::host_fault);
   const auto dsp_started = std::chrono::steady_clock::now();
   std::cerr << "MCU_AOT_SECONDS="
             << std::chrono::duration<double>(dsp_started - mcu_started).count() << '\n';
-  const auto dsp = std::make_shared<blofeld::vi::dsp::Program>(
-      blofeld::app::aot::load_dsp_program(profile, blofeld::vi::dsp::BootRom::document(boot)));
+  const auto dsp = std::make_shared<blofeld::vi::dsp::Program>(blofeld::app::aot::load_dsp_program(
+      profile, blofeld::vi::dsp::BootRom::document(boot), mode));
   std::cerr << "DSP_AOT_SECONDS="
             << std::chrono::duration<double>(std::chrono::steady_clock::now() - dsp_started).count()
             << '\n';
@@ -103,6 +109,11 @@ int main(int argc, char **argv) try {
         blofeld::host::read_file(profile.device_state, blofeld::vi::FlashImage::file_bytes)));
     auto media = std::make_unique<blofeld::vi::MediaImage>(
         blofeld::host::read_file(profile.storage, blofeld::vi::MediaImage::max_bytes));
+    const auto memory =
+        mode == dsp56300::CompileOptions::MemoryMode::direct
+            ? std::make_unique<blofeld::app::DspMemory>(blofeld::vi::dsp::BootRom::document(boot))
+            : nullptr;
+    const auto storage = memory ? memory->storage() : blofeld::vi::dsp::Memory::Storage{};
     blofeld::app::OfflineRender render(options);
     blofeld::vi::VmContext vm(std::move(image),
                               boot,
@@ -111,7 +122,8 @@ int main(int argc, char **argv) try {
                               render.output(),
                               blofeld::vi::MidiPort::InputMode::stream,
                               dsp,
-                              windows[workload]);
+                              windows[workload],
+                              storage);
 #if defined(BLOFELD_CENSUS)
     const auto boundary = 2 * workload;
     if (bounds[boundary] != 0 || bounds[boundary + 1] != 0) {

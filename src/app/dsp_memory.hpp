@@ -6,10 +6,13 @@
 
 #include <array>
 #include <cstddef>
+#include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
 #include <memory>
 
 namespace blofeld::app {
+[[nodiscard]] dsp56300::CompileOptions::MemoryMode dsp_memory_mode();
+
 // App-owned host mappings; the VM borrows only physical words and typed views.
 class DspMemory {
 public:

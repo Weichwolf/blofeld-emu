@@ -12,12 +12,12 @@
 #include "mcu/program.hpp"
 #include "memory/faults.hpp"
 #include "options.hpp"
-#include "process/configuration.hpp"
 #if defined(BLOFELD_NATIVE_MIDI)
 #include "audio/playback.hpp"
 #include "display/publication.hpp"
 #include "files/directory.hpp"
 #include "live.hpp"
+#include "process/configuration.hpp"
 
 #include <filesystem>
 #endif
@@ -36,8 +36,6 @@
 #include <iostream>
 #include <memory>
 #include <span>
-#include <stdexcept>
-#include <string>
 #include <utility>
 
 #if defined(BLOFELD_NATIVE_MIDI)
@@ -68,12 +66,7 @@ int main(const int argc, char **argv) try {
   auto media = std::make_unique<blofeld::vi::MediaImage>(blofeld::host::read_file(
       profile.storage, blofeld::vi::MediaImage::max_bytes, offline ? nullptr : &media_revision));
   auto boot = blofeld::app::load_boot_rom(profile.boot_rom, profile.boot_format);
-  const auto memory_setting = blofeld::host::inherited_setting("BLOFELD_DSP_MEMORY");
-  if (!memory_setting.empty() && memory_setting != "direct" && memory_setting != "exact") {
-    throw std::invalid_argument("BLOFELD_DSP_MEMORY must be direct or exact");
-  }
-  const auto mode = memory_setting == "exact" ? dsp56300::CompileOptions::MemoryMode::exact
-                                              : dsp56300::CompileOptions::MemoryMode::direct;
+  const auto mode = blofeld::app::dsp_memory_mode();
   const auto memory =
       mode == dsp56300::CompileOptions::MemoryMode::direct
           ? std::make_unique<blofeld::app::DspMemory>(blofeld::vi::dsp::BootRom::document(boot))

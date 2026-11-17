@@ -4,10 +4,12 @@
 #include "dsp/boot_rom.hpp"
 #include "dsp/memory.hpp"
 #include "memory/address_space.hpp"
+#include "process/configuration.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
 #include <memory>
 #include <span>
@@ -34,6 +36,15 @@ std::size_t page_size() {
 std::span<Word> words(const std::span<std::byte> data) {
   return {reinterpret_cast<Word *>(data.data()), data.size() / sizeof(Word)};
 }
+}
+
+dsp56300::CompileOptions::MemoryMode dsp_memory_mode() {
+  const auto setting = host::inherited_setting("BLOFELD_DSP_MEMORY");
+  if (setting.empty() || setting == "direct") {
+    return dsp56300::CompileOptions::MemoryMode::direct;
+  }
+  if (setting == "exact") { return dsp56300::CompileOptions::MemoryMode::exact; }
+  throw std::invalid_argument("BLOFELD_DSP_MEMORY must be direct or exact");
 }
 
 DspMemory::DspMemory(const vi::dsp::BootRom boot)
