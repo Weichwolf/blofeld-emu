@@ -44,8 +44,10 @@ extern "C" std::uint64_t blofeld_dsp_revision(const dsp56300::Io *owner) noexcep
   return static_cast<const Io *>(owner)->program_revision();
 }
 
-extern "C" void
-blofeld_dsp_retired(dsp56300::Io *owner, std::uint32_t count, bool region) noexcept {
+extern "C" void blofeld_dsp_retired(dsp56300::Io *owner,
+                                    std::uint32_t count,
+                                    bool region,
+                                    std::uint64_t /*site*/) noexcept {
   if (owner != nullptr) { static_cast<Io *>(owner)->retired(count, region); }
 }
 }
