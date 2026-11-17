@@ -61,13 +61,13 @@ find_package(LLVM 19.1 CONFIG REQUIRED GLOBAL)
 if(NOT LLVM_VERSION_MAJOR EQUAL 19 OR NOT TARGET LLVM)
   message(FATAL_ERROR "The packaged LLVM 19 shared library and headers are required")
 endif()
-add_library(blofeld_host_aot src/host/aot/abi.cpp src/host/aot/cache.cpp src/host/aot/code.cpp src/host/aot/source_map.cpp
+add_library(blofeld_host_aot src/host/aot/abi.cpp src/host/aot/cache.cpp src/host/aot/code.cpp
   src/host/aot/contracts.cpp src/host/aot/imports.cpp src/host/aot/link_graph.cpp
   src/host/aot/module.cpp src/host/aot/optimize.cpp
   src/host/aot/symbols.cpp src/host/aot/target.cpp)
 target_include_directories(blofeld_host_aot PUBLIC src/host)
 target_include_directories(blofeld_host_aot SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
-target_link_libraries(blofeld_host_aot PUBLIC blofeld_quality PRIVATE LLVM blofeld_host_files)
+target_link_libraries(blofeld_host_aot PUBLIC blofeld_quality llvm_native_sites PRIVATE LLVM blofeld_host_files)
 file(GLOB blofeld_aot_pipeline_inputs CONFIGURE_DEPENDS src/host/aot/*.cpp src/host/aot/*.hpp)
 set(blofeld_aot_pipeline "${LLVM_PACKAGE_VERSION};${CMAKE_CXX_COMPILER_VERSION};${CMAKE_BUILD_TYPE};${BLOFELD_SANITIZER};${CMAKE_CXX_FLAGS};${CMAKE_CXX_FLAGS_RELEASE};${CMAKE_CXX_FLAGS_DEBUG}")
 foreach(input IN LISTS blofeld_aot_pipeline_inputs)

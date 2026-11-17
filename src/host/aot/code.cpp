@@ -3,7 +3,7 @@
 
 #include "aot/link_graph.hpp"
 #include "aot/llvm.hpp"
-#include "aot/source_map.hpp"
+#include "native_sites.hpp"
 
 #include "llvm-c/Core.h"
 #include "llvm-c/Error.h"
@@ -55,7 +55,9 @@ llvm::orc::LLJIT &native(LLVMOrcLLJITRef jit) {
   return *reinterpret_cast<llvm::orc::LLJIT *>(jit);
 }
 
-void platform(LLVMOrcLLJITBuilderRef builder, llvm::ObjectCache *cache, detail::SourceMap &source) {
+void platform(LLVMOrcLLJITBuilderRef builder,
+              llvm::ObjectCache *cache,
+              llvm_native_sites::SourceMap &source) {
   auto &native_builder = *reinterpret_cast<llvm::orc::LLJITBuilder *>(builder);
   native_builder.setNumCompileThreads(0).setSupportConcurrentCompilation(false);
   native_builder.setPrePlatformSetup([cache, &source](llvm::orc::LLJIT &jit) {
@@ -101,7 +103,7 @@ public:
   }
 
   std::unique_ptr<llvm::ObjectCache> objects;
-  detail::SourceMap source;
+  llvm_native_sites::SourceMap source;
   Owner<LLVMOrcLLJITRef, dispose> jit;
   std::map<std::string, const void *, std::less<>> symbols;
   Phase phase = Phase::assembling;
