@@ -7,6 +7,8 @@
 #include <string_view>
 
 namespace blofeld::host {
+struct FileRevision;
+
 class Presence {
 public:
   ~Presence();
@@ -33,10 +35,16 @@ public:
   // Replace one complete directory entry. Transient publication only; this
   // operation makes no durability guarantee across power loss.
   void replace(std::string_view name, std::span<const std::uint8_t> bytes) const;
+  void commit(std::string_view name,
+              std::span<const std::uint8_t> bytes,
+              const FileRevision &expected) const;
   void remove(std::string_view name) const;
   [[nodiscard]] Presence presence(std::string_view name) const;
 
 private:
+  void publish(std::string_view name,
+               std::span<const std::uint8_t> bytes,
+               const FileRevision *expected) const;
   int descriptor_ = -1;
 };
 }

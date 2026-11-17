@@ -11,6 +11,7 @@
 #if defined(BLOFELD_NATIVE_MIDI)
 #include "audio/playback.hpp"
 #include "display/publication.hpp"
+#include "files/directory.hpp"
 #include "live.hpp"
 #include "process/configuration.hpp"
 
@@ -25,11 +26,23 @@
 
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <iostream>
 #include <memory>
 #include <span>
 #include <utility>
+
+#if defined(BLOFELD_NATIVE_MIDI)
+namespace {
+void commit_storage(const std::filesystem::path &path,
+                    const std::span<const std::uint8_t> bytes,
+                    const blofeld::host::FileRevision &revision) {
+  const blofeld::host::Directory directory(std::filesystem::canonical(path.parent_path()));
+  directory.commit(path.filename().native(), bytes, revision);
+}
+}
+#endif
 
 int main(const int argc, char **argv) try {
   const auto launched = std::chrono::steady_clock::now();
@@ -37,16 +50,22 @@ int main(const int argc, char **argv) try {
   const auto options = blofeld::app::options(
       std::span<const char *const>(argv + 1, static_cast<std::size_t>(argc - 1)));
   const auto profile = blofeld::app::load_profile(options.profile);
-  auto image = std::make_unique<blofeld::vi::FlashImage>(blofeld::vi::FlashImage::decode(
-      blofeld::host::read_file(profile.device_state, blofeld::vi::FlashImage::file_bytes)));
-  auto media = std::make_unique<blofeld::vi::MediaImage>(
-      blofeld::host::read_file(profile.storage, blofeld::vi::MediaImage::max_bytes));
+  const bool offline = options.midi && options.wav;
+  blofeld::host::FileRevision device_revision;
+  blofeld::host::FileRevision media_revision;
+  const auto device_state = blofeld::host::read_file(profile.device_state,
+                                                     blofeld::vi::FlashImage::file_bytes,
+                                                     offline ? nullptr : &device_revision);
+  auto image =
+      std::make_unique<blofeld::vi::FlashImage>(blofeld::vi::FlashImage::decode(device_state));
+  auto media = std::make_unique<blofeld::vi::MediaImage>(blofeld::host::read_file(
+      profile.storage, blofeld::vi::MediaImage::max_bytes, offline ? nullptr : &media_revision));
   auto boot = blofeld::app::load_boot_rom(profile.boot_rom, profile.boot_format);
   const auto mcu_program =
       std::make_shared<blofeld::vi::mcu::Program>(blofeld::app::aot::load_mcu_program(profile));
   const auto program = std::make_shared<blofeld::vi::dsp::Program>(
       blofeld::app::aot::load_dsp_program(profile, blofeld::vi::dsp::BootRom::document(boot)));
-  if (options.midi && options.wav) {
+  if (offline) {
     blofeld::app::OfflineRender render(options);
     blofeld::vi::VmContext vm(std::move(image),
                               std::move(boot),
@@ -72,7 +91,17 @@ int main(const int argc, char **argv) try {
                             live.output(),
                             blofeld::vi::MidiPort::InputMode::stream,
                             program);
-  return live.run(vm, signals);
+  const auto result = live.run(vm, signals);
+  if (result.save_storage) {
+    const auto storage = vm.stopped_storage();
+    if (storage.device != device_state) {
+      commit_storage(profile.device_state, storage.device, device_revision);
+    }
+    if (!storage.changed_media.empty()) {
+      commit_storage(profile.storage, storage.changed_media, media_revision);
+    }
+  }
+  return result.status;
 #else
   std::cerr << "Native MIDI input backend is unavailable on this platform.\n";
   return 2;

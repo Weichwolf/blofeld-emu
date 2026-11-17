@@ -489,9 +489,11 @@ program/erase use about 200 us/2 ms, without a silicon-timing claim.
 
 Preserve protection, interrupted-write known zeros and untouched contents; mark
 possibly changed bits/history unknown. Serialize checksums outside ordinary
-transfers and qualify host durability separately. Reset/update coordinates owner
-stop, channel retirement, image publication and fresh code bindings. Physical
-flashing requires an independently established recovery path.
+transfers. After a clean live shutdown, join the execution owners and atomically
+replace each changed image from a synced staged file. Reject changes to the
+backing file since startup. Reset/update coordinates owner stop, channel
+retirement, image publication and fresh code bindings. Physical flashing requires
+an independently established recovery path.
 
 ## Qualification and primary references
 

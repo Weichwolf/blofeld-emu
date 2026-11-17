@@ -33,6 +33,9 @@ public:
   [[nodiscard]] std::optional<bool> program(Location target,
                                             std::span<const std::uint8_t> data) noexcept;
   void interrupt_program(Location target, std::span<const std::uint8_t> data) noexcept;
+
+  [[nodiscard]] bool needs_encoding() const noexcept { return checksum_dirty_; }
+
   // Refresh the checksum only on explicit serialization. Views are borrowed;
   // materializing missing pages may invalidate previous page/encoded views.
   [[nodiscard]] std::span<const std::uint8_t> encoded() noexcept;

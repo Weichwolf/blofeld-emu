@@ -24,7 +24,13 @@ class Live {
 public:
   Live(host::audio::Playback &audio, DisplayPublication &display, const Options &options);
   [[nodiscard]] vi::PcmOutput output() noexcept;
-  int run(vi::VmContext &vm, const host::Signals &signals);
+
+  struct Result {
+    int status;
+    bool save_storage;
+  };
+
+  [[nodiscard]] Result run(vi::VmContext &vm, const host::Signals &signals);
 
 private:
   enum class Phase : std::uint8_t { booting, priming, audio_ready, playing, closed };

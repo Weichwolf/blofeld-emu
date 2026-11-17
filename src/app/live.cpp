@@ -290,7 +290,7 @@ void Live::status(const bool terminal) const {
   if (!terminal) { std::cerr << '\n'; }
 }
 
-int Live::run(vi::VmContext &vm, const host::Signals &signals) {
+Live::Result Live::run(vi::VmContext &vm, const host::Signals &signals) {
   if (vm_ != nullptr) { throw std::logic_error("A live session can only run once"); }
   vm_ = &vm;
   const auto origin = startup(signals);
@@ -298,7 +298,7 @@ int Live::run(vi::VmContext &vm, const host::Signals &signals) {
     vm.request_stop();
     const auto reports = vm.wait();
     publish_display();
-    return report_execution(reports) ? 2 : 1;
+    return {.status = report_execution(reports) ? 2 : 1, .save_storage = false};
   }
   consumer_.begin_at(*origin);
   phase_.store(Phase::priming, std::memory_order_release);
@@ -346,9 +346,9 @@ int Live::run(vi::VmContext &vm, const host::Signals &signals) {
   std::cerr << "Live MIDI bytes admitted=" << received_ << " pre-live=" << ignored_
             << " clock-ready=" << yes_no(clock_ready) << " input-active=" << yes_no(playing)
             << '\n';
-  if (!report_execution(reports)) { return 1; }
+  if (!report_execution(reports)) { return {.status = 1, .save_storage = false}; }
   if (failure) { std::rethrow_exception(failure); }
   audio_.check();
-  return playing ? 0 : 2;
+  return {.status = playing ? 0 : 2, .save_storage = true};
 }
 }

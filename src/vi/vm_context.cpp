@@ -26,6 +26,7 @@
 #include <dsp56300/memory.hpp>
 #include <exception>
 #include <memory>
+#include <span>
 #include <stdexcept>
 #include <stop_token>
 #include <thread>
@@ -137,5 +138,15 @@ std::array<ExecutionReport, 2> VmContext::wait() {
 std::array<ExecutionReport, 2> VmContext::run() {
   start();
   return wait();
+}
+
+VmContext::Storage VmContext::stopped_storage() {
+  if (!started_ || mcu_.joinable() || dsp_.joinable()) {
+    throw std::logic_error("Storage serialization requires joined execution owners");
+  }
+  auto device = image_->encode();
+  const auto changed_media =
+      media_ && media_->needs_encoding() ? media_->encoded() : std::span<const std::uint8_t>{};
+  return {.device = std::move(device), .changed_media = changed_media};
 }
 }

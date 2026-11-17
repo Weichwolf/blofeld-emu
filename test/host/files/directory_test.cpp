@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "files/directory.hpp"
+#include "files/read.hpp"
 
 #include <array>
 #include <cerrno>
@@ -56,6 +57,53 @@ void presence(const blofeld::host::Directory &directory, const std::filesystem::
   } catch (const std::invalid_argument &) { rejected = true; }
   require(rejected, "Presence cannot leave its publication directory");
 }
+
+void persistence(const blofeld::host::Directory &directory, const std::filesystem::path &root) {
+  constexpr std::array<std::uint8_t, 2> original{1, 2};
+  constexpr std::array<std::uint8_t, 2> changed{3, 4};
+  constexpr std::array<std::uint8_t, 2> foreign{5, 6};
+  const auto image = root / "device";
+  directory.replace("device", original);
+  constexpr auto permissions = std::filesystem::perms::owner_read |
+                               std::filesystem::perms::owner_write |
+                               std::filesystem::perms::group_read;
+  std::filesystem::permissions(image, permissions);
+  blofeld::host::FileRevision revision;
+  require(blofeld::host::read_file(image, original.size(), &revision) ==
+              std::vector<std::uint8_t>(original.begin(), original.end()),
+          "Read the original bytes and revision together");
+  directory.commit("device", original, revision);
+  blofeld::host::FileRevision unchanged;
+  static_cast<void>(blofeld::host::read_file(image, original.size(), &unchanged));
+  require(unchanged == revision, "An identical commit keeps the original directory entry");
+
+  const auto staging = ".blofeld-state." + std::to_string(::getpid());
+  directory.replace(staging, foreign);
+  bool rejected = false;
+  try {
+    directory.commit("device", changed, revision);
+  } catch (const std::system_error &) { rejected = true; }
+  require(rejected &&
+              read(root / staging) == std::vector<std::uint8_t>(foreign.begin(), foreign.end()) &&
+              read(image) == std::vector<std::uint8_t>(original.begin(), original.end()),
+          "A staging collision preserves both existing files");
+  directory.remove(staging);
+
+  std::ifstream old(image, std::ios::binary);
+  directory.commit("device", changed, revision);
+  require(old.get() == original.front() &&
+              read(image) == std::vector<std::uint8_t>(changed.begin(), changed.end()) &&
+              std::filesystem::status(image).permissions() == permissions &&
+              !std::filesystem::exists(root / staging),
+          "Commit publishes complete bytes and preserves permissions");
+
+  rejected = false;
+  try {
+    directory.commit("device", foreign, revision);
+  } catch (const std::runtime_error &) { rejected = true; }
+  require(rejected && read(image) == std::vector<std::uint8_t>(changed.begin(), changed.end()),
+          "A stale revision cannot overwrite an image");
+}
 }
 
 int main(const int argc, char **argv) try {
@@ -65,6 +113,7 @@ int main(const int argc, char **argv) try {
   {
     const blofeld::host::Directory directory(root);
     presence(directory, root);
+    persistence(directory, root);
     constexpr std::array<std::uint8_t, 3> first{1, 2, 3};
     directory.replace("frame", first);
     require(read(root / "frame") == std::vector<std::uint8_t>{1, 2, 3}, "Complete initial file");

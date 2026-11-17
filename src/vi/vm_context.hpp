@@ -28,6 +28,7 @@
 #include <dsp56300/memory.hpp>
 #include <memory>
 #include <optional>
+#include <span>
 #include <stop_token>
 #include <thread>
 #include <vector>
@@ -83,6 +84,13 @@ public:
 
   [[nodiscard]] std::array<ExecutionReport, 2> wait();
   [[nodiscard]] std::array<ExecutionReport, 2> run();
+
+  struct Storage {
+    std::vector<std::uint8_t> device;
+    std::span<const std::uint8_t> changed_media;
+  };
+
+  [[nodiscard]] Storage stopped_storage();
 
 private:
   void join_owners();

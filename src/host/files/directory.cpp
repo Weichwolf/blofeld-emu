@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "files/directory.hpp"
 
+#include "files/read.hpp"
+
 #include <algorithm>
 #include <cerrno>
 #include <cstddef>
@@ -12,6 +14,7 @@
 #include <string>
 #include <string_view>
 #if defined(__APPLE__)
+#include <sys/_types/_mode_t.h>
 #include <sys/_types/_ssize_t.h>
 #include <sys/fcntl.h>
 #include <sys/stdio.h>
@@ -56,6 +59,22 @@ void write_all(const int descriptor, std::span<const std::uint8_t> bytes) {
     bytes = bytes.subspan(static_cast<std::size_t>(written));
   }
 }
+
+void sync_file(const int descriptor, const std::string_view filename) {
+  while (::fsync(descriptor) != 0) {
+    if (errno != EINTR) { fail("Sync publication", filename); }
+  }
+}
+
+void check_revision(const int directory, const std::string &name, const FileRevision &expected) {
+  struct stat status{};
+  if (::fstatat(directory, name.c_str(), &status, AT_SYMLINK_NOFOLLOW) != 0) {
+    fail("Inspect publication target", name);
+  }
+  if (!S_ISREG(status.st_mode) || FileRevision::from(status) != expected) {
+    throw std::runtime_error("Publication target changed since startup: " + name);
+  }
+}
 }
 
 Directory::Directory(const std::filesystem::path &path, const Lock lock)
@@ -96,9 +115,28 @@ Presence Directory::presence(const std::string_view name) const {
 
 void Directory::replace(const std::string_view name,
                         const std::span<const std::uint8_t> bytes) const {
+  publish(name, bytes, nullptr);
+}
+
+void Directory::commit(const std::string_view name,
+                       const std::span<const std::uint8_t> bytes,
+                       const FileRevision &expected) const {
+  publish(name, bytes, &expected);
+}
+
+void Directory::publish(const std::string_view name,
+                        const std::span<const std::uint8_t> bytes,
+                        const FileRevision *const expected) const {
   const auto filename = entry_name(name);
-  const auto staging = "." + filename + ".tmp";
-  if (::unlinkat(descriptor_, staging.c_str(), 0) != 0 && errno != ENOENT) {
+  const auto staging = expected != nullptr ? ".blofeld-state." + std::to_string(::getpid())
+                                           : "." + filename + ".tmp";
+  if (expected != nullptr) {
+    check_revision(descriptor_, filename, *expected);
+    if (same_contents(descriptor_, filename, bytes, *expected)) {
+      check_revision(descriptor_, filename, *expected);
+      return;
+    }
+  } else if (::unlinkat(descriptor_, staging.c_str(), 0) != 0 && errno != ENOENT) {
     fail("Remove stale publication", staging);
   }
   const auto output = ::openat(descriptor_,
@@ -108,6 +146,12 @@ void Directory::replace(const std::string_view name,
   if (output < 0) { fail("Create publication", staging); }
   try {
     write_all(output, bytes);
+    if (expected != nullptr) {
+      if (::fchmod(output, static_cast<mode_t>(expected->permissions)) != 0) {
+        fail("Set publication permissions", staging);
+      }
+      sync_file(output, staging);
+    }
   } catch (...) {
     ::close(output);
     ::unlinkat(descriptor_, staging.c_str(), 0);
@@ -118,17 +162,20 @@ void Directory::replace(const std::string_view name,
     ::unlinkat(descriptor_, staging.c_str(), 0);
     throw std::system_error(error, std::generic_category(), "Close publication " + staging);
   }
+  try {
+    if (expected != nullptr) { check_revision(descriptor_, filename, *expected); }
 #if defined(__APPLE__)
-  const auto replaced = ::renameat(descriptor_, staging.c_str(), descriptor_, filename.c_str());
+    const auto replaced = ::renameat(descriptor_, staging.c_str(), descriptor_, filename.c_str());
 #else
-  const auto replaced =
-      ::syscall(SYS_renameat, descriptor_, staging.c_str(), descriptor_, filename.c_str());
+    const auto replaced =
+        ::syscall(SYS_renameat, descriptor_, staging.c_str(), descriptor_, filename.c_str());
 #endif
-  if (replaced != 0) {
-    const auto error = errno;
+    if (replaced != 0) { fail("Replace publication", filename); }
+  } catch (...) {
     ::unlinkat(descriptor_, staging.c_str(), 0);
-    throw std::system_error(error, std::generic_category(), "Replace publication " + filename);
+    throw;
   }
+  if (expected != nullptr) { sync_file(descriptor_, filename); }
 }
 
 void Directory::remove(const std::string_view name) const {
