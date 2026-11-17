@@ -11,6 +11,7 @@
 #include "io/shi.hpp"
 #include "isa.hpp"
 #include "mcu/effects.hpp"
+#include "mcu/epoch.hpp"
 #include "mcu/program.hpp"
 #include "storage/flash_image.hpp"
 #include "support/isa.hpp"
@@ -20,6 +21,7 @@
 #include <array>
 #include <chrono>
 #include <cpu12/memory.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
@@ -255,6 +257,65 @@ void streaming_frontier() {
   }
 }
 
+void publish_driven_peer_pins() {
+  vi::PeerPort peer;
+  vi::Shi shi;
+  vi::DspReset reset;
+  vi::ExecutionTime time;
+  vi::MidiPort midi(vi::MidiPort::InputMode::stream);
+  const std::stop_source stop;
+  vi::Coupling coupling(
+      peer, shi, reset, time, midi, stop.get_token(), vi::Coupling::default_window);
+  std::uint64_t ticks = 0;
+  std::uint64_t serial = 0;
+  const auto check = [&](const vi::PeerPort::Sample drive,
+                         const std::optional<vi::PeerPort::Sample> expected) {
+    peer.dsp_data(drive);
+    ++ticks;
+    std::promise<bool> done;
+    auto ready = done.get_future();
+    std::jthread producer([&](const std::stop_token &token) {
+      const std::stop_callback cancelled(token, [&] { std::stop_source{stop}.request_stop(); });
+      done.set_value(coupling.outputs(ticks));
+    });
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{1};
+    std::optional<vi::Coupling::Input> update;
+    while (!(update = coupling.input(serial)) && std::chrono::steady_clock::now() < deadline &&
+           ready.wait_for(std::chrono::milliseconds{1}) != std::future_status::ready) {}
+    constexpr unsigned direction_shift = 16;
+    constexpr unsigned known_shift = 8;
+    const auto pack = [](const vi::PeerPort::Sample sample) {
+      return (std::uint64_t{sample.mask} << direction_shift) |
+             (std::uint64_t{sample.known} << known_shift) | sample.value;
+    };
+    if (update && expected && update->ticks == ticks && update->serial == serial + 1 &&
+        update->values[static_cast<std::size_t>(vi::mcu::Epoch::Signal::data)] == pack(*expected)) {
+      serial = update->serial;
+      coupling.acknowledge(serial);
+    } else if (update || expected) {
+      throw std::runtime_error("DSP publication must describe only the driven GPIO pins");
+    }
+    if (ready.wait_for(std::chrono::seconds{1}) != std::future_status::ready || !ready.get()) {
+      throw std::runtime_error("Undriven GPIO latch updates cannot wait for the MCU");
+    }
+    producer.join();
+  };
+  constexpr std::uint8_t lower_pins = 0x0f;
+  constexpr vi::PeerPort::Sample released{.known = byte_mask, .value = 0x5a};
+  constexpr vi::PeerPort::Sample drive{.mask = lower_pins, .known = 0x83, .value = 0xa5};
+  constexpr vi::PeerPort::Sample same_pins{.mask = lower_pins, .known = 0xf3, .value = 0x35};
+  constexpr vi::PeerPort::Sample changed_pins{.mask = lower_pins, .known = 0xf7, .value = 0x34};
+  constexpr vi::PeerPort::Sample observed{.mask = lower_pins, .known = 3, .value = 5};
+  constexpr vi::PeerPort::Sample changed_observation{.mask = lower_pins, .known = 7, .value = 4};
+  check(released, {});
+  check({.known = changed_pins.known, .value = changed_pins.value}, {});
+  check({.known = drive.known, .value = drive.value}, {});
+  check(drive, observed);
+  check(same_pins, {});
+  check(changed_pins, changed_observation);
+  check(released, vi::PeerPort::Sample{});
+}
+
 void exercise(const bool dense) {
   const auto code = dsp_code(dense);
   const std::array spans{dsp56300::CodeSpan{.address = 0xff0000, .words = code}};
@@ -293,6 +354,7 @@ void exercise(const bool dense) {
 }
 
 int main() try {
+  publish_driven_peer_pins();
   live_input_demand();
   streaming_frontier();
   for (const bool dense : {false, true}) { exercise(dense); }

@@ -177,8 +177,11 @@ mcu::InputHistory::Values Coupling::sample() {
   using Signal = mcu::Epoch::Signal;
   mcu::InputHistory::Values values{};
   const auto view = peer_.view();
-  values[index(Signal::data)] = (std::uint64_t{view.data.mask} << direction_shift) |
-                                (std::uint64_t{view.data.known} << known_shift) | view.data.value;
+  if (const auto driven = std::uint64_t{view.data.mask}; driven != 0) {
+    values[index(Signal::data)] = (driven << direction_shift) |
+                                  ((view.data.known & driven) << known_shift) |
+                                  (view.data.value & driven);
+  }
   values[index(Signal::interrupt)] = std::uint64_t{view.ready};
   values[index(Signal::generation)] = view.generation;
   values[index(Signal::announce)] = view.announced ? view.generation : 0;
