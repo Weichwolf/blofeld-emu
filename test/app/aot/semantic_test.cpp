@@ -147,16 +147,32 @@ template <class Input> void region_modes(const std::filesystem::path &root) {
   }
 }
 
-void dsp_memory_modes() {
+void dsp_memory_modes(const std::filesystem::path &root) {
   const DspInput input;
   auto options = input.options();
-  const auto checked =
-      aot::semantic_inputs(input.image(), options, DspInput::Core::compiler_identity(), {});
+  const auto prepare = [&] {
+    return aot::prepare_semantic<DspInput::Core>(input.image(), options, {}, root);
+  };
+  const auto exact = prepare();
+  const auto exact_files = records(root);
+  require(exact_files.size() == 1, "Exact memory publishes one semantic artifact");
+  const auto &exact_file = exact_files.front();
+  const auto exact_modified = std::filesystem::last_write_time(exact_file);
   options.memory_mode = dsp56300::CompileOptions::MemoryMode::direct;
-  const auto direct =
-      aot::semantic_inputs(input.image(), options, DspInput::Core::compiler_identity(), {});
-  require(checked.data != direct.data,
-          "Exact and direct DSP memory cannot overwrite each other's semantic cache entries");
+  const auto direct = prepare();
+  const auto both_files = records(root);
+  require(exact.identity() != direct.identity() && both_files.size() == 2 &&
+              std::ranges::find(both_files, exact_file) != both_files.end() &&
+              std::filesystem::last_write_time(exact_file) == exact_modified,
+          "Direct memory creates a separate semantic artifact and leaves exact intact");
+  const auto before = builders + passes;
+  options.memory_mode = dsp56300::CompileOptions::MemoryMode::exact;
+  const auto warm = prepare();
+  require(warm.identity() == exact.identity() &&
+              std::ranges::equal(warm.artifact(), exact.artifact()) &&
+              std::filesystem::last_write_time(exact_file) == exact_modified &&
+              records(root).size() == 2 && before == builders + passes,
+          "Returning to exact reuses the original semantic artifact and retains direct");
 }
 
 template <class Input> void lifecycle(const std::filesystem::path &root) {
@@ -237,7 +253,7 @@ int main(const int argc, const char *const *const argv) try {
   lifecycle<CpuInput>(root / "cpu12");
   lifecycle<DspInput>(root / "dsp56300");
   region_modes<DspInput>(root / "region-modes");
-  dsp_memory_modes();
+  dsp_memory_modes(root / "memory-modes");
   std::cout << "Verified actual cold/warm semantic reuse and deterministic rejection/rebuild for "
                "both cores.\n";
 } catch (const std::exception &error) {
