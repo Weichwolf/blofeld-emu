@@ -34,7 +34,7 @@ identity, address and reason. Preserve observable program reads/writes while
 selecting prepared native code. Startup loading and build-time IR/object export
 share one semantic pipeline. No first-use compilation or private-layout copies.
 
-Fuse eligible host IR before LLVM19 O3. Keep registers live, RAM direct and DSP56
+Fuse eligible host IR before final LLVM 19 optimization. Keep registers live, RAM direct and DSP56
 arithmetic/rounding/saturation/flags inline. Validate proved invariants during
 AOT/stopped binding, revalidating relevant revisions. Release omits optional Debug/
 sanitizer work and repeated proved checks; both modes preserve required dynamic

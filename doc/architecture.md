@@ -15,7 +15,7 @@ gains a general mechanism that a similar device could use as well.
 
 ```text
 known MCU/DSP code + variants -> semantic LLVM IR --+
-                                                   +-> joint LLVM 19 O3 -> native instrument
+                                                   +-> joint LLVM 19 optimization -> native instrument
 concrete host bindings --------> compatible IR -----+
 
                          VmContext
@@ -102,8 +102,9 @@ also respect real storage aliases; non-overlap does not establish distinct
 outermost allocations for LLVM noalias guarantees.
 
 Generated code follows the host build's Debug/Release policy. Debug supplies
-assertions and diagnostic instrumentation; Release uses joint LLVM O3 without
-optional debug checks, sanitizer work or telemetry. Required instrument semantics
+assertions and diagnostic instrumentation. Release omits optional debug checks,
+sanitizer work and telemetry. The current final pipeline uses O3. Select the
+level per image by measuring whole-instrument throughput with exact PCM. Required instrument semantics
 and fault boundaries are identical. Sanitizers insert runtime checks during
 compilation; apply selected instrumentation to our host/generated code, never
 packaged foreign libraries or runtime-generated platform helpers. Verify IR and
@@ -112,7 +113,7 @@ identity and inspect emitted code to qualify the Release path.
 
 ## Linking, bindings and artifacts
 
-Core::lower returns owned pre-O3 IR, guest/event exports and component identity
+Core::lower returns owned unoptimized IR, guest/event exports and component identity
 without a runtime Core, borrowed execution RAM or native engine. Compile the real
 MCU/DSP adapter and device definitions into binding IR; no parallel implementation
 or private core-layout copy. Public state/progress/yield methods join that IR when
@@ -123,7 +124,7 @@ ABI attributes, noexcept, parameter guarantees and memory effects. Structural
 shape matters, not module-local type names. Linker attribute merging must not
 hide incompatibility. Omit an argument noalias guarantee only with proof that
 the local allocation has not escaped and cannot alias other arguments. Preserve
-call-site return contracts and every declared guest/event root through O3.
+call-site return contracts and every declared guest/event root through optimization.
 
 Native channel, wake and OS boundaries use explicit owner-scoped imports with
 symbol, LLVM19 ABI and function address. Reject missing, duplicate, null, reserved
