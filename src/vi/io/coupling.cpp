@@ -238,7 +238,6 @@ bool Coupling::service(const Stamp stamp) {
   if (!bound_.load(std::memory_order_acquire)) { return true; }
   refresh();
   const auto exclusive = stamp.ceil();
-  attained(exclusive);
   while (cursor_ < published_.load(std::memory_order_acquire) &&
          storage_[cursor_].ticks < exclusive && !stopped()) {
     const auto entry = storage_[cursor_];
