@@ -10,7 +10,10 @@ ARM64. Decide everything else yourself.
 
 - Execute unchanged firmware and preserve its quirks. No patches, skipped
   routines, invented replies or host synthesis. Unknown accesses fail with
-  address, operation, PC and context.
+  address, operation, PC and context: exactly per word in the checked
+  diagnostic build, and at host-page granularity in the product build, where
+  memory is protected by the host and not by checks in translated code. The
+  pages in which the two differ are listed in `doc/architecture.md`.
 - One native path per core: LLVM 19 AOT through cpu12 and dsp56300. Incomplete
   preparation is a failure, not a fallback. Delete what the target does not need;
   no archives or compatibility layers. Git keeps history.
