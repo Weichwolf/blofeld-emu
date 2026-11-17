@@ -118,8 +118,7 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
                                          .callbacks = callbacks,
                                          .bindings = {},
                                          .region_modes = region_modes};
-  const auto semantic =
-      detail::prepare_semantic<dsp56300::Core>(image, options, detail::dsp_bindings, cache);
+  const auto semantic = detail::prepare_semantic<dsp56300::Core>(image, options, cache);
   std::vector<native::Export> exports;
   for (const auto symbol : semantic.exports()) {
     exports.push_back({.name = symbol.name, .abi = symbol.abi});

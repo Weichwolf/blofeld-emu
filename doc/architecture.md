@@ -150,6 +150,8 @@ source/variant hashes, core/LLVM pipeline, target/features, generation
 mode and binding ABI. Store relocations, never instance pointers or device-state
 snapshots. Reject corrupt/incompatible artifacts and rebuild before playback.
 Keep derived source, IR, objects, catalogues and executables untracked in build/.
+The semantic cache keys the inputs passed to Core::lower. Concrete device IR
+that only joins during native composition belongs to the final cache key.
 Use the build's aot-cache/ for pre-platform optimized bitcode. Validate current
 inputs before lookup; key the composed module, ABI sets, target/features and
 compiler/build pipeline. Verify artifact identity and payload before import.

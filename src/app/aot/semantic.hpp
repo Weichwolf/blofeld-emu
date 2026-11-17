@@ -36,12 +36,10 @@ public:
 };
 
 // Only compiler inputs are encoded, never RAM, device state or host addresses.
-inline Inputs semantic_inputs(const auto image,
-                              const auto options,
-                              const std::string_view compiler,
-                              const std::span<const std::byte> binding_ir) {
+inline Inputs
+semantic_inputs(const auto image, const auto options, const std::string_view compiler) {
   Inputs key;
-  key.text("semantic-inputs-1");
+  key.text("semantic-inputs-2");
   key.text(compiler);
   key.sequence(image.variants, [&](const auto &variant) {
     key.number(variant.id);
@@ -91,17 +89,13 @@ inline Inputs semantic_inputs(const auto image,
     key.number(options.region_modes.has_value());
     if (options.region_modes) { key.bytes(std::as_bytes(*options.region_modes)); }
   }
-  key.bytes(binding_ir);
   return key;
 }
 
 template <class Core>
-auto prepare_semantic(const auto image,
-                      const auto options,
-                      const std::span<const std::byte> binding_ir,
-                      const std::filesystem::path &cache) {
+auto prepare_semantic(const auto image, const auto options, const std::filesystem::path &cache) {
   if (cache.empty()) { return Core::lower(image, options); }
-  const auto inputs = semantic_inputs(image, options, Core::compiler_identity(), binding_ir);
+  const auto inputs = semantic_inputs(image, options, Core::compiler_identity());
   const host::aot::Artifact entry(cache, inputs.data);
   if (auto bytes = entry.load()) {
     try {

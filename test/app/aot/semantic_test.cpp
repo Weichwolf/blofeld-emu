@@ -134,13 +134,13 @@ template <class Input> void region_modes(const std::filesystem::path &root) {
   if constexpr (requires { options.region_modes; }) {
     using Core = typename Input::Core;
     const std::array selected{dsp56300::Word{0}};
-    const auto all = aot::prepare_semantic<Core>(input.image(), options, {}, root);
+    const auto all = aot::prepare_semantic<Core>(input.image(), options, root);
     options.region_modes = selected;
-    const auto hinted = aot::prepare_semantic<Core>(input.image(), options, {}, root);
+    const auto hinted = aot::prepare_semantic<Core>(input.image(), options, root);
     require(all.identity() != hinted.identity() && records(root).size() == 2,
             "Distinct fast-mode hints retain separate semantic cache records");
     const auto before = builders + passes;
-    const auto warm = aot::prepare_semantic<Core>(input.image(), options, {}, root);
+    const auto warm = aot::prepare_semantic<Core>(input.image(), options, root);
     require(warm.identity() == hinted.identity() && before == builders + passes &&
                 records(root).size() == 2,
             "A matching fast-mode hint restores without lowering or overwriting another mode");
@@ -150,9 +150,8 @@ template <class Input> void region_modes(const std::filesystem::path &root) {
 template <class Input> void lifecycle(const std::filesystem::path &root) {
   using Core = typename Input::Core;
   Input input;
-  std::array binding{std::byte{1}, std::byte{2}};
   const auto prepare = [&] {
-    return aot::prepare_semantic<Core>(input.image(), input.options(), binding, root);
+    return aot::prepare_semantic<Core>(input.image(), input.options(), root);
   };
   const auto before = builders + passes;
   const auto cold = prepare();
@@ -203,11 +202,6 @@ template <class Input> void lifecycle(const std::filesystem::path &root) {
   static_cast<void>(prepare());
   require(builders + passes > layout_builders && records(root).size() == 3,
           "A changed valid layout cannot reuse the previous semantic record");
-  binding[0] ^= std::byte{1};
-  const auto binding_builders = builders + passes;
-  static_cast<void>(prepare());
-  require(builders + passes > binding_builders && records(root).size() == 4,
-          "Changed consumer binding IR participates in the preparation key");
 }
 }
 

@@ -102,8 +102,7 @@ cpu12::NativeImage prepare_mcu(const cpu12::CodeImage image,
                                       .callbacks = callbacks,
                                       .bindings = {},
                                       .topology = cpu12::MemoryTopology::dynamic};
-  const auto semantic =
-      detail::prepare_semantic<cpu12::Core>(image, options, McuBinding::bitcode(), cache);
+  const auto semantic = detail::prepare_semantic<cpu12::Core>(image, options, cache);
   namespace native = host::aot;
   const McuBinding binding;
   std::vector<native::Export> exports;

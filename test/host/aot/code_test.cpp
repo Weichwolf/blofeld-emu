@@ -285,8 +285,8 @@ void cached_code() {
     using Step = unsigned (*)(unsigned, unsigned *) noexcept;
     auto state = 5U;
     require(std::bit_cast<Step>(code.address("aot_import_step"))(11, &state) == changed_result &&
-                state == 7 && cache_files(root).size() == 2,
-            "Changed source semantics require a new artifact and execute the changed return");
+                state == 7 && cache_files(root).size() == 2 && cache_files(root, ".o").size() == 2,
+            "Changed source semantics require new optimized IR and native object artifacts");
   }
   cached_imports<0>(root);
   require(cache_files(root).size() == 2, "Distinct immutable source artifacts coexist");
