@@ -10,6 +10,13 @@
 #include "llvm-c/BitWriter.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
+#include "llvm/BinaryFormat/Dwarf.h"
+#include "llvm/IR/DIBuilder.h"
+#include "llvm/IR/DebugInfoMetadata.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Metadata.h"
+#include "llvm/IR/Module.h"
 
 #include <algorithm>
 #include <array>
@@ -96,6 +103,80 @@ struct Inputs {
              {.bitcode = host, .exports = std::span(exports).subspan(2, 1)}}};
   }
 };
+
+void source_intervals() {
+  constexpr std::uint64_t high_variant = (std::uint64_t{1} << 48) + 7;
+  Inputs inputs;
+  inputs.first = change(inputs.first, [](LLVMModuleRef module) {
+    auto &native = *llvm::unwrap(module);
+    llvm::DIBuilder debug(native);
+    auto *file = debug.createFile("core-variant-" + std::to_string(high_variant) + ".S", "");
+    debug.createCompileUnit(llvm::dwarf::DW_LANG_Mips_Assembler,
+                            file,
+                            "authored source-map fixture",
+                            true,
+                            "",
+                            0,
+                            "",
+                            llvm::DICompileUnit::LineTablesOnly);
+    native.addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
+    native.addModuleFlag(llvm::Module::Warning, "Dwarf Version", 4);
+    auto *function = native.getFunction("aot_first");
+    require(function != nullptr, "The authored fixture supplies its actual source function");
+    auto *scope = debug.createFunction(file,
+                                       function->getName(),
+                                       function->getName(),
+                                       file,
+                                       0,
+                                       debug.createSubroutineType(debug.getOrCreateTypeArray({})),
+                                       0,
+                                       llvm::DINode::FlagZero,
+                                       llvm::DISubprogram::SPFlagDefinition);
+    function->setSubprogram(scope);
+    for (auto &block : *function) {
+      for (auto &instruction : block) {
+        instruction.setDebugLoc(llvm::DILocation::get(native.getContext(), 1, 0, scope));
+      }
+    }
+    debug.finalize();
+  });
+  const auto root = std::filesystem::path(BLOFELD_AOT_CACHE_TEST) / "source-map";
+  std::filesystem::remove_all(root);
+  for (const bool cached : {false, true}) {
+    const auto before = calls().optimizations;
+    const Code code(inputs.modules(), {}, root);
+    const auto map = code.fault_map();
+    require(!map.text_ranges.empty() && !map.sites.empty(),
+            "The provider publishes actual linked executable blocks and parsed line intervals");
+    const auto entry = reinterpret_cast<std::uintptr_t>(code.address("aot_first"));
+    const auto covered = [&](const std::uintptr_t address, const std::uint64_t size) {
+      return std::ranges::any_of(map.text_ranges, [&](const auto &range) {
+        return address >= range.address && address - range.address < range.size &&
+               size <= range.size - (address - range.address);
+      });
+    };
+    require(covered(entry, 1), "The exported entry belongs to an actual executable block");
+    for (const auto &site : map.sites) {
+      require(site.variant == high_variant && site.guest_pc == 0 && site.size != 0 &&
+                  covered(site.address, site.size),
+              "Every linked source interval retains PC0 and the complete 64-bit variant");
+    }
+    for (std::size_t index = 1; index < map.text_ranges.size(); ++index) {
+      const auto &previous = map.text_ranges[index - 1];
+      require(previous.address + previous.size <= map.text_ranges[index].address,
+              "Executable ranges are sorted and disjoint after relocation");
+    }
+    for (std::size_t index = 1; index < map.sites.size(); ++index) {
+      const auto &previous = map.sites[index - 1];
+      require(previous.address + previous.size <= map.sites[index].address,
+              "Source intervals are sorted and disjoint after relocation");
+    }
+    if (cached) {
+      require(calls().optimizations == before,
+              "A cached object reconstructs source intervals without reoptimizing");
+    }
+  }
+}
 
 template <unsigned Instance> unsigned native_step(const unsigned value, unsigned *state) noexcept {
   *state = (*state * 3) ^ value;
@@ -799,6 +880,7 @@ int main() try {
   import_process_isolation();
   imported_channel();
   cached_code();
+  source_intervals();
   const ImportInputs unbound;
   rejected_imports(unbound.modules(), {}, "unresolved native symbol");
   std::cout << "Verified joint native fusion, prelink contracts, actual lifecycle and shared "

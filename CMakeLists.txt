@@ -61,7 +61,7 @@ find_package(LLVM 19.1 CONFIG REQUIRED GLOBAL)
 if(NOT LLVM_VERSION_MAJOR EQUAL 19 OR NOT TARGET LLVM)
   message(FATAL_ERROR "The packaged LLVM 19 shared library and headers are required")
 endif()
-add_library(blofeld_host_aot src/host/aot/abi.cpp src/host/aot/cache.cpp src/host/aot/code.cpp
+add_library(blofeld_host_aot src/host/aot/abi.cpp src/host/aot/cache.cpp src/host/aot/code.cpp src/host/aot/source_map.cpp
   src/host/aot/contracts.cpp src/host/aot/imports.cpp src/host/aot/link_graph.cpp
   src/host/aot/module.cpp src/host/aot/optimize.cpp
   src/host/aot/symbols.cpp src/host/aot/target.cpp)
@@ -83,6 +83,9 @@ set_source_files_properties(src/host/aot/cache.cpp PROPERTIES
 add_library(blofeld_vi_display src/vi/display/st7565.cpp src/vi/display/lcd_image.cpp src/vi/display/state.cpp)
 target_include_directories(blofeld_vi_display PUBLIC src/vi)
 target_link_libraries(blofeld_vi_display PUBLIC blofeld_quality Threads::Threads)
+add_library(blofeld_host_memory src/host/memory/address_space.cpp)
+target_include_directories(blofeld_host_memory PUBLIC src/host)
+target_link_libraries(blofeld_host_memory PUBLIC blofeld_quality)
 add_library(blofeld_host_files src/host/files/directory.cpp src/host/files/read.cpp)
 target_include_directories(blofeld_host_files PUBLIC src/host)
 target_link_libraries(blofeld_host_files PUBLIC blofeld_quality)
@@ -271,6 +274,7 @@ if(BUILD_TESTING)
     BLOFELD_AOT_IMPORTS="$<TARGET_OBJECTS:blofeld-aot-imports-ir>")
   add_dependencies(host-aot-code-test blofeld-aot-first-ir blofeld-aot-second-ir blofeld-aot-host-ir
     blofeld-aot-imports-ir)
+  blofeld_unit(host-memory-test test/host/memory/address_space_test.cpp blofeld_host_memory)
   blofeld_unit(host-audio-buffer-test test/host/audio/buffer_test.cpp blofeld_host_audio)
   blofeld_unit(vi-dsp-midi-test test/vi/dsp/midi_test.cpp blofeld_vi_execution)
   blofeld_unit(app-boot-test test/app/boot_rom_test.cpp blofeld_app_boot)

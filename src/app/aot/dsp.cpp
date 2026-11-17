@@ -131,11 +131,26 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
   for (const auto symbol : semantic.exports()) {
     symbols.push_back({.name = symbol.name, .address = code->address(symbol.name)});
   }
+  const auto source = code->fault_map();
+  std::vector<dsp56300::NativeSymbols::TextRange> text;
+  std::vector<dsp56300::NativeSymbols::Site> sites;
+  text.reserve(source.text_ranges.size());
+  sites.reserve(source.sites.size());
+  for (const auto &range : source.text_ranges) {
+    text.push_back({.address = range.address, .size = range.size});
+  }
+  for (const auto &site : source.sites) {
+    sites.push_back({.address = site.address,
+                     .size = site.size,
+                     .variant = site.variant,
+                     .guest_pc = site.guest_pc});
+  }
   return dsp56300::Core::bind(semantic,
                               {.owner = code,
                                .symbols = symbols,
                                .identity = semantic.identity(),
-                               .native_bytes = code->native_bytes()});
+                               .native_bytes = code->native_bytes(),
+                               .fault_map = {.text_ranges = text, .sites = sites}});
 }
 
 vi::dsp::Program prepare_dsp_program(const dsp56300::CodeImage image,
