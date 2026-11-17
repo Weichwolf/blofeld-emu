@@ -52,14 +52,20 @@ public:
     const native::detail::Owner<LLVMModuleRef, LLVMDisposeModule> module(
         native::detail::parse(context.get(), {.bitcode = bitcode, .exports = {}}, exports));
     for (std::size_t index = 0; index < names.size(); ++index) {
-      auto *function = LLVMGetNamedFunction(module.get(), names[index]);
+      auto &name = names_[index];
+      name = names[index];
+      auto *function = LLVMGetNamedFunction(module.get(), name.c_str());
+      if (function == nullptr) {
+        // Literal assembler labels bypass the target's symbol prefix.
+        name.insert(name.begin(), '\1');
+        function = LLVMGetNamedFunction(module.get(), name.c_str());
+      }
       if (function == nullptr || LLVMIsDeclaration(function) == 0) {
         throw std::invalid_argument(std::string("DSP binding lacks native channel: ") +
                                     names[index]);
       }
       signatures_[index] = native::detail::abi(function);
-      entries_[index] = {
-          .name = names[index], .abi = signatures_[index], .address = addresses[index]};
+      entries_[index] = {.name = name, .abi = signatures_[index], .address = addresses[index]};
     }
   }
 
@@ -80,7 +86,7 @@ private:
       "blofeld_census_discarded_write",
 #endif
   };
-  std::array<std::string, names.size()> signatures_;
+  std::array<std::string, names.size()> names_, signatures_;
   std::array<native::Import, names.size()> entries_;
 };
 }
