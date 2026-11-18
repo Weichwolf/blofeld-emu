@@ -30,6 +30,7 @@ void PulsePosition::reset(const std::int64_t origin_bytes) {
   if (initialized_) { ++epoch_; }
   origin_bytes_ = origin_bytes;
   received_ns_ = 0;
+  consumed_frames_ = 0;
   initialized_ = true;
   failed_ = false;
   previous_.reset();
@@ -47,14 +48,13 @@ void PulsePosition::fail(const char *reason, const Snapshot snapshot) {
 std::optional<RenderPosition> PulsePosition::observe(const Snapshot snapshot) {
   if (!initialized_ || failed_) { fail("epoch is unavailable", snapshot); }
   if (snapshot.sent_ns == 0 || snapshot.received_ns < snapshot.sent_ns ||
-      snapshot.sent_ns < received_ns_ ||
-      snapshot.received_ns - snapshot.sent_ns > maximum_query_ns_) {
-    fail("native query is backwards, overlapping or overdue", snapshot);
+      snapshot.sent_ns < received_ns_) {
+    fail("native query is backwards or overlapping", snapshot);
   }
   received_ns_ = snapshot.received_ns;
   if (snapshot.corrupt) { fail("corrupt native PCM index", snapshot); }
   if (!snapshot.playing) {
-    if (previous_) { fail("native consumption stopped", snapshot); }
+    if (consumed_frames_ != 0) { fail("native consumption stopped", snapshot); }
     return {};
   }
   if (snapshot.read_bytes < origin_bytes_ || snapshot.read_bytes % frame_bytes != 0) {
@@ -63,17 +63,13 @@ std::optional<RenderPosition> PulsePosition::observe(const Snapshot snapshot) {
   const auto consumed =
       static_cast<std::uint64_t>((snapshot.read_bytes - origin_bytes_) / frame_bytes);
   if (consumed > snapshot.submitted_frames) { fail("native PCM exceeds submitted data", snapshot); }
-  if (consumed == 0) {
-    if (previous_) { fail("native PCM index moved backwards", snapshot); }
-    return {};
-  }
+  if (consumed < consumed_frames_) { fail("native PCM index moved backwards", snapshot); }
+  consumed_frames_ = consumed;
+  const auto duration = snapshot.received_ns - snapshot.sent_ns;
+  if (consumed == 0 || duration > maximum_query_ns_) { return {}; }
   const auto first = consumed - 1;
-  if (previous_ && first < previous_->first_frame) {
-    fail("native PCM index moved backwards", snapshot);
-  }
   // Repeated queries of one native index do not create another audio interval.
   if (previous_ && first == previous_->first_frame) { return {}; }
-  const auto duration = snapshot.received_ns - snapshot.sent_ns;
   const auto midpoint = snapshot.sent_ns + (duration / 2);
   if (previous_ && midpoint <= previous_->host_ns) { fail("host time did not advance", snapshot); }
   const RenderPosition position{.epoch = epoch_,

@@ -444,8 +444,9 @@ Linux uses a dedicated PulseAudio owner, actual server format/buffer grants,
 priming before uncork and cork/flush on reset. Backpressure stays outside native
 callbacks. Explicit asynchronous timing requests supply raw consumption indices
 within measured send/receipt bounds; reject corrupt/backwards/unsubmitted indices,
-stopped consumption and excessive uncertainty. No interpolated server clock is
-substituted for an actual observation.
+and stopped consumption. Drop overdue timing queries while audio playback
+continues. Only bounded observations can advance MIDI admission. No interpolated
+server clock is substituted for an actual observation.
 
 Publish coherent bounded-read correlation snapshots: source frame range/index,
 native epoch, monotonic time and uncertainty. Retain enough accepted original frame

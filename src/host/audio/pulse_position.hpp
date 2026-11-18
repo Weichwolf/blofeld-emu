@@ -25,7 +25,7 @@ private:
   [[noreturn]] void fail(const char *reason, Snapshot snapshot);
   const std::uint64_t maximum_query_ns_;
   std::int64_t origin_bytes_ = 0;
-  std::uint64_t epoch_ = 0, received_ns_ = 0;
+  std::uint64_t epoch_ = 0, received_ns_ = 0, consumed_frames_ = 0;
   bool initialized_ = false, failed_ = false;
   std::optional<RenderPosition> previous_;
 };

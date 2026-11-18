@@ -374,8 +374,10 @@ struct Playback::Impl {
         }
         timing_request.reset();
         timing_done = false;
-      } else if (now < query_sent_ns || now - query_sent_ns > query_bound_ns) {
-        throw std::runtime_error("Native audio position query exceeded the minimum audio period");
+      } else if (now < query_sent_ns) {
+        throw std::runtime_error("Native audio query clock moved backwards");
+      } else if (now - query_sent_ns > query_bound_ns) {
+        cancel_timing();
       }
     }
     if (timing_request || !started.load(std::memory_order_acquire) || now < next_query_ns) {

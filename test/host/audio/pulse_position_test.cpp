@@ -107,9 +107,7 @@ void invalid_observations() {
   invalid.sent_ns = 0;
   auto backwards = snapshot();
   backwards.received_ns = backwards.sent_ns - 1;
-  auto overdue = snapshot();
-  overdue.received_ns = overdue.sent_ns + query_bound + 1;
-  for (const auto candidate : {invalid, backwards, overdue}) {
+  for (const auto candidate : {invalid, backwards}) {
     PulsePosition clock(query_bound);
     clock.reset(0);
     rejects(clock, candidate, "query");
@@ -136,6 +134,43 @@ void invalid_observations() {
     candidate.read_bytes = overlap ? (9 * 8) : (7 * 8);
     rejects(clock, candidate, overlap ? "query" : "backwards");
   }
+}
+
+void overdue_observations() {
+  auto overdue = snapshot();
+  overdue.received_ns = overdue.sent_ns + query_bound + 1;
+  auto prompt = overdue;
+  prompt.sent_ns = overdue.received_ns + 1;
+  prompt.received_ns = prompt.sent_ns + 4;
+
+  PulsePosition clock(query_bound);
+  clock.reset(0);
+  require(!clock.observe(overdue), "An overdue reply cannot establish the native timeline");
+  require(clock.observe(prompt) == RenderPosition{.epoch = 0,
+                                                  .first_frame = 7,
+                                                  .host_ns = prompt.sent_ns + 2,
+                                                  .frames = 1,
+                                                  .uncertainty_ns = 2},
+          "A fresh reply can establish the same timeline at a verified consumed frame");
+
+  overdue.sent_ns = prompt.received_ns + 1;
+  overdue.received_ns = overdue.sent_ns + query_bound + 1;
+  overdue.read_bytes += 8;
+  require(!clock.observe(overdue), "An overdue reply cannot advance an established timeline");
+  prompt.sent_ns = overdue.received_ns + 1;
+  prompt.received_ns = prompt.sent_ns + 4;
+  prompt.read_bytes = overdue.read_bytes;
+  const auto next = clock.observe(prompt);
+  require(next && next->epoch == 0 && next->first_frame == 8 && next->uncertainty_ns == 2,
+          "Consumption after a missed timing reply is observed only with a fresh bound");
+
+  overdue.sent_ns = prompt.received_ns + 1;
+  overdue.received_ns = overdue.sent_ns + query_bound + 1;
+  overdue.read_bytes += 8;
+  require(!clock.observe(overdue), "A late raw frame index still guards subsequent index order");
+  prompt.sent_ns = overdue.received_ns + 1;
+  prompt.received_ns = prompt.sent_ns + 4;
+  rejects(clock, prompt, "PCM index moved backwards");
 }
 
 void limits() {
@@ -170,6 +205,7 @@ int main() try {
   bounded_observations();
   priming_and_recovery();
   invalid_observations();
+  overdue_observations();
   limits();
 } catch (const std::exception &error) {
 
