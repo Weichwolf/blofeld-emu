@@ -34,7 +34,8 @@ void Shi::publish() noexcept {
   if (count_ != 0) { value |= receive_not_empty; }
   if (count_ >= capacity) { value |= receive_full; }
   if (selected_ && (control_ & enabled) != 0) { value |= busy; }
-  status_.store(value, std::memory_order_release);
+  // Host-only upper bits keep receive mode and status in one coherent publication.
+  status_.store(value | ((clock_ & 3U) << word_bits), std::memory_order_release);
 }
 
 void Shi::prime_transmit() noexcept {
@@ -62,7 +63,7 @@ void Shi::reset() noexcept {
 
 bool Shi::read(const std::uint32_t address, std::uint32_t &value) noexcept {
   if (address == status_address) {
-    value = status_.load(std::memory_order_acquire);
+    value = status_.load(std::memory_order_acquire) & word_mask;
     if ((value & overrun) != 0) { observed_overrun_ = true; }
     if ((value & underrun) != 0) { observed_underrun_ = true; }
     return true;
@@ -140,21 +141,18 @@ std::optional<Shi::Mode> Shi::select(const bool active) noexcept {
   return mode();
 }
 
-std::optional<Shi::Mode> Shi::configuration(const bool selected) noexcept {
-  const std::lock_guard lock(mutex_);
-  return mode(selected);
+std::optional<Shi::Mode> Shi::configuration(const bool selected) const noexcept {
+  const auto snapshot = status_.load(std::memory_order_acquire);
+  if (!selected || (snapshot & enabled) == 0) { return {}; }
+  const auto clock = snapshot >> word_bits;
+  // SPI samples the leading edge for CPHA=0, trailing for CPHA=1.
+  const bool phase = (clock & 1) != 0;
+  const bool polarity = (clock & 2) != 0;
+  return Mode{.bits = width(snapshot), .falling = phase != polarity, .continuous = phase};
 }
 
 std::optional<Shi::Mode> Shi::mode() const noexcept {
-  return mode(selected_);
-}
-
-std::optional<Shi::Mode> Shi::mode(const bool selected) const noexcept {
-  if (!selected || (control_ & enabled) == 0) { return {}; }
-  // SPI samples the leading edge for CPHA=0, trailing for CPHA=1.
-  const bool phase = (clock_ & 1) != 0;
-  const bool polarity = (clock_ & 2) != 0;
-  return Mode{.bits = width(control_), .falling = phase != polarity, .continuous = phase};
+  return configuration(selected_);
 }
 
 std::optional<Shi::Mode> Shi::wait_mode(const std::stop_token &stop) {

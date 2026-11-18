@@ -97,6 +97,47 @@ void peripheral_reset() {
           "Reset preserves external selection but never preserves stale receive data");
 }
 
+void receive_modes() {
+  blofeld::vi::Shi shi;
+
+  struct Size {
+    std::uint32_t control;
+    unsigned bits;
+  };
+
+  struct Clock {
+    std::uint32_t value;
+    bool falling, continuous;
+  };
+
+  constexpr std::array sizes{Size{.control = 1, .bits = 8},
+                             Size{.control = 5, .bits = 16},
+                             Size{.control = 9, .bits = 24}};
+  constexpr std::array clocks{Clock{.value = 0, .falling = false, .continuous = false},
+                              Clock{.value = 1, .falling = true, .continuous = true},
+                              Clock{.value = 2, .falling = true, .continuous = false},
+                              Clock{.value = 3, .falling = false, .continuous = true}};
+  for (const auto size : sizes) {
+    for (const auto clock : clocks) {
+      require(shi.write({.address = control, .value = size.control}) &&
+                  shi.write({.address = clock_register, .value = clock.value}),
+              "Program each documented word width and clock phase/polarity");
+      const auto mode = shi.configuration(true);
+      require(mode && mode->bits == size.bits && mode->falling == clock.falling &&
+                  mode->continuous == clock.continuous && !shi.configuration(false),
+              "Published receive configuration preserves width, edge and selection semantics");
+      constexpr std::uint32_t guest_word_mask = 0xffffff;
+      require((status(shi) & ~guest_word_mask) == 0,
+              "Private publication bits never appear in the guest status register");
+    }
+  }
+  require(shi.write({.address = control, .value = 0}) && !shi.configuration(true),
+          "Disabling SPI revokes its published receive mode");
+  shi.reset();
+  require(!shi.configuration(true) && status(shi) == reset_status,
+          "Reset preserves no stale receive mode or private guest-visible bits");
+}
+
 void transmit_pipeline() {
   blofeld::vi::Shi shi;
   constexpr std::uint32_t first = 0xa591e7;
@@ -268,6 +309,7 @@ void concurrent_transmit() {
 }
 
 int main() try {
+  receive_modes();
   fifo();
   error_clear();
   peripheral_reset();
