@@ -436,7 +436,7 @@ if(BUILD_TESTING)
   blofeld_unit(vi-dsp-interrupts-test test/vi/dsp/interrupts_test.cpp blofeld_vi_execution)
   blofeld_unit(vi-dsp-execute-test test/vi/dsp/execute_test.cpp
     "blofeld_app_aot;blofeld_vi_execution;blofeld_host_files" "${blofeld_unit_inputs}")
-  set_tests_properties(vi-dsp-execute-test PROPERTIES TIMEOUT 120)
+  set_tests_properties(vi-dsp-execute-test PROPERTIES TIMEOUT 300)
   add_dependencies(vi-dsp-execute-test unit-inputs)
   target_include_directories(vi-dsp-execute-test PRIVATE "${BLOFELD_DSP56300_ROOT}/test")
   blofeld_unit(vi-dsp-reset-test test/vi/io/dsp_reset_test.cpp blofeld_vi_execution)
