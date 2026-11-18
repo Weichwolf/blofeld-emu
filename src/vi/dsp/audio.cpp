@@ -181,19 +181,16 @@ bool Audio::clock() {
 
 bool Audio::submit(const bool partial) {
   if (used_ == 0 || (!partial && used_ != frames_.size())) { return true; }
-  if (output_.write != nullptr && !output_.write(output_.owner,
-                                                 {.frames = std::span(frames_).first(used_),
-                                                  .ticks = std::span(ticks_).first(used_),
-                                                  .epoch = epoch_,
-                                                  .first_frame = next_frame_ - used_,
-                                                  .reference_hz = reference_hz,
-                                                  .frame_ticks = frame_ticks_,
-                                                  .underruns = underruns_},
-                                                 stop_)) {
-    return fail("PCM consumer rejected an output block");
-  }
+  const PcmOutput::Block block{.frames = std::span(frames_).first(used_),
+                               .ticks = std::span(ticks_).first(used_),
+                               .epoch = epoch_,
+                               .first_frame = next_frame_ - used_,
+                               .reference_hz = reference_hz,
+                               .frame_ticks = frame_ticks_,
+                               .underruns = underruns_};
   used_ = 0;
   underruns_ = 0;
-  return true;
+  return output_.write == nullptr || output_.write(output_.owner, block, stop_) ||
+         fail("PCM consumer rejected an output block");
 }
 }

@@ -175,6 +175,9 @@ void fractional_clock_and_underrun() {
   require(audio.clock() && audio.clock() && !audio.submit(true) && audio.error() != nullptr &&
               consumer.frames.size() == 2,
           "A rejected output cannot become accepted or counted PCM");
+  consumer.accepted = true;
+  require(audio.submit(true) && consumer.frames.size() == 2,
+          "The final flush cannot offer a rejected block again");
 }
 
 void delayed_submission_and_clock_changes() {

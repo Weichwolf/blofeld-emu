@@ -346,7 +346,10 @@ Live::Result Live::run(vi::VmContext &vm, const host::Signals &signals) {
   std::cerr << "Live MIDI bytes admitted=" << received_ << " pre-live=" << ignored_
             << " clock-ready=" << yes_no(clock_ready) << " input-active=" << yes_no(playing)
             << '\n';
-  if (!report_execution(reports)) { return {.status = 1, .save_storage = false}; }
+  if (!report_execution(reports)) {
+    audio_.check();
+    return {.status = 1, .save_storage = false};
+  }
   if (failure) { std::rethrow_exception(failure); }
   audio_.check();
   return {.status = playing ? 0 : 2, .save_storage = true};
