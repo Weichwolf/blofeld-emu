@@ -2,6 +2,9 @@
 // POSIX signal/wait extensions precede glibc's duplicate stdlib macros.
 extern "C" {
 #include <signal.h>
+#if defined(__APPLE__)
+#include <sys/signal.h>
+#endif
 #include <sys/wait.h>
 }
 
