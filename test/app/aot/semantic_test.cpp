@@ -151,7 +151,7 @@ void dsp_memory_modes(const std::filesystem::path &root) {
   const DspInput input;
   auto options = input.options();
   const auto prepare = [&] {
-    return aot::prepare_semantic<DspInput::Core>(input.image(), options, {}, root);
+    return aot::prepare_semantic<DspInput::Core>(input.image(), options, root);
   };
   const auto exact = prepare();
   const auto exact_files = records(root);
