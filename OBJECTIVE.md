@@ -45,13 +45,17 @@ Keep manufacturer inputs/generated artifacts local with source/size/hash identit
 
 ## Performance and qualification
 
-- Sustain **>=4x offline in every situation on the i5 reference hosts** (Linux
-  x86-64, i5-1135G7 and i5-10400): sixteen active parts, up to twenty-five actual
-  voices, distinct programs, original effects and authentic SL samples together.
-  The fully loaded DSP is the governing case. **>=10x** is the direction on
-  faster hosts such as Apple-silicon macOS ARM64, not an acceptance condition.
-  Include heavier combinations and record resource limits,
-  allocation/release/stealing. At 44.1 kHz, 4x = 176400 and 10x = 441000 stereo frames/s.
+- **Highest priority is uninterrupted live playback in the worst case** on Apple
+  A18 Pro, Intel Core i5-1135G7 and i5-10400. Run the normal instrument with
+  dense MIDI on all sixteen active Multi parts while the original allocator
+  sustains the full twenty-five voices, with distinct sounds, effects and
+  authentic SL samples. Record voice allocation, release and stealing.
+- Qualify each host with the same reproducible combined workload. Record the
+  actual audio backend, sample rate, buffer sizes, run duration and callback
+  deadlines. Deliver every buffer on time with continuous, correctly ordered
+  original PCM, including during MIDI bursts and first use of sounds. Require
+  zero underruns, missed deadlines, lost frames and repeated frames.
+  Offline rendering measures headroom and verifies PCM.
 - Count valid original frames once against monotonic host processing time. Report
   compilation, boot/readiness, warm-up, active rendering, pacing and conversion
   separately. No lost, repeated or retimed frames; core/silent-startup results do

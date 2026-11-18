@@ -8,8 +8,9 @@ Execute unchanged original firmware through our independent
 [OBJECTIVE.md](OBJECTIVE.md) defines complete acceptance,
 [doc/architecture.md](doc/architecture.md) the current target, and
 [ACCEPTANCE.tsv](ACCEPTANCE.tsv) the separate platform results.
-Target >=10x sustained original offline output, >=4x intermediate; physical
-keyboard-to-analog latency 2-5 ms, maximum 10 ms. Microbenchmarks do not qualify.
+The primary target is uninterrupted live playback on A18 Pro, i5-1135G7 and
+i5-10400 with all 16 Multi parts, 25 voices and dense MIDI together.
+Physical keyboard-to-analog latency targets 2-5 ms, maximum 10 ms.
 
 Complete known firmware AOT and joint host-code optimization before playback.
 Prefer startup loading; build-time translation uses the same pipeline.

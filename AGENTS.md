@@ -1,10 +1,10 @@
 # blofeld-emu
 
-Goal: OBJECTIVE.md. Target design: doc/architecture.md. Build the complete
-Blofeld Desktop SL instrument from unchanged original 1.25 firmware at >=4x
-offline in every situation on the i5 reference hosts (>=10x as direction on
-faster hosts) and 2-5 ms live latency (max 10 ms) on Linux x86-64 and macOS
-ARM64. Decide everything else yourself.
+Goal: OBJECTIVE.md. Target design: doc/architecture.md. Highest priority is uninterrupted
+live playback of unchanged original 1.25 firmware on A18 Pro, i5-1135G7 and
+i5-10400 under simultaneous 16-part Multi, 25-voice and dense MIDI load.
+Physical key-to-analog latency targets 2-5 ms (maximum 10 ms).
+Decide everything else yourself.
 
 ## Fixed limits
 
@@ -26,9 +26,9 @@ ARM64. Decide everything else yourself.
 
 ## How work is judged
 
-- By whole-instrument throughput with bit-identical original PCM on the reference
-  workloads, measured by the developers; startup and preparation are reported
-  separately. Component numbers are supporting evidence, not results.
+- By on-time live buffers and exact original PCM under the combined worst-case
+  load on each reference host. Offline throughput diagnoses headroom. Report
+  startup and preparation separately.
   ACCEPTANCE.tsv records qualification.
 - Less code is better. Report the src/ and test/ line delta with each published
   increment; see the reduction plan in Weichwolf/blofeld-src#31.
