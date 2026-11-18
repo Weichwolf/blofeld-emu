@@ -16,8 +16,12 @@ extern "C" {
 #include <bits/types/sigset_t.h>
 #include <sys/ucontext.h>
 #else
+#if defined(__aarch64__)
+#include <mach/arm/thread_status.h>
+#endif
+#include <sys/_types/_sigset_t.h>
+#include <sys/_types/_ucontext.h>
 #include <sys/signal.h>
-#include <ucontext.h>
 #endif
 #include <unistd.h>
 
@@ -64,8 +68,7 @@ void Faults::handle(const int signal, siginfo_t *info, void *context) noexcept {
   const auto pc = static_cast<std::uintptr_t>(state->uc_mcontext.gregs[REG_RIP]);
   const bool writing = (state->uc_mcontext.gregs[REG_ERR] & 2) != 0;
 #elif defined(__APPLE__) && defined(__aarch64__)
-  const auto pc =
-      static_cast<std::uintptr_t>(__darwin_arm_thread_state64_get_pc(state->uc_mcontext->__ss));
+  const auto pc = static_cast<std::uintptr_t>(arm_thread_state64_get_pc(state->uc_mcontext->__ss));
   const bool writing = (state->uc_mcontext->__es.__esr & (1U << 6)) != 0;
 #elif defined(__APPLE__) && defined(__x86_64__)
   const auto pc = static_cast<std::uintptr_t>(state->uc_mcontext->__ss.__rip);

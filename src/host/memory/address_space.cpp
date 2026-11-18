@@ -5,12 +5,18 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
-#include <fcntl.h>
 #include <span>
 #include <stdexcept>
 #include <string>
-#include <sys/mman.h>
+#if defined(__APPLE__)
+#include <sys/_types/_off_t.h>
+#include <sys/_types/_s_ifmt.h>
+#include <sys/fcntl.h>
+#else
+#include <fcntl.h>
 #include <sys/stat.h>
+#endif
+#include <sys/mman.h>
 #include <system_error>
 #include <unistd.h>
 #include <utility>
