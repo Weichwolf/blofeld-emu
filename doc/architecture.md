@@ -104,7 +104,11 @@ owner; only fault diagnostics and last completed-return progress are defined.
 The consumer owns signal handlers; the escape stays below C++ execution scopes.
 
 `BLOFELD_DSP_MEMORY=exact` selects the checked per-word reference; `direct` is the
-product default. The only coarser read pages contain these declared contents:
+product default. The direct views map ordinary P, X and Y RAM at their OMR
+addresses, including shared storage for P aliases. Checked execution can still
+track startup initialization per word within those RAM ranges. The desktop
+profile lends no separate X/Y data ROM. Outside ordinary RAM, these declared
+contents grant page-rounded reads:
 
 | Contents | 4 KiB host page (DSP words) | 16 KiB host page (DSP words) |
 |---|---|---|
@@ -113,12 +117,25 @@ product default. The only coarser read pages contain these declared contents:
 | Y:`016000`, zero | `016000..0163ff` | `016000..016fff` |
 | Y:`ffffff`, zero | `fffc00..ffffff` | `fff000..ffffff` |
 
-Read-view padding is zero; peripheral decode still takes priority on X/Y's last
-page. Reserved writes use separate scratch and never create readable RAM or
-change ROM/constants. Other holes remain inaccessible. The checked reference
-must report no undeclared read in the qualifying workloads. Code inventory and
-load completion stay separate from RAM's initial contents; loading is performed
-by the original firmware, never inferred from a prepared native image.
+In Checked mode the named Y words return zero through the device memory
+contract. Adjacent undeclared words fault. Direct mode additionally permits
+reads of ordinary zero padding in these Y pages. For example, Y:`016001` and
+Y:`ffff7f` read zero from the rounded views on both listed host page sizes.
+Those values describe the host mappings. Only Y:`016000` and Y:`ffffff` are
+established guest zero reads.
+
+X has no corresponding last-page read mapping. X:`ffff7f` therefore remains an
+unmapped ordinary read. From `ffff80` onward, the X/Y peripheral decoder takes
+priority over the view in both modes. The last X and Y write pages remain
+protected. Valid registers keep their device behavior through the decoder.
+The named Y:`ffffff` zero is resolved by the device memory contract;
+padding grants no new register behavior. Discarded X/Y writes below
+`ff0000` and discarded P writes at or above `ff0000` use separate scratch.
+Their backing leaves the read views and real device state intact.
+
+The checked reference must report no undeclared read in the qualifying
+workloads. Code inventory and load completion stay separate from RAM's initial
+contents. The original firmware performs loading.
 
 Generated code follows the host build's Debug/Release policy. Debug supplies
 assertions and diagnostic instrumentation. Release omits optional debug checks,

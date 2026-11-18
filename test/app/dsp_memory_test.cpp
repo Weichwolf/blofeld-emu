@@ -24,7 +24,10 @@ int main() try {
   constexpr Word value = 0x123456;
   constexpr Word low_address = 17;
   constexpr Word reserved_y = 0x16000;
+  constexpr Word reserved_y_neighbor = reserved_y + 1;
+  constexpr Word last_ordinary_word = 0xffff7f;
   constexpr Word discarded_y = 0x1ffff;
+  constexpr Word last_y = dsp56300::word_mask;
   constexpr Word p_y_first = 0x3000;
   constexpr Word high_first = 0xc000;
   std::array<Word, vi::dsp::BootRom::document_words> words{};
@@ -57,8 +60,15 @@ int main() try {
             "Native stores and DMA/consumer reads share the same physical RAM");
     y[reserved_y] = value;
     y[discarded_y] = value;
-    require(py[reserved_y] == 0 && py[dsp56300::word_mask] == 0,
-            "Reserved constant reads are isolated from discarded stores, including mixed pages");
+    require(memory.read(Space::y, reserved_y, result) && result == 0 &&
+                memory.read(Space::y, last_y, result) && result == 0 &&
+                !memory.read(Space::y, reserved_y_neighbor, result) &&
+                !memory.read(Space::y, last_ordinary_word, result) &&
+                !memory.read(Space::x, last_ordinary_word, result),
+            "Checked memory recognizes only the two established zero words");
+    require(py[reserved_y] == 0 && py[last_y] == 0 && py[reserved_y_neighbor] == 0 &&
+                py[last_ordinary_word] == 0,
+            "Direct Y pages read zero padding without granting checked RAM");
     if (index != 0) {
       auto *const write_p = static_cast<volatile Word *>(views[0].write.data.data());
       write_p[0x1000] = value + 10;
