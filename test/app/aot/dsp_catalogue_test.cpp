@@ -319,15 +319,35 @@ void alternate_loaded_guard(Object &input) {
 }
 
 void multiple_targets() {
+  constexpr Word second_entry = 4;
   for (const bool stop_payload : {false, true}) {
     Fixture fixture;
-    if (stop_payload) { fixture.rom[1] = stop; }
+    if (stop_payload) {
+      fixture.rom[1] = stop;
+    } else {
+      fixture.rom.back() = jump | second_entry;
+    }
     auto input = catalogue(fixture);
     alternate_loaded_guard(input);
-    input.getArray("transitions")
-        ->push_back(Object{{.K = "from", .V = 0}, {.K = "to", .V = 2}, {.K = "entry", .V = 0}});
-    execute_owner(fixture, std::move(input), stop_payload ? 12 : 15, 1);
+    auto &loaded = *(*input.getArray("variants"))[1].getAsObject();
+    loaded["entries"] = Array{0, second_entry};
+    loaded["resumes"] = Array{0, second_entry};
+    auto &transitions = *input.getArray("transitions");
+    (*transitions[0].getAsObject())["entry"] = Array{0, second_entry};
+    transitions.push_back(
+        Object{{.K = "from", .V = 0}, {.K = "to", .V = 2}, {.K = "entry", .V = 0}});
+    execute_owner(fixture, std::move(input), stop_payload ? 12 : 16, 1);
   }
+  const Fixture fixture;
+  auto input = catalogue(fixture);
+  auto &handoff = *(*input.getArray("transitions"))[0].getAsObject();
+  handoff["entry"] = Array{};
+  bool rejected = false;
+  try {
+    static_cast<void>(blofeld::app::aot::prepare_dsp_catalogue(
+        document(std::move(input)), fixture.firmware, fixture.boot_rom()));
+  } catch (const std::invalid_argument &) { rejected = true; }
+  require(rejected, "An empty grouped transition cannot silently drop a handoff");
 }
 
 void software_interrupts() {

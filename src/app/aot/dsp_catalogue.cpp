@@ -405,9 +405,16 @@ vi::dsp::Program prepare(const Object &root,
   std::vector<dsp56300::CodeTransition> transitions;
   for (const auto &value : array(root, "transitions")) {
     const auto &transfer = object(value);
-    transitions.push_back({.from = number(transfer, "from"),
-                           .to = number(transfer, "to"),
-                           .entry = word(transfer, "entry")});
+    const auto from = number(transfer, "from");
+    const auto to = number(transfer, "to");
+    if (const auto *entries = transfer.getArray("entry")) {
+      if (entries->empty()) { invalid("empty transition entry list"); }
+      for (const auto &entry : *entries) {
+        transitions.push_back({.from = from, .to = to, .entry = word(number(entry))});
+      }
+    } else {
+      transitions.push_back({.from = from, .to = to, .entry = word(transfer, "entry")});
+    }
   }
   return prepare_dsp_program(
       {.variants = source}, choices, layouts, interrupts, transitions, cache);
