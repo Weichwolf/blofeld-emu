@@ -254,31 +254,50 @@ void stored_write(Stored &stored,
   }
 }
 
+using Guards = std::vector<vi::dsp::ProgramWord>;
+
 struct Variant {
   std::uint64_t id;
   vi::dsp::CodeSource code;
   std::vector<Word> entries, resumes, failed_fetches;
-  std::vector<vi::dsp::ProgramWord> guards;
+  std::vector<Guards> guard_sets;
   std::vector<dsp56300::RegionLayout> memory;
   Word mode_mask = 0, mode = 0;
   bool fixed_memory = false;
 };
 
-void admission(Variant &variant, const Object &input) {
-  variant.entries = addresses(array(input, "entries"));
-  variant.resumes = addresses(array(input, "resumes"));
-  if (input.get("failed_fetches") != nullptr) {
-    variant.failed_fetches = addresses(array(input, "failed_fetches"));
-  }
-  if (input.get("mode_mask") != nullptr) { variant.mode_mask = word(input, "mode_mask"); }
-  if (input.get("mode") != nullptr) { variant.mode = word(input, "mode"); }
-  for (const auto &value : array(input, "guards")) {
+Guards guards(const Array &input) {
+  Guards result;
+  for (const auto &value : input) {
     const auto &guard = object(value);
     const auto *expected = guard.get("value");
     if (expected == nullptr) { invalid("guard value"); }
     const auto word_value = expected->kind() == llvm::json::Value::Null ? std::optional<Word>{}
                                                                         : word(number(*expected));
-    variant.guards.push_back({.address = word(guard, "address"), .value = word_value});
+    result.push_back({.address = word(guard, "address"), .value = word_value});
+  }
+  return result;
+}
+
+void admission(Variant &variant, const Object &input) {
+  variant.entries = addresses(array(input, "entries"));
+  variant.resumes = addresses(array(input, "resumes"));
+  std::ranges::sort(variant.resumes);
+  if (input.get("failed_fetches") != nullptr) {
+    variant.failed_fetches = addresses(array(input, "failed_fetches"));
+  }
+  if (input.get("mode_mask") != nullptr) { variant.mode_mask = word(input, "mode_mask"); }
+  if (input.get("mode") != nullptr) { variant.mode = word(input, "mode"); }
+  if (input.get("guard_sets") != nullptr) {
+    const auto &sets = array(input, "guard_sets");
+    if (input.get("guards") != nullptr || sets.empty()) { invalid("guard_sets"); }
+    for (const auto &set : sets) {
+      const auto *words = set.getAsArray();
+      if (words == nullptr || words->empty()) { invalid("guard set"); }
+      variant.guard_sets.push_back(guards(*words));
+    }
+  } else {
+    variant.guard_sets.push_back(guards(array(input, "guards")));
   }
   variant.fixed_memory = input.get("memory") != nullptr;
   if (variant.fixed_memory) {
@@ -297,11 +316,17 @@ void admission(Variant &variant, const Object &input) {
 }
 
 bool compatible_admission(const Variant &left, const Variant &right) {
-  if (((left.mode ^ right.mode) & left.mode_mask & right.mode_mask) != 0) { return false; }
-  for (const auto &guard : left.guards) {
-    const auto found =
-        std::ranges::find(right.guards, guard.address, &vi::dsp::ProgramWord::address);
-    if (found != right.guards.end() && found->value != guard.value) { return false; }
+  if (((left.mode ^ right.mode) & left.mode_mask & right.mode_mask) != 0 ||
+      !std::ranges::any_of(left.guard_sets, [&right](const auto &first) {
+        return std::ranges::any_of(right.guard_sets, [&first](const auto &second) {
+          return std::ranges::none_of(first, [&second](const auto &guard) {
+            const auto found =
+                std::ranges::find(second, guard.address, &vi::dsp::ProgramWord::address);
+            return found != second.end() && found->value != guard.value;
+          });
+        });
+      })) {
+    return false;
   }
   const auto layout = [](const dsp56300::RegionLayout &region) {
     return std::tuple{region.space,
@@ -320,7 +345,11 @@ void validate_admissions(const std::span<const Variant> variants) {
     const auto &left = variants[first];
     for (const auto &right : variants.subspan(first + 1)) {
       if (!compatible_admission(left, right)) { continue; }
-      const auto shared = std::ranges::find_first_of(left.resumes, right.resumes);
+      const auto shared = std::ranges::find_if(left.resumes, [&right](const auto pc) {
+        const auto found = std::ranges::partition_point(
+            right.resumes, [pc](const auto item) { return item < pc; });
+        return found != right.resumes.end() && *found == pc;
+      });
       if (shared != left.resumes.end()) {
         throw std::invalid_argument(
             std::format("Ambiguous DSP catalogue admission at P:${:06x}: variants {} and {}",
@@ -356,11 +385,13 @@ vi::dsp::Program prepare(const Object &root,
                       .code = variant.code.code(),
                       .entries = variant.entries,
                       .failed_fetches = variant.failed_fetches});
-    choices.push_back({.variant = variant.id,
-                       .resumes = variant.resumes,
-                       .words = variant.guards,
-                       .mode_mask = variant.mode_mask,
-                       .mode = variant.mode});
+    for (const auto &words : variant.guard_sets) {
+      choices.push_back({.variant = variant.id,
+                         .resumes = variant.resumes,
+                         .words = words,
+                         .mode_mask = variant.mode_mask,
+                         .mode = variant.mode});
+    }
     if (variant.fixed_memory) { layouts.push_back({.id = variant.id, .memory = variant.memory}); }
   }
   std::vector<dsp56300::InterruptRequest> interrupts;

@@ -298,6 +298,8 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_BINARY_DIR}/Testing/app-aot-dsp-catalogue-${group}-test" ${group})
     set_tests_properties(app-aot-dsp-catalogue-${group}-test PROPERTIES TIMEOUT 10)
   endforeach()
+  # The software interrupt matrix prepares four independent native images.
+  set_tests_properties(app-aot-dsp-catalogue-software-test PROPERTIES TIMEOUT 30)
   blofeld_unit(host-audio-render-test test/host/audio/render_buffer_test.cpp blofeld_host_audio)
   blofeld_unit(host-audio-timeline-test test/host/audio/render_timeline_test.cpp blofeld_host_audio)
   blofeld_unit(host-audio-position-test test/host/audio/render_position_test.cpp blofeld_host_audio)

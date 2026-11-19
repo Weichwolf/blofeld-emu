@@ -17,12 +17,18 @@
 
 namespace blofeld::vi::dsp {
 namespace {
+bool contains_pc(const std::span<const dsp56300::Word> sorted, const dsp56300::Word pc) {
+  const auto position =
+      std::ranges::partition_point(sorted, [pc](const auto item) { return item < pc; });
+  return position != sorted.end() && *position == pc;
+}
+
 void validate_choice(const dsp56300::CodeVariant &variant, const ProgramChoice &choice) {
+  std::vector<dsp56300::Word> starts(variant.entries.begin(), variant.entries.end());
+  for (const auto &span : variant.code) { starts.push_back(span.address); }
+  std::ranges::sort(starts);
   for (const auto pc : choice.resumes) {
-    if (std::ranges::find(variant.entries, pc) == variant.entries.end() &&
-        !std::ranges::any_of(variant.code, [pc](const auto &span) {
-          return span.address == pc && !span.words.empty();
-        })) {
+    if (!contains_pc(starts, pc)) {
       throw std::invalid_argument("DSP program installation point is not a prepared boundary");
     }
   }
@@ -64,6 +70,7 @@ Program::Program(dsp56300::NativeImage image,
                         {choice.words.begin(), choice.words.end()},
                         choice.mode_mask,
                         choice.mode});
+    std::ranges::sort(choices_.back().resumes);
     covered.insert(choice.variant);
   }
   if (covered.size() != ranges_.size()) {
@@ -72,8 +79,7 @@ Program::Program(dsp56300::NativeImage image,
   std::set<std::tuple<std::uint64_t, dsp56300::Word, std::uint64_t>> targets;
   for (const auto &transfer : transitions) {
     const bool admitted = std::ranges::any_of(choices_, [&transfer](const auto &choice) {
-      return choice.variant == transfer.to &&
-             std::ranges::find(choice.resumes, transfer.entry) != choice.resumes.end();
+      return choice.variant == transfer.to && contains_pc(choice.resumes, transfer.entry);
     });
     if (!ranges_.contains(transfer.from) || transfer.from == transfer.to || !admitted ||
         !targets.emplace(transfer.from, transfer.entry, transfer.to).second) {
@@ -138,8 +144,8 @@ std::uint64_t Program::install(dsp56300::Core &core, dsp56300::Io &io) const {
   std::optional<std::uint64_t> selected;
   for (const auto &choice : choices_) {
     if ((registers.omr & choice.mode_mask) != choice.mode ||
-        std::ranges::find(choice.resumes, registers.pc) == choice.resumes.end() ||
-        !layout(choice.variant, io) || !std::ranges::all_of(choice.words, [&io](const auto &word) {
+        !contains_pc(choice.resumes, registers.pc) || !layout(choice.variant, io) ||
+        !std::ranges::all_of(choice.words, [&io](const auto &word) {
           return io.inspect_program(word.address) == word.value;
         })) {
       continue;

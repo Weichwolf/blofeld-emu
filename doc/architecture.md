@@ -187,6 +187,11 @@ writes, code contexts [P address, word count], entries, stopped resumes and guar
 {address, value}; null denotes an actually unreadable word. Optional mode/mode_mask
 constrains OMR admission.
 
+A variant can declare `guard_sets` in place of `guards` when several exact
+program states admit the same code view. Each alternative is a nonempty array
+of word guards. All guards in one alternative must match. Every alternative
+must be disjoint from the predicates of other variants at a shared resume PC.
+
 Writes construct immutable source views, never guest state or loading effects:
 
 | Kind | Source fields |

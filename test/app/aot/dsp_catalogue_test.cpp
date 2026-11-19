@@ -308,11 +308,22 @@ void execute_owner(const Fixture &fixture,
           "normal owner with its bound code size");
 }
 
+void alternate_loaded_guard(Object &input) {
+  auto &loaded = *(*input.getArray("variants"))[1].getAsObject();
+  Array alternatives;
+  alternatives.emplace_back(
+      Array{Object{{.K = "address", .V = 0}, {.K = "value", .V = literal ^ 1U}}});
+  alternatives.emplace_back(std::move(*loaded.getArray("guards")));
+  loaded.erase("guards");
+  loaded["guard_sets"] = std::move(alternatives);
+}
+
 void multiple_targets() {
   for (const bool stop_payload : {false, true}) {
     Fixture fixture;
     if (stop_payload) { fixture.rom[1] = stop; }
     auto input = catalogue(fixture);
+    alternate_loaded_guard(input);
     input.getArray("transitions")
         ->push_back(Object{{.K = "from", .V = 0}, {.K = "to", .V = 2}, {.K = "entry", .V = 0}});
     execute_owner(fixture, std::move(input), stop_payload ? 12 : 15, 1);
@@ -402,6 +413,14 @@ void invalid_catalogues(const Fixture &fixture) {
           [](auto &input) { variant(input)["code"] = code_range(Array{dsp56300::word_mask, 2}); });
   rejects(fixture, [](auto &input) { variant(input)["code"] = code_range(Array{0, 1}); });
   rejects(fixture, [](auto &input) { variant(input)["failed_fetches"] = false; });
+  rejects(fixture, [](auto &input) {
+    variant(input)["guard_sets"] =
+        Array{Array{Object{{.K = "address", .V = 0}, {.K = "value", .V = literal}}}};
+  });
+  rejects(fixture, [](auto &input) {
+    variant(input).erase("guards");
+    variant(input)["guard_sets"] = Array{};
+  });
   rejects(fixture, [](auto &input) { variant(input)["memory"] = false; });
   rejects(fixture, [](auto &input) {
     variant(input)["memory"] =
@@ -429,6 +448,10 @@ void duplicate_loaded(Object &input) {
 
 void ambiguous_admission(const Fixture &fixture) {
   rejects(fixture, [](auto &input) { duplicate_loaded(input); });
+  rejects(fixture, [](auto &input) {
+    duplicate_loaded(input);
+    alternate_loaded_guard(input);
+  });
   rejects(fixture, [](auto &input) {
     duplicate_loaded(input);
     variant(input, 3)["memory"] = Array{};
