@@ -19,6 +19,7 @@ using blofeld::vi::dsp::Program;
 using blofeld::vi::dsp::ProgramChoice;
 using blofeld::vi::dsp::ProgramWord;
 constexpr Word entry = 16, marker = 32, switched = 0x80;
+constexpr Word unexpected_mode = 0x100, mode_mask = switched | unexpected_mode;
 constexpr std::array words{static_cast<Word>(isa::Opcode::stop)};
 constexpr std::array entries{entry};
 const std::array code{CodeSpan{.address = entry, .words = words}};
@@ -28,11 +29,11 @@ const std::array variants{
 constexpr std::array known{ProgramWord{.address = marker, .value = Word{0}}};
 constexpr std::array unknown{ProgramWord{.address = marker, .value = std::nullopt}};
 const std::array choices{
-    ProgramChoice{.variant = 0, .resumes = entries, .words = known, .mode_mask = switched},
+    ProgramChoice{.variant = 0, .resumes = entries, .words = known, .mode_mask = mode_mask},
     ProgramChoice{.variant = 1,
                   .resumes = entries,
                   .words = unknown,
-                  .mode_mask = switched,
+                  .mode_mask = mode_mask,
                   .mode = switched}};
 
 void require(const bool condition, const char *message) {
@@ -123,6 +124,21 @@ void mapped() {
     require(result.retired == 1 && result.fault == Fault{},
             "Both admitted memory shapes execute their native code");
   }
+  Bus bus;
+  bus.expose = true;
+  bus.window.address = marker + 1;
+  Core core(Memory::external(), &bus);
+  auto seed = core.registers();
+  seed.pc = entry;
+  core.set_registers(seed);
+  bool failed = false;
+  try {
+    static_cast<void>(program.install(core, bus));
+  } catch (const std::runtime_error &error) {
+    failed = std::string_view(error.what()).contains("memory layout differs");
+  }
+  require(failed && core.registers() == seed && core.progress() == Progress{},
+          "An unprepared memory layout is reported before native execution");
 }
 
 void mixed_layouts() {
@@ -185,23 +201,53 @@ void stream_boundaries() {
 void rejected(const NativeImage &image) {
   const Program program(image, {.variants = variants}, choices, {});
   Bus bus;
-  bus.value = 1;
   Core core(Memory::external(), &bus);
+
+  struct Failure {
+    Word pc, mode;
+    std::optional<Word> word;
+    std::string_view expected;
+  };
+
+  constexpr std::array failures{
+      Failure{.pc = entry,
+              .mode = 0,
+              .word = std::nullopt,
+              .expected = "variant 0 program read P:$000020, expected $000000, observed unknown"},
+      Failure{.pc = entry,
+              .mode = switched,
+              .word = Word{1},
+              .expected = "variant 1 program read P:$000020, expected unknown, observed $000001"},
+      Failure{.pc = entry,
+              .mode = unexpected_mode,
+              .word = Word{0},
+              .expected = "OMR=$000100: operating mode differs"},
+      Failure{.pc = entry + 1,
+              .mode = 0,
+              .word = Word{0},
+              .expected = "P:$000011, OMR=$000000: entry is absent"}};
+  for (const auto &failure : failures) {
+    bus.value = failure.word;
+    auto seed = core.registers();
+    seed.pc = failure.pc;
+    seed.omr = failure.mode;
+    core.set_registers(seed);
+    bool failed = false;
+    try {
+      static_cast<void>(program.install(core, bus));
+    } catch (const std::runtime_error &error) {
+      failed = std::string_view(error.what()).contains(failure.expected);
+    }
+    require(failed && core.registers() == seed && core.progress() == Progress{},
+            "Failed binding identifies the rejected constraint without executing native code");
+  }
   auto seed = core.registers();
   seed.pc = entry;
   core.set_registers(seed);
-  bool failed = false;
-  try {
-    static_cast<void>(program.install(core, bus));
-  } catch (const std::runtime_error &error) {
-    failed = std::string_view(error.what()).contains("P:$000010");
-  }
-  require(failed && core.registers() == seed && core.progress() == Progress{},
-          "Unprepared entry/data combinations fail with PC context before execution");
   const std::array ambiguous{ProgramChoice{.variant = 0, .resumes = entries, .words = {}},
                              ProgramChoice{.variant = 1, .resumes = entries, .words = {}}};
   const Program conflict(image, {.variants = variants}, ambiguous, {});
-  failed = false;
+  bool failed = false;
   try {
     static_cast<void>(conflict.install(core, bus));
   } catch (const std::runtime_error &error) {

@@ -11,6 +11,7 @@
 #include <set>
 #include <span>
 #include <stdexcept>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -156,10 +157,7 @@ std::uint64_t Program::install(dsp56300::Core &core, dsp56300::Io &io) const {
     }
     selected = choice.variant;
   }
-  if (!selected) {
-    throw std::runtime_error(std::format(
-        "No prepared DSP image admits P:${:06x}, OMR=${:06x}", registers.pc, registers.omr));
-  }
+  if (!selected) { reject(registers.pc, registers.omr, io); }
   try {
     core.install(image_, *selected);
   } catch (const std::invalid_argument &error) {
@@ -171,6 +169,32 @@ std::uint64_t Program::install(dsp56300::Core &core, dsp56300::Io &io) const {
                     error.what()));
   }
   return *selected;
+}
+
+void Program::reject(const dsp56300::Word pc, const dsp56300::Word omr, dsp56300::Io &io) const {
+  const auto context = std::format("No prepared DSP image admits P:${:06x}, OMR=${:06x}", pc, omr);
+  std::string_view reason = "entry is absent";
+  for (const auto &choice : choices_) {
+    if (!contains_pc(choice.resumes, pc)) { continue; }
+    if ((omr & choice.mode_mask) != choice.mode) {
+      if (reason == "entry is absent") { reason = "operating mode differs"; }
+      continue;
+    }
+    reason = "memory layout differs";
+    if (!layout(choice.variant, io)) { continue; }
+    for (const auto &word : choice.words) {
+      const auto actual = io.inspect_program(word.address);
+      if (actual == word.value) { continue; }
+      throw std::runtime_error(
+          std::format("{}: variant {} program read P:${:06x}, expected {}, observed {}",
+                      context,
+                      choice.variant,
+                      word.address,
+                      word.value ? std::format("${:06x}", *word.value) : "unknown",
+                      actual ? std::format("${:06x}", *actual) : "unknown"));
+    }
+  }
+  throw std::runtime_error(std::format("{}: {}", context, reason));
 }
 
 bool Program::layout(const std::uint64_t variant, dsp56300::Io &io) const {

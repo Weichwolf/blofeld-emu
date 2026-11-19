@@ -64,6 +64,7 @@ private:
   void memory_variants(std::span<const dsp56300::VariantLayout> memory);
   void source_variant(const dsp56300::CodeVariant &variant);
   [[nodiscard]] bool layout(std::uint64_t variant, dsp56300::Io &io) const;
+  [[noreturn]] void reject(dsp56300::Word pc, dsp56300::Word omr, dsp56300::Io &io) const;
   dsp56300::NativeImage image_;
   std::map<std::uint64_t, std::vector<Range>> ranges_;
   std::vector<Choice> choices_;
