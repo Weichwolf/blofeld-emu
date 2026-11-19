@@ -405,7 +405,15 @@ failure/cancellation without either receiver cursor blocking the other forever.
 
 USB endpoints borrow selected RAM and knowledge arrays. Bank-selection effects
 publish grants after the selecting instruction; unrelated register writes do not
-remap buffers. Preserve word-commit order and firmware configuration quirks.
+remap buffers. SETUP acknowledgement clears the interrupt flag while retaining
+the received bytes for the original firmware's subsequent read. Endpoint-zero
+IN exposes the primed RAM until host acknowledgement, and OUT owns its received
+RAM until firmware clears DVALID. Preserve word-commit order and configuration quirks.
+Automatic SET_CONFIGURATION raises SETECR and holds status IN at NAK until the
+firmware writes DONEECRU. Its status packet belongs to the controller.
+Local bulk endpoints resolve logical addresses and direction through the active
+configuration. The firmware's NISOF bits remain readable and have no effect on
+full-speed bulk routing. Control and bulk share the same buffer ownership rules.
 Enumeration, SOF and completions come from real host transactions. Expose original
 USB-MIDI descriptors/endpoints, never USB Audio or synthesized success.
 

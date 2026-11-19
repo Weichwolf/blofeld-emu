@@ -252,8 +252,12 @@ StateProbe::Digest StateProbe::usb_state(const Usb &u) {
          u.interrupts_,
          u.configuration_status_,
          u.selector_,
+         u.frame_,
          u.bound_buffers_,
-         u.staged_high_);
+         u.halted_,
+         u.configuration_status_pending_,
+         u.staged_high_,
+         u.setup_);
   });
 }
 
