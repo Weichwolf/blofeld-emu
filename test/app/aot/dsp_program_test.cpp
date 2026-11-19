@@ -15,6 +15,7 @@
 
 #include <array>
 #include <cpu12/memory.hpp>
+#include <cstddef>
 #include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
 #include <exception>
@@ -91,6 +92,36 @@ void missing_program() {
           "Even executable STOP input requires a prepared program before device startup");
 }
 
+void mismatched_program() {
+  auto words = bootstrap();
+  // Change the stored operand while keeping the opcode and its admission guard.
+  constexpr std::size_t operand_payload = 5;
+  words[operand_payload] ^= 1U;
+  const auto program = prepare(words);
+  vi::Shi shi;
+  vi::DspReset reset;
+  try {
+    static_cast<void>(vi::dsp::execute({.main = words, .eeprom = {}},
+                                       shi,
+                                       reset,
+                                       {},
+                                       nullptr,
+                                       {},
+                                       nullptr,
+                                       nullptr,
+                                       nullptr,
+                                       nullptr,
+                                       &program));
+  } catch (const std::invalid_argument &error) {
+    const std::string_view message(error.what());
+    require(message.contains("DSP image bind variant 1 at P:$000000, OMR=$000305") &&
+                message.contains("DSP image code mismatch at P:$000001"),
+            "A failed bind reports the execution context and the mismatched source address");
+    return;
+  }
+  throw std::runtime_error("A prepared image accepted modified program RAM");
+}
+
 void normal_owner() {
   const auto words = bootstrap();
   auto program = std::make_shared<vi::dsp::Program>(prepare(words));
@@ -139,6 +170,7 @@ void normal_owner() {
 
 int main() try {
   missing_program();
+  mismatched_program();
   normal_owner();
 } catch (const std::exception &error) {
 

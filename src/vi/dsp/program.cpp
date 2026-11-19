@@ -154,7 +154,16 @@ std::uint64_t Program::install(dsp56300::Core &core, dsp56300::Io &io) const {
     throw std::runtime_error(std::format(
         "No prepared DSP image admits P:${:06x}, OMR=${:06x}", registers.pc, registers.omr));
   }
-  core.install(image_, *selected);
+  try {
+    core.install(image_, *selected);
+  } catch (const std::invalid_argument &error) {
+    throw std::invalid_argument(
+        std::format("DSP image bind variant {} at P:${:06x}, OMR=${:06x}: {}",
+                    *selected,
+                    registers.pc,
+                    registers.omr,
+                    error.what()));
+  }
   return *selected;
 }
 
