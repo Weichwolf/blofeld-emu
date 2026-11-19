@@ -487,6 +487,12 @@ void Speculation::recover() {
   restore();
   replaying_ = true;
   while (check() && ticks() < target) { step(target); }
+  replaying_ = false;
+  // Stop can cut this replay short while its receiver is shutting down.
+  if (coupling_.stopped()) {
+    static_cast<void>(check());
+    return;
+  }
   if (!effects_.finish_replay()) {
     const auto status = effects_.diagnostic();
     std::string prefix;
@@ -503,7 +509,6 @@ void Speculation::recover() {
                                        coupling_.known(),
                                        prefix));
   }
-  replaying_ = false;
   pending_.reset();
   coupling_.acknowledge(serial);
   publish();
