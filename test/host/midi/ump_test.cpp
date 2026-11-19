@@ -10,6 +10,7 @@
 #include <stdexcept>
 
 namespace {
+using blofeld::host::midi::DinEncoder;
 using blofeld::host::midi::Ump;
 constexpr std::uint64_t timestamp = 123456;
 
@@ -80,6 +81,58 @@ void messages() {
   expect(other, other_group);
 }
 
+void encoded(const std::span<const std::uint8_t> bytes,
+             const std::span<const std::uint32_t> expected,
+             const std::uint8_t group = 0) {
+  DinEncoder encoder(group);
+  const auto *word = expected.data();
+  const auto *limit = expected.data() + expected.size();
+  for (const auto byte : bytes) {
+    const auto batch = encoder.push(byte);
+    for (const auto native : batch.data()) {
+      require(word != limit && native == *word, "Unexpected outgoing UMP word");
+      ++word;
+    }
+  }
+  require(word == limit, "Missing outgoing UMP word");
+}
+
+void outgoing() {
+  constexpr std::array<std::uint8_t, 12> running{
+      0x90, 60, 100, 61, 0xf8, 0, 0xc0, 5, 6, 0xf2, 0x7f, 1};
+  constexpr std::array<std::uint32_t, 6> channel{
+      0x20903c64, 0x10f80000, 0x20903d00, 0x20c00500, 0x20c00600, 0x10f27f01};
+  encoded(running, channel);
+  constexpr auto group = std::uint8_t{15};
+  encoded(std::span(other_group.bytes).first(other_group.byte_count),
+          std::span(other_group.words).first(other_group.word_count),
+          group);
+  constexpr std::array<std::uint8_t, 10> complete{0xf0, 0xf7, 0xf0, 1, 2, 3, 4, 5, 6, 0xf7};
+  constexpr std::array<std::uint32_t, 4> complete_words{0x30000000, 0, 0x30060102, 0x03040506};
+  encoded(complete, complete_words);
+  constexpr std::array<std::uint8_t, 12> fragmented{0xf0, 0x43, 1, 0xf8, 2, 3, 4, 5, 6, 7, 8, 0xf7};
+  constexpr std::array<std::uint32_t, 7> fragments{
+      0x30124301, 0, 0x10f80000, 0x30260203, 0x04050607, 0x30310800, 0};
+  encoded(fragmented, fragments);
+  const auto rejects = [](const std::span<const std::uint8_t> bytes) {
+    DinEncoder encoder(0);
+    try {
+      for (const auto byte : bytes) { static_cast<void>(encoder.push(byte)); }
+    } catch (const std::runtime_error &) { return; }
+    throw std::runtime_error("Malformed DIN stream was accepted");
+  };
+  constexpr std::array<std::uint8_t, 1> orphan{1};
+  constexpr std::array<std::uint8_t, 1> undefined{0xf9};
+  constexpr std::array<std::uint8_t, 3> broken_sysex{0xf0, 1, 0x90};
+  constexpr std::array<std::uint8_t, 3> interrupted{0x90, 60, 0xc0};
+  constexpr std::array<std::uint8_t, 4> cancelled_running{0xc0, 5, 0xf6, 7};
+  rejects(orphan);
+  rejects(broken_sysex);
+  rejects(interrupted);
+  rejects(cancelled_running);
+  rejects(undefined);
+}
+
 void malformed() {
   constexpr std::array<std::uint32_t, 12> invalid{0x40903c64,
                                                   0x20908064,
@@ -124,6 +177,7 @@ void malformed() {
 int main() try {
   messages();
   malformed();
+  outgoing();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

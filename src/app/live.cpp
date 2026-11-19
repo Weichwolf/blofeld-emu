@@ -2,6 +2,7 @@
 #include "live.hpp"
 
 #include "audio/consumer.hpp"
+#include "audio/pcm_clock.hpp"
 #include "audio/playback.hpp"
 #include "display/lcd_image.hpp"
 #include "display/publication.hpp"
@@ -9,6 +10,7 @@
 #include "io/pcm_output.hpp"
 #include "midi/input.hpp"
 #include "midi/live_clock.hpp"
+#include "midi/output.hpp"
 #include "midi/startup.hpp"
 #include "midi/ump.hpp"
 #include "options.hpp"
@@ -45,6 +47,21 @@ constexpr const char *yes_no(const bool value) noexcept {
   return value ? "yes" : "no";
 }
 
+std::uint64_t host_time(const PcmClock::Point clock, const std::uint64_t tick) {
+  const bool later = tick >= clock.ticks;
+  const auto ticks = later ? tick - clock.ticks : clock.ticks - tick;
+  using Nanoseconds = std::ratio<std::nano::den, vi::MidiPort::reference_hz>;
+  constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+  if (ticks > maximum / Nanoseconds::num) {
+    throw std::overflow_error("MIDI output time exceeds the audio clock range");
+  }
+  const auto distance = ticks * Nanoseconds::num / Nanoseconds::den;
+  if (distance > (later ? maximum - clock.host_ns : clock.host_ns)) {
+    throw std::overflow_error("MIDI output time exceeds the host clock range");
+  }
+  return later ? clock.host_ns + distance : clock.host_ns - distance;
+}
+
 std::size_t queue_grant(const host::audio::Grants &grants) {
   std::cerr << "Audio: s24-in-32 stereo " << grants.rate << "Hz -> " << grants.sink_format << ' '
             << grants.sink_rate << "Hz on " << grants.sink << "; buffer=" << grants.target_frames
@@ -75,6 +92,10 @@ Live::Live(host::audio::Playback &audio, DisplayPublication &display, const Opti
             << "ms admission-lead~=" << std::chrono::duration<double, std::milli>(lead).count()
             << "ms; physical key-to-output latency is unmeasured.\n";
   connect();
+  if (options.midi_destination) {
+    midi_output_.emplace(*options.midi_destination);
+    std::cerr << "MIDI output: ID=" << *options.midi_destination << '\n';
+  }
 }
 
 void Live::connect() {
@@ -290,6 +311,47 @@ void Live::status(const bool terminal) const {
   if (!terminal) { std::cerr << '\n'; }
 }
 
+void Live::send_midi(host::midi::Output &output, const std::stop_token &stop) {
+  host::midi::DinEncoder encoder(group_);
+  auto &port = vm_->midi();
+  while (!stop.stop_requested() && port.await_output(stop)) {
+    const auto event = port.read_output();
+    if (!event) { continue; }
+    const auto packets = encoder.push(event->byte);
+    if (packets.size == 0) { continue; }
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::nanoseconds(LiveClock::maximum_gap_ns);
+    auto clock = consumer_.clock();
+    while (!clock && !stop.stop_requested()) {
+      if (std::chrono::steady_clock::now() >= deadline) {
+        throw std::runtime_error("Original MIDI output needs a native audio clock");
+      }
+      std::this_thread::sleep_for(input_poll);
+      clock = consumer_.clock();
+    }
+    if (!clock || stop.stop_requested()) { return; }
+    output.send(packets.data(), host_time(*clock, event->ticks));
+  }
+}
+
+std::jthread Live::output_worker() {
+  if (!midi_output_) { return {}; }
+  return std::jthread([this, output = &*midi_output_](const std::stop_token &stop) {
+    try {
+      send_midi(*output, stop);
+    } catch (const std::exception &error) {
+      std::cerr << "MIDI output stopped: " << error.what() << '\n';
+      auto &port = vm_->midi();
+      while (port.await_output(stop)) { static_cast<void>(port.read_output()); }
+    }
+  });
+}
+
+void Live::discard_midi_replies() {
+  if (midi_output_) { return; }
+  while (vm_->midi().read_output()) {}
+}
+
 Live::Result Live::run(vi::VmContext &vm, const host::Signals &signals) {
   if (vm_ != nullptr) { throw std::logic_error("A live session can only run once"); }
   vm_ = &vm;
@@ -312,6 +374,7 @@ Live::Result Live::run(vi::VmContext &vm, const host::Signals &signals) {
       vm.request_stop();
     }
   });
+  auto output = output_worker();
   const bool terminal = ::isatty(STDERR_FILENO) != 0;
   auto next = std::chrono::steady_clock::now();
   bool announced = false;
@@ -322,7 +385,7 @@ Live::Result Live::run(vi::VmContext &vm, const host::Signals &signals) {
                 << clock_.uncertainty_ns() << "ns.\n";
       announced = true;
     }
-    while (vm.midi().read_output()) {}
+    discard_midi_replies();
     if (signals.wait(control_poll) || audio_.status().failed) { break; }
     const auto now = std::chrono::steady_clock::now();
     if (now >= next) {
@@ -333,9 +396,11 @@ Live::Result Live::run(vi::VmContext &vm, const host::Signals &signals) {
     }
   }
   input.request_stop();
+  output.request_stop();
   vm.request_stop();
   const auto reports = vm.wait();
   input.join();
+  if (output.joinable()) { output.join(); }
   audio_.stop();
   publish_display();
   if (terminal) { std::cerr << '\n'; }

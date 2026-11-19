@@ -7,6 +7,7 @@
 #include "io/pcm_output.hpp"
 #include "midi/input.hpp"
 #include "midi/live_clock.hpp"
+#include "midi/output.hpp"
 #include "options.hpp"
 #include "process/signals.hpp"
 #include "vm_context.hpp"
@@ -17,6 +18,7 @@
 #include <memory>
 #include <optional>
 #include <stop_token>
+#include <thread>
 #include <vector>
 
 namespace blofeld::app {
@@ -36,6 +38,9 @@ private:
   enum class Phase : std::uint8_t { booting, priming, audio_ready, playing, closed };
   [[nodiscard]] std::optional<std::uint64_t> startup(const host::Signals &signals);
   void feed(std::uint64_t origin, const std::stop_token &stop);
+  void send_midi(host::midi::Output &output, const std::stop_token &stop);
+  [[nodiscard]] std::jthread output_worker();
+  void discard_midi_replies();
   void admit(LiveClock::Window window);
   void process(LiveClock::Window window,
                std::uint64_t now,
@@ -57,6 +62,7 @@ private:
   const std::optional<std::int32_t> source_id_;
   const std::uint8_t group_;
   std::unique_ptr<host::midi::Input> input_;
+  std::optional<host::midi::Output> midi_output_;
   std::atomic<host::midi::Input *> active_input_{nullptr};
   std::optional<std::vector<host::midi::Source>> sources_;
   vi::VmContext *vm_ = nullptr;

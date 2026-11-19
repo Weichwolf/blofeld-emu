@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "midi/input.hpp"
+#include "midi/output.hpp"
 #include "midi/ump.hpp"
 
 #include <CoreFoundation/CFBase.h>
@@ -40,14 +41,14 @@ void require(const OSStatus status, const char *operation) {
 std::int32_t identifier(const MIDIEndpointRef endpoint) {
   SInt32 result = 0;
   require(MIDIObjectGetIntegerProperty(endpoint, kMIDIPropertyUniqueID, &result),
-          "Query MIDI source identifier");
+          "Query MIDI endpoint identifier");
   return result;
 }
 
 std::string name(const MIDIEndpointRef endpoint) {
   CFStringRef value = nullptr;
   require(MIDIObjectGetStringProperty(endpoint, kMIDIPropertyDisplayName, &value),
-          "Query MIDI source name");
+          "Query MIDI endpoint name");
   if (value == nullptr) { throw std::runtime_error("Missing MIDI source name"); }
   constexpr std::size_t maximum = 4096;
   std::array<char, maximum> text{};
@@ -380,5 +381,70 @@ std::optional<Packet> Input::read() {
   impl_->tail.store(at + 1, std::memory_order_release);
   packet.timestamp = nanoseconds(packet.timestamp, impl_->timebase);
   return packet;
+}
+
+struct Output::Impl {
+  explicit Impl(const std::int32_t id) : timebase(host_timebase()), identifier_(id) {
+    std::string available;
+    const auto count = MIDIGetNumberOfDestinations();
+    for (ItemCount index = 0; index < count; ++index) {
+      const auto endpoint = MIDIGetDestination(index);
+      if (endpoint == 0) { continue; }
+      const auto candidate = identifier(endpoint);
+      if (candidate == id) {
+        destination = endpoint;
+        break;
+      }
+      available += " " + std::to_string(candidate) + " " + name(endpoint);
+    }
+    if (destination == 0) {
+      throw std::runtime_error("Unknown CoreMIDI destination " + std::to_string(id) +
+                               ". Available destinations:" + available);
+    }
+    require(MIDIClientCreate(CFSTR("blofeld-emu MIDI output"), nullptr, nullptr, &client.value),
+            "Create MIDI output client");
+    require(MIDIOutputPortCreate(client.value, CFSTR("Blofeld DIN OUT"), &port),
+            "Create MIDI output port");
+  }
+
+  ~Impl() {
+    if (port != 0) { MIDIPortDispose(port); }
+  }
+
+  Client client;
+  const mach_timebase_info_data_t timebase;
+  const std::int32_t identifier_;
+  MIDIEndpointRef destination = 0;
+  MIDIPortRef port = 0;
+  std::uint64_t last = 0;
+};
+
+Output::Output(const std::int32_t destination) : impl_(std::make_unique<Impl>(destination)) {}
+
+Output::~Output() = default;
+
+void Output::send(const std::span<const std::uint32_t> words, const std::uint64_t host_ns) {
+  auto &state = *impl_;
+  SInt32 offline = 0;
+  if (identifier(state.destination) != state.identifier_ ||
+      (MIDIObjectGetIntegerProperty(state.destination, kMIDIPropertyOffline, &offline) == noErr &&
+       offline != 0)) {
+    throw std::runtime_error("Selected CoreMIDI destination disconnected");
+  }
+  const auto whole = host_ns / state.timebase.numer;
+  const auto fraction =
+      (host_ns % state.timebase.numer) * state.timebase.denom / state.timebase.numer;
+  if (whole > (std::numeric_limits<std::uint64_t>::max() - fraction) / state.timebase.denom) {
+    throw std::overflow_error("MIDI output timestamp exceeds host time range");
+  }
+  const auto timestamp = std::max(state.last, (whole * state.timebase.denom) + fraction);
+  MIDIEventList list{};
+  auto *const packet = MIDIEventListInit(&list, kMIDIProtocol_1_0);
+  if (MIDIEventListAdd(&list, sizeof list, packet, timestamp, words.size(), words.data()) ==
+      nullptr) {
+    throw std::runtime_error("Cannot pack native MIDI output");
+  }
+  require(MIDISendEventList(state.port, state.destination, &list), "Send CoreMIDI output");
+  state.last = timestamp;
 }
 }

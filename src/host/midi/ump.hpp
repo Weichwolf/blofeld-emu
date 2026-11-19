@@ -18,6 +18,37 @@ struct Packet {
   }
 };
 
+class DinEncoder {
+public:
+  explicit DinEncoder(std::uint8_t group);
+
+  struct Batch {
+    std::array<std::uint32_t, 3> words{};
+    std::uint8_t size = 0;
+
+    [[nodiscard]] std::span<const std::uint32_t> data() const noexcept {
+      return std::span(words).first(size);
+    }
+  };
+
+  [[nodiscard]] Batch push(std::uint8_t byte);
+
+private:
+  void fragment(Batch &batch, bool end) noexcept;
+  void system_exclusive(Batch &batch, std::uint8_t byte);
+  void begin_message(Batch &batch, std::uint8_t status);
+  void message(Batch &batch,
+               std::uint8_t status,
+               std::uint8_t first = 0,
+               std::uint8_t second = 0) const noexcept;
+
+  std::array<std::uint8_t, 6> bytes_{};
+  std::uint32_t group_;
+  std::uint8_t running_ = 0, status_ = 0, used_ = 0, remaining_ = 0;
+  enum class Exclusive : std::uint8_t { idle, start, continuation };
+  Exclusive exclusive_ = Exclusive::idle;
+};
+
 class Ump {
 public:
   explicit Ump(std::uint8_t group);

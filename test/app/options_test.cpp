@@ -44,15 +44,25 @@ int main() try {
   rejects(std::array{"--profile", "p", "--midi", "m", "--wav", "w", "--startup-watchdog", "0"});
   rejects(std::array{
       "--midi", "m", "--wav", "w", "--startup-watchdog", "1", "--startup-watchdog", "2"});
-  const auto routed =
-      options(std::array{"--profile", "p", "--midi-group", "15", "--midi-source", "-2147483648"});
-  require(routed.midi_source == std::numeric_limits<std::int32_t>::min() && routed.midi_group == 15,
+  const auto routed = options(std::array{"--profile",
+                                         "p",
+                                         "--midi-group",
+                                         "15",
+                                         "--midi-source",
+                                         "-2147483648",
+                                         "--midi-destination",
+                                         "123"});
+  constexpr std::int32_t destination = 123;
+  require(routed.midi_source == std::numeric_limits<std::int32_t>::min() &&
+              routed.midi_destination == destination && routed.midi_group == 15,
           "Preserve signed native IDs and select an explicit UMP group");
   rejects(std::array{"--midi-source", "1", "--midi-source", "2"});
+  rejects(std::array{"--midi-destination", "1", "--midi-destination", "2"});
   rejects(std::array{"--midi-group", "0", "--midi-group", "1"});
   rejects(std::array{"--midi-group", "16"});
   rejects(std::array{"--midi-source", "2147483648"});
   rejects(std::array{"--midi-source", "1", "--midi", "m", "--wav", "w"});
+  rejects(std::array{"--midi-destination", "1", "--midi", "m", "--wav", "w"});
   rejects(std::array{"--midi-group", "0", "--midi", "m", "--wav", "w"});
   rejects(std::array{"--profile"});
   rejects(std::array{"--profile", "p", "--midi", "m"});

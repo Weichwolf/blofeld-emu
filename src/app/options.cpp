@@ -18,6 +18,10 @@ struct Provided {
   bool profile = false, tail = false, group = false, watchdog = false;
 };
 
+struct Argument {
+  std::string_view key, value;
+};
+
 template <typename T> T number(const std::string_view value, const char *message) {
   T result{};
   const auto parsed = std::from_chars(value.data(), value.data() + value.size(), result);
@@ -27,8 +31,27 @@ template <typename T> T number(const std::string_view value, const char *message
   return result;
 }
 
+bool midi_route(Options &result, Provided &provided, const Argument argument) {
+  const auto [key, value] = argument;
+  if (key == "--midi-source" && !result.midi_source) {
+    result.midi_source = number<std::int32_t>(value, "--midi-source requires a signed native ID");
+    return true;
+  }
+  if (key == "--midi-destination" && !result.midi_destination) {
+    result.midi_destination =
+        number<std::int32_t>(value, "--midi-destination requires a signed native ID");
+    return true;
+  }
+  if (key != "--midi-group" || provided.group) { return false; }
+  const auto group = number<unsigned>(value, "--midi-group requires an integer from 0 to 15");
+  if (group > 15) { throw std::invalid_argument("--midi-group requires an integer from 0 to 15"); }
+  provided.group = true;
+  result.midi_group = static_cast<std::uint8_t>(group);
+  return true;
+}
+
 void validate(const Options &result, const Provided &provided) {
-  if (result.midi && (result.midi_source || provided.group)) {
+  if (result.midi && (result.midi_source || result.midi_destination || provided.group)) {
     throw std::invalid_argument("Native MIDI routing is only available in live mode");
   }
   if (result.midi.has_value() != result.wav.has_value() ||
@@ -50,6 +73,7 @@ Options options(const std::span<const char *const> arguments) {
     if (++index == arguments.size()) { throw std::invalid_argument("Missing option value"); }
     const std::string_view value(arguments[index]);
     if (value.empty()) { throw std::invalid_argument("Empty option value"); }
+    if (midi_route(result, provided, {.key = key, .value = value})) { continue; }
     if (key == "--profile" && !provided.profile) {
       provided.profile = true;
       result.profile = value;
@@ -57,15 +81,6 @@ Options options(const std::span<const char *const> arguments) {
       result.midi = value;
     } else if (key == "--wav" && !result.wav) {
       result.wav = value;
-    } else if (key == "--midi-source" && !result.midi_source) {
-      result.midi_source = number<std::int32_t>(value, "--midi-source requires a signed native ID");
-    } else if (key == "--midi-group" && !provided.group) {
-      provided.group = true;
-      const auto parsed = number<unsigned>(value, "--midi-group requires an integer from 0 to 15");
-      if (parsed > 15) {
-        throw std::invalid_argument("--midi-group requires an integer from 0 to 15");
-      }
-      result.midi_group = static_cast<std::uint8_t>(parsed);
     } else if (key == "--tail" && !provided.tail) {
       provided.tail = true;
       result.tail_seconds =
@@ -76,7 +91,8 @@ Options options(const std::span<const char *const> arguments) {
           number<std::uint64_t>(value, "--startup-watchdog requires positive whole seconds");
     } else {
       throw std::invalid_argument(
-          "Usage: blofeld-headless [--profile FILE] [--midi-source ID --midi-group 0..15] "
+          "Usage: blofeld-headless [--profile FILE] [--midi-source ID] "
+          "[--midi-destination ID] [--midi-group 0..15] "
           "[--midi FILE --wav FILE [--tail SECONDS] [--startup-watchdog SECONDS]]");
     }
   }

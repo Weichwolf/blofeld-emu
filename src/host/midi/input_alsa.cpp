@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "midi/input.hpp"
+#include "midi/output.hpp"
 #include "midi/ump.hpp"
 
 #include <algorithm>
@@ -14,6 +15,7 @@
 #include <fcntl.h>
 #include <limits>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <sound/asequencer.h>
 #include <span>
@@ -28,6 +30,7 @@
 #include <system_error>
 #include <thread>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 extern "C" {
@@ -42,6 +45,9 @@ static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
 constexpr unsigned source_capabilities = SNDRV_SEQ_PORT_CAP_READ | SNDRV_SEQ_PORT_CAP_SUBS_READ;
 constexpr unsigned source_types = SNDRV_SEQ_PORT_TYPE_MIDI_GENERIC | SNDRV_SEQ_PORT_TYPE_MIDI_UMP;
 constexpr unsigned minimum_protocol = (1U << 16) | 3;
+constexpr unsigned midi_kind_mask = 0xf0, midi_data_bits = 7, midi_kind_shift = 4;
+constexpr unsigned ump_type_shift = 28, ump_group_shift = 24, ump_sysex_type = 3;
+constexpr int pitch_center = 8192;
 
 enum Midi : std::uint8_t {
   data_mask = 127,
@@ -97,6 +103,30 @@ private:
   int descriptor_;
 };
 
+std::pair<int, bool> configure_midi_client(const Sequencer &seq, const std::string_view name) {
+  int protocol = 0;
+  int client = -1;
+  seq.query(SNDRV_SEQ_IOCTL_PVERSION, &protocol, "Query ALSA sequencer protocol");
+  seq.query(SNDRV_SEQ_IOCTL_CLIENT_ID, &client, "Query ALSA MIDI client ID");
+  if (client < 0 || client > std::numeric_limits<unsigned char>::max()) {
+    throw std::runtime_error("Invalid native MIDI client ID grant");
+  }
+  snd_seq_client_info info{};
+  info.client = client;
+  seq.query(SNDRV_SEQ_IOCTL_GET_CLIENT_INFO, &info, "Query native MIDI client");
+  std::ranges::copy(name, info.name);
+  info.name[name.size()] = '\0';
+  info.midi_version = protocol >= static_cast<int>(minimum_protocol) ? SNDRV_SEQ_CLIENT_UMP_MIDI_1_0
+                                                                     : SNDRV_SEQ_CLIENT_LEGACY_MIDI;
+  seq.query(SNDRV_SEQ_IOCTL_SET_CLIENT_INFO, &info, "Select native MIDI 1.0 protocol");
+  seq.query(SNDRV_SEQ_IOCTL_GET_CLIENT_INFO, &info, "Read granted MIDI protocol");
+  const bool ump = info.midi_version == SNDRV_SEQ_CLIENT_UMP_MIDI_1_0;
+  if (!ump && info.midi_version != SNDRV_SEQ_CLIENT_LEGACY_MIDI) {
+    throw std::runtime_error("ALSA MIDI needs a MIDI 1.0 protocol grant");
+  }
+  return {client, ump};
+}
+
 class Wakeup {
 public:
   Wakeup() : descriptor_(::eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)) {
@@ -149,6 +179,65 @@ snd_seq_addr address(const std::int32_t source) {
 bool same(const snd_seq_addr a, const snd_seq_addr b) {
   return a.client == b.client && a.port == b.port;
 }
+
+void submit(const Sequencer &seq, const std::span<const std::byte> packet) {
+  ssize_t result = 0;
+  do {
+    result = ::write(seq.descriptor(), packet.data(), packet.size());
+  } while (result < 0 && errno == EINTR);
+  if (result < 0) { throw std::system_error(errno, std::generic_category(), "Send ALSA MIDI"); }
+  if (static_cast<std::size_t>(result) != packet.size()) {
+    throw std::runtime_error("Incomplete ALSA MIDI event");
+  }
+}
+
+template <typename Event> void submit(const Sequencer &seq, const Event &event) {
+  submit(seq, std::as_bytes(std::span(&event, 1)));
+}
+
+void encode_voice(snd_seq_event &event, const Packet &packet) {
+  const auto status = packet.bytes[0];
+  constexpr std::array<snd_seq_event_type_t, 7> types{SNDRV_SEQ_EVENT_NOTEOFF,
+                                                      SNDRV_SEQ_EVENT_NOTEON,
+                                                      SNDRV_SEQ_EVENT_KEYPRESS,
+                                                      SNDRV_SEQ_EVENT_CONTROLLER,
+                                                      SNDRV_SEQ_EVENT_PGMCHANGE,
+                                                      SNDRV_SEQ_EVENT_CHANPRESS,
+                                                      SNDRV_SEQ_EVENT_PITCHBEND};
+  event.type = types.at((status - note_off) >> midi_kind_shift);
+  const auto channel = static_cast<unsigned char>(status & channel_mask);
+  if (status < controller) {
+    event.data.note.channel = channel;
+    event.data.note.note = packet.bytes[1];
+    event.data.note.velocity = packet.bytes[2];
+    return;
+  }
+  event.data.control.channel = channel;
+  const auto kind = status & midi_kind_mask;
+  if (kind == controller) { event.data.control.param = packet.bytes[1]; }
+  event.data.control.value = (kind == controller) ? packet.bytes[2] : packet.bytes[1];
+  if (kind == pitch_bend) {
+    event.data.control.value =
+        (int{packet.bytes[1]} | (int{packet.bytes[2]} << midi_data_bits)) - pitch_center;
+  }
+}
+
+void encode_system(snd_seq_event &event, const Packet &packet) {
+  switch (packet.bytes[0]) {
+    case time_code: event.type = SNDRV_SEQ_EVENT_QFRAME; break;
+    case song_position: event.type = SNDRV_SEQ_EVENT_SONGPOS; break;
+    case song_select: event.type = SNDRV_SEQ_EVENT_SONGSEL; break;
+    case tune_request: event.type = SNDRV_SEQ_EVENT_TUNE_REQUEST; break;
+    case realtime_clock: event.type = SNDRV_SEQ_EVENT_CLOCK; break;
+    case midi_start: event.type = SNDRV_SEQ_EVENT_START; break;
+    case midi_continue: event.type = SNDRV_SEQ_EVENT_CONTINUE; break;
+    case midi_stop: event.type = SNDRV_SEQ_EVENT_STOP; break;
+    case active_sensing: event.type = SNDRV_SEQ_EVENT_SENSING; break;
+    case midi_reset: event.type = SNDRV_SEQ_EVENT_RESET; break;
+    default: throw std::invalid_argument("Unsupported ALSA MIDI system message");
+  }
+  event.data.control.value = int{packet.bytes[1]} | (int{packet.bytes[2]} << midi_data_bits);
+}
 }
 
 struct Input::Impl {
@@ -199,25 +288,10 @@ struct Input::Impl {
   }
 
   void configure_client() {
-    int protocol = 0;
-    seq.query(SNDRV_SEQ_IOCTL_PVERSION, &protocol, "Query ALSA sequencer protocol");
-    seq.query(SNDRV_SEQ_IOCTL_CLIENT_ID, &client, "Query ALSA MIDI client ID");
-    if (client < 0 || client > std::numeric_limits<unsigned char>::max()) {
-      throw std::runtime_error("Invalid native MIDI client ID grant");
-    }
-    snd_seq_client_info info{};
-    info.client = client;
-    seq.query(SNDRV_SEQ_IOCTL_GET_CLIENT_INFO, &info, "Query native MIDI client");
-    constexpr std::string_view name = "Virtual instrument MIDI";
-    std::ranges::copy(name, info.name);
-    info.name[name.size()] = '\0';
-    info.midi_version = protocol >= static_cast<int>(minimum_protocol)
-                            ? SNDRV_SEQ_CLIENT_UMP_MIDI_1_0
-                            : SNDRV_SEQ_CLIENT_LEGACY_MIDI;
-    seq.query(SNDRV_SEQ_IOCTL_SET_CLIENT_INFO, &info, "Select native MIDI 1.0 UMP input");
-    seq.query(SNDRV_SEQ_IOCTL_GET_CLIENT_INFO, &info, "Read granted MIDI protocol");
-    ump = info.midi_version == SNDRV_SEQ_CLIENT_UMP_MIDI_1_0;
-    if (!ump && (info.midi_version != SNDRV_SEQ_CLIENT_LEGACY_MIDI || route.group != 0)) {
+    const auto [id, universal] = configure_midi_client(seq, "Virtual instrument MIDI");
+    client = id;
+    ump = universal;
+    if (!ump && route.group != 0) {
       throw std::runtime_error("Legacy native ALSA input exposes MIDI 1.0 group 0 only");
     }
     snd_seq_client_pool pool{};
@@ -572,5 +646,130 @@ std::optional<Packet> Input::read() {
   auto packet = impl_->packets[at % capacity];
   impl_->tail.store(at + 1, std::memory_order_release);
   return packet;
+}
+
+struct Output::Impl {
+  explicit Impl(const std::int32_t id) {
+    constexpr std::string_view label = "Virtual instrument MIDI output";
+    const auto [client, universal] = configure_midi_client(seq, label);
+    ump = universal;
+
+    snd_seq_port_info port{};
+    port.addr.client = static_cast<unsigned char>(client);
+    port.capability = source_capabilities | SNDRV_SEQ_PORT_CAP_NO_EXPORT;
+    port.type = SNDRV_SEQ_PORT_TYPE_MIDI_GENERIC;
+    if (ump) { port.type |= SNDRV_SEQ_PORT_TYPE_MIDI_UMP; }
+    std::ranges::copy(label, port.name);
+    seq.query(SNDRV_SEQ_IOCTL_CREATE_PORT, &port, "Create ALSA MIDI output port");
+    route.sender = port.addr;
+    route.dest = address(id);
+    seq.query(SNDRV_SEQ_IOCTL_SUBSCRIBE_PORT, &route, "Subscribe ALSA MIDI destination");
+
+    snd_seq_queue_info info{};
+    info.locked = 1;
+    seq.query(SNDRV_SEQ_IOCTL_CREATE_QUEUE, &info, "Create ALSA MIDI output queue");
+    if (info.queue < 0 || info.queue >= SNDRV_SEQ_QUEUE_DIRECT) {
+      throw std::runtime_error("Invalid ALSA MIDI output queue ID");
+    }
+    queue = static_cast<unsigned char>(info.queue);
+    snd_seq_event start{};
+    start.type = SNDRV_SEQ_EVENT_START;
+    start.queue = SNDRV_SEQ_QUEUE_DIRECT;
+    start.dest = {.client = SNDRV_SEQ_CLIENT_SYSTEM, .port = SNDRV_SEQ_PORT_SYSTEM_TIMER};
+    start.source = route.sender;
+    start.data.queue.queue = queue;
+    submit(seq, start);
+  }
+
+  [[nodiscard]] snd_seq_real_time timestamp(const std::uint64_t host_ns) {
+    snd_seq_queue_status status{};
+    status.queue = queue;
+    const auto before = Input::now();
+    seq.query(SNDRV_SEQ_IOCTL_GET_QUEUE_STATUS, &status, "Read ALSA MIDI output queue time");
+    const auto now = std::midpoint(before, Input::now());
+    if (status.running == 0) { throw std::runtime_error("ALSA MIDI output queue stopped"); }
+    const auto at = nanoseconds(status.time.tv_sec, status.time.tv_nsec);
+    const auto delay = host_ns > now ? host_ns - now : 0;
+    if (delay > std::numeric_limits<std::uint64_t>::max() - at) {
+      throw std::overflow_error("ALSA MIDI output time exceeds queue range");
+    }
+    last = std::max(last, at + delay);
+    if (last / second > std::numeric_limits<unsigned int>::max()) {
+      throw std::overflow_error("ALSA MIDI output time exceeds queue range");
+    }
+    return {.tv_sec = static_cast<unsigned int>(last / second),
+            .tv_nsec = static_cast<unsigned int>(last % second)};
+  }
+
+  void legacy(snd_seq_event event, const std::span<const std::uint32_t> words) {
+    const auto header = words.front();
+    if (!decoder) {
+      decoder.emplace(static_cast<std::uint8_t>((header >> ump_group_shift) & channel_mask));
+    }
+    const auto packet = decoder->decode(words, 0);
+    if (!packet) { throw std::invalid_argument("Invalid MIDI 1.0 output packet"); }
+    if ((header >> ump_type_shift) == ump_sysex_type) {
+      const auto data = packet->data();
+      event.type = SNDRV_SEQ_EVENT_SYSEX;
+      event.flags |= SNDRV_SEQ_EVENT_LENGTH_VARIABLE;
+      event.data.ext.len = static_cast<unsigned int>(data.size());
+      std::array<std::byte, sizeof(event) + Packet{}.bytes.size()> bytes{};
+      std::memcpy(bytes.data(), &event, sizeof(event));
+      std::memcpy(bytes.data() + sizeof(event), data.data(), data.size());
+      submit(seq, std::span<const std::byte>{bytes}.first(sizeof(event) + data.size()));
+      return;
+    }
+    if (packet->bytes[0] < sysex_begin) {
+      encode_voice(event, *packet);
+    } else {
+      encode_system(event, *packet);
+    }
+    submit(seq, event);
+  }
+
+  Sequencer seq;
+  snd_seq_port_subscribe route{};
+  std::optional<Ump> decoder;
+  unsigned char queue = 0;
+  bool ump = false;
+  std::uint64_t last = 0;
+};
+
+Output::Output(const std::int32_t destination) : impl_(std::make_unique<Impl>(destination)) {}
+
+Output::~Output() = default;
+
+void Output::send(std::span<const std::uint32_t> words, const std::uint64_t host_ns) {
+  auto &state = *impl_;
+  state.seq.query(SNDRV_SEQ_IOCTL_GET_SUBSCRIPTION, &state.route, "Check ALSA MIDI subscription");
+  const auto at = state.timestamp(host_ns);
+  constexpr snd_seq_addr subscribers{.client = SNDRV_SEQ_ADDRESS_SUBSCRIBERS, .port = 0};
+  while (!words.empty()) {
+    const auto type = words.front() >> ump_type_shift;
+    const auto size = type == ump_sysex_type ? 2U : 1U;
+    if (type < 1 || type > ump_sysex_type || size > words.size()) {
+      throw std::invalid_argument("Incomplete or unsupported ALSA MIDI output message");
+    }
+    const auto message = words.first(size);
+    if (state.ump) {
+      snd_seq_ump_event event{};
+      event.flags = SNDRV_SEQ_TIME_STAMP_REAL | SNDRV_SEQ_EVENT_UMP;
+      event.queue = state.queue;
+      event.time.time = at;
+      event.source = state.route.sender;
+      event.dest = subscribers;
+      std::ranges::copy(message, event.ump);
+      submit(state.seq, event);
+    } else {
+      snd_seq_event event{};
+      event.flags = SNDRV_SEQ_TIME_STAMP_REAL;
+      event.queue = state.queue;
+      event.time.time = at;
+      event.source = state.route.sender;
+      event.dest = subscribers;
+      state.legacy(event, message);
+    }
+    words = words.subspan(size);
+  }
 }
 }

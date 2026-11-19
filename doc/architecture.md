@@ -387,6 +387,9 @@ in instrument time. Two independent cursors feed MCU SCI activity and the DSP's
 original Timer0 decoder. Supply scheduled input-level boundaries to Timer0, not
 decoded ring writes. Preserve back-to-back timing, SCI clear sequences, overrun,
 wakeup and genuine transmit-completion timestamps. USB remains a separate route.
+An optional host output owner translates completed DIN bytes into MIDI 1.0
+messages and schedules them against the native audio epoch. A disconnected
+destination stops host delivery while the owner continues to retire queued bytes.
 
 Streaming input publishes an exclusive known-until frontier. Silence emits no
 character; source delay adds no device time. Stop at the last authorized native

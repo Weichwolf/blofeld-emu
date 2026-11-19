@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "midi/input.hpp"
+#include "midi/output.hpp"
 #include "midi/ump.hpp"
 
 #include <algorithm>
@@ -19,6 +20,7 @@
 #include <string>
 #include <string_view>
 #include <sys/ioctl.h>
+#include <sys/poll.h>
 #include <system_error>
 #include <thread>
 #include <unistd.h>
@@ -409,6 +411,96 @@ void channel_and_system_events() {
   }
 }
 
+void scheduled_output() {
+  const Descriptor sink;
+  int client = -1;
+  control(sink.value, SNDRV_SEQ_IOCTL_CLIENT_ID, &client);
+  snd_seq_port_info port{};
+  port.addr.client = static_cast<unsigned char>(client);
+  port.capability = SNDRV_SEQ_PORT_CAP_WRITE | SNDRV_SEQ_PORT_CAP_SUBS_WRITE;
+  port.type = SNDRV_SEQ_PORT_TYPE_MIDI_GENERIC;
+  control(sink.value, SNDRV_SEQ_IOCTL_CREATE_PORT, &port);
+  blofeld::host::midi::Output output((client << 8) | port.addr.port);
+  constexpr std::array<std::uint8_t, 7> first{0xf0, 1, 2, 3, 4, 5, 6};
+  constexpr std::array<std::uint8_t, 3> last{7, 8, 0xf7};
+  constexpr std::array<unsigned, 5> types{SNDRV_SEQ_EVENT_NOTEON,
+                                          SNDRV_SEQ_EVENT_SYSEX,
+                                          SNDRV_SEQ_EVENT_CLOCK,
+                                          SNDRV_SEQ_EVENT_SYSEX,
+                                          SNDRV_SEQ_EVENT_PITCHBEND};
+  constexpr std::uint64_t lead_ns = 15000000;
+  const auto deadline = Input::now() + lead_ns;
+  output.send(std::array{voice(note_on, note, velocity)}, deadline);
+  constexpr std::array<std::uint32_t, 3> start_and_clock{0x30160102, 0x03040506, 0x10f80000};
+  constexpr std::array<std::uint32_t, 2> end{0x30320708, 0};
+  output.send(start_and_clock, deadline);
+  output.send(end, deadline);
+  constexpr unsigned pitch_channel = 3;
+  constexpr unsigned pitch_bend = 0xe0;
+  constexpr int maximum_pitch_bend = 8191;
+  constexpr int poll_ms = 500;
+  output.send(std::array{voice(pitch_bend | pitch_channel, data_mask, data_mask)}, deadline);
+  std::size_t received = 0;
+  int sender_id = -1;
+  while (received != types.size()) {
+    pollfd pending{.fd = sink.value, .events = POLLIN, .revents = 0};
+    require(::poll(&pending, 1, poll_ms) == 1 && (pending.revents & POLLIN) != 0,
+            "Kernel delivered the scheduled ALSA output");
+    std::array<std::uint8_t, 512> bytes{};
+    const auto count = ::read(sink.value, bytes.data(), bytes.size());
+    const auto time = Input::now();
+    require(count > 0 && static_cast<std::size_t>(count) % sizeof(snd_seq_event) == 0,
+            "ALSA output has complete native frames");
+    std::size_t at = 0;
+    while (at < static_cast<std::size_t>(count)) {
+      snd_seq_event event{};
+      std::memcpy(&event, bytes.data() + at, sizeof(event));
+      at += sizeof(event);
+      if (event.type == SNDRV_SEQ_EVENT_PORT_SUBSCRIBED) { continue; }
+      require(received < types.size() && event.type == types[received] &&
+                  time + 4 * uncertainty >= deadline,
+              "Kernel preserves output order and accepts its scheduled delay");
+      const auto id = (int{event.source.client} << 8) | event.source.port;
+      if (received == 0) { sender_id = id; }
+      require(sender_id == id, "All bytes use the selected subscription");
+      switch (event.type) {
+        case SNDRV_SEQ_EVENT_NOTEON:
+          require(event.data.note.note == note && event.data.note.velocity == velocity,
+                  "Note number and velocity survive output");
+          break;
+        case SNDRV_SEQ_EVENT_PITCHBEND:
+          require(event.data.control.channel == pitch_channel &&
+                      event.data.control.value == maximum_pitch_bend,
+                  "Full-range bend becomes the signed ALSA value");
+          break;
+        case SNDRV_SEQ_EVENT_SYSEX: {
+          const auto expected = received == 1 ? std::span<const std::uint8_t>{first}
+                                              : std::span<const std::uint8_t>{last};
+          require(event.data.ext.len == expected.size() &&
+                      static_cast<std::size_t>(count) - at >= sizeof(event) &&
+                      std::ranges::equal(expected, std::span(bytes).subspan(at, expected.size())),
+                  "SysEx fragment arrives byte-for-byte around MIDI clock");
+          at += sizeof(event);
+          break;
+        }
+        default: break;
+      }
+      ++received;
+    }
+  }
+  require(std::ranges::none_of(Input::sources(),
+                               [sender_id](const auto &item) { return item.id == sender_id; }),
+          "The explicit output is never offered for automatic input routing");
+  control(sink.value, SNDRV_SEQ_IOCTL_DELETE_PORT, &port);
+  try {
+    output.send(std::array{voice(note_off, note, 0)}, Input::now());
+  } catch (const std::system_error &error) {
+    require(error.code().value() == ENOENT, "A lost ALSA subscription reports disconnection");
+    return;
+  }
+  throw std::runtime_error("A removed ALSA destination accepted another packet");
+}
+
 void expect_failure(const Input &input, const std::string_view reason) {
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
   for (;;) {
@@ -479,6 +571,7 @@ int main() try {
   sysex_and_groups();
   legacy_conversion();
   channel_and_system_events();
+  scheduled_output();
   faults();
   std::cout << "Native ALSA input, timestamp, queue, SysEx and disconnect checks passed\n";
 } catch (const std::exception &error) {

@@ -110,6 +110,9 @@ See the [MCU](doc/architecture.md#local-mcu-catalogue-json-format-1) and
 Live mode uses the normal host audio output, an external MIDI keyboard and the
 independent viewer. Query actual rates/buffer grants and report native faults,
 queues, underruns and disconnects. SIGINT/SIGTERM requests coordinated shutdown.
+Use `--midi-destination ID` to deliver firmware DIN replies to an ALSA sequencer
+or CoreMIDI destination with timestamps from the native audio epoch. ALSA IDs
+encode the sequencer client and port as `client * 256 + port`.
 
 `--midi` and `--wav` are paired. Offline rendering opens no host audio or viewer;
 `--tail` selects whole seconds after serialized MIDI/file end, default five.
