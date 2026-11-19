@@ -3,6 +3,7 @@
 
 #include "io/midi_port.hpp"
 
+#include <bit>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -81,8 +82,16 @@ std::optional<std::uint64_t> MidiInput::deadline() const noexcept {
   const auto event = port_->peek_input(receiver);
   if (!event) { return {}; }
   if (event->ticks > time_) { return event->ticks; }
-  const auto bit = (time_ - event->ticks) / bit_ticks;
-  return event->ticks + ((bit + 1) * bit_ticks);
+  const auto elapsed = time_ - event->ticks;
+  if (elapsed >= MidiPort::byte_ticks) { return event->ticks + MidiPort::byte_ticks; }
+  const auto first = static_cast<unsigned>(elapsed / bit_ticks) + 1;
+  constexpr unsigned stop_bit = 1U << (data_bits + 1);
+  constexpr unsigned end = 1U << character_bits;
+  const auto levels = stop_bit | (unsigned{event->byte} << 1U);
+  // Wake the DSP at a real transition or when this cursor must retire the byte.
+  const auto changes = ((levels ^ (levels << 1U)) & (end - 1U)) | end;
+  const auto next = first + static_cast<unsigned>(std::countr_zero(changes >> first));
+  return event->ticks + (next * bit_ticks);
 }
 
 const char *MidiInput::error() const noexcept {
