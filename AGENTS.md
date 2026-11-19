@@ -3,7 +3,8 @@
 Goal: OBJECTIVE.md. Target design: doc/architecture.md. Highest priority is uninterrupted
 live playback of unchanged original 1.25 firmware on A18 Pro, i5-1135G7 and
 i5-10400 under simultaneous 16-part Multi, 25-voice and dense MIDI load.
-Physical key-to-analog latency targets 2-5 ms (maximum 10 ms).
+Qualify the i5-1135G7 at its 2.4 GHz maximum. Physical key-to-analog latency
+targets 2-5 ms (maximum 10 ms).
 Decide everything else yourself.
 
 ## Fixed limits
@@ -31,7 +32,7 @@ Decide everything else yourself.
   startup and preparation separately.
   ACCEPTANCE.tsv records qualification.
 - Less code is better. Report the src/ and test/ line delta with each published
-  increment; see the reduction plan in Weichwolf/blofeld-src#31.
+  increment.
 
 ## Freedom
 
@@ -50,11 +51,10 @@ lives here and reaches the cores through their public interfaces.
   cores; no force pushes or backup branches. Validate your native host without
   breaking the other; both platforms use identical firmware, images and settings.
   Shared presets come from ../blofeld-src/tools/blofeld_image.py.
-- Coordinate in private Weichwolf/blofeld-src issues. Comments starting with
-  [Lead] come from the technical lead and set priorities: #30 experiments,
-  #31 reduction, #23 whole-instrument performance, #28 DSP AOT and backend,
-  #25 arithmetic/filter/LFO, #26 MIDI/SysEx, #27 MCU IRQ/display/USB.
-  Write short, result-first comments: table, what changed, what is open.
+- Coordinate Linux and macOS work in Weichwolf/blofeld-emu issues. Comments
+  starting with [Lead] set priorities. See #18 for the topic index, #17 for
+  Linux live audio and #19 for macOS live audio. Write short, result-first
+  comments. Keep original firmware, private traces and raw disassembly local.
 - Bound probes with explicit timeouts and stop promptly on faults. Telemetry is
   selectable, off by default and absent from the normal hot path.
 - Sanitizer qualification (ASan/UBSan, separate TSan) of own and generated code
