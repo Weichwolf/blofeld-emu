@@ -110,6 +110,8 @@ void instrument_time() {
     for (std::uint64_t cycles = 0; cycles <= last_cycle; ++cycles) {
       require(clock.advance(cycles) && clock.ticks() == (cycles * top) / bottom,
               "Repeated small advances retain the independently calculated fractional phase");
+      require(clock.advance(cycles) && clock.ticks() == (cycles * top) / bottom,
+              "Advancing again at the same cycle retains the original tick");
       const auto target = clock.ticks() + future_ticks;
       const auto expected = ((target * bottom) + top - 1) / top;
       require(clock.deadline(target) == expected,

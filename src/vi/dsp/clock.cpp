@@ -78,7 +78,7 @@ bool Clock::write(const dsp56300::Word value) noexcept {
 }
 
 bool Clock::advance(const std::uint64_t cycles) noexcept {
-  if (cycles < cycles_) { return false; }
+  if (cycles <= cycles_) { return cycles == cycles_; }
   const auto elapsed = cycles - cycles_;
   auto scaled_fraction = fraction_;
   std::uint64_t whole = 0;
