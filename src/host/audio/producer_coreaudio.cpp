@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "audio/deadline_coreaudio.hpp"
 #include "audio/playback.hpp"
 
 #include <AudioToolbox/AudioWorkInterval.h>
@@ -46,7 +47,9 @@ void require_workgroup(const int status) {
   }
 }
 
-std::uint32_t absolute_period(const std::chrono::nanoseconds duration) {
+}
+
+std::uint32_t device_period_ticks(const std::chrono::nanoseconds duration) {
   if (duration <= std::chrono::nanoseconds::zero() || duration > std::chrono::seconds(1)) {
     throw std::invalid_argument("Audio producer period requires a bounded positive grant");
   }
@@ -62,6 +65,17 @@ std::uint32_t absolute_period(const std::chrono::nanoseconds duration) {
   return static_cast<std::uint32_t>(ticks);
 }
 
+kern_return_t set_current_deadline(const std::uint32_t period) noexcept {
+  const thread_time_constraint_policy_data_t policy{
+      .period = period, .computation = period / 2, .constraint = period, .preemptible = 1};
+  auto words = std::bit_cast<std::array<integer_t, THREAD_TIME_CONSTRAINT_POLICY_COUNT>>(policy);
+  return thread_policy_set(pthread_mach_thread_np(pthread_self()),
+                           THREAD_TIME_CONSTRAINT_POLICY,
+                           words.data(),
+                           static_cast<mach_msg_type_number_t>(words.size()));
+}
+
+namespace {
 class Deadline {
 public:
   explicit Deadline(const std::uint32_t period) : thread_(pthread_self()) {
@@ -78,14 +92,7 @@ public:
     if (count != previous_.size()) {
       throw std::runtime_error("Invalid producer scheduling policy");
     }
-    const thread_time_constraint_policy_data_t policy{
-        .period = period, .computation = period / 2, .constraint = period, .preemptible = 1};
-    auto words = std::bit_cast<Policy>(policy);
-    require(thread_policy_set(pthread_mach_thread_np(thread_),
-                              THREAD_TIME_CONSTRAINT_POLICY,
-                              words.data(),
-                              static_cast<mach_msg_type_number_t>(words.size())),
-            "Set producer scheduling deadline");
+    require(set_current_deadline(period), "Set producer scheduling deadline");
   }
 
   ~Deadline() {
@@ -158,7 +165,7 @@ private:
 
 struct Playback::Producer::Impl {
   explicit Impl(const std::chrono::nanoseconds duration)
-      : period(absolute_period(duration)), deadline(period) {}
+      : period(device_period_ticks(duration)), deadline(period) {}
 
   std::uint32_t period;
   Deadline deadline;

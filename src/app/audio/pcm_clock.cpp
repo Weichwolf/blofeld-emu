@@ -59,35 +59,8 @@ void PcmClock::append(const vi::PcmOutput::Block block, const std::uint64_t audi
   if (phase == Phase::empty) { phase_.store(Phase::buffering); }
 }
 
-void PcmClock::observe(const host::audio::RenderPosition position) {
-  const auto point = read(position);
-  if (!point) { fail("Native audio position has no retained original PCM interval"); }
-  if (previous_) {
-    if (position == *previous_) { return; }
-    if (position.first_frame <= previous_->first_frame || position.host_ns <= previous_->host_ns ||
-        position.first_frame < previous_->first_frame + previous_->frames) {
-      fail("Native audio position moved backwards or overlapped");
-    }
-  }
-  const auto version = version_.load();
-  if (version > std::numeric_limits<std::uint64_t>::max() - 2) {
-    fail("PCM clock publication exhausted");
-  }
-  // One SC order encloses payload access; clear() revokes without recycling a version.
-  version_.store(version + 1);
-  published_epoch_.store(point->epoch);
-  published_audio_epoch_.store(point->audio_epoch);
-  published_ticks_.store(point->ticks);
-  published_host_ns_.store(point->host_ns);
-  published_uncertainty_ns_.store(point->uncertainty_ns);
-  version_.store(version + 2);
-  phase_.store(Phase::published);
-  previous_ = position;
-}
-
 void PcmClock::clear(const std::uint64_t source_origin) noexcept {
   phase_.store(Phase::empty);
-  previous_.reset();
   const auto version = source_version_.load();
   if (version > std::numeric_limits<std::uint64_t>::max() - 2) {
     phase_.store(Phase::failed);
@@ -104,7 +77,7 @@ PcmClock::read(const host::audio::RenderPosition position) const noexcept {
   constexpr unsigned attempts = 3;
   for (unsigned attempt = 0; attempt < attempts; ++attempt) {
     const auto phase = phase_.load();
-    if ((phase != Phase::buffering && phase != Phase::published) || ticks_.empty()) { return {}; }
+    if (phase != Phase::buffering) { return {}; }
     const auto version = source_version_.load();
     if ((version & 1U) != 0) { continue; }
     const auto origin = origin_.load();
@@ -124,27 +97,9 @@ PcmClock::read(const host::audio::RenderPosition position) const noexcept {
                       .ticks = ticks_[static_cast<std::size_t>(first % ticks_.size())].load(),
                       .host_ns = position.host_ns,
                       .uncertainty_ns = position.uncertainty_ns};
-    if (version == source_version_.load()) {
-      const auto current = phase_.load();
-      if (current == Phase::buffering || current == Phase::published) { return point; }
-    }
+    if (version == source_version_.load() && phase_.load() == Phase::buffering) { return point; }
   }
   return {};
 }
 
-std::optional<PcmClock::Point> PcmClock::read() const noexcept {
-  constexpr unsigned attempts = 3;
-  for (unsigned attempt = 0; attempt < attempts; ++attempt) {
-    if (phase_.load() != Phase::published) { return {}; }
-    const auto version = version_.load();
-    if ((version & 1U) != 0) { continue; }
-    const Point point{.epoch = published_epoch_.load(),
-                      .audio_epoch = published_audio_epoch_.load(),
-                      .ticks = published_ticks_.load(),
-                      .host_ns = published_host_ns_.load(),
-                      .uncertainty_ns = published_uncertainty_ns_.load()};
-    if (version_.load() == version && phase_.load() == Phase::published) { return point; }
-  }
-  return {};
-}
 }

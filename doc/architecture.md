@@ -466,11 +466,12 @@ throughput; live host consumption supplies pacing/backpressure outside callbacks
 Query source/native rates and actual conversion; never assume macOS fixes 48 kHz.
 
 Establish readiness through the original application WAI, valid PCM and genuine
-DIN identity exchange before choosing the musical origin. Early inquiries must
-not overwrite startup mailbox state. Discard boot audio. Live composition primes
-a fresh native output epoch, obtains audio correlation, then accepts new host
-events; input predating readiness is discarded. Map only retained original audio
-intervals. Missing clocks, late input, native faults and underruns fail the session.
+DIN identity exchange before choosing the musical origin. Discard boot audio
+and host input predating firmware readiness. The DSP owner stages host MIDI in
+DIN order, then advances the shared exclusive input frontier using granted PCM
+queue credit. An empty MIDI queue advances the same frontier. Admit late or
+uncorrelated packets at the earliest legal tick and count them separately.
+Report native faults and underruns.
 
 SMF reading merges tracks by pulse and source-track order with bounded cursors
 and payloads. Format2 requires explicit pattern selection. Retain rational time
@@ -502,16 +503,16 @@ Linux uses a dedicated PulseAudio owner, actual server format/buffer grants,
 priming before uncork and cork/flush on reset. Backpressure stays outside native
 callbacks. Explicit asynchronous timing requests supply raw consumption indices
 within measured send/receipt bounds; reject corrupt/backwards/unsubmitted indices,
-and stopped consumption. Drop overdue timing queries while audio playback
-continues. Only bounded observations can advance MIDI admission. No interpolated
-server clock is substituted for an actual observation.
+and stopped consumption. Drop overdue timing queries while playback continues.
+Use only bounded real observations to correlate host MIDI time.
 
 Publish coherent bounded-read correlation snapshots: source frame range/index,
 native epoch, monotonic time and uncertainty. Retain enough accepted original frame
 completion times for the granted maximum lookback; never interpolate guest time
-from nominal frame rate. Bind VI and native epoch IDs explicitly. Reset/failure
-revokes old observations. Grant maximum uncertainty before priming and include
-both margins in MIDI lead/silence admission; queued events are never retimed.
+from nominal frame rate. Bind VI and native epoch IDs explicitly. A new audio
+epoch invalidates prior MIDI correlation even before a new observation arrives.
+Check the granted maximum uncertainty at priming and leave admitted events at
+their original guest ticks.
 The total live window must fit the physical latency limit in OBJECTIVE.md.
 Render/submission/server-consumption points are not analog presentation timestamps.
 

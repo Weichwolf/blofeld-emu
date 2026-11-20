@@ -2,6 +2,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <span>
 #include <stop_token>
@@ -26,5 +27,7 @@ struct PcmOutput {
   bool (*write)(void *, Block, const std::stop_token &) = nullptr;
   // Runs on the execution owner after its final submission, including unwinding.
   void (*close)(void *) noexcept = nullptr;
+  // A live consumer can request an incomplete block of already completed frames.
+  bool (*submit_partial)(void *, std::size_t) noexcept = nullptr;
 };
 }

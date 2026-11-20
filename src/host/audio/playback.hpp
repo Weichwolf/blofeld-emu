@@ -66,6 +66,10 @@ public:
   [[nodiscard]] const Grants &grants() const noexcept;
   [[nodiscard]] PlaybackStatus status() const noexcept;
   [[nodiscard]] Producer producer() const;
+#if defined(__APPLE__)
+  [[nodiscard]] std::chrono::nanoseconds device_period() const noexcept;
+  [[nodiscard]] bool fills_render_quantum(std::size_t pending) const noexcept;
+#endif
 
 private:
   struct Impl;

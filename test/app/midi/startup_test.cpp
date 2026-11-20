@@ -41,8 +41,8 @@ void rejects(const auto &action) {
   require(rejected, "Reject invalid destination state");
 }
 
-void startup_silence() {
-  MidiPort port(MidiPort::InputMode::stream);
+void startup_silence(const MidiPort::InputMode mode) {
+  MidiPort port(mode);
   MidiStartup startup;
   require(
       !startup.poll(port, {}) && port.input_limit() == interval && !port.peek_input(),
@@ -57,8 +57,8 @@ void startup_silence() {
           "Only actual application entry and PCM enable the ordinary identity query");
 }
 
-void requested_input() {
-  MidiPort port(MidiPort::InputMode::stream);
+void requested_input(const MidiPort::InputMode mode) {
+  MidiPort port(mode);
   MidiStartup startup;
   static_cast<void>(startup.poll(port, {}));
   constexpr auto confirmed = interval - (2 * character_ticks);
@@ -108,8 +108,8 @@ void concurrent_readiness() {
           "The next coherent observation sends the actual query at the original frontier");
 }
 
-void readiness() {
-  MidiPort port(MidiPort::InputMode::stream);
+void readiness(const MidiPort::InputMode mode) {
+  MidiPort port(mode);
   MidiStartup startup;
   require(!startup.poll(port, {.application = true, .pcm = true}) && port.input_limit() == interval,
           "Grant an initial query window");
@@ -170,10 +170,12 @@ void invalid_identity() {
 }
 
 int main() try {
-  startup_silence();
-  requested_input();
+  for (const auto mode : {MidiPort::InputMode::stream, MidiPort::InputMode::audio}) {
+    startup_silence(mode);
+    requested_input(mode);
+    readiness(mode);
+  }
   concurrent_readiness();
-  readiness();
   invalid_identity();
   MidiPort live;
   MidiStartup startup;

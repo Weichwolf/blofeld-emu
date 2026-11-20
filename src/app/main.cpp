@@ -104,7 +104,7 @@ int main(const int argc, char **argv) try {
                             mcu_program,
                             std::move(media),
                             live.output(),
-                            blofeld::vi::MidiPort::InputMode::stream,
+                            blofeld::vi::MidiPort::InputMode::audio,
                             program,
                             blofeld::vi::Coupling::default_window,
                             dsp_storage);

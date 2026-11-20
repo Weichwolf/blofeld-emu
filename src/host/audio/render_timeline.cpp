@@ -5,6 +5,17 @@
 #include <optional>
 
 namespace blofeld::host::audio {
+RenderTimeline::Start RenderTimeline::establish(const Request request) noexcept
+    [[clang::nonblocking]] {
+  const bool anchored = next_.has_value();
+  if (const auto fault = advance(request)) {
+    if (fault->error != Error::discontinuity) { return {.fault = fault}; }
+    reset();
+    return {.fault = advance(request)};
+  }
+  return {.fault = {}, .continuous = anchored};
+}
+
 std::optional<RenderTimeline::Fault> RenderTimeline::advance(const Request request) noexcept
     [[clang::nonblocking]] {
   if (failure_) { return failure_; }

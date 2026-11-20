@@ -179,7 +179,7 @@ T unit_property(const AudioUnit unit,
 }
 
 struct Playback::Impl {
-  enum class Phase : std::uint8_t { opening, priming, playing, stopped, failed };
+  enum class Phase : std::uint8_t { opening, priming, starting, playing, stopped, failed };
   static_assert(std::atomic<Phase>::is_always_lock_free);
   Grants granted;
   AudioUnit unit = nullptr;
@@ -222,7 +222,7 @@ struct Playback::Impl {
 
   [[nodiscard]] bool open() const noexcept {
     const auto current = phase.load(std::memory_order_acquire);
-    return current == Phase::priming || current == Phase::playing;
+    return current == Phase::priming || current == Phase::starting || current == Phase::playing;
   }
 
   void stop() noexcept {
@@ -250,7 +250,7 @@ struct Playback::Impl {
       return kAudio_ParamError;
     }
     const std::span output(static_cast<FloatFrame *>(data->mBuffers[0].mData), frames);
-    if (current != Phase::playing) {
+    if (current != Phase::playing && current != Phase::starting) {
       std::ranges::fill(output, FloatFrame{});
       if (flags != nullptr) { *flags |= kAudioUnitRenderAction_OutputIsSilence; }
       return noErr;
@@ -261,11 +261,21 @@ struct Playback::Impl {
     const auto host = (time->mFlags & kAudioTimeStampHostTimeValid) != 0
                           ? nanoseconds(time->mHostTime, self.timebase)
                           : std::nullopt;
-    if (const auto fault =
-            self.timeline.advance({.sample = sample, .host = host, .frames = frames})) {
-      self.timing_fault = fault;
+    const RenderTimeline::Request request{.sample = sample, .host = host, .frames = frames};
+    const auto timing =
+        current == Phase::starting
+            ? self.timeline.establish(request)
+            : RenderTimeline::Start{.fault = self.timeline.advance(request), .continuous = true};
+    if (timing.fault) {
+      self.timing_fault = timing.fault;
       self.render_error.store(kAudio_ParamError, std::memory_order_release);
       return kAudio_ParamError;
+    }
+    if (!timing.continuous) {
+      std::ranges::fill(output, FloatFrame{});
+      if (flags != nullptr) { *flags |= kAudioUnitRenderAction_OutputIsSilence; }
+      self.renders.fetch_add(1, std::memory_order_release);
+      return noErr;
     }
     if (!host || frames > std::numeric_limits<std::uint64_t>::max() - self.rendered_frame) {
       self.render_error.store(kAudio_ParamError, std::memory_order_release);
@@ -286,6 +296,9 @@ struct Playback::Impl {
       self.underrun_frames.store((std::uint64_t{frames} << 32) | supplied,
                                  std::memory_order_relaxed);
       self.underruns.fetch_add(1, std::memory_order_release);
+    } else if (current == Phase::starting) {
+      auto expected = Phase::starting;
+      self.phase.compare_exchange_strong(expected, Phase::playing, std::memory_order_release);
     }
     if (flags != nullptr) {
       if (supplied == 0) {
@@ -369,7 +382,7 @@ struct Playback::Impl {
     maximum_slice = unit_property<UInt32>(unit, kAudioUnitProperty_MaximumFramesPerSlice);
     physical_buffer = static_cast<std::size_t>(
         (std::uint64_t{device_frames.maximum} * rate + sink_hz - 1) / sink_hz);
-    constexpr unsigned prime_quanta = 3;
+    constexpr unsigned prime_quanta = 2;
     const auto target = physical_buffer * prime_quanta;
     const auto capacity = target + physical_buffer;
     if (device_frames.minimum == 0 || physical_buffer == 0 || maximum_slice == 0 ||
@@ -457,18 +470,19 @@ struct Playback::Impl {
         check_device();
         next_check = now + device_check_period;
       }
-      if (phase.load(std::memory_order_acquire) == Phase::priming &&
-          buffer->queued() >= granted.target_frames) {
-        phase.store(Phase::playing, std::memory_order_release);
+      auto current_phase = phase.load(std::memory_order_acquire);
+      if (current_phase == Phase::priming && buffer->queued() >= granted.target_frames) {
+        phase.store(Phase::starting, std::memory_order_release);
         require(AudioOutputUnitStart(unit), "Start primed native audio output");
-        last_render = now;
+        last_render = std::chrono::steady_clock::now();
+        current_phase = phase.load(std::memory_order_acquire);
       }
       const auto current = renders.load(std::memory_order_acquire);
       if (current != observed) {
         observed = current;
-        last_render = now;
+        if (current_phase == Phase::playing) { last_render = now; }
       }
-      if (phase.load(std::memory_order_acquire) == Phase::playing &&
+      if ((current_phase == Phase::starting || current_phase == Phase::playing) &&
           now - last_render > std::chrono::seconds(2)) {
         throw std::runtime_error("Native audio callback timed out");
       }
@@ -533,6 +547,16 @@ Playback::~Playback() = default;
 Playback::Producer Playback::producer() const {
   check();
   return Producer(impl_->device_period);
+}
+
+std::chrono::nanoseconds Playback::device_period() const noexcept {
+  return impl_->device_period;
+}
+
+bool Playback::fills_render_quantum(const std::size_t pending) const noexcept {
+  if (impl_->phase.load(std::memory_order_acquire) != Impl::Phase::playing) { return false; }
+  const auto queued = impl_->buffer->queued();
+  return queued < impl_->physical_buffer && pending >= impl_->physical_buffer - queued;
 }
 
 void Playback::stop() noexcept {

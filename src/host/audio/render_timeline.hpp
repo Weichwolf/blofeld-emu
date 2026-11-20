@@ -22,6 +22,12 @@ public:
     std::optional<std::uint64_t> previous_host;
   };
 
+  struct Start {
+    std::optional<Fault> fault;
+    bool continuous = false;
+  };
+
+  [[nodiscard]] Start establish(Request request) noexcept [[clang::nonblocking]];
   [[nodiscard]] std::optional<Fault> advance(Request request) noexcept [[clang::nonblocking]];
   void reset() noexcept;
 

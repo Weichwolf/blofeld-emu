@@ -56,20 +56,17 @@ RenderPosition position(const std::uint64_t first,
 
 void exact_points() {
   PcmClock clock(history_frames);
-  require(!clock.read(), "No host correlation exists before real PCM and a native interval");
+  require(!clock.read(position(1, 2)), "No native interval maps before real PCM");
   clock.append(block(0, initial_ticks), native_epoch);
-  require(!clock.read(), "Accepted PCM alone does not invent a host clock");
-  clock.observe(position(1, 2));
   const PcmClock::Point expected{
       .epoch = guest_epoch, .audio_epoch = native_epoch, .ticks = 102, .host_ns = first_host};
-  require(clock.read() == expected,
+  require(clock.read(position(1, 2)) == expected,
           "Bind the exact retained completion without nominal interpolation");
-  clock.observe(position(1, 2));
-  require(clock.read() == expected, "Repeated observations preserve the same clock point");
+  require(clock.read(position(1, 2)) == expected,
+          "Repeated observations preserve the same clock point");
   constexpr std::array<std::uint64_t, 4> later{501, 502, 1000, 1001};
   clock.append(block(4, later), native_epoch);
-  clock.observe(position(4, 4, first_host * 2));
-  const auto current = clock.read();
+  const auto current = clock.read(position(4, 4, first_host * 2));
   require(current && current->ticks == later.front() && current->host_ns == first_host * 2,
           "Skipped native observations do not synthesize or skip source frames");
 }
@@ -84,8 +81,6 @@ void correlation_uncertainty() {
   require(point && point->ticks == initial_ticks[1] && point->host_ns == first_host &&
               point->uncertainty_ns == uncertainty,
           "Native timing uncertainty survives direct source-frame correlation unchanged");
-  clock.observe(native);
-  require(clock.read() == point, "Owner publication retains the same complete bounded point");
   native.uncertainty_ns = first_host;
   require(!clock.read(native), "A native uncertainty interval cannot include time zero");
   native.host_ns = std::numeric_limits<std::uint64_t>::max();
@@ -98,16 +93,12 @@ void selected_source_origin() {
   PcmClock clock(history_frames);
   clock.clear(origin);
   clock.append(block(origin, initial_ticks), native_epoch);
-  require(!clock.read(), "A source origin alone cannot invent a native render observation");
   const auto fresh = clock.read(position(1, 2));
   require(fresh == PcmClock::Point{.epoch = guest_epoch,
                                    .audio_epoch = native_epoch,
                                    .ticks = initial_ticks[1],
                                    .host_ns = first_host},
           "The first native callback maps original frame numbers before another PCM write");
-  require(!clock.read(), "A concurrent lookup does not rewrite the owner's observation stream");
-  clock.observe(position(1, 2));
-  require(clock.read() == fresh, "Owner publication and direct native lookup agree exactly");
   constexpr std::array<std::uint64_t, 8> later{501, 502, 600, 601, 700, 800, 900, 1000};
   clock.append(block(origin + initial_ticks.size(), later), native_epoch);
   require(!clock.read(position(3)), "An expired interval cannot alias a recycled history slot");
@@ -115,7 +106,7 @@ void selected_source_origin() {
   require(retained && retained->ticks == later.front(),
           "History wrapping uses original source indices and native-relative frame positions");
   clock.clear(origin + (2 * history_frames));
-  require(!clock.read() && !clock.read(position(4)), "Reset revokes both correlation interfaces");
+  require(!clock.read(position(4)), "Reset revokes the preceding correlation");
   rejects([&] { clock.append(block(origin, initial_ticks), native_epoch); });
 }
 
@@ -146,50 +137,21 @@ void retention_and_reset() {
   PcmClock clock(retained);
   constexpr std::array<std::uint64_t, 8> ticks{1, 4, 7, 8, 12, 15, 20, 32};
   clock.append(block(0, ticks), native_epoch);
-  clock.observe(position(4, 4));
-  const auto wrapped = clock.read();
+  const auto wrapped = clock.read(position(4, 4));
   require(wrapped && wrapped->ticks == ticks[4],
           "Wrapped retention includes its oldest remaining complete interval");
-  rejects([&] { clock.observe(position(3)); });
-  require(!clock.read(), "An expired source frame revokes the clock");
-  rejects([&] { clock.observe(position(4, 4)); });
-  rejects([&] { clock.append(block(8, initial_ticks), native_epoch); });
+  require(!clock.read(position(3)) && clock.read(position(4, 4)) == wrapped,
+          "Expired source frames lose correlation without corrupting retained PCM history");
   clock.clear();
-  require(!clock.read(), "Reset cannot leak the previous epoch");
+  require(!clock.read(position(4, 4)), "Reset cannot leak the previous epoch");
   constexpr std::array<std::uint64_t, 1> zero{0};
   clock.append(block(0, zero, 0), 0);
-  clock.observe({.epoch = 0, .first_frame = 0, .host_ns = 1, .frames = 1});
-  require(clock.read() == PcmClock::Point{.epoch = 0, .audio_epoch = 0, .ticks = 0, .host_ns = 1},
+  require(clock.read({.epoch = 0, .first_frame = 0, .host_ns = 1, .frames = 1}) ==
+              PcmClock::Point{.epoch = 0, .audio_epoch = 0, .ticks = 0, .host_ns = 1},
           "Guest/audio epoch zero and original tick zero remain valid after reset");
   clock.clear();
   clock.clear();
-  require(!clock.read(), "Repeated owner shutdown or reset remains revoked");
-}
-
-void native_failures() {
-  for (auto candidate : {position(0, 0), position(0, 1, 0), position(4), position(3, 2)}) {
-    PcmClock clock(history_frames);
-    clock.append(block(0, initial_ticks), native_epoch);
-    rejects([&] { clock.observe(candidate); });
-    require(!clock.read(), "Invalid native intervals cannot produce an instrument clock");
-  }
-  PcmClock unbound(history_frames);
-  rejects([&] { unbound.observe(position(0)); });
-  for (auto candidate : {position(0, 1, first_host + 1),
-                         position(2, 1, first_host + 1),
-                         position(3, 1, first_host),
-                         position(3, 1, first_host - 1)}) {
-    PcmClock clock(history_frames);
-    clock.append(block(0, initial_ticks), native_epoch);
-    clock.observe(position(1, 2));
-    rejects([&] { clock.observe(candidate); });
-    require(!clock.read(), "Backwards/overlapping frames and reused host time revoke publication");
-  }
-  PcmClock clock(history_frames);
-  clock.append(block(0, initial_ticks), native_epoch);
-  auto wrong_epoch = position(0);
-  ++wrong_epoch.epoch;
-  rejects([&] { clock.observe(wrong_epoch); });
+  require(!clock.read(position(0)), "Repeated owner shutdown or reset remains revoked");
 }
 
 void source_failures() {
@@ -198,9 +160,9 @@ void source_failures() {
        {block(5, later), block(4, later, guest_epoch + 1), block(4, initial_ticks)}) {
     PcmClock clock(history_frames);
     clock.append(block(0, initial_ticks), native_epoch);
-    clock.observe(position(0));
     rejects([&] { clock.append(next, native_epoch); });
-    require(!clock.read(), "Source gaps, epoch changes and backwards ticks revoke publication");
+    require(!clock.read(position(0)),
+            "Source gaps, epoch changes and backwards ticks revoke correlation");
   }
   PcmClock clock(history_frames);
   clock.append(block(0, initial_ticks), native_epoch);
@@ -217,54 +179,13 @@ void full_range_and_disabled() {
   const std::array<std::uint64_t, 1> tick{maximum};
   PcmClock clock(1);
   clock.append(block(0, tick, maximum), maximum);
-  clock.observe({.epoch = maximum, .first_frame = 0, .host_ns = maximum, .frames = 1});
-  require(clock.read() ==
+  require(clock.read({.epoch = maximum, .first_frame = 0, .host_ns = maximum, .frames = 1}) ==
               PcmClock::Point{
                   .epoch = maximum, .audio_epoch = maximum, .ticks = maximum, .host_ns = maximum},
           "Guest/audio epoch IDs and times retain all their integer bits");
   PcmClock disabled(0);
   disabled.append(block(0, initial_ticks), native_epoch);
-  require(!disabled.read(), "An unqualified backend supplies no clock or retention grant");
-  rejects([&] { disabled.observe(position(0)); });
-}
-
-void concurrent() {
-  PcmClock clock(history_frames);
-  std::atomic<bool> done{false};
-  constexpr std::uint64_t count = 20000;
-  constexpr std::uint64_t per_epoch = 1024;
-  std::jthread writer([&] {
-    for (std::uint64_t index = 1; index <= count; ++index) {
-      const auto epoch = (index - 1) / per_epoch;
-      const auto frame = (index - 1) % per_epoch;
-      if (frame == 0) { clock.clear(); }
-      const std::array<std::uint64_t, 1> ticks{index * 11};
-      clock.append(block(frame, ticks, epoch * 2), epoch);
-      clock.observe({.epoch = epoch,
-                     .first_frame = frame,
-                     .host_ns = index * 7,
-                     .frames = 1,
-                     .uncertainty_ns = index * 3});
-    }
-    done.store(true, std::memory_order_release);
-  });
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-  std::uint64_t previous = 0;
-  do {
-    if (const auto point = clock.read()) {
-      const auto index = point->host_ns / 7;
-      require(index != 0 && index >= previous && index <= count && point->host_ns == index * 7 &&
-                  point->ticks == index * 11 && point->audio_epoch == (index - 1) / per_epoch &&
-                  point->epoch == 2 * point->audio_epoch && point->uncertainty_ns == index * 3,
-              "Concurrent readers receive coherent ordered points across independent epochs");
-      previous = index;
-    }
-    require(std::chrono::steady_clock::now() < deadline, "Concurrent publication stays bounded");
-  } while (!done.load(std::memory_order_acquire));
-  writer.join();
-  const auto point = clock.read();
-  require(point && point->host_ns == count * 7 && point->ticks == count * 11,
-          "Final quiescent publication survives concurrent reads");
+  require(!disabled.read(position(0)), "An unqualified backend supplies no PCM history");
 }
 
 void concurrent_native_lookup() {
@@ -306,7 +227,7 @@ void concurrent_native_lookup() {
   writer.join();
   const auto position = native.read();
   const auto point = position ? clock.read(*position) : std::nullopt;
-  require(point && point->host_ns == count * 7 && point->ticks == count * 11 && !clock.read(),
+  require(point && point->host_ns == count * 7 && point->ticks == count * 11,
           "Fresh native correlation needs no later producer observation or invented anchor");
 }
 }
@@ -317,10 +238,8 @@ int main() try {
   selected_source_origin();
   source_origin_limits();
   retention_and_reset();
-  native_failures();
   source_failures();
   full_range_and_disabled();
-  concurrent();
   concurrent_native_lookup();
 } catch (const std::exception &error) {
 

@@ -323,6 +323,24 @@ void held_reset_boundary() {
           "Quiescence cannot replace confirmation after a destructive native instruction");
 }
 
+void promoted_read_set() {
+  std::array<Epoch::Read, 8> storage{};
+  Epoch epoch(storage, 2);
+  require(epoch.record({.ticks = 3, .value = 1, .mask = 1}) &&
+              epoch.record({.ticks = 7, .value = 1, .mask = 1}) && epoch.attained(5) &&
+              epoch.promote(4) && !epoch.changed({.ticks = 6, .value = 0, .mask = 1}) &&
+              epoch.conflict() == 6,
+          "A promoted boundary retains the speculative read set after it");
+  require(epoch.rollback() && epoch.record({.ticks = 4, .value = 1, .mask = 1}) &&
+              !epoch.record({.ticks = 3, .value = 1, .mask = 1}) &&
+              epoch.error() == Epoch::Error::time,
+          "Replay starts at the promoted boundary");
+  Epoch unsettled(storage, 2);
+  require(unsettled.attained(4) && !unsettled.promote(4) &&
+              unsettled.error() == Epoch::Error::unsettled,
+          "The receiver frontier must extend past the promoted boundary");
+}
+
 void bounded_read_set() {
   std::array<Epoch::Read, 8> storage{};
   Epoch epoch(storage, 2);
@@ -377,6 +395,7 @@ int main() try {
   native_cancellation_and_commit(image);
   genuine_fault(image, false);
   genuine_fault(image, true);
+  promoted_read_set();
   bounded_read_set();
   held_reset_boundary();
   pressure_restart();

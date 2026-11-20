@@ -74,6 +74,15 @@ private:
     std::uint64_t binding = 0;
   };
 
+  struct StagedCheckpoint {
+    std::uint64_t tick;
+    std::size_t effects;
+    Checkpoint snapshot;
+  };
+
+  [[nodiscard]] Checkpoint snapshot() const;
+  [[nodiscard]] bool stage_ordinary(std::uint64_t target);
+  void promote_staged();
   [[nodiscard]] std::uint64_t ticks() const noexcept;
   [[nodiscard]] bool data(PeerPort::Sample &sample, std::uint8_t mask) noexcept;
   void publish() noexcept;
@@ -114,6 +123,8 @@ private:
   Effects effects_;
   State state_;
   std::optional<Checkpoint> checkpoint_;
+  std::optional<StagedCheckpoint> staged_;
+  unsigned further_windows_ = 0;
   std::vector<cpu12::Ram> grants_;
   std::vector<std::uint64_t> mounted_;
   std::optional<Coupling::Input> pending_;

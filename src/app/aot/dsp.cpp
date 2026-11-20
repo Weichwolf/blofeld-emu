@@ -131,7 +131,13 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
   const std::array modules{native::Module{.bitcode = semantic.bitcode(), .exports = exports},
                            native::Module{.bitcode = detail::dsp_bindings, .exports = {}}};
   const Channels channels(detail::dsp_bindings);
-  const auto code = std::make_shared<native::Code>(modules, channels.entries(), cache);
+#if defined(__APPLE__) && defined(__aarch64__)
+  constexpr auto executable_memory = native::Code::ExecutableMemory::jit;
+#else
+  constexpr auto executable_memory = native::Code::ExecutableMemory::standard;
+#endif
+  const auto code =
+      std::make_shared<native::Code>(modules, channels.entries(), cache, executable_memory);
   std::vector<dsp56300::NativeSymbol> symbols;
   for (const auto symbol : semantic.exports()) {
     symbols.push_back({.name = symbol.name, .address = code->address(symbol.name)});

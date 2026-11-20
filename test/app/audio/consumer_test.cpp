@@ -242,6 +242,7 @@ void reset_epochs() {
   Fixture fixture;
   constexpr std::array<std::uint64_t, 2> ticks{10, 20};
   constexpr std::array<std::uint64_t, 2> after{30, 40};
+  constexpr std::array<std::uint64_t, 2> reset{50, 60};
   require(fixture.write(0, ticks), "Valid boot PCM");
   require(fixture.write(0, ticks, guest_epoch + 1) && fixture.device.resets == 0,
           "Boot resets validate a new source sequence without resetting an unopened native stream");
@@ -253,14 +254,18 @@ void reset_epochs() {
                                                        .ticks = after.front(),
                                                        .host_ns = host_ns},
           "Selected initial audio epoch");
-  require(fixture.write(0, ticks, guest_epoch + 2),
+  require(fixture.write(0, reset, guest_epoch + 2),
           "A running reset accepts new original frame zero");
   require(fixture.device.resets == 1 && !fixture.consumer->clock(),
           "Reset flushes the real stream and revokes its previous native interval");
+  fixture.position(0);
+  const auto grant = fixture.consumer->input_grant(fixture.device.status);
+  require(grant && grant->audio_epoch == 1 && !grant->playhead,
+          "A reset grant carries the new epoch even while the old position is visible");
   fixture.position(0, 1);
   require(fixture.consumer->clock() == PcmClock::Point{.epoch = guest_epoch + 2,
                                                        .audio_epoch = 1,
-                                                       .ticks = ticks.front(),
+                                                       .ticks = reset.front(),
                                                        .host_ns = host_ns},
           "A hardware reset does not reapply the obsolete one-time startup boundary");
   rejects([&] { return fixture.write(2, after, guest_epoch + 1); });
@@ -315,6 +320,62 @@ void invalid_and_cancelled() {
   }
 }
 
+void audio_credit_without_playhead() {
+  Fixture fixture(false);
+  const auto current = [&] { return fixture.consumer->input_grant(fixture.device.status); };
+  require(!current(), "Audio credit requires an original PCM interval");
+  constexpr std::array<std::uint64_t, 2> ticks{10, 20};
+  require(fixture.write(0, ticks), "Submit an original PCM interval");
+  const auto uncorrelated = current();
+  if (!uncorrelated) { throw std::runtime_error("PCM could not continue without a playhead"); }
+  require(!uncorrelated->started && !uncorrelated->playhead,
+          "Audio credit is available during priming without a playhead");
+  fixture.device.status.started = true;
+  const auto playing = current();
+  require(playing && playing->started && !playing->playhead &&
+              playing->exclusive == uncorrelated->exclusive,
+          "The device can start without supplying a playhead for MIDI correlation");
+
+  fixture.position(0);
+  const auto correlated = current();
+  require(correlated && correlated->playhead && correlated->playhead->ticks == ticks.front() &&
+              correlated->exclusive == uncorrelated->exclusive,
+          "An actual observation maps MIDI without changing PCM credit");
+  fixture.position(ticks.size());
+  const auto outside_history = current();
+  require(outside_history && !outside_history->playhead &&
+              outside_history->exclusive == uncorrelated->exclusive,
+          "An observation outside accepted PCM leaves the same audio credit");
+
+  fixture.device.status.queued_frames = fixture.playback->grants().maximum_frames;
+  const auto full = current();
+  constexpr auto block_ticks = (16 * PcmOutput::time_hz + rate - 1) / rate;
+  require(full && full->exclusive == ticks.back() + block_ticks + 1 &&
+              full->exclusive < uncorrelated->exclusive,
+          "A full queue authorizes only the pending output block");
+}
+
+void writes_across_expired_playhead() {
+  Fixture fixture(false);
+  constexpr std::size_t block_size = 16;
+  constexpr auto count = history + block_size;
+  std::array<std::uint64_t, block_size> ticks{};
+  for (std::size_t first = 0; first < count; first += ticks.size()) {
+    for (std::size_t index = 0; index < ticks.size(); ++index) { ticks[index] = first + index + 1; }
+    require(fixture.write(first, ticks), "Submit original PCM across a stalled native clock");
+    if (first == 0) {
+      fixture.position(0);
+      require(fixture.consumer->clock().has_value(), "A previously usable native playhead");
+    }
+  }
+  require(!fixture.consumer->clock() && fixture.device.written.size() == count,
+          "An expired native observation loses correlation while every original frame is sent");
+  fixture.position(history);
+  const auto recovered = fixture.consumer->clock();
+  require(recovered && recovered->ticks == history + 1,
+          "A fresh native observation recovers exact correlation");
+}
+
 void concurrent_begin() {
   Fixture fixture;
   std::binary_semaphore ready(0);
@@ -353,6 +414,8 @@ int main() try {
   selected_original_frames();
   reset_epochs();
   invalid_and_cancelled();
+  audio_credit_without_playhead();
+  writes_across_expired_playhead();
   concurrent_begin();
 } catch (const std::exception &error) {
 

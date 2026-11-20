@@ -39,6 +39,25 @@ void cadence() {
   }
 }
 
+void startup() {
+  RenderTimeline timeline;
+  const auto anchor = timeline.establish({.sample = 0, .host = 100, .frames = 30});
+  require(!anchor.fault && !anchor.continuous, "The first callback establishes a tentative origin");
+  const auto jump = timeline.establish({.sample = 82, .host = 200, .frames = 29});
+  require(!jump.fault && !jump.continuous, "A startup discontinuity replaces the tentative origin");
+  const RenderTimeline::Request first_pcm{.sample = 111, .host = 300, .frames = 30};
+  const auto contiguous = timeline.establish(first_pcm);
+  require(!contiguous.fault && contiguous.continuous, "A contiguous callback can take live PCM");
+  const auto active = timeline.advance({.sample = 171, .host = 400, .frames = 29});
+  require(active && active->error == Error::discontinuity &&
+              active->expected == *first_pcm.sample + first_pcm.frames,
+          "A discontinuity after live PCM still fails");
+  timeline.reset();
+  const auto invalid = timeline.establish({.sample = 0, .host = {}, .frames = 30});
+  require(invalid.fault && invalid.fault->error == Error::host_time && !invalid.continuous,
+          "A missing startup host timestamp fails");
+}
+
 void rejection(const RenderTimeline::Request request, const Error error) {
   RenderTimeline timeline;
   require(!timeline.advance({.sample = 0, .host = first_host, .frames = 16}),
@@ -97,6 +116,7 @@ void range() {
 
 int main() try {
   cadence();
+  startup();
   invalid();
   range();
 } catch (const std::exception &error) {

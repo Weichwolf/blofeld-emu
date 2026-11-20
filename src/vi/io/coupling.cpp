@@ -61,8 +61,9 @@ void Coupling::Cancel::operator()() const noexcept {
 }
 
 void Coupling::notify() noexcept {
-  changed_.fetch_add(1, std::memory_order_seq_cst);
-  if (waiting_.load(std::memory_order_seq_cst) != 0) { changed_.notify_all(); }
+  auto changed = std::atomic_ref(changed_);
+  changed.fetch_add(1, std::memory_order_seq_cst);
+  if (waiting_.load(std::memory_order_seq_cst) != 0) { changed.notify_all(); }
 }
 
 void Coupling::wait(const std::uint64_t observed) noexcept {
@@ -71,9 +72,16 @@ void Coupling::wait(const std::uint64_t observed) noexcept {
 #if defined(BLOFELD_CENSUS)
     const Census::Wait observed_wait;
 #endif
-    changed_.wait(observed, std::memory_order_acquire);
+    std::atomic_ref(changed_).wait(observed, std::memory_order_acquire);
   }
   waiting_.fetch_sub(1, std::memory_order_seq_cst);
+}
+
+void Coupling::wait_checkpoint(const std::uint64_t observed) noexcept {
+  if (!midi_.before_checkpoint_wait(
+          {.generation = changed_, .observed = observed, .command = checkpoint_sequence_})) {
+    wait(observed);
+  }
 }
 
 bool Coupling::fail(const char *const message) noexcept {
@@ -309,8 +317,13 @@ std::optional<Coupling::Grant> Coupling::receiver(const Stamp stamp) {
     if (checkpoint_barrier()) { continue; }
     const auto frontier = frontier_.load(std::memory_order_acquire);
     const auto input = midi_.input_limit();
-    if (input && *input <= stamp.ticks) { midi_.request_input(stamp.ceil()); }
-    if ((!input || *input > stamp.ticks) && bound_.load(std::memory_order_acquire) &&
+    const bool midi_blocked = input && *input <= stamp.ticks;
+    if (midi_blocked && midi_.audio_driven()) {
+      if (!midi_.prepare_audio(stamp.ticks, stop_)) { return {}; }
+      continue;
+    }
+    if (midi_blocked) { midi_.request_input(stamp.ceil()); }
+    if (!midi_blocked && bound_.load(std::memory_order_acquire) &&
         (frontier > stamp.ticks || (frontier == stamp.ticks && !stamp.fractional))) {
       return grant(stamp);
     }
