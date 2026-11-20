@@ -3,11 +3,14 @@
 #include "dsp/boot_rom.hpp"
 #include "dsp/code_source.hpp"
 #include "dsp/io.hpp"
+#include "dsp/memory.hpp"
 #include "dsp/program.hpp"
+#include "dsp_memory.hpp"
 #include "io/dsp_reset.hpp"
 #include "io/pcm_output.hpp"
 #include "io/shi.hpp"
 #include "isa.hpp"
+#include "memory/faults.hpp"
 #include "storage/dsp_records.hpp"
 #include "support/dsp_records.hpp"
 
@@ -18,6 +21,7 @@
 #include <exception>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <stop_token>
@@ -25,34 +29,36 @@
 namespace {
 using namespace dsp56300;
 namespace vi = blofeld::vi;
+using Mode = CompileOptions::MemoryMode;
 constexpr Word entry = vi::dsp::BootRom::main_first;
 constexpr Word control = 0xffff91;
 constexpr Word clock_register = 0xffff90;
 constexpr Word receive = 0xffff94;
+constexpr Word last_ram_hole = 0xffff7f;
 constexpr Word x0 = 4;
 constexpr Word x1 = 5;
-constexpr Word receive_port = 0x14;
 constexpr Word clock_port = 0x10;
 constexpr Word pctl_port = 0x3d;
 constexpr Word write_direction = 0x8000;
 constexpr unsigned high_word = 24;
-constexpr Word receive_word =
-    static_cast<Word>(isa::Opcode::movep_register_low) | (x0 << 8U) | receive_port;
+// MOVE X:(R0),X0 uses the same native instruction for RAM and device reads.
+constexpr Word indexed_read =
+    static_cast<Word>(isa::Opcode::move_x_effective) | (4U << 11U) | (1U << 15U);
 constexpr Word pctl_word =
     static_cast<Word>(isa::Opcode::movep_register_high) | (x1 << 8U) | pctl_port;
 constexpr Word write_clock_word =
     static_cast<Word>(isa::Opcode::movep_register_low) | (x0 << 8U) | clock_port | write_direction;
 constexpr Word read_clock_word =
     static_cast<Word>(isa::Opcode::movep_register_low) | (x1 << 8U) | clock_port;
-constexpr auto read_words = isa::program(std::array{receive_word, pctl_word}, isa::stop);
+constexpr auto read_words = isa::program(std::array{indexed_read, pctl_word}, isa::stop);
 constexpr auto write_words = isa::program(std::array{write_clock_word, read_clock_word}, isa::stop);
-enum class Action : std::uint8_t { read, empty, write };
+enum class Action : std::uint8_t { read, empty, write, hole };
 
 void require(const bool condition, const char *message) {
   if (!condition) { throw std::runtime_error(message); }
 }
 
-NativeImage prepare() {
+NativeImage prepare(const Mode mode) {
   blofeld::test::DspRecords transport;
   transport.add(0, entry, read_words);
   transport.add(0, entry, write_words);
@@ -65,14 +71,14 @@ NativeImage prepare() {
   const std::array variants{
       CodeVariant{.id = 0, .code = read.code(), .entries = entries, .failed_fetches = {}},
       CodeVariant{.id = 1, .code = write.code(), .entries = entries, .failed_fetches = {}}};
-  auto native = blofeld::app::aot::prepare_dsp({.variants = variants});
+  auto native = blofeld::app::aot::prepare_dsp({.variants = variants}, {}, {}, {}, {}, mode);
   require(native.report().prepared_entries == read_words.size() + write_words.size() &&
               native.report().native_bytes != 0 && native.report().failure.kind == FaultKind::none,
           "The application prepares every authored variant through its built-in concrete binding");
   return native;
 }
 
-void execute(const NativeImage &native, const Action action, const Word payload) {
+void execute(const NativeImage &native, const Mode mode, const Action action, const Word payload) {
   vi::Shi shi;
   vi::DspReset reset;
   const std::stop_token stop;
@@ -84,7 +90,11 @@ void execute(const NativeImage &native, const Action action, const Word payload)
       .id = write ? 1U : 0U, .code = spans, .entries = entries, .failed_fetches = {}};
   const vi::dsp::ProgramChoice choice{.variant = variant.id, .resumes = entries, .words = {}};
   const vi::dsp::Program program(native, {.variants = {&variant, 1}}, {&choice, 1}, {});
-  const auto io = std::make_unique<vi::dsp::Io>(vi::dsp::BootRom{.main = words, .eeprom = {}},
+  const vi::dsp::BootRom boot{.main = words, .eeprom = {}};
+  std::optional<blofeld::app::DspMemory> memory;
+  if (mode == Mode::direct) { memory.emplace(boot); }
+  const auto storage = memory ? memory->storage() : vi::dsp::Memory::Storage{};
+  const auto io = std::make_unique<vi::dsp::Io>(boot,
                                                 shi,
                                                 reset,
                                                 stop,
@@ -94,7 +104,9 @@ void execute(const NativeImage &native, const Action action, const Word payload)
                                                 nullptr,
                                                 nullptr,
                                                 nullptr,
-                                                program);
+                                                program,
+                                                nullptr,
+                                                storage);
   Core core(Memory::external(), io.get());
   io->bind(core, 0);
   core.reset();
@@ -105,6 +117,7 @@ void execute(const NativeImage &native, const Action action, const Word payload)
   registers.omr = reset_mode;
   registers.sr = reset_status;
   registers.x = payload;
+  registers.r[0] = action == Action::hole ? last_ram_hole : receive;
   core.set_registers(registers);
   core.install(native, write ? 1 : 0);
   if (action == Action::read) {
@@ -114,6 +127,13 @@ void execute(const NativeImage &native, const Action action, const Word payload)
             "Publish a real native transport word without a binding-specific device copy");
   }
   const auto result = core.run();
+  if (action == Action::hole) {
+    require(result.fault.kind == FaultKind::memory_read && result.fault.pc == entry &&
+                result.fault.space == Space::x && result.fault.address == last_ram_hole &&
+                result.fault.variant == variant.id && result.retired == 0,
+            "The same indirect read faults on an unmapped X word below the device range");
+    return;
+  }
   if (action == Action::empty) {
     require(result.fault.kind == FaultKind::io_read && result.fault.pc == entry &&
                 result.fault.space == Space::x && result.fault.address == receive &&
@@ -160,15 +180,19 @@ void incomplete_input() {
 }
 
 int main() try {
-  const auto native = prepare();
+  const blofeld::host::memory::Faults faults(Core::host_fault);
   constexpr Word first = 0x53a2f1;
   constexpr Word second = 0xa53971;
   constexpr Word clock_fields = 0xffffff;
-  execute(native, Action::read, first);
-  execute(native, Action::read, second);
-  execute(native, Action::read, 0);
-  execute(native, Action::empty, 0);
-  execute(native, Action::write, clock_fields);
+  for (const auto mode : std::array{Mode::exact, Mode::direct}) {
+    const auto native = prepare(mode);
+    execute(native, mode, Action::read, first);
+    execute(native, mode, Action::read, second);
+    execute(native, mode, Action::read, 0);
+    execute(native, mode, Action::empty, 0);
+    execute(native, mode, Action::write, clock_fields);
+    if (mode == Mode::direct) { execute(native, mode, Action::hole, 0); }
+  }
   incomplete_input();
 } catch (const std::exception &error) {
 
