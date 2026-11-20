@@ -18,6 +18,10 @@ function(blofeld_device_binding core exports)
   add_library(${target} OBJECT ${ARGN})
   target_link_libraries(${target} PRIVATE blofeld_vi_execution)
   target_compile_options(${target} PRIVATE -O3 -emit-llvm ${blofeld_native_option})
+  if(BLOFELD_SANITIZER STREQUAL "address-undefined")
+    # Preserve frontend UBSan and apply ASan once after composing native AOT IR.
+    target_compile_options(${target} PRIVATE -Xclang -disable-llvm-passes)
+  endif()
   set_target_properties(${target} PROPERTIES
     INTERPROCEDURAL_OPTIMIZATION OFF INTERPROCEDURAL_OPTIMIZATION_RELEASE OFF)
   set(binding "${blofeld_binding_directory}/${core}_bindings.bc")
