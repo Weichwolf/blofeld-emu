@@ -7,4 +7,4 @@ blofeld_device_binding(mcu "${blofeld_mcu_exports}"
   src/vi/io/sci.cpp src/vi/io/usb.cpp src/vi/io/mcu_flash.cpp
   src/vi/display/port.cpp src/vi/display/st7565.cpp src/vi/storage/flash_image.cpp)
 target_sources(blofeld_app_aot PRIVATE src/app/aot/mcu.cpp src/app/aot/mcu_catalogue.cpp src/app/aot/mcu_load.cpp
-  "${blofeld_binding_directory}/mcu_bindings.hpp")
+  "${blofeld_binding_directory}/mcu_bindings.hpp" $<TARGET_OBJECTS:blofeld_mcu_binding_bytes>)
