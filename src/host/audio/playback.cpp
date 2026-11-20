@@ -174,7 +174,7 @@ struct Playback::Impl {
     constexpr std::uint32_t maximum = 128;
     const pa_buffer_attr requested{.maxlength = static_cast<std::uint32_t>(maximum * frame_bytes),
                                    .tlength = static_cast<std::uint32_t>(target * frame_bytes),
-                                   .prebuf = 0,
+                                   .prebuf = static_cast<std::uint32_t>(target * frame_bytes),
                                    .minreq = static_cast<std::uint32_t>(minimum * frame_bytes),
                                    .fragsize = std::numeric_limits<std::uint32_t>::max()};
     constexpr auto flags =
@@ -192,7 +192,8 @@ struct Playback::Impl {
         stream.get(),
         [](pa_stream *, void *data) noexcept {
           auto &self = *static_cast<Impl *>(data);
-          if (self.started.load(std::memory_order_relaxed)) {
+          // The server can consume the primed frames before uncork is acknowledged.
+          if (self.primed >= self.target_frames) {
             self.underruns.fetch_add(1, std::memory_order_relaxed);
           }
         },
@@ -207,7 +208,8 @@ struct Playback::Impl {
     const auto *value = pa_stream_get_buffer_attr(stream.get());
     if (value == nullptr || value->tlength == 0 || value->maxlength < value->tlength ||
         value->maxlength > rate * frame_bytes || value->tlength % frame_bytes != 0 ||
-        value->minreq == 0 || value->minreq % frame_bytes != 0) {
+        value->minreq == 0 || value->minreq % frame_bytes != 0 || value->prebuf == 0 ||
+        value->prebuf > value->tlength || value->prebuf % frame_bytes != 0) {
       throw std::runtime_error("Unsupported or unbounded audio buffer grants");
     }
     if (granted.rate != 0 &&
@@ -308,12 +310,12 @@ struct Playback::Impl {
 
   void reset(const std::stop_token &stop) {
     started.store(false, std::memory_order_release);
+    primed = 0;
     cancel_timing();
     if (!position.clear()) { throw std::overflow_error("Native audio position exhausted"); }
     operation(pa_stream_cork(stream.get(), 1, completed, this), stop);
     operation(pa_stream_flush(stream.get(), completed, this), stop);
     buffer.discard();
-    primed = 0;
     begin_epoch(stop);
     latency.store(unknown_latency, std::memory_order_relaxed);
     reset_done.release();

@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <dsp56300/core.hpp>
 #include <filesystem>
 #include <map>
 #include <optional>
@@ -47,7 +48,9 @@ Sources load_sources(const std::string_view document, const std::filesystem::pat
 }
 }
 
-vi::dsp::Program load_dsp_program(const Profile &profile, const vi::dsp::BootRom boot) {
+vi::dsp::Program load_dsp_program(const Profile &profile,
+                                  const vi::dsp::BootRom boot,
+                                  const dsp56300::CompileOptions::MemoryMode mode) {
   if (profile.firmware.empty() || profile.dsp_catalogue.empty()) {
     throw std::invalid_argument("AOT requires firmware and dsp-catalogue profile paths");
   }
@@ -60,6 +63,7 @@ vi::dsp::Program load_dsp_program(const Profile &profile, const vi::dsp::BootRom
                                load_firmware(profile.firmware),
                                boot,
                                sources,
-                               std::filesystem::path{BLOFELD_AOT_CACHE_DIRECTORY});
+                               std::filesystem::path{BLOFELD_AOT_CACHE_DIRECTORY},
+                               mode);
 }
 }

@@ -7,6 +7,7 @@
 #endif
 #include "display/st7565.hpp"
 #include "display/state.hpp"
+#include "dsp/memory.hpp"
 #include "dsp/program.hpp"
 #include "execution.hpp"
 #include "io/controls.hpp"
@@ -45,7 +46,8 @@ public:
             PcmOutput output = {},
             MidiPort::InputMode input = MidiPort::InputMode::live,
             std::shared_ptr<const dsp::Program> program = {},
-            std::uint64_t speculation_window = Coupling::default_window);
+            std::uint64_t speculation_window = Coupling::default_window,
+            dsp::Memory::Storage dsp_memory = {});
   ~VmContext();
   VmContext(const VmContext &) = delete;
   VmContext &operator=(const VmContext &) = delete;
@@ -100,6 +102,7 @@ private:
   std::stop_source stop_;
   std::shared_ptr<const mcu::Program> mcu_program_;
   std::shared_ptr<const dsp::Program> program_;
+  dsp::Memory::Storage dsp_memory_;
   std::jthread mcu_;
   std::jthread dsp_;
   ExecutionTime time_;

@@ -14,20 +14,11 @@
 #include <bit>
 #include <dlfcn.h>
 #include <initializer_list>
-#include <memory>
 #include <stdexcept>
 #include <string_view>
-#include <vector>
 
 namespace {
 std::atomic<unsigned> machines{0}, engines{0}, objects{0}, helpers{0}, modules{0}, optimizations{0};
-
-struct Probe {
-  LLVMOrcObjectTransformLayerTransformFunction transform;
-  void *owner;
-};
-
-std::vector<std::unique_ptr<Probe>> probes;
 
 template <typename Function> Function original(const char *name) {
   const auto *address = dlsym(RTLD_NEXT, name);
@@ -47,7 +38,7 @@ LLVMErrorRef inspect(void *owner, LLVMModuleRef module) noexcept {
   return nullptr;
 }
 
-LLVMErrorRef observe(void *owner, LLVMMemoryBufferRef *buffer) noexcept {
+LLVMErrorRef observe(void * /*owner*/, LLVMMemoryBufferRef *buffer) noexcept {
   char *error = nullptr;
   auto *binary = LLVMCreateBinary(*buffer, nullptr, &error);
   if (error != nullptr) { LLVMDisposeMessage(error); }
@@ -70,8 +61,7 @@ LLVMErrorRef observe(void *owner, LLVMMemoryBufferRef *buffer) noexcept {
     ++objects;
     if (!first || !second) { ++helpers; }
   }
-  const auto &probe = *static_cast<Probe *>(owner);
-  return probe.transform(probe.owner, buffer);
+  return nullptr;
 }
 }
 
@@ -98,7 +88,13 @@ extern "C" LLVMTargetMachineRef LLVMCreateTargetMachine(LLVMTargetRef target,
 extern "C" LLVMErrorRef LLVMOrcCreateLLJIT(LLVMOrcLLJITRef *result,
                                            LLVMOrcLLJITBuilderRef builder) {
   ++engines;
-  return original<decltype(&LLVMOrcCreateLLJIT)>("LLVMOrcCreateLLJIT")(result, builder);
+  auto *error = original<decltype(&LLVMOrcCreateLLJIT)>("LLVMOrcCreateLLJIT")(result, builder);
+  if (error == nullptr) {
+    original<decltype(&LLVMOrcObjectTransformLayerSetTransform)>(
+        "LLVMOrcObjectTransformLayerSetTransform")(
+        LLVMOrcLLJITGetObjTransformLayer(*result), observe, nullptr);
+  }
+  return error;
 }
 
 extern "C" LLVMErrorRef LLVMOrcLLJITAddLLVMIRModule(LLVMOrcLLJITRef J,
@@ -108,15 +104,6 @@ extern "C" LLVMErrorRef LLVMOrcLLJITAddLLVMIRModule(LLVMOrcLLJITRef J,
   if (auto *error = LLVMOrcThreadSafeModuleWithModuleDo(TSM, inspect, nullptr)) { return error; }
   return original<decltype(&LLVMOrcLLJITAddLLVMIRModule)>("LLVMOrcLLJITAddLLVMIRModule")(
       J, JD, TSM);
-}
-
-extern "C" void LLVMOrcObjectTransformLayerSetTransform(
-    LLVMOrcObjectTransformLayerRef ObjTransformLayer,
-    LLVMOrcObjectTransformLayerTransformFunction TransformFunction,
-    void *Ctx) {
-  probes.push_back(std::make_unique<Probe>(Probe{.transform = TransformFunction, .owner = Ctx}));
-  original<decltype(&LLVMOrcObjectTransformLayerSetTransform)>(
-      "LLVMOrcObjectTransformLayerSetTransform")(ObjTransformLayer, observe, probes.back().get());
 }
 
 namespace blofeld::test::aot {

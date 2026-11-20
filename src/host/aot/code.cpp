@@ -3,6 +3,7 @@
 
 #include "aot/link_graph.hpp"
 #include "aot/llvm.hpp"
+#include "native_sites.hpp"
 
 #include "llvm-c/Core.h"
 #include "llvm-c/Error.h"
@@ -54,31 +55,16 @@ llvm::orc::LLJIT &native(LLVMOrcLLJITRef jit) {
   return *reinterpret_cast<llvm::orc::LLJIT *>(jit);
 }
 
-LLVMErrorRef measure(void *owner, LLVMMemoryBufferRef *buffer) noexcept {
-  try {
-    *static_cast<std::uint64_t *>(owner) += detail::text_bytes(*buffer);
-    return nullptr;
-  } catch (const std::exception &error) {
-    LLVMDisposeMemoryBuffer(*buffer);
-    *buffer = nullptr;
-    return LLVMCreateStringError(error.what());
-  } catch (...) {
-    LLVMDisposeMemoryBuffer(*buffer);
-    *buffer = nullptr;
-    return LLVMCreateStringError("Cannot measure native AOT object");
-  }
-}
-
-void platform(LLVMOrcLLJITBuilderRef builder, std::uint64_t &bytes, llvm::ObjectCache *cache) {
+void platform(LLVMOrcLLJITBuilderRef builder,
+              llvm::ObjectCache *cache,
+              llvm_native_sites::SourceMap &source) {
   auto &native_builder = *reinterpret_cast<llvm::orc::LLJITBuilder *>(builder);
   native_builder.setNumCompileThreads(0).setSupportConcurrentCompilation(false);
-  native_builder.setPrePlatformSetup([&bytes, cache](llvm::orc::LLJIT &jit) {
+  native_builder.setPrePlatformSetup([cache, &source](llvm::orc::LLJIT &jit) {
+    source.attach(jit);
     // LLVM19 selects SimpleCompiler when concurrent compilation is disabled.
     static_cast<llvm::orc::SimpleCompiler &>(jit.getIRCompileLayer().getCompiler())
         .setObjectCache(cache);
-    auto *handle = reinterpret_cast<LLVMOrcLLJITRef>(&jit);
-    LLVMOrcObjectTransformLayerSetTransform(
-        LLVMOrcLLJITGetObjTransformLayer(handle), measure, &bytes);
     return llvm::Error::success();
   });
 }
@@ -116,8 +102,8 @@ public:
     }
   }
 
-  std::uint64_t bytes = 0;
   std::unique_ptr<llvm::ObjectCache> objects;
+  llvm_native_sites::SourceMap source;
   Owner<LLVMOrcLLJITRef, dispose> jit;
   std::map<std::string, const void *, std::less<>> symbols;
   Phase phase = Phase::assembling;
@@ -154,7 +140,7 @@ Code::Code(const std::span<const Module> modules,
   Owner<LLVMTargetMachineRef, LLVMDisposeTargetMachine> machine(detail::target(module.get()));
   impl_->objects = detail::optimize(module, machine.get(), exports, bindings, cache);
   Owner<LLVMOrcLLJITBuilderRef, LLVMOrcDisposeLLJITBuilder> builder(LLVMOrcCreateLLJITBuilder());
-  platform(builder.get(), impl_->bytes, impl_->objects.get());
+  platform(builder.get(), impl_->objects.get(), impl_->source);
   LLVMOrcLLJITBuilderSetJITTargetMachineBuilder(
       builder.get(), LLVMOrcJITTargetMachineBuilderCreateFromTargetMachine(machine.release()));
   LLVMOrcLLJITRef raw_jit = nullptr;
@@ -188,8 +174,14 @@ const void *Code::address(const std::string_view name) const {
   return found->second;
 }
 
+Code::FaultMap Code::fault_map() const noexcept {
+  return impl_->source.map();
+}
+
 std::uint64_t Code::native_bytes() const noexcept {
-  return impl_->bytes;
+  std::uint64_t bytes = 0;
+  for (const auto &range : impl_->source.text) { bytes += range.size; }
+  return bytes;
 }
 }
 

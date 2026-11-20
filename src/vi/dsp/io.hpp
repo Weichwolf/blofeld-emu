@@ -74,7 +74,8 @@ public:
      MidiPort *midi,
      PreparationClock *preparation,
      const Program &program,
-     Coupling *coupling = nullptr)
+     Coupling *coupling = nullptr,
+     const Memory::Storage storage = {})
       : coupling_(coupling),
         program_(program),
         boot_(boot),
@@ -82,6 +83,7 @@ public:
         reset_(reset),
         stop_(stop),
         audio_(esai_1_, dax_, output, stop),
+        memory_({}, storage),
         controller_(image),
         peer_(peer),
         time_(time),
@@ -125,6 +127,7 @@ public:
     midi_deadline_.reset();
     if (midi_.connected()) { static_cast<void>(timers_.input(0, midi_.level())); }
     memory_.configure(0);
+    if (memory_.direct()) { core.set_memory(memory_.loan()); }
     ports_.reset();
     if (peer_ != nullptr) { peer_->reset_dsp(); }
     if (coupling_ != nullptr && !coupling_->outputs(origin_)) {

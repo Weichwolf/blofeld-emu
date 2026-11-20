@@ -7,6 +7,7 @@
 #include <dsp56300/memory.hpp>
 #include <optional>
 #include <span>
+#include <vector>
 
 namespace blofeld::vi::dsp {
 // DSP56371UM 3.1: 88K physical RAM words, retained across bank switches/reset.
@@ -25,7 +26,29 @@ public:
     std::span<dsp56300::Word> x, y;
   };
 
-  explicit Memory(Rom rom = {});
+  static constexpr std::size_t physical_words = 0x16000, mapping_count = 5;
+  static constexpr std::array<std::size_t, 5> bank_words{0x1000, 0x3000, 0x2000, 0x6000, 0xa000};
+
+  struct Mapping {
+    std::array<dsp56300::Memory::Views, 3> views;
+    std::span<const dsp56300::MemoryWindow> program;
+  };
+
+  struct Storage {
+    std::span<dsp56300::Word> physical;
+    std::span<const Mapping> mappings;
+  };
+
+  [[nodiscard]] static constexpr std::size_t mapping_index(dsp56300::Word omr) noexcept {
+    constexpr unsigned msw_shift = 21;
+    return (omr & 0x80U) == 0 ? 0 : 1 + ((omr >> msw_shift) & 3U);
+  }
+
+  explicit Memory(Rom rom = {}, Storage storage = {});
+
+  [[nodiscard]] bool direct() const noexcept { return !storage_.mappings.empty(); }
+
+  [[nodiscard]] dsp56300::Memory loan();
   Memory(const Memory &) = delete;
   Memory &operator=(const Memory &) = delete;
   void configure(dsp56300::Word omr) noexcept;
@@ -40,7 +63,7 @@ public:
 
 private:
   template <std::size_t Size> struct Block {
-    std::array<dsp56300::Word, Size> words{};
+    std::span<dsp56300::Word> words;
     std::array<std::uint8_t, Size> known{};
   };
 
@@ -55,6 +78,8 @@ private:
                                            dsp56300::Word address) const noexcept;
   static constexpr std::size_t low_x_words = 0x3000, high_x_words = 0x6000, high_y_words = 0xa000;
   Rom rom_;
+  Storage storage_;
+  std::vector<dsp56300::Word> owned_;
   Block<0x1000> program_;
   Block<low_x_words> x_;
   Block<0x2000> y_;
@@ -63,5 +88,6 @@ private:
   bool initialized_x_ = false, initialized_y_ = false;
   dsp56300::Word mapping_ = dsp56300::word_mask;
   std::array<dsp56300::MemoryWindow, 3> program_windows_, x_windows_, y_windows_;
+  std::array<dsp56300::MemoryWindow, 3> native_x_, native_y_;
 };
 }

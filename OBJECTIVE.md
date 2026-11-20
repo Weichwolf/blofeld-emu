@@ -55,11 +55,15 @@ Keep manufacturer inputs/generated artifacts local with source/size/hash identit
   deadlines. Deliver every buffer on time with continuous, correctly ordered
   original PCM, including during MIDI bursts and first use of sounds. Require
   zero underruns, missed deadlines, lost frames and repeated frames.
-  Offline rendering measures headroom and verifies PCM.
+  Require real-time playback in every reference scenario. Once each scenario
+  meets that floor, use W5 to decide performance trade-offs.
 - Count valid original frames once against monotonic host processing time. Report
   compilation, boot/readiness, warm-up, active rendering, pacing and conversion
-  separately. No lost, repeated or retimed frames; core/silent-startup results do
-  not qualify. Compare authored core algorithms with equivalent Clang19 O3 C++.
+  separately. Require exact PCM and sustainable W5 offline throughput of at
+  least 176,400 valid stereo frames per host second at the 44.1 kHz reference
+  rate (4× real time). No lost, repeated or retimed frames; core/silent-startup
+  results do not qualify. Compare authored core algorithms with equivalent
+  Clang19 O3 C++.
 - Physical keyboard-actuation-to-analog latency targets **2-5 ms**, maximum **10 ms**,
   including scan, transport, firmware, queues, driver and DAC. Qualify an immediate-
   attack original sound under representative load; identify devices and report
@@ -67,8 +71,9 @@ Keep manufacturer inputs/generated artifacts local with source/size/hash identit
 - Prove independent owners' bidirectional event horizons, ordering and progress
   under changed host scheduling. Use queried resources; no arbitrary time slices.
 - ACCEPTANCE.tsv defines complete profile-D scope and separate native-platform
-  results. Pending proves nothing; grouped rows need complete independent evidence
-  and fixed tolerances. Optional stock comparisons are not an extra gate. Source
+  results. Record the tested emulator and core revisions for each result. Pending
+  proves nothing; grouped rows need complete independent evidence and fixed
+  tolerances. Optional stock comparisons are not an extra gate. Source
   M/S/U/F-D resolves through doc/downloads.json and function-references.json.
 - Use focused independent units and the normal instrument for reset-to-playable,
   load/long-run and recovery acceptance. Prioritize Release functionality/

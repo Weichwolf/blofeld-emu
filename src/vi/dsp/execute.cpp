@@ -64,8 +64,13 @@ void Io::prepare_code() {
   const auto registers = core_->registers();
   const bool transfer = installed_program_ && program_.transition({.variant = *installed_program_,
                                                                    .address = registers.pc});
-  if (!preparation_requested_ && !transfer) { return; }
+  const bool mode_changed = registers.omr != prepared_mode_;
+  if (!preparation_requested_ && !transfer && !mode_changed) { return; }
   memory_.configure(registers.omr);
+  if (memory_.direct() &&
+      Memory::mapping_index(registers.omr) != Memory::mapping_index(prepared_mode_)) {
+    core_->set_memory(memory_.loan());
+  }
   const PreparationClock::Scope phase(preparation_);
   installed_program_ = program_.install(*core_, *this);
   prepared_mode_ = registers.omr;
@@ -230,7 +235,8 @@ ExecutionReport execute(const BootRom boot,
                         MidiPort *midi,
                         PreparationClock *preparation,
                         const Program *program,
-                        Coupling *coupling) {
+                        Coupling *coupling,
+                        const Memory::Storage memory) {
   if (program == nullptr) {
     throw std::invalid_argument("DSP execution requires a complete prepared program");
   }
@@ -238,7 +244,19 @@ ExecutionReport execute(const BootRom boot,
     throw std::invalid_argument("DSP boot ROM has invalid or overlapping bounds");
   }
   const OutputOwner owner{output};
-  Io io(boot, shi, reset, stop, image, output, peer, time, midi, preparation, *program, coupling);
+  Io io(boot,
+        shi,
+        reset,
+        stop,
+        image,
+        output,
+        peer,
+        time,
+        midi,
+        preparation,
+        *program,
+        coupling,
+        memory);
   ExecutionReport report;
   report.prepared_native_bytes = program->report().native_bytes;
   std::uint64_t applied = 0;

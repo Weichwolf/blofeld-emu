@@ -94,22 +94,63 @@ short block. Fully initialized, stably mapped RAM uses direct loads/stores witho
 per-word initialization checks. Removing a check requires a proof covering every
 reachable use and every operation that can invalidate it.
 
-Dynamic addresses, MMIO, conditional initialization and observable faults retain
-their exact semantics unless analysis proves their outcome. Keep unavoidable
-selection and cold failure paths small. OS page protection does not establish
-DSP address-space validity, initialization or device behavior. Range proofs must
-also respect real storage aliases; non-overlap does not establish distinct
-outermost allocations for LLVM noalias guarantees.
+The product reserves a 64 MiB view for each P/X/Y read and write role. Each view
+addresses the full 24-bit space in 32-bit host words. Real zero-initialized RAM
+has shared physical backing across both roles and all five OMR layouts. Typed
+volatile guest accesses preserve ordering across virtual
+aliases; registers and flags remain ordinary SSA. Peripherals retain their
+architectural decode and callbacks. P stores outside ordinary grants retain the
+consumer's real loader/code-inventory effects. Native access faults terminate the
+owner; only fault diagnostics and last completed-return progress are defined.
+The consumer owns signal handlers; the escape stays below C++ execution scopes.
+
+`BLOFELD_DSP_MEMORY=exact` selects the checked per-word reference; `direct` is the
+product default. The direct views map ordinary P, X and Y RAM at their OMR
+addresses, including shared storage for P aliases. Checked execution tracks
+startup initialization per word where declared. The affected pages cover low
+P `000000..000fff`, X `000000..002fff` and Y `000000..001fff`, high X from
+`00c000` to `011fff` or `00ffff`, high Y from `00c000` to the word before the
+OMR-selected end `00e000`, `010000`, `014000` or `016000`, and their P aliases.
+The desktop profile lends no separate X/Y data ROM. Outside ordinary RAM, these
+declared contents grant page-rounded reads:
+
+| Contents | 4 KiB host page (DSP words) | 16 KiB host page (DSP words) |
+|---|---|---|
+| P:`ff0000..ff00bf`, main ROM | `ff0000..ff03ff` | `ff0000..ff0fff` |
+| P:`ffff00..ffff50`, EEPROM ROM when present | `fffc00..ffffff` | `fff000..ffffff` |
+| Y:`016000`, zero | `016000..0163ff` | `016000..016fff` |
+| Y:`ffffff`, zero | `fffc00..ffffff` | `fff000..ffffff` |
+
+In Checked mode the named Y words return zero through the device memory
+contract. Adjacent undeclared words fault. Direct mode additionally permits
+reads of ordinary zero padding in these Y pages. For example, Y:`016001` and
+Y:`ffff7f` read zero from the rounded views on both listed host page sizes.
+Those values describe the host mappings. Only Y:`016000` and Y:`ffffff` are
+established guest zero reads.
+
+X has no corresponding last-page read mapping. X:`ffff7f` therefore remains an
+unmapped ordinary read. From `ffff80` onward, the X/Y peripheral decoder takes
+priority over the view in both modes. The last X and Y write pages remain
+protected. Valid registers keep their device behavior through the decoder.
+The named Y:`ffffff` zero is resolved by the device memory contract;
+padding grants no new register behavior. Discarded X/Y writes below
+`ff0000` and discarded P writes at or above `ff0000` use separate scratch.
+Their backing leaves the read views and real device state intact.
+
+The checked reference must report no undeclared read in the qualifying
+workloads. Code inventory and load completion stay separate from RAM's initial
+contents. The original firmware performs loading.
 
 Generated code follows the host build's Debug/Release policy. Debug supplies
 assertions and diagnostic instrumentation. Release omits optional debug checks,
 sanitizer work and telemetry. The current final pipeline uses O3. Select the
-level per image by measuring whole-instrument throughput with exact PCM. Required instrument semantics
-and fault boundaries are identical. Sanitizers insert runtime checks during
-compilation; apply selected instrumentation to our host/generated code, never
-packaged foreign libraries or runtime-generated platform helpers. Verify IR and
-binding contracts during preparation. Include mode/instrumentation in artifact
-identity and inspect emitted code to qualify the Release path.
+level per image by measuring whole-instrument throughput with exact PCM. Preserve
+instrument behavior, including the specified page granularity for direct faults.
+Apply selected sanitizer checks during compilation of our host and generated
+code, and leave packaged libraries and runtime-generated platform helpers
+uninstrumented. Verify IR and binding contracts during preparation. Include
+mode and instrumentation in artifact identity and inspect emitted code to
+qualify the Release path.
 
 ## Linking, bindings and artifacts
 

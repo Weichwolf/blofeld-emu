@@ -2,6 +2,7 @@
 #pragma once
 
 #include "dsp/boot_rom.hpp"
+#include "dsp/memory.hpp"
 #include "dsp/program.hpp"
 #include "execution.hpp"
 #include "io/coupling.hpp"
@@ -28,5 +29,6 @@ namespace blofeld::vi::dsp {
                                       MidiPort *midi = nullptr,
                                       PreparationClock *preparation = nullptr,
                                       const Program *program = nullptr,
-                                      Coupling *coupling = nullptr);
+                                      Coupling *coupling = nullptr,
+                                      Memory::Storage memory = {});
 }
