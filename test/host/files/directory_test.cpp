@@ -79,25 +79,21 @@ void persistence(const blofeld::host::Directory &directory, const std::filesyste
 
   const auto staging = ".blofeld-state." + std::to_string(::getpid());
   directory.replace(staging, foreign);
-  bool rejected = false;
-  try {
-    directory.commit("device", changed, revision);
-  } catch (const std::system_error &) { rejected = true; }
-  require(rejected &&
-              read(root / staging) == std::vector<std::uint8_t>(foreign.begin(), foreign.end()) &&
-              read(image) == std::vector<std::uint8_t>(original.begin(), original.end()),
-          "A staging collision preserves both existing files");
-  directory.remove(staging);
+  directory.replace(staging + ".1", original);
 
   std::ifstream old(image, std::ios::binary);
   directory.commit("device", changed, revision);
   require(old.get() == original.front() &&
               read(image) == std::vector<std::uint8_t>(changed.begin(), changed.end()) &&
               std::filesystem::status(image).permissions() == permissions &&
-              !std::filesystem::exists(root / staging),
+              !std::filesystem::exists(root / (staging + ".2")),
           "Commit publishes complete bytes and preserves permissions");
+  require(read(root / staging) == std::vector<std::uint8_t>(foreign.begin(), foreign.end()) &&
+              read(root / (staging + ".1")) ==
+                  std::vector<std::uint8_t>(original.begin(), original.end()),
+          "Retry after interrupted staging preserves existing entries");
 
-  rejected = false;
+  bool rejected = false;
   try {
     directory.commit("device", foreign, revision);
   } catch (const std::runtime_error &) { rejected = true; }

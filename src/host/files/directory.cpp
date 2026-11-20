@@ -66,6 +66,23 @@ void sync_file(const int descriptor, const std::string_view filename) {
   }
 }
 
+int create_staging(const int directory, std::string &name, const bool durable) {
+  constexpr auto flags = O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW;
+  const auto base = name.size();
+  std::uint64_t suffix = 0;
+  for (;;) {
+    const auto descriptor = ::openat(directory, name.c_str(), flags, owner_permissions);
+    if (descriptor >= 0) { return descriptor; }
+    if (!durable || errno != EEXIST || suffix == std::numeric_limits<std::uint64_t>::max()) {
+      fail("Create publication", name);
+    }
+    // A stopped writer may have left this entry before the PID was reused.
+    name.resize(base);
+    name += '.';
+    name += std::to_string(++suffix);
+  }
+}
+
 void check_revision(const int directory, const std::string &name, const FileRevision &expected) {
   struct stat status{};
   if (::fstatat(directory, name.c_str(), &status, AT_SYMLINK_NOFOLLOW) != 0) {
@@ -128,8 +145,8 @@ void Directory::publish(const std::string_view name,
                         const std::span<const std::uint8_t> bytes,
                         const FileRevision *const expected) const {
   const auto filename = entry_name(name);
-  const auto staging = expected != nullptr ? ".blofeld-state." + std::to_string(::getpid())
-                                           : "." + filename + ".tmp";
+  auto staging = expected != nullptr ? ".blofeld-state." + std::to_string(::getpid())
+                                     : "." + filename + ".tmp";
   if (expected != nullptr) {
     check_revision(descriptor_, filename, *expected);
     if (same_contents(descriptor_, filename, bytes, *expected)) {
@@ -139,11 +156,7 @@ void Directory::publish(const std::string_view name,
   } else if (::unlinkat(descriptor_, staging.c_str(), 0) != 0 && errno != ENOENT) {
     fail("Remove stale publication", staging);
   }
-  const auto output = ::openat(descriptor_,
-                               staging.c_str(),
-                               O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW,
-                               owner_permissions);
-  if (output < 0) { fail("Create publication", staging); }
+  const auto output = create_staging(descriptor_, staging, expected != nullptr);
   try {
     write_all(output, bytes);
     if (expected != nullptr) {
