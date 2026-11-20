@@ -132,7 +132,7 @@ void store(const std::filesystem::path &root,
   record.insert(record.end(), digest.begin(), digest.end());
   record.insert(record.end(), payload.begin(), payload.end());
   const Directory locked(root, Directory::Lock::wait);
-  locked.replace(name, record);
+  locked.replace(name, record, Directory::Durability::durable);
 }
 
 class Objects final : public llvm::ObjectCache {

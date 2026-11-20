@@ -131,18 +131,20 @@ Presence Directory::presence(const std::string_view name) const {
 }
 
 void Directory::replace(const std::string_view name,
-                        const std::span<const std::uint8_t> bytes) const {
-  publish(name, bytes, nullptr);
+                        const std::span<const std::uint8_t> bytes,
+                        const Durability durability) const {
+  publish(name, bytes, durability, nullptr);
 }
 
 void Directory::commit(const std::string_view name,
                        const std::span<const std::uint8_t> bytes,
                        const FileRevision &expected) const {
-  publish(name, bytes, &expected);
+  publish(name, bytes, Durability::durable, &expected);
 }
 
 void Directory::publish(const std::string_view name,
                         const std::span<const std::uint8_t> bytes,
+                        const Durability durability,
                         const FileRevision *const expected) const {
   const auto filename = entry_name(name);
   auto staging = expected != nullptr ? ".blofeld-state." + std::to_string(::getpid())
@@ -159,12 +161,10 @@ void Directory::publish(const std::string_view name,
   const auto output = create_staging(descriptor_, staging, expected != nullptr);
   try {
     write_all(output, bytes);
-    if (expected != nullptr) {
-      if (::fchmod(output, static_cast<mode_t>(expected->permissions)) != 0) {
-        fail("Set publication permissions", staging);
-      }
-      sync_file(output, staging);
+    if (expected != nullptr && ::fchmod(output, static_cast<mode_t>(expected->permissions)) != 0) {
+      fail("Set publication permissions", staging);
     }
+    if (durability == Durability::durable) { sync_file(output, staging); }
   } catch (...) {
     ::close(output);
     ::unlinkat(descriptor_, staging.c_str(), 0);
@@ -188,7 +188,7 @@ void Directory::publish(const std::string_view name,
     ::unlinkat(descriptor_, staging.c_str(), 0);
     throw;
   }
-  if (expected != nullptr) { sync_file(descriptor_, filename); }
+  if (durability == Durability::durable) { sync_file(descriptor_, filename); }
 }
 
 void Directory::remove(const std::string_view name) const {

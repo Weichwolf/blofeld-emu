@@ -27,14 +27,16 @@ private:
 class Directory {
 public:
   enum class Lock : std::uint8_t { try_once, wait };
+  enum class Durability : std::uint8_t { transient, durable };
   explicit Directory(const std::filesystem::path &path, Lock lock = Lock::try_once);
   ~Directory();
   Directory(const Directory &) = delete;
   Directory &operator=(const Directory &) = delete;
 
-  // Replace one complete directory entry. Transient publication only; this
-  // operation makes no durability guarantee across power loss.
-  void replace(std::string_view name, std::span<const std::uint8_t> bytes) const;
+  // Durable replacement synchronizes the staged contents and the directory.
+  void replace(std::string_view name,
+               std::span<const std::uint8_t> bytes,
+               Durability durability = Durability::transient) const;
   void commit(std::string_view name,
               std::span<const std::uint8_t> bytes,
               const FileRevision &expected) const;
@@ -44,6 +46,7 @@ public:
 private:
   void publish(std::string_view name,
                std::span<const std::uint8_t> bytes,
+               Durability durability,
                const FileRevision *expected) const;
   int descriptor_ = -1;
 };
