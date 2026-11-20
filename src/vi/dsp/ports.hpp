@@ -4,7 +4,6 @@
 #include <array>
 #include <cstdint>
 #include <dsp56300/memory.hpp>
-#include <optional>
 
 namespace blofeld::vi::dsp {
 enum class Port : std::uint8_t { c, d, e, f };
@@ -14,11 +13,6 @@ public:
   struct Write {
     dsp56300::Space space = dsp56300::Space::x;
     dsp56300::Word address = 0, value = 0;
-  };
-
-  struct Written {
-    Port port;
-    bool configured;
   };
 
   struct Input {
@@ -34,7 +28,7 @@ public:
   [[nodiscard]] static bool contains(dsp56300::Space space, dsp56300::Word address) noexcept;
   [[nodiscard]] bool
   read(dsp56300::Space space, dsp56300::Word address, dsp56300::Word &value) const noexcept;
-  [[nodiscard]] std::optional<Written> write(Write access) noexcept;
+  [[nodiscard]] bool write(Write access) noexcept;
   void input(Port port, Input sample);
   [[nodiscard]] Output output(Port port) const;
   [[nodiscard]] dsp56300::Word peripheral(Port port) const;

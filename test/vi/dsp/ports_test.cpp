@@ -27,14 +27,11 @@ void registers() {
   constexpr dsp56300::Word implemented_direction = 0xf00;
   require(!ports.read(Space::x, c_data, value) && ports.read(Space::x, d_data, value) && value == 0,
           "C/E/F latches begin unknown while Port D has its documented reset value");
-  const auto configured =
-      ports.write({.space = Space::x, .address = c_direction, .value = original_direction});
-  require(configured && configured->port == Port::c && configured->configured &&
+  require(ports.write({.space = Space::x, .address = c_direction, .value = original_direction}) &&
               ports.read(Space::x, c_direction, value) && value == implemented_direction,
           "The original reserved-one direction store retains only implemented fields");
-  const auto function = ports.write({.space = Space::x, .address = c_function, .value = byte_mask});
-  const auto data = ports.write({.space = Space::x, .address = c_data, .value = control_pattern});
-  require(function && function->configured && data && data->port == Port::c && !data->configured &&
+  require(ports.write({.space = Space::x, .address = c_function, .value = byte_mask}) &&
+              ports.write({.space = Space::x, .address = c_data, .value = control_pattern}) &&
               ports.read(Space::x, c_data, value) && value == control_pattern,
           "Output readback and input pull-downs share the actual data register");
   const auto output = ports.output(Port::c);

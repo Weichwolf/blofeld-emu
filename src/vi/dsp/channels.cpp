@@ -13,7 +13,6 @@
 
 #include <cstdint>
 #include <dsp56300/core.hpp>
-#include <optional>
 #include <stdexcept>
 
 namespace blofeld::vi::dsp {
@@ -50,20 +49,8 @@ bool Coupled::service() const noexcept {
 }
 
 bool Coupled::changed() const noexcept {
-  return changed(io_.timestamp());
-}
-
-bool Coupled::peer_outputs(PeerPort &peer,
-                           const bool ready_known,
-                           const bool ready_active) const noexcept {
-  // Both observations occur within one DSP access at the same guest time.
-  const auto stamp = io_.timestamp();
-  static_cast<void>(changed(stamp));
-  return ready_known && peer.dsp_ready(ready_active) && changed(stamp);
-}
-
-bool Coupled::changed(const std::optional<Coupling::Stamp> stamp) const noexcept {
   const auto before = coupling_->revision();
+  const auto stamp = io_.timestamp();
   const bool accepted = stamp && coupling_->outputs(stamp->ceil());
   if (!accepted || coupling_->revision() != before) {
 #if defined(BLOFELD_CENSUS)
@@ -106,19 +93,24 @@ bool blofeld_dsp_peer_sample(PeerPort *const channel,
   return true;
 }
 
-bool blofeld_dsp_peer_publish(PeerPort *const channel,
-                              const PeerPort::Sample sample,
-                              const bool ready_known,
-                              const bool ready_active) noexcept {
-  channel->dsp_data(sample);
-  if (const auto *coupled = Coupled::current()) {
-    return coupled->peer_outputs(*channel, ready_known, ready_active);
-  }
-  return ready_known && channel->dsp_ready(ready_active);
+void blofeld_dsp_peer_data(PeerPort *const channel,
+                           const std::uint8_t mask,
+                           const std::uint8_t known,
+                           const std::uint8_t value) noexcept {
+  channel->dsp_data({.mask = mask, .known = known, .value = value});
+  if (const auto *coupled = Coupled::current()) { static_cast<void>(coupled->changed()); }
 }
 
 bool blofeld_dsp_peer_write(PeerPort *const channel, const std::uint64_t ticks) noexcept {
   return channel->dsp_write(channel->dsp_data(), ticks);
+}
+
+bool blofeld_dsp_peer_ready(PeerPort *const channel, const bool active) noexcept {
+  const bool accepted = channel->dsp_ready(active);
+  if (accepted) {
+    if (const auto *coupled = Coupled::current()) { return coupled->changed(); }
+  }
+  return accepted;
 }
 
 bool blofeld_dsp_peer_interrupt(const PeerPort *const channel,

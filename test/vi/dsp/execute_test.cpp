@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "aot/dsp.hpp"
 #include "dsp/boot_rom.hpp"
-#include "dsp/coupling.hpp"
 #include "dsp/execute.hpp"
-#include "dsp/io.hpp"
 #if defined(BLOFELD_CENSUS)
 #include "census.hpp"
 #endif
@@ -11,21 +9,16 @@
 #include "dsp/program.hpp"
 #include "execution.hpp"
 #include "files/read.hpp"
-#include "io/coupling.hpp"
 #include "io/dsp_reset.hpp"
-#include "io/execution_time.hpp"
-#include "io/midi_port.hpp"
 #include "io/pcm_output.hpp"
 #include "io/peer_port.hpp"
 #include "io/shi.hpp"
-#include "mcu/epoch.hpp"
 #include "storage/media_image.hpp"
 #include "support/isa.hpp"
 
 #include <array>
 #include <atomic>
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
 #include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
@@ -34,7 +27,6 @@
 #include <future>
 #include <iostream>
 #include <limits>
-#include <optional>
 #include <span>
 #include <stdexcept>
 #include <stop_token>
@@ -254,101 +246,6 @@ std::vector<dsp56300::Word> peer_reply_program() {
   return program;
 }
 
-std::optional<blofeld::vi::Coupling::Input>
-next_publication(const blofeld::vi::Coupling &coupling,
-                 const std::uint64_t serial,
-                 const std::chrono::steady_clock::time_point end) {
-  while (std::chrono::steady_clock::now() < end) {
-    if (const auto input = coupling.input(serial)) { return input; }
-    std::this_thread::yield();
-  }
-  return {};
-}
-
-void port_publication_boundary(const blofeld::vi::dsp::Program &program,
-                               const bool reset_at_boundary) {
-  namespace vi = blofeld::vi;
-  constexpr std::uint64_t origin = 180;
-  constexpr std::uint8_t mask = 0xff;
-  constexpr std::uint8_t report = 0x0d;
-  constexpr std::uint8_t payload = 0xa5;
-  constexpr unsigned bytes = 16;
-  constexpr dsp56300::Word port_c = 0xffffbd;
-  constexpr dsp56300::Word direction = port_c + 1;
-  constexpr dsp56300::Word driven = 0xfff;
-  constexpr dsp56300::Word media_idle = 0x300;
-  constexpr dsp56300::Word media_command = 0x700;
-  constexpr auto space = dsp56300::Space::x;
-  vi::PeerPort peer;
-  vi::Shi shi;
-  vi::DspReset reset;
-  vi::ExecutionTime time;
-  vi::MidiPort midi;
-  std::stop_source stopping;
-  const auto stop = stopping.get_token();
-  vi::Coupling coupling(peer, shi, reset, time, midi, stop, vi::Coupling::default_window);
-  vi::dsp::Io io(
-      {}, shi, reset, stop, nullptr, {}, &peer, &time, &midi, nullptr, program, &coupling);
-  dsp56300::Core core(dsp56300::Memory::external(), &io);
-  time.release_dsp(origin);
-  io.bind(core, 0);
-  require(io.write(space, direction, 0, driven) && io.write(space, port_c, 0, media_idle | payload),
-          "Configure the actual Port C drivers");
-  peer.dsp_data({.mask = mask, .known = mask, .value = report});
-  require(peer.dsp_ready(true) && peer.mcu_strobe(true) && peer.mcu_strobe(false),
-          "Announce and accept the actual report request");
-  constexpr vi::PeerPort::Sample byte{.mask = mask, .known = mask, .value = payload};
-  for (unsigned index = 0; index < bytes; ++index) {
-    require(io.write(space, port_c, 0, media_idle | payload),
-            "Record each equal timed Port C write");
-  }
-  peer.dsp_data({});
-  for (unsigned index = 0; index < bytes - 1; ++index) {
-    require(peer.read_dsp_data({.mask = mask, .ticks = origin}) == byte,
-            "Read all but the last original reply byte");
-  }
-  require(io.write(space, port_c, 0, media_idle | report),
-          "Drive both Port C groups while the last reply byte remains available");
-  const vi::dsp::Coupled coupled(&coupling, io, core);
-  std::array<vi::Coupling::Input, 2> seen{};
-  bool applied = false;
-  const auto end = std::chrono::steady_clock::now() + std::chrono::seconds{2};
-  std::jthread observer([&] {
-    std::uint64_t serial = 0;
-    for (auto &sample : seen) {
-      const auto input = next_publication(coupling, serial, end);
-      if (!input) {
-        stopping.request_stop();
-        return;
-      }
-      sample = *input;
-      if (serial == 0) {
-        if (reset_at_boundary) {
-          peer.hold_reset();
-          applied = reset.assert_reset();
-        } else {
-          applied = peer.read_dsp_data({.mask = mask, .ticks = origin}) == byte;
-        }
-      }
-      serial = sample.serial;
-      coupling.acknowledge(serial);
-    }
-  });
-  const bool written = io.write(space, port_c, 0, media_command | payload);
-  observer.join();
-  using Signal = vi::mcu::Epoch::Signal;
-  constexpr auto reply_signal = static_cast<std::size_t>(Signal::reply);
-  constexpr auto data_signal = static_cast<std::size_t>(Signal::data);
-  require(written && applied && seen[0].serial == 1 && seen[1].serial == 2 &&
-              seen[0].ticks == origin && seen[1].ticks == origin &&
-              seen[0].values[reply_signal] == 1 && (seen[0].values[data_signal] & mask) == payload,
-          "A simultaneous media/peer write retains the original first publication");
-  require(reset_at_boundary ? seen[1].values[data_signal] == 0 && reset.pending(0)
-                            : seen[1].values[reply_signal] == 0 &&
-                                  seen[1].values[data_signal] == seen[0].values[data_signal],
-          "The second original observation sees reset or the actual last-byte read");
-}
-
 void native_reply_time() {
   const auto program = peer_reply_program();
   const auto prepared = prepare({.main = program, .eeprom = {}});
@@ -395,9 +292,6 @@ void native_reply_time() {
     require(sample && sample->mask == byte_mask && sample->known == byte_mask &&
                 sample->value == index,
             "The real native producer's timestamps preserve all sixteen distinct data writes");
-  }
-  for (const bool reset_at_boundary : {false, true}) {
-    port_publication_boundary(prepared, reset_at_boundary);
   }
 }
 
