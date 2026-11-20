@@ -294,7 +294,7 @@ if(BUILD_TESTING)
   target_include_directories(app-aot-mcu-catalogue-test PRIVATE "${BLOFELD_CPU12_ROOT}/test/support")
   target_include_directories(app-aot-mcu-catalogue-test SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
   blofeld_unit(app-aot-dsp-test test/app/aot/dsp_test.cpp
-    "blofeld_app_aot;blofeld_vi_execution;blofeld_vi_code_source")
+    "blofeld_app_aot;blofeld_app_memory;blofeld_vi_execution;blofeld_vi_code_source")
   target_include_directories(app-aot-dsp-test PRIVATE test "${BLOFELD_DSP56300_ROOT}/test/support")
   blofeld_unit(app-aot-dsp-program-test test/app/aot/dsp_program_test.cpp
     "blofeld_app_aot;blofeld_vi_execution;blofeld_vi_code_source")
