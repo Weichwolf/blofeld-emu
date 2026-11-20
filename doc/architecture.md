@@ -94,9 +94,10 @@ short block. Fully initialized, stably mapped RAM uses direct loads/stores witho
 per-word initialization checks. Removing a check requires a proof covering every
 reachable use and every operation that can invalidate it.
 
-The product lends complete P/X/Y read and write views with host protection.
-Real zero-initialized RAM has shared physical backing across both roles and all
-five OMR layouts. Typed volatile guest accesses preserve ordering across virtual
+The product reserves a 64 MiB view for each P/X/Y read and write role. Each view
+addresses the full 24-bit space in 32-bit host words. Real zero-initialized RAM
+has shared physical backing across both roles and all five OMR layouts. Typed
+volatile guest accesses preserve ordering across virtual
 aliases; registers and flags remain ordinary SSA. Peripherals retain their
 architectural decode and callbacks. P stores outside ordinary grants retain the
 consumer's real loader/code-inventory effects. Native access faults terminate the
@@ -105,10 +106,13 @@ The consumer owns signal handlers; the escape stays below C++ execution scopes.
 
 `BLOFELD_DSP_MEMORY=exact` selects the checked per-word reference; `direct` is the
 product default. The direct views map ordinary P, X and Y RAM at their OMR
-addresses, including shared storage for P aliases. Checked execution can still
-track startup initialization per word within those RAM ranges. The desktop
-profile lends no separate X/Y data ROM. Outside ordinary RAM, these declared
-contents grant page-rounded reads:
+addresses, including shared storage for P aliases. Checked execution tracks
+startup initialization per word where declared. The affected pages cover low
+P `000000..000fff`, X `000000..002fff` and Y `000000..001fff`, high X from
+`00c000` to `011fff` or `00ffff`, high Y from `00c000` to the word before the
+OMR-selected end `00e000`, `010000`, `014000` or `016000`, and their P aliases.
+The desktop profile lends no separate X/Y data ROM. Outside ordinary RAM, these
+declared contents grant page-rounded reads:
 
 | Contents | 4 KiB host page (DSP words) | 16 KiB host page (DSP words) |
 |---|---|---|
