@@ -181,7 +181,8 @@ public:
 
   bool complete_events(ExecutionReport &report) {
     if (media_deadline_ && device_cycles() >= *media_deadline_) {
-      if (!controller_.complete() || !update_ports()) {
+      const auto port_c = ports_.output(Port::c);
+      if (!controller_.complete() || !drive_media(port_c) || !publish_peer(port_c)) {
         report.failure = completion_failure_;
         report.failure->reason = controller_.error();
         return false;
@@ -767,7 +768,14 @@ private:
                             access.address == peer_data_address;
     const auto timestamp = peer_write ? outgoing_time() : std::nullopt;
     if (peer_write && !timestamp) { return false; }
-    if (!ports_.write(access) || !update_ports()) { return false; }
+    const auto written = ports_.write(access);
+    if (!written) { return false; }
+    update_audio_route(*written);
+    const auto port_c = ports_.output(Port::c);
+    if ((written->port == Port::c || written->port == Port::f) && !drive_media(port_c)) {
+      return false;
+    }
+    if (!publish_peer(port_c)) { return false; }
     if (timestamp && !blofeld_dsp_peer_write(peer_, *timestamp)) { return false; }
     if (controller_.pending() && controller_.epoch() != media_epoch_) {
       if (!synchronize_timers(true) || !schedule_media()) { return false; }
@@ -797,19 +805,17 @@ private:
     return ports_.read(space, address, value);
   }
 
-  [[nodiscard]] bool publish_peer() {
+  [[nodiscard]] bool publish_peer(const Ports::Output data) {
     if (peer_ == nullptr) { return true; }
-    const auto data = ports_.output(Port::c);
     constexpr dsp56300::Word byte_mask = 0xff;
     constexpr dsp56300::Word ready = 1U << 9U;
-    blofeld_dsp_peer_data(peer_,
-                          static_cast<std::uint8_t>(data.mask & byte_mask),
-                          static_cast<std::uint8_t>(data.known & byte_mask),
-                          static_cast<std::uint8_t>(data.value & byte_mask));
     const auto request = ports_.output(Port::e);
-    if ((request.mask & ~request.known & ready) != 0) { return false; }
-    const bool active = (request.mask & ready) != 0 && (request.value & ready) == 0;
-    return blofeld_dsp_peer_ready(peer_, active);
+    return blofeld_dsp_peer_publish(peer_,
+                                    {.mask = static_cast<std::uint8_t>(data.mask & byte_mask),
+                                     .known = static_cast<std::uint8_t>(data.known & byte_mask),
+                                     .value = static_cast<std::uint8_t>(data.value & byte_mask)},
+                                    (request.mask & ~request.known & ready) == 0,
+                                    (request.mask & ready) != 0 && (request.value & ready) == 0);
   }
 
   [[nodiscard]] std::optional<std::uint64_t> outgoing_time() noexcept {
@@ -826,17 +832,22 @@ private:
     return origin_ + clock.ticks() + fraction;
   }
 
-  bool update_ports() noexcept {
-    const bool esai_connected = esai_1_.connected();
-    const bool dax_connected = dax_.connected();
-    esai_1_.connected(ports_.peripheral(Port::e) != 0);
-    dax_.connected(ports_.peripheral(Port::d) != 0);
-    if (esai_connected != esai_1_.connected() || dax_connected != dax_.connected()) {
-      audio_changed();
-    }
+  void update_audio_route(const Ports::Written written) noexcept {
+    if (!written.configured) { return; }
+    if (written.port == Port::d) { update_audio_route(dax_, Port::d); }
+    if (written.port == Port::e) { update_audio_route(esai_1_, Port::e); }
+  }
+
+  void update_audio_route(auto &device, const Port port) noexcept {
+    const bool connected = ports_.peripheral(port) != 0;
+    if (connected == device.connected()) { return; }
+    device.connected(connected);
+    audio_changed();
+  }
+
+  bool drive_media(const Ports::Output controls) noexcept {
     constexpr dsp56300::Word control_mask = 0xf00;
     constexpr dsp56300::Word data_mask = 0xff;
-    const auto controls = ports_.output(Port::c);
     const auto data = ports_.output(Port::f);
     if ((controls.mask & controls.known & control_mask) == control_mask &&
         !controller_.write({.controls = controls.value & control_mask,
@@ -848,7 +859,7 @@ private:
     const auto output = controller_.output();
     ports_.input(Port::f,
                  {.mask = data_mask, .known = output ? data_mask : 0, .value = output.value_or(0)});
-    return publish_peer();
+    return true;
   }
 
   bool read_x(const dsp56300::Word address, dsp56300::Word &value) noexcept {

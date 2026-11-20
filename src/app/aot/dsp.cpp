@@ -37,9 +37,8 @@ public:
         reinterpret_cast<const void *>(&blofeld_dsp_shi_read),
         reinterpret_cast<const void *>(&blofeld_dsp_shi_write),
         reinterpret_cast<const void *>(&blofeld_dsp_peer_sample),
-        reinterpret_cast<const void *>(&blofeld_dsp_peer_data),
+        reinterpret_cast<const void *>(&blofeld_dsp_peer_publish),
         reinterpret_cast<const void *>(&blofeld_dsp_peer_write),
-        reinterpret_cast<const void *>(&blofeld_dsp_peer_ready),
         reinterpret_cast<const void *>(&blofeld_dsp_peer_interrupt),
 #if defined(BLOFELD_CENSUS)
         reinterpret_cast<const void *>(&vi::Census::unit_entry),
@@ -77,9 +76,8 @@ private:
       "blofeld_dsp_shi_read",
       "blofeld_dsp_shi_write",
       "blofeld_dsp_peer_sample",
-      "blofeld_dsp_peer_data",
+      "blofeld_dsp_peer_publish",
       "blofeld_dsp_peer_write",
-      "blofeld_dsp_peer_ready",
       "blofeld_dsp_peer_interrupt",
 #if defined(BLOFELD_CENSUS)
       "blofeld_census_unit_entry",

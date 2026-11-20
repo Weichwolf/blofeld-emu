@@ -78,21 +78,23 @@ bool Ports::read(const dsp56300::Space space,
   return true;
 }
 
-bool Ports::write(const Write access) noexcept {
+std::optional<Ports::Written> Ports::write(const Write access) noexcept {
   const auto index = decode(access.space, access.address);
-  if (!index || access.value > dsp56300::word_mask) { return false; }
+  if (!index || access.value > dsp56300::word_mask) { return {}; }
   auto &port = registers_[*index];
   const auto &spec = specs[*index];
   const auto value = access.value & spec.mask;
-  switch (access.address - spec.base) {
+  const auto reg = access.address - spec.base;
+  switch (reg) {
     case 0:
       port.data = value;
       port.known = spec.mask;
-      return true;
-    case 1: port.direction = value; return true;
-    case 2: port.function = value; return true;
-    default: return false;
+      break;
+    case 1: port.direction = value; break;
+    case 2: port.function = value; break;
+    default: return {};
   }
+  return Written{.port = static_cast<Port>(*index), .configured = reg != 0};
 }
 
 void Ports::input(const Port port, const Input sample) {
