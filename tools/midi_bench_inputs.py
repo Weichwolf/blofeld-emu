@@ -23,16 +23,16 @@ def vlq(value):
     return bytes(result)
 
 
-def track(events):
+def track(events, end=END):
     result = bytearray()
     previous = 0
     for tick, message in sorted(events, key=lambda event: event[0]):
-        if not previous <= tick <= END:
+        if not previous <= tick <= end:
             raise ValueError("MIDI event is outside the scenario timeline")
         result.extend(vlq(tick - previous))
         result.extend(message)
         previous = tick
-    result.extend(vlq(END - previous) + b"\xff\x2f\0")
+    result.extend(vlq(end - previous) + b"\xff\x2f\0")
     return b"MTrk" + struct.pack(">I", len(result)) + result
 
 
@@ -83,6 +83,30 @@ def multi():
     return tracks
 
 
+def dense_multi(end):
+    ticks_per_second = 2 * PPQN
+    period = ticks_per_second // 32
+    tracks = []
+    for channel in range(16):
+        notes = [(48 + channel, ticks_per_second, 100)]
+        if channel < 9:
+            notes.append((60 + channel, 3 * PPQN, 89))
+        events = [message(on, 0x90 | channel, pitch, velocity)
+                  for pitch, on, velocity in notes]
+        if end > RELEASE:
+            events.extend(message(RELEASE, 0x80 | channel, pitch, 0)
+                          for pitch, _, _ in notes)
+        for step, tick in enumerate(range(2 * ticks_per_second, min(end, RELEASE), period)):
+            at = tick + (channel * period) // 16
+            if step % 2 == 0:
+                events.append(message(at, 0xb0 | channel, 1, (step * 7 + channel * 11) % 128))
+            else:
+                bend = 8192 + ((step * 19 + channel * 23) % 257) - 128
+                events.append(message(at, 0xe0 | channel, bend & 127, bend >> 7))
+        tracks.append(events)
+    return tracks
+
+
 def controls():
     events = setup(0, 0)
     for beat in range(32):
@@ -113,12 +137,15 @@ def sl_samples():
     return [events]
 
 
-def write_case(output, name, tracks, requirements, tempo_change=False):
+def write_case(output, name, tracks, requirements, tempo_change=False, end=END):
     conductor = [message(0, 0xff, 0x51, 3, 7, 0xa1, 0x20)]
+    duration = end * 500000
     if tempo_change:
-        conductor.append(message(16 * PPQN, 0xff, 0x51, 3, 6, 0x1a, 0x80))
+        change_at = 16 * PPQN
+        conductor.append(message(change_at, 0xff, 0x51, 3, 6, 0x1a, 0x80))
+        duration -= (end - change_at) * 100000
     encoded = b"MThd" + struct.pack(">IHHH", 6, 1, len(tracks) + 1, PPQN)
-    encoded += track(conductor) + b"".join(track(events) for events in tracks)
+    encoded += track(conductor, end) + b"".join(track(events, end) for events in tracks)
     path = output / (name + ".mid")
     with path.open("xb") as stream:
         stream.write(encoded)
@@ -127,7 +154,7 @@ def write_case(output, name, tracks, requirements, tempo_change=False):
             "note_on_events": sum(1 for events in tracks for _, data in events
                                   if data[0] & 0xf0 == 0x90),
             "channels": len(tracks),
-            "file_duration_us": 16000000 if tempo_change else 18000000,
+            "file_duration_us": duration // PPQN,
             "requirements": requirements}
 
 
@@ -151,6 +178,15 @@ def main():
                     "Original SNDP messages select Osc1 sample bank 1 before Shape 0 (Clavinet)",
                     "Verify real sample reads and audible original PCM; selection alone is not proof"]),
     ]
+    for name, end in (("multi-midi-stress", END), ("multi-midi-stress-six", 12 * PPQN)):
+        tracks = dense_multi(end)
+        case = write_case(args.output, name, tracks, [
+            "Use the verified sixteen-part Multi fixture with active SL, Chorus and Delay",
+            "25 held notes and 512 CC1/bend messages per second from musical second two",
+            "Verify actual voices, MIDI delivery, samples and effects separately",
+        ], end=end)
+        case["source_messages"] = sum(len(events) for events in tracks)
+        cases.append(case)
     manifest = {
         "scope": "Authored deterministic MIDI workload inputs, not instrument qualification",
         "ppqn": PPQN,

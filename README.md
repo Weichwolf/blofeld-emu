@@ -140,11 +140,16 @@ controls are required.
 
 ## Local inputs and references
 
-Generate deterministic workloads with
-python3 tools/midi_bench_inputs.py --output build/local/bench-midi.
-Its manifest identifies single-note, chord/pedal, sixteen-channel,
-control/SysEx/tempo and SL cases. Verify actual voice/effect/sample use;
-matching files alone do not establish instrument acceptance.
+Generate deterministic workloads:
+
+```sh
+python3 tools/midi_bench_inputs.py --output build/local/bench-midi
+```
+
+For W5 use `multi-midi-stress.mid` with the shared sixteen-part Desktop SL
+profile and a one-second tail. `multi-midi-stress-six.mid` is the bounded
+diagnostic score. Record actual voice allocation, effects and sample playback
+alongside the generated manifest.
 
 Build `blofeld-render-controls` explicitly to prepare immutable MCU/DSP programs
 once and run fresh normal offline VMs for several controls. Separate complete CLI
