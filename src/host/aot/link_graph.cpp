@@ -14,7 +14,6 @@
 #include <mutex>
 #endif
 
-#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ExecutionEngine/JITLink/JITLink.h"
@@ -100,12 +99,13 @@ public:
     if (!path.empty()) {
       auto labels = std::make_shared<Labels>();
       config.PostPrunePasses.emplace_back(
-          [this, &owner, labels](llvm::jitlink::LinkGraph &graph) -> llvm::Error {
+          [this, &owner, labels, names = std::vector<Definition>{}](
+              llvm::jitlink::LinkGraph &graph) mutable -> llvm::Error {
             std::vector<std::pair<Symbol *, std::string>> original;
             for (auto *symbol : graph.defined_symbols()) {
               if (symbol->hasName()) { original.emplace_back(symbol, symbol->getName().str()); }
             }
-            if (auto error = define(owner, graph)) { return error; }
+            if (auto error = define(owner, graph, names)) { return error; }
             for (const auto &[symbol, name] : original) { (*labels)[symbol->getName()] = name; }
             return llvm::Error::success();
           });
@@ -117,7 +117,9 @@ public:
     }
 #endif
     config.PostPrunePasses.emplace_back(
-        [this, &owner](llvm::jitlink::LinkGraph &graph) { return define(owner, graph); });
+        [this, &owner, names = std::vector<Definition>{}](llvm::jitlink::LinkGraph &graph) mutable {
+          return define(owner, graph, names);
+        });
   }
 
   llvm::Error notifyFailed(Responsibility & /*owner*/) override { return llvm::Error::success(); }
@@ -186,14 +188,13 @@ private:
     }
   }
 
-  llvm::Error define(Responsibility &owner, llvm::jitlink::LinkGraph &graph) {
-    std::vector<Definition> definitions;
+  llvm::Error define(Responsibility &owner,
+                     llvm::jitlink::LinkGraph &graph,
+                     std::vector<Definition> &definitions) {
     if (auto error = claim(owner, graph, definitions)) { return error; }
     // Keep relocations intact; let ORC resolve cycles at symbol granularity.
     for (const auto &definition : definitions) {
-      const auto name = *definition.name;
-      const auto storage = graph.allocateContent(llvm::ArrayRef<char>(name.data(), name.size()));
-      definition.symbol->setName(llvm::StringRef(storage.data(), storage.size()));
+      definition.symbol->setName(*definition.name);
       definition.symbol->setScope(llvm::jitlink::Scope::Hidden);
     }
     return llvm::Error::success();
