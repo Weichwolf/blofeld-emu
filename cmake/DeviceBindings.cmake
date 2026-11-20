@@ -22,15 +22,18 @@ function(blofeld_device_binding core exports)
     INTERPROCEDURAL_OPTIMIZATION OFF INTERPROCEDURAL_OPTIMIZATION_RELEASE OFF)
   set(binding "${blofeld_binding_directory}/${core}_bindings.bc")
   set(header "${blofeld_binding_directory}/${core}_bindings.hpp")
-  add_custom_command(OUTPUT "${header}" "${binding}"
+  set(assembly "${blofeld_binding_directory}/${core}_bindings.S")
+  add_custom_command(OUTPUT "${header}" "${binding}" "${assembly}"
     COMMAND "${BLOFELD_llvm_link}" $<TARGET_OBJECTS:${target}>
       -o "${blofeld_binding_directory}/${core}_linked.bc"
     COMMAND "${BLOFELD_opt}" -passes=internalize,globaldce
       "--internalize-public-api-list=${exports}"
       "${blofeld_binding_directory}/${core}_linked.bc" -o "${binding}"
     COMMAND "${BLOFELD_opt}" -passes=verify -disable-output "${binding}"
-    COMMAND "${CMAKE_COMMAND}" "-DINPUT=${binding}" "-DOUTPUT=${header}"
+    COMMAND "${CMAKE_COMMAND}" "-DINPUT=${binding}" "-DOUTPUT=${header}" "-DASSEMBLY=${assembly}"
       "-DSYMBOL=${core}_bindings" -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedBitcode.cmake"
     DEPENDS ${target} $<TARGET_OBJECTS:${target}> cmake/EmbedBitcode.cmake
     COMMAND_EXPAND_LISTS VERBATIM)
+  set_source_files_properties("${assembly}" PROPERTIES OBJECT_DEPENDS "${binding}")
+  add_library(blofeld_${core}_binding_bytes OBJECT "${assembly}")
 endfunction()
