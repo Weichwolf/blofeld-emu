@@ -51,10 +51,10 @@ lives here and reaches the cores through their public interfaces.
   cores; no force pushes or backup branches. Validate your native host without
   breaking the other; both platforms use identical firmware, images and settings.
   Shared presets come from ../blofeld-src/tools/blofeld_image.py.
-- Coordinate Linux and macOS work in Weichwolf/blofeld-emu issues. Comments
-  starting with [Lead] set priorities. See #18 for the topic index, #17 for
-  Linux live audio and #19 for macOS live audio. Write short, result-first
-  comments. Keep original firmware, private traces and raw disassembly local.
+- Use GitHub issues for concrete remaining work. Keep one issue active across
+  blofeld-emu and dsp56300. Keep closed issues with useful technical evidence
+  and write short, result-first comments. Keep original firmware, private traces
+  and raw disassembly local.
 - Bound probes with explicit timeouts and stop promptly on faults. Telemetry is
   selectable, off by default and absent from the normal hot path.
 - Sanitizer qualification (ASan/UBSan, separate TSan) of own and generated code
@@ -72,15 +72,15 @@ lives here and reaches the cores through their public interfaces.
   then `git merge --ff-only`) before starting work, before any measurement that
   names a published commit, and before every push. Nothing is committed on
   local `main` that is not pushed in the same step.
-- Unpublished work lives on at most one work branch per open step, named
-  `work/<issue>-<step>` (for example `work/37-r1`), rebased on the remote
-  `main`, without merge commits. Publishing is: fast-forward `main` to it,
-  push, delete the work branch, all in one step.
+- Keep at most one `work/<issue>-<step>` branch across blofeld-emu and dsp56300
+  for the active issue. Rebase it on remote `main` without merge commits.
+  Publish by fast-forwarding `main`, pushing and deleting the work branch in
+  the same step.
 - A measurement baseline may be a detached worktree at a published commit. It
   is removed when the result is posted.
 - A branch, worktree or stash is orphaned when its step is published, cancelled
   or superseded, or when no open issue step names it. Orphans are deleted, not
   archived: history on `main` and the issue record are the archive. A stash is
   never storage.
-- At every publication `git branch` shows `main` plus the active work branches
+- At every publication `git branch` shows `main` plus any active work branch
   and `git worktree list` shows nothing else. No force pushes to `main`.
