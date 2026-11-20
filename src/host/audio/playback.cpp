@@ -408,8 +408,9 @@ struct Playback::Impl {
   }
 
   void poll(const std::stop_token &stop) const {
-    const int timeout_ms = started.load(std::memory_order_acquire) ? 1 : -1;
-    if (pa_mainloop_prepare(loop.get(), timeout_ms) < 0) { fail("Prepare audio events"); }
+    constexpr int playback_poll_us = 1000;
+    const int poll_timeout_us = started.load(std::memory_order_acquire) ? playback_poll_us : -1;
+    if (pa_mainloop_prepare(loop.get(), poll_timeout_us) < 0) { fail("Prepare audio events"); }
     // Recheck after prepare clears its wake pipe, preventing a lost producer wake.
     if (stop.stop_requested() || reset_pending.load(std::memory_order_acquire) ||
         (!buffer.readable().empty() && pa_stream_writable_size(stream.get()) >= frame_bytes)) {
