@@ -4,9 +4,9 @@
 #include "llvm-c/Core.h"
 #include "llvm-c/Support.h"
 #include "llvm-c/Types.h"
+#include "llvm/ADT/SmallPtrSet.h"
 
 #include <cstddef>
-#include <set>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -54,7 +54,7 @@ void validate_symbols(LLVMModuleRef module, const Imports &imports) {
     symbol(global, imports);
     pending.push_back(global);
   }
-  std::set<LLVMValueRef> visited;
+  llvm::SmallPtrSet<LLVMValueRef, 32> visited;
   while (!pending.empty()) {
     auto *value = pending.back();
     pending.pop_back();
