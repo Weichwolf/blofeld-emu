@@ -93,24 +93,21 @@ bool blofeld_dsp_peer_sample(PeerPort *const channel,
   return true;
 }
 
-void blofeld_dsp_peer_data(PeerPort *const channel,
-                           const std::uint8_t mask,
-                           const std::uint8_t known,
-                           const std::uint8_t value) noexcept {
+bool blofeld_dsp_peer_ports(PeerPort *const channel,
+                            const std::uint8_t mask,
+                            const std::uint8_t known,
+                            const std::uint8_t value,
+                            const bool ready_known,
+                            const bool active) noexcept {
   channel->dsp_data({.mask = mask, .known = known, .value = value});
-  if (const auto *coupled = Coupled::current()) { static_cast<void>(coupled->changed()); }
+  const auto *coupled = Coupled::current();
+  const bool observed = coupled != nullptr && coupled->changed();
+  if (!ready_known || !channel->dsp_ready(active)) { return false; }
+  return coupled == nullptr || (observed && coupled->ready_unchanged(active)) || coupled->changed();
 }
 
 bool blofeld_dsp_peer_write(PeerPort *const channel, const std::uint64_t ticks) noexcept {
   return channel->dsp_write(channel->dsp_data(), ticks);
-}
-
-bool blofeld_dsp_peer_ready(PeerPort *const channel, const bool active) noexcept {
-  const bool accepted = channel->dsp_ready(active);
-  if (accepted) {
-    if (const auto *coupled = Coupled::current()) { return coupled->changed(); }
-  }
-  return accepted;
 }
 
 bool blofeld_dsp_peer_interrupt(const PeerPort *const channel,

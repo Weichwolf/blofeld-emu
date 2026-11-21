@@ -90,6 +90,14 @@ public:
   [[nodiscard]] bool service(Stamp stamp);
   [[nodiscard]] bool outputs(std::uint64_t ticks);
 
+  [[nodiscard]] bool ready_unchanged(const bool active) const noexcept {
+    using Signal = mcu::Epoch::Signal;
+    // The DSP owner applies reset and reply activation. During acknowledgement
+    // the MCU can finish a reply that was active in the published snapshot.
+    return !stopped() && previous_[static_cast<std::size_t>(Signal::reply)] == 0 &&
+           previous_[static_cast<std::size_t>(Signal::interrupt)] == std::uint64_t{active};
+  }
+
   [[nodiscard]] std::uint64_t revision() const noexcept { return serial_; }
 
   [[nodiscard]] bool held();

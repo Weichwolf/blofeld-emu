@@ -16,6 +16,11 @@ public:
   Coupled &operator=(const Coupled &) = delete;
   [[nodiscard]] bool service() const noexcept;
   [[nodiscard]] bool changed() const noexcept;
+
+  [[nodiscard]] bool ready_unchanged(const bool active) const noexcept {
+    return coupling_->ready_unchanged(active);
+  }
+
   [[nodiscard]] static const Coupled *current() noexcept;
 
 private:

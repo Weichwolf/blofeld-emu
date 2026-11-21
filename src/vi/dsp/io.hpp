@@ -802,14 +802,15 @@ private:
     const auto data = ports_.output(Port::c);
     constexpr dsp56300::Word byte_mask = 0xff;
     constexpr dsp56300::Word ready = 1U << 9U;
-    blofeld_dsp_peer_data(peer_,
-                          static_cast<std::uint8_t>(data.mask & byte_mask),
-                          static_cast<std::uint8_t>(data.known & byte_mask),
-                          static_cast<std::uint8_t>(data.value & byte_mask));
     const auto request = ports_.output(Port::e);
-    if ((request.mask & ~request.known & ready) != 0) { return false; }
+    const bool ready_known = (request.mask & ~request.known & ready) == 0;
     const bool active = (request.mask & ready) != 0 && (request.value & ready) == 0;
-    return blofeld_dsp_peer_ready(peer_, active);
+    return blofeld_dsp_peer_ports(peer_,
+                                  static_cast<std::uint8_t>(data.mask & byte_mask),
+                                  static_cast<std::uint8_t>(data.known & byte_mask),
+                                  static_cast<std::uint8_t>(data.value & byte_mask),
+                                  ready_known,
+                                  active);
   }
 
   [[nodiscard]] std::optional<std::uint64_t> outgoing_time() noexcept {
