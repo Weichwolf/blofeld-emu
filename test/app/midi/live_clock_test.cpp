@@ -156,6 +156,7 @@ void bounded_uncertainty() {
   require(clock.uncertainty_ns() == granted && clock.prime_ticks() == expected_prime,
           "Actual queue grants determine bounded priming");
   clock.observe(point(host, tick));
+  require(!clock.correlate(host + 1, native_epoch), "Projection needs an observed interval");
   auto next = point(host + interval, tick + 11);
   next.uncertainty_ns = granted;
   clock.observe(next);
@@ -164,6 +165,18 @@ void bounded_uncertainty() {
           "Timestamp uncertainty does not retime the mapped original samples");
   auto later = point(host + (2 * interval), tick + 16);
   clock.observe(later);
+  require(clock.correlate(later.host_ns + granted, native_epoch) == later.ticks + 2 &&
+              !clock.correlate(later.host_ns + granted + 1, native_epoch) &&
+              !clock.correlate(later.host_ns + 1, native_epoch + 1),
+          "Projection uses the latest slope within the current device uncertainty and epoch");
+  constexpr std::uint64_t short_interval = 100;
+  constexpr std::uint64_t short_tick_delta = 6;
+  const auto nearby = point(later.host_ns + short_interval, later.ticks + short_tick_delta);
+  clock.observe(nearby);
+  require(clock.correlate(nearby.host_ns + short_interval, native_epoch) ==
+                  nearby.ticks + short_tick_delta &&
+              !clock.correlate(nearby.host_ns + short_interval + 1, native_epoch),
+          "An uncertain timestamp may project at most one observed interval");
   constexpr std::uint64_t terminal_delta = 17;
   later = point(host + (3 * interval), tick + terminal_delta);
   later.uncertainty_ns = granted + 1;
