@@ -60,7 +60,10 @@ Access operation(const dsp56300::FaultKind fault) {
 
 }
 
-void Io::prepare_code() {
+void Io::prepare_code(const bool guest_yielded) {
+  // The core yields on image transitions, code writes and memory map changes.
+  // DMA can also publish a new image while the core is stopped.
+  if (!guest_yielded && !preparation_requested_) { return; }
   const auto registers = core_->registers();
   const bool transfer = installed_program_ && program_.transition({.variant = *installed_program_,
                                                                    .address = registers.pc});
@@ -169,17 +172,19 @@ bool run_instance(Io &io,
   });
 #endif
   bool restart = false;
+  bool guest_yielded = false;
   while (!stop.stop_requested()) {
     if (reset.pending(epoch)) {
       restart = true;
       break;
     }
-    io.prepare_code();
+    io.prepare_code(guest_yielded);
 #if defined(BLOFELD_CENSUS)
     const auto result = run_observed(io);
 #else
     const auto result = io.run();
 #endif
+    guest_yielded = result.yielded;
     report.instructions += result.retired;
     if (stop.stop_requested()) { break; }
     if (io.reset_interrupted()) {

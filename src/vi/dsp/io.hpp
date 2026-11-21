@@ -178,7 +178,7 @@ public:
 
   [[nodiscard]] std::array<std::uint64_t, 2> retirement() const noexcept { return retirement_; }
 
-  void prepare_code();
+  void prepare_code(bool guest_yielded);
 
   bool complete_events(ExecutionReport &report) {
     if (media_deadline_ && device_cycles() >= *media_deadline_) {
