@@ -29,10 +29,12 @@ public:
   using TextRange = llvm_native_sites::TextRange;
   using Site = llvm_native_sites::Site;
   using FaultMap = llvm_native_sites::FaultMap;
+  enum class ExecutableMemory : std::uint8_t { standard, jit };
 
   explicit Code(std::span<const Module> modules,
                 std::span<const Import> imports = {},
-                const std::filesystem::path &cache = {});
+                const std::filesystem::path &cache = {},
+                ExecutableMemory memory = ExecutableMemory::standard);
   ~Code();
   Code(const Code &) = delete;
   Code &operator=(const Code &) = delete;

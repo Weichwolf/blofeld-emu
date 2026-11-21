@@ -27,6 +27,8 @@ public:
     enum class Kind : std::uint8_t { frontier, current };
     std::uint64_t until;
     Kind kind = Kind::frontier;
+    // Exclusive horizon for reads that reuse an already admitted input sample.
+    std::uint64_t quiet_until = 0;
     bool operator==(const Grant &) const = default;
   };
 
@@ -79,15 +81,24 @@ public:
   }
 
   [[nodiscard]] std::uint64_t observation() const noexcept {
-    return changed_.load(std::memory_order_seq_cst);
+    return std::atomic_ref(changed_).load(std::memory_order_seq_cst);
   }
 
   void wait(std::uint64_t observed) noexcept;
+  void wait_checkpoint(std::uint64_t observed) noexcept;
   void notify() noexcept;
 
   [[nodiscard]] std::optional<Grant> receiver(Stamp stamp);
   [[nodiscard]] bool service(Stamp stamp);
   [[nodiscard]] bool outputs(std::uint64_t ticks);
+
+  [[nodiscard]] bool ready_unchanged(const bool active) const noexcept {
+    using Signal = mcu::Epoch::Signal;
+    // The DSP owner applies reset and reply activation. During acknowledgement
+    // the MCU can finish a reply that was active in the published snapshot.
+    return !stopped() && previous_[static_cast<std::size_t>(Signal::reply)] == 0 &&
+           previous_[static_cast<std::size_t>(Signal::interrupt)] == std::uint64_t{active};
+  }
 
   [[nodiscard]] std::uint64_t revision() const noexcept { return serial_; }
 
@@ -132,7 +143,7 @@ private:
   [[maybe_unused]] std::array<std::byte, 128 - sizeof(known_)> known_padding_;
   alignas(128) std::atomic<std::uint64_t> cut_{0}, message_{0};
   std::atomic<std::size_t> consumed_{0};
-  alignas(128) std::atomic<std::uint64_t> changed_{0};
+  alignas(128) mutable std::uint64_t changed_ = 0;
   std::atomic<unsigned> waiting_{0};
   std::atomic<const char *> error_{nullptr};
   std::stop_callback<Cancel> cancellation_;

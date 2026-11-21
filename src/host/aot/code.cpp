@@ -3,6 +3,9 @@
 
 #include "aot/link_graph.hpp"
 #include "aot/llvm.hpp"
+#if defined(__APPLE__) && defined(__aarch64__)
+#include "aot/jit_memory_darwin.hpp"
+#endif
 #include "native_sites.hpp"
 
 #include "llvm-c/Core.h"
@@ -57,8 +60,16 @@ llvm::orc::LLJIT &native(LLVMOrcLLJITRef jit) {
 
 void platform(LLVMOrcLLJITBuilderRef builder,
               llvm::ObjectCache *cache,
-              llvm_native_sites::SourceMap &source) {
+              llvm_native_sites::SourceMap &source,
+              Code::ExecutableMemory memory) {
   auto &native_builder = *reinterpret_cast<llvm::orc::LLJITBuilder *>(builder);
+  if (memory == Code::ExecutableMemory::jit) {
+#if defined(__APPLE__) && defined(__aarch64__)
+    detail::use_jit_memory(native_builder);
+#else
+    throw std::invalid_argument("JIT memory requires macOS ARM64");
+#endif
+  }
   native_builder.setNumCompileThreads(0).setSupportConcurrentCompilation(false);
   native_builder.setPrePlatformSetup([cache, &source](llvm::orc::LLJIT &jit) {
     source.attach(jit);
@@ -111,7 +122,8 @@ public:
 
 Code::Code(const std::span<const Module> modules,
            const std::span<const Import> imports,
-           const std::filesystem::path &cache)
+           const std::filesystem::path &cache,
+           const ExecutableMemory memory)
     : impl_(std::make_unique<Impl>()) {
   const auto bindings = detail::imports(imports);
   detail::initialize();
@@ -140,7 +152,7 @@ Code::Code(const std::span<const Module> modules,
   Owner<LLVMTargetMachineRef, LLVMDisposeTargetMachine> machine(detail::target(module.get()));
   impl_->objects = detail::optimize(module, machine.get(), exports, bindings, cache);
   Owner<LLVMOrcLLJITBuilderRef, LLVMOrcDisposeLLJITBuilder> builder(LLVMOrcCreateLLJITBuilder());
-  platform(builder.get(), impl_->objects.get(), impl_->source);
+  platform(builder.get(), impl_->objects.get(), impl_->source, memory);
   LLVMOrcLLJITBuilderSetJITTargetMachineBuilder(
       builder.get(), LLVMOrcJITTargetMachineBuilderCreateFromTargetMachine(machine.release()));
   LLVMOrcLLJITRef raw_jit = nullptr;

@@ -34,6 +34,25 @@ bool AudioConsumer::has_pcm() const noexcept {
   return pcm_.load(std::memory_order_acquire);
 }
 
+std::optional<AudioConsumer::InputGrant>
+AudioConsumer::input_grant(const host::audio::PlaybackStatus &status) const noexcept {
+  const auto &grants = playback_.grants();
+  if (!last_tick_ || grants.maximum_frames > grants.rate || grants.rate == 0 ||
+      status.queued_frames > grants.maximum_frames) {
+    return {};
+  }
+  // The DSP owner needs room for its next block before it can submit PCM.
+  constexpr std::uint64_t block_frames = 16;
+  const auto frames = grants.maximum_frames - status.queued_frames + block_frames;
+  const auto from_queue = (frames * vi::PcmOutput::time_hz + grants.rate - 1) / grants.rate;
+  constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+  if (from_queue >= maximum - *last_tick_) { return {}; }
+  return InputGrant{.playhead = status.position ? clock_.read(*status.position) : std::nullopt,
+                    .exclusive = *last_tick_ + from_queue + 1,
+                    .audio_epoch = audio_epoch_,
+                    .started = status.started};
+}
+
 vi::PcmOutput AudioConsumer::output() noexcept {
   return {.owner = this,
           .write =
@@ -136,10 +155,7 @@ bool AudioConsumer::submit(vi::PcmOutput::Block block, const std::stop_token &st
     clock_.clear();
     return false;
   }
-  if (playback_.grants().position_history_frames) {
-    clock_.append(block, audio_epoch_);
-    if (const auto position = playback_.status().position) { clock_.observe(*position); }
-  }
+  if (playback_.grants().position_history_frames) { clock_.append(block, audio_epoch_); }
   producer_->begin_work();
   const auto completed = std::chrono::steady_clock::now();
   if (previous_) {

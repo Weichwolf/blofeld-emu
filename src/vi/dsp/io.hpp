@@ -116,6 +116,7 @@ public:
     clock_.reset(true);
     origin_ = time_ != nullptr ? time_->dsp_origin() : 0;
     peer_deadline_.reset();
+    invalidate_peer_read();
     interrupts_.reset();
     dma_.reset();
     esai_1_.reset();
@@ -330,6 +331,8 @@ public:
   }
 
   [[nodiscard]] bool coupling_interrupted() noexcept { return interrupted(); }
+
+  void invalidate_peer_read() noexcept { peer_read_until_ = 0; }
 
   [[nodiscard]] bool reset_interrupted() const noexcept { return reset_interrupted_; }
 
@@ -555,6 +558,7 @@ private:
   }
 
   bool write_clock(const dsp56300::Word value) noexcept {
+    invalidate_peer_read();
     if (!clock_.advance(device_cycles()) || !clock_.write(value)) { return false; }
     if (memory_.promote_initialized()) {
       revision_ ^= 1U;
@@ -565,6 +569,7 @@ private:
   }
 
   bool synchronize_peer() {
+    invalidate_peer_read();
     if (!clock_.advance(device_cycles())) {
       throw std::overflow_error("DSP instrument time is not representable or monotonic");
     }
@@ -589,6 +594,13 @@ private:
       peer_deadline_ = clock_.deadline(limit->until - origin_);
     }
     if (!peer_deadline_) { throw std::overflow_error("DSP peer deadline is not representable"); }
+    if (peer_ != nullptr && limit->quiet_until > stamp->ticks) {
+      PeerPort::Sample input;
+      if (peer_->cached_mcu_data(input)) {
+        ports_.input(Port::c, {.mask = input.mask, .known = input.known, .value = input.value});
+        peer_read_until_ = clock_.deadline(limit->quiet_until - origin_).value_or(0);
+      }
+    }
     return true;
   }
 
@@ -786,13 +798,16 @@ private:
 
   bool read_port(const dsp56300::Space space, const dsp56300::Word address, dsp56300::Word &value) {
     if (peer_ != nullptr && space == dsp56300::Space::x && address == peer_data_address) {
-      if (!clock_.advance(device_cycles()) ||
-          clock_.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_) {
-        return false;
+      const auto now = device_cycles();
+      if (now >= peer_read_until_) {
+        if (!clock_.advance(now) ||
+            clock_.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_) {
+          return false;
+        }
+        PeerPort::Sample input;
+        if (!blofeld_dsp_peer_sample(peer_, origin_ + clock_.ticks(), input)) { return false; }
+        ports_.input(Port::c, {.mask = input.mask, .known = input.known, .value = input.value});
       }
-      PeerPort::Sample input;
-      if (!blofeld_dsp_peer_sample(peer_, origin_ + clock_.ticks(), input)) { return false; }
-      ports_.input(Port::c, {.mask = input.mask, .known = input.known, .value = input.value});
     }
     return ports_.read(space, address, value);
   }
@@ -802,14 +817,15 @@ private:
     const auto data = ports_.output(Port::c);
     constexpr dsp56300::Word byte_mask = 0xff;
     constexpr dsp56300::Word ready = 1U << 9U;
-    blofeld_dsp_peer_data(peer_,
-                          static_cast<std::uint8_t>(data.mask & byte_mask),
-                          static_cast<std::uint8_t>(data.known & byte_mask),
-                          static_cast<std::uint8_t>(data.value & byte_mask));
     const auto request = ports_.output(Port::e);
-    if ((request.mask & ~request.known & ready) != 0) { return false; }
+    const bool ready_known = (request.mask & ~request.known & ready) == 0;
     const bool active = (request.mask & ready) != 0 && (request.value & ready) == 0;
-    return blofeld_dsp_peer_ready(peer_, active);
+    return blofeld_dsp_peer_ports(peer_,
+                                  static_cast<std::uint8_t>(data.mask & byte_mask),
+                                  static_cast<std::uint8_t>(data.known & byte_mask),
+                                  static_cast<std::uint8_t>(data.value & byte_mask),
+                                  ready_known,
+                                  active);
   }
 
   [[nodiscard]] std::optional<std::uint64_t> outgoing_time() noexcept {
@@ -926,7 +942,7 @@ private:
   MidiInput midi_;
   PreparationClock *preparation_;
   std::optional<std::uint64_t> midi_deadline_;
-  std::uint64_t origin_ = 0;
+  std::uint64_t origin_ = 0, peer_read_until_ = 0;
   std::optional<std::uint64_t> peer_deadline_;
   Failure completion_failure_;
   std::array<std::uint64_t, 2> retirement_{};

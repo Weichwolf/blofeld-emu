@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <dsp56300/memory.hpp>
 #include <exception>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -262,6 +263,35 @@ void completion_time_overflow() {
           "An overflowing common origin cannot publish partial stereo PCM or wrapped time");
 }
 
+void consumer_requests_partial_block() {
+  Esai esai;
+  Dax dax;
+  Consumer consumer;
+  const std::stop_token stop;
+  auto output = consumer.output();
+  output.submit_partial = [](void *, const std::size_t frames) noexcept { return frames == 3; };
+  Audio audio(esai, dax, output, stop);
+  Clock clock;
+  configure(esai);
+  audio.reset({.id = 3});
+  require(clock.write(nominal_clock) && esai.write({.address = tx0, .value = first_word}) &&
+              audio.configure(0, clock),
+          "Configure partial stereo delivery");
+
+  for (unsigned frame = 0; frame < 5; ++frame) {
+    require(audio.clock() && audio.submit() && audio.clock() && audio.submit(),
+            "Complete and submit only due stereo frames");
+    require(consumer.frames.size() == (frame < 2 ? 0U : 3U),
+            "The consumer can request a complete stereo prefix before a full block");
+  }
+  require(audio.submit(true) && consumer.frames.size() == 5 && consumer.metadata.size() == 2 &&
+              consumer.metadata[0].epoch == 3 && consumer.metadata[0].first_frame == 0 &&
+              consumer.metadata[1].epoch == 3 && consumer.metadata[1].first_frame == 3 &&
+              std::ranges::adjacent_find(consumer.ticks, std::greater_equal{}) ==
+                  consumer.ticks.end(),
+          "Early delivery and the final flush preserve the epoch, frame sequence and sample times");
+}
+
 void coarse_completion_rounding() {
   Esai esai;
   Dax dax;
@@ -323,6 +353,7 @@ int main() try {
   delayed_submission_and_clock_changes();
   completion_time_overflow();
   pending_completion_before_pll_write();
+  consumer_requests_partial_block();
   coarse_completion_rounding();
 } catch (const std::exception &error) {
 

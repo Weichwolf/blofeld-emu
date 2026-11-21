@@ -32,6 +32,15 @@ public:
   [[nodiscard]] PcmStatistics statistics() const noexcept;
   [[nodiscard]] std::optional<PcmClock::Point> clock() const noexcept;
 
+  struct InputGrant {
+    std::optional<PcmClock::Point> playhead;
+    std::uint64_t exclusive, audio_epoch;
+    bool started;
+  };
+
+  [[nodiscard]] std::optional<InputGrant>
+  input_grant(const host::audio::PlaybackStatus &status) const noexcept;
+
 private:
   enum class Phase : std::uint8_t { waiting, writing, closed, failed };
   [[nodiscard]] bool write(vi::PcmOutput::Block block, const std::stop_token &stop);

@@ -34,6 +34,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace blofeld::vi::mcu {
 namespace {
@@ -276,6 +277,7 @@ bool Speculation::await_midi(const std::uint64_t time) noexcept {
     const auto limit = midi_.input_limit();
     if (!limit || *limit > time) { return true; }
     midi_.request_input(time);
+    midi_.before_mcu_wait(time);
     coupling_.wait(observed);
   }
   return false;
@@ -389,14 +391,64 @@ void Speculation::ready() {
   }
 }
 
+Speculation::Checkpoint Speculation::snapshot() const {
+  auto state = state_;
+  state.instructions = report_.instructions;
+  return {.cpu = core_.save(),
+          .memory = memory_.save(),
+          .devices = devices_.save(),
+          .io = io_.save(),
+          .state = state,
+          .binding = binding_};
+}
+
 void Speculation::save() {
-  state_.instructions = report_.instructions;
-  checkpoint_.emplace(Checkpoint{.cpu = core_.save(),
-                                 .memory = memory_.save(),
-                                 .devices = devices_.save(),
-                                 .io = io_.save(),
-                                 .state = state_,
-                                 .binding = binding_});
+  checkpoint_.emplace(snapshot());
+}
+
+bool Speculation::stage_ordinary(const std::uint64_t target) {
+  const auto time = ticks();
+  if (!midi_.rendering_at(time) || !check() || time < target || action_ != Action::run ||
+      epoch_.atomic() || state_.reset.held || replaying_ || effects_.yield() || epoch_.yield() ||
+      history_.yield()) {
+    return false;
+  }
+  if (further_windows_ != 0) {
+    --further_windows_;
+    return true;
+  }
+  if (staged_ || core_.state().execution != cpu12::ExecutionState::waiting) { return false; }
+  ready();
+  staged_.emplace(
+      StagedCheckpoint{.tick = time, .effects = effects_.size(), .snapshot = snapshot()});
+  further_windows_ = 2;
+  return true;
+}
+
+void Speculation::promote_staged() {
+  if (!staged_ || state_.reset.held || epoch_.atomic() || action_ != Action::run ||
+      effects_.yield() || epoch_.yield() || history_.yield() ||
+      coupling_.known() <= staged_->tick || !poll()) {
+    return;
+  }
+  auto &saved = *staged_;
+  const auto known = coupling_.known();
+  const auto consumed = coupling_.consumed();
+  if (consumed < saved.effects) { return; }
+  const auto cursor = saved.snapshot.state.input_cursor;
+  if (state_.input_cursor < cursor ||
+      !effects_.promote(
+          {.ticks = saved.tick, .known = known, .position = saved.effects, .received = consumed}) ||
+      !epoch_.promote(saved.tick) || !history_.retire(saved.tick)) {
+    throw std::logic_error("An ordinary checkpoint could not promote its settled prefix");
+  }
+  midi_.publish_time(saved.tick);
+  for (std::uint64_t count = 0; count < cursor; ++count) { midi_.pop_input(); }
+  state_.input_cursor -= cursor;
+  saved.snapshot.state.input_cursor = 0;
+  if (display_ != nullptr) { display_->capture(saved.snapshot.io.display.controller()); }
+  checkpoint_.emplace(std::move(saved.snapshot));
+  staged_.reset();
 }
 
 void Speculation::restore() {
@@ -441,6 +493,8 @@ void Speculation::restore() {
 
 void Speculation::confirm() {
   const auto time = ticks();
+  promote_staged();
+  further_windows_ = 0;
   publish();
   coupling_.request(time);
   coupling_.checkpoint(time);
@@ -454,9 +508,12 @@ void Speculation::confirm() {
       static_cast<void>(check());
       return;
     }
-    if (!coupling_.pause_after(time)) { coupling_.wait(observed); }
+    promote_staged();
+    if (!coupling_.pause_after(time)) { coupling_.wait_checkpoint(observed); }
   }
   if (!check()) { return; }
+  promote_staged();
+  staged_.reset();
   ready();
   if (!effects_.acknowledge(coupling_.consumed(), coupling_.cut()) || !effects_.checkpoint(time) ||
       !epoch_.attained(coupling_.known()) ||
@@ -481,6 +538,8 @@ void Speculation::confirm() {
 
 void Speculation::recover() {
   if (!pending_) { throw std::logic_error("Invalidated MCU epoch has no source event"); }
+  staged_.reset();
+  further_windows_ = 0;
   coupling_.cancel_checkpoint();
   const auto target = pending_->ticks;
   const auto serial = pending_->serial;
@@ -646,12 +705,13 @@ void Speculation::run() {
     while (check() && ticks() < target && !effects_.yield() && !epoch_.yield() &&
            !history_.yield()) {
       step(target);
+      if (staged_) { promote_staged(); }
     }
     if (epoch_.cancelled()) {
       recover();
       continue;
     }
-    confirm();
+    if (!stage_ordinary(target)) { confirm(); }
   }
 }
 }

@@ -101,6 +101,14 @@ public:
     return accepted;
   }
 
+  [[nodiscard]] bool promote(const std::uint64_t ticks) noexcept {
+    if (error_ != Error::none || phase_ != Phase::speculative) { return false; }
+    if (ticks < checkpoint_ || !settled(ticks)) { return fail(Error::unsettled); }
+    checkpoint_ = ticks;
+    position_ = position_ < ticks ? ticks : position_;
+    return true;
+  }
+
   [[nodiscard]] bool checkpoint(const std::uint64_t ticks) noexcept {
     if (error_ != Error::none || phase_ == Phase::invalidated) { return false; }
     if (ticks < position_ || !settled(ticks) || size_ != 0) { return fail(Error::unsettled); }

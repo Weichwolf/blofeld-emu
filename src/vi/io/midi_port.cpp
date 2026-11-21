@@ -66,8 +66,7 @@ void MidiPort::signal() noexcept {
 void MidiPort::notify() noexcept {
   if (wake_notify_ != nullptr) { wake_notify_(wake_owner_); }
   if (input_waiters_.load(std::memory_order_seq_cst) != 0 ||
-      space_waiters_.load(std::memory_order_seq_cst) != 0 ||
-      output_waiters_.load(std::memory_order_seq_cst) != 0) {
+      space_waiters_.load(std::memory_order_seq_cst) != 0) {
     signal();
   }
 }
@@ -92,45 +91,66 @@ bool MidiPort::await(std::atomic<unsigned> &waiters,
   }
 }
 
+void MidiPort::signal_output() noexcept {
+  output_changed_.fetch_add(1, std::memory_order_seq_cst);
+  output_changed_.notify_one();
+}
+
 bool MidiPort::fail(const char *message) noexcept {
   const char *empty = nullptr;
   error_.compare_exchange_strong(empty, message, std::memory_order_release);
   signal();
+  signal_output();
   return false;
 }
 
 bool MidiPort::write_input(const std::span<const std::uint8_t> bytes,
                            const std::uint64_t ticks) noexcept {
-  return admit(bytes, ticks, nullptr);
+  return admit(bytes, ticks, nullptr, false).status == InputStatus::admitted;
 }
 
 bool MidiPort::write_input(const std::span<const std::uint8_t> bytes,
                            const std::uint64_t ticks,
                            const std::stop_token &stop) noexcept {
-  return admit(bytes, ticks, &stop);
+  return admit(bytes, ticks, &stop, false).status == InputStatus::admitted;
 }
 
-bool MidiPort::admit(const std::span<const std::uint8_t> bytes,
-                     const std::uint64_t ticks,
-                     const std::stop_token *stop) noexcept {
-  if (stop != nullptr && stop->stop_requested()) { return false; }
-  if (error() != nullptr) { return false; }
+MidiPort::Admission MidiPort::stage_input(const std::span<const std::uint8_t> bytes,
+                                          const std::uint64_t ticks) noexcept {
+  return admit(bytes, ticks, nullptr, true);
+}
+
+MidiPort::Admission MidiPort::admit(const std::span<const std::uint8_t> bytes,
+                                    const std::uint64_t ticks,
+                                    const std::stop_token *stop,
+                                    const bool staged) noexcept {
+  const auto refuse = [this](const char *message) noexcept {
+    static_cast<void>(fail(message));
+    return Admission{};
+  };
+  if ((stop != nullptr && stop->stop_requested()) || error() != nullptr) { return {}; }
+  if (staged && input_mode_ != InputMode::audio) {
+    return refuse("MIDI input has no active audio grant");
+  }
   if (phase_.load(std::memory_order_seq_cst) == Phase::ended) {
-    return fail("MIDI input is already finished");
+    return refuse("MIDI input is already finished");
   }
-  if (bytes.empty()) { return true; }
-  if (ticks < last_input_) { return fail("MIDI input timestamps moved backwards"); }
+  if (bytes.empty()) { return {.status = InputStatus::admitted, .tick = ticks}; }
+  if (ticks < last_input_) { return refuse("MIDI input timestamps moved backwards"); }
   const auto at = input_.written.load(std::memory_order_relaxed);
-  if (bytes.size() > capacity) { return fail("MIDI input packet exceeds queue capacity"); }
-  const auto first = std::max(ticks, next_input_);
-  if (input_mode_ == InputMode::stream && first < input_until_.load(std::memory_order_seq_cst)) {
-    return fail("MIDI input precedes its committed stream frontier");
+  if (bytes.size() > capacity) { return refuse("MIDI input packet exceeds queue capacity"); }
+  const auto frontier = input_until_.load(std::memory_order_seq_cst);
+  const auto published = time();
+  const auto first =
+      staged ? std::max({ticks, next_input_, frontier, published}) : std::max(ticks, next_input_);
+  if (input_mode_ != InputMode::live && first < frontier) {
+    return refuse("MIDI input precedes its committed stream frontier");
   }
-  if (first < time_.load(std::memory_order_acquire)) {
-    return fail("MIDI character starts before published instrument time");
+  if (first < published) {
+    return refuse("MIDI character starts before published instrument time");
   }
   if (bytes.size() > maximum - at || bytes.size() > (maximum - first) / byte_ticks) {
-    return fail("MIDI input timeline or queue sequence is not representable");
+    return refuse("MIDI input timeline or queue sequence is not representable");
   }
   const auto room = [&] {
     const auto retired = std::min(input_.mcu.load(std::memory_order_seq_cst),
@@ -138,13 +158,12 @@ bool MidiPort::admit(const std::span<const std::uint8_t> bytes,
     return bytes.size() <= capacity - (at - retired);
   };
   if (stop != nullptr) {
-    if (!await(space_waiters_, *stop, room)) { return false; }
+    if (!await(space_waiters_, *stop, room)) { return {}; }
   } else if (!room()) {
-    return fail("MIDI input queue is full");
+    if (staged) { return {.status = InputStatus::full, .tick = first}; }
+    return refuse("MIDI input queue is full");
   }
-  if (first < time_.load(std::memory_order_acquire)) {
-    return fail("MIDI character starts before published instrument time");
-  }
+  if (first < time()) { return refuse("MIDI character starts before published instrument time"); }
   for (std::size_t index = 0; index < bytes.size(); ++index) {
     input_.events[(at + index) & index_mask] = {.ticks = first + (index * byte_ticks),
                                                 .byte = bytes[index]};
@@ -152,16 +171,16 @@ bool MidiPort::admit(const std::span<const std::uint8_t> bytes,
   last_input_ = ticks;
   next_input_ = first + bytes.size() * byte_ticks;
   input_.written.store(at + bytes.size(), std::memory_order_release);
-  if (input_mode_ == InputMode::stream) {
+  if (!staged && input_mode_ != InputMode::live) {
     input_until_.store(next_input_, std::memory_order_seq_cst);
     notify();
   }
-  return true;
+  return {.status = InputStatus::admitted, .tick = first};
 }
 
 std::uint64_t MidiPort::input_knowledge() const noexcept {
   if (phase_.load(std::memory_order_seq_cst) == Phase::ended) { return maximum; }
-  return input_mode_ == InputMode::stream ? input_until_.load(std::memory_order_seq_cst) : 0;
+  return input_mode_ == InputMode::live ? 0 : input_until_.load(std::memory_order_seq_cst);
 }
 
 std::optional<std::uint64_t> MidiPort::input_limit() const noexcept {
@@ -173,7 +192,7 @@ std::optional<std::uint64_t> MidiPort::input_limit() const noexcept {
 
 bool MidiPort::advance_input(const std::uint64_t ticks) noexcept {
   if (error() != nullptr) { return false; }
-  if (input_mode_ != InputMode::stream || phase_.load(std::memory_order_seq_cst) == Phase::ended) {
+  if (input_mode_ == InputMode::live || phase_.load(std::memory_order_seq_cst) == Phase::ended) {
     return fail("MIDI input has no active stream frontier");
   }
   if (ticks < input_until_.load(std::memory_order_seq_cst)) {
@@ -198,6 +217,17 @@ void MidiPort::abort_input() noexcept {
   static_cast<void>(fail("MIDI input source aborted"));
 }
 
+bool MidiPort::prepare_audio(const std::uint64_t ticks, const std::stop_token &stop) {
+  if (stop.stop_requested() || error() != nullptr) { return false; }
+  if (input_until_.load(std::memory_order_acquire) > ticks) { return true; }
+  if (audio_source_.refill == nullptr) { return fail("MIDI input has no audio owner"); }
+  if (!audio_source_.refill(audio_source_.owner, ticks, stop) || stop.stop_requested()) {
+    return false;
+  }
+  return error() == nullptr && (input_until_.load(std::memory_order_acquire) > ticks ||
+                                fail("Audio owner did not commit the requested input horizon"));
+}
+
 bool MidiPort::await_input(const std::uint64_t ticks, const std::stop_token &stop) noexcept {
   if (input_mode_ == InputMode::live) { return !stop.stop_requested() && error() == nullptr; }
   request_input(ticks);
@@ -216,7 +246,10 @@ void MidiPort::request_input(const std::uint64_t ticks) noexcept {
 
 std::optional<MidiPort::Event> MidiPort::peek_input(const Receiver receiver,
                                                     const std::uint64_t offset) const noexcept {
-  return input_.peek(receiver, offset);
+  if (input_mode_ != InputMode::audio) { return input_.peek(receiver, offset); }
+  const auto frontier = input_until_.load(std::memory_order_acquire);
+  const auto event = input_.peek(receiver, offset);
+  return event && event->ticks < frontier ? event : std::nullopt;
 }
 
 void MidiPort::pop_input(const Receiver receiver) noexcept {
@@ -235,6 +268,7 @@ bool MidiPort::write_output(const Event event) noexcept {
   output_.events[at & index_mask] = event;
   last_output_ = event.ticks;
   output_.written.store(at + 1, std::memory_order_seq_cst);
+  signal_output();
   notify();
   return true;
 }
@@ -246,9 +280,15 @@ std::optional<MidiPort::Event> MidiPort::read_output() noexcept {
 }
 
 bool MidiPort::await_output(const std::stop_token &stop) noexcept {
-  return await(output_waiters_, stop, [this] {
-    return output_.written.load(std::memory_order_seq_cst) !=
-           output_.read.load(std::memory_order_relaxed);
-  });
+  const std::stop_callback cancelled(stop, [this] { signal_output(); });
+  for (;;) {
+    const auto observed = output_changed_.load(std::memory_order_seq_cst);
+    if (stop.stop_requested() || error() != nullptr) { return false; }
+    if (output_.written.load(std::memory_order_seq_cst) !=
+        output_.read.load(std::memory_order_relaxed)) {
+      return true;
+    }
+    output_changed_.wait(observed, std::memory_order_acquire);
+  }
 }
 }

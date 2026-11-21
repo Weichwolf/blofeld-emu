@@ -11,6 +11,9 @@
 #include "options.hpp"
 #include "process/signals.hpp"
 #include "vm_context.hpp"
+#if defined(__APPLE__)
+#include "audio/mcu_wake.hpp"
+#endif
 
 #include <atomic>
 #include <chrono>
@@ -35,39 +38,41 @@ public:
   [[nodiscard]] Result run(vi::VmContext &vm, const host::Signals &signals);
 
 private:
-  enum class Phase : std::uint8_t { booting, priming, audio_ready, playing, closed };
+  enum class Phase : std::uint8_t { booting, arming, priming, audio_ready, playing, closed };
   [[nodiscard]] std::optional<std::uint64_t> startup(const host::Signals &signals);
-  void feed(std::uint64_t origin, const std::stop_token &stop);
-  void send_midi(host::midi::Output &output, const std::stop_token &stop);
-  [[nodiscard]] std::jthread output_worker();
-  void discard_midi_replies();
-  void admit(LiveClock::Window window);
-  void process(LiveClock::Window window,
-               std::uint64_t now,
-               std::optional<std::uint64_t> &ready,
-               const std::stop_token &stop);
-  [[nodiscard]] bool receive(host::midi::Input &input,
-                             LiveClock::Window window,
-                             std::uint64_t ready,
-                             const std::stop_token &stop);
+  [[nodiscard]] bool refill(std::uint64_t required, const std::stop_token &stop);
+  void release_input(const AudioConsumer::InputGrant &grant, std::uint64_t required);
+  [[nodiscard]] std::uint64_t receive(host::midi::Input &input,
+                                      std::uint64_t committed,
+                                      const AudioConsumer::InputGrant &grant,
+                                      std::uint64_t now);
   void discard(std::uint64_t now);
   void connect();
+  void discard_midi_replies();
+  void send_midi(host::midi::Output &output, const std::stop_token &stop);
+  [[nodiscard]] std::jthread output_worker();
+  std::optional<host::midi::Output> midi_output_;
   void control();
+  void attach_audio_source();
   void publish_display();
   void status(bool terminal) const;
   host::audio::Playback &audio_;
   DisplayPublication &display_;
   AudioConsumer consumer_;
+#if defined(__APPLE__)
+  McuWake mcu_wake_;
+#endif
   LiveClock clock_;
   const std::optional<std::int32_t> source_id_;
   const std::uint8_t group_;
   std::unique_ptr<host::midi::Input> input_;
-  std::optional<host::midi::Output> midi_output_;
   std::atomic<host::midi::Input *> active_input_{nullptr};
   std::optional<std::vector<host::midi::Source>> sources_;
   vi::VmContext *vm_ = nullptr;
   std::optional<host::midi::Packet> pending_;
+  std::uint64_t ready_host_ns_ = 0, last_requested_ = 0;
   std::uint64_t ignored_ = 0, received_ = 0;
+  std::uint64_t late_packets_ = 0, uncorrelated_packets_ = 0, maximum_late_ticks_ = 0;
   std::atomic<Phase> phase_{Phase::booting};
   std::chrono::steady_clock::time_point next_display_;
   std::chrono::steady_clock::time_point next_connect_;

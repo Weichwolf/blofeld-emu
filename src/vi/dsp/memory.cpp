@@ -117,6 +117,7 @@ std::span<const dsp56300::MemoryWindow> Memory::view(const dsp56300::Space space
 
 std::optional<Memory::Cell> Memory::locate(const dsp56300::Space space,
                                            const dsp56300::Word address) const noexcept {
+  if (address >= boot_first) { return {}; }
   for (const auto &page : view(space)) {
     if (address < page.address || address - page.address >= page.words.size()) { continue; }
     const auto offset = address - page.address;

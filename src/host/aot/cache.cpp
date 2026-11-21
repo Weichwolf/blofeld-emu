@@ -13,6 +13,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ExecutionEngine/ObjectCache.h"
+#include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SHA256.h"
@@ -37,6 +38,27 @@ namespace {
 using Buffer = Owner<LLVMMemoryBufferRef, LLVMDisposeMemoryBuffer>;
 using Digest = std::array<std::uint8_t, 32>;
 constexpr std::size_t maximum_bytes = std::size_t{1} << 30U, header_bytes = 2 * Digest{}.size();
+
+bool omit_dsp_frame_pointers(LLVMModuleRef module) {
+#if defined(__linux__) && defined(__x86_64__) && defined(NDEBUG) &&                                \
+    !__has_feature(address_sanitizer) && !__has_feature(thread_sanitizer) &&                       \
+    !__has_feature(undefined_behavior_sanitizer)
+  bool changed = false;
+  for (auto &function : *llvm::unwrap(module)) {
+    if (function.isDeclaration() || !function.hasFnAttribute("dsp56300-image-part") ||
+        function.getFnAttribute("frame-pointer").getValueAsString() == "none") {
+      continue;
+    }
+    // Keep RBP available for the allocator. Fault attribution uses the saved PC.
+    function.addFnAttr("frame-pointer", "none");
+    changed = true;
+  }
+  return changed;
+#else
+  static_cast<void>(module);
+  return false;
+#endif
+}
 
 std::span<const std::uint8_t> bytes(const Buffer &buffer) {
   return {reinterpret_cast<const std::uint8_t *>(LLVMGetBufferStart(buffer.get())),
@@ -179,6 +201,7 @@ std::unique_ptr<llvm::ObjectCache> optimize(Owner<LLVMModuleRef, LLVMDisposeModu
                                             const std::filesystem::path &cache) {
   if (cache.empty()) {
     optimize(module.get(), machine, exports);
+    static_cast<void>(omit_dsp_frame_pointers(module.get()));
     return {};
   }
   if (!cache.is_absolute()) { throw std::invalid_argument("AOT cache must be an absolute path"); }
@@ -202,7 +225,14 @@ std::unique_ptr<llvm::ObjectCache> optimize(Owner<LLVMModuleRef, LLVMDisposeModu
     const Buffer output(LLVMWriteBitcodeToMemoryBuffer(module.get()));
     store(cache, name, key, bytes(output));
   }
-  return std::make_unique<Objects>(cache, key, *llvm::unwrap(module.get()));
+  auto object_key = key;
+  if (omit_dsp_frame_pointers(module.get())) {
+    llvm::SHA256 hash;
+    hash.update(object_key);
+    hash.update("generated-dsp-frame-pointer-none");
+    object_key = hash.final();
+  }
+  return std::make_unique<Objects>(cache, object_key, *llvm::unwrap(module.get()));
 }
 }
 

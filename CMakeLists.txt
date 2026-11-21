@@ -81,6 +81,9 @@ add_library(blofeld_host_aot src/host/aot/abi.cpp src/host/aot/cache.cpp src/hos
   src/host/aot/contracts.cpp src/host/aot/imports.cpp src/host/aot/link_graph.cpp
   src/host/aot/module.cpp src/host/aot/optimize.cpp
   src/host/aot/symbols.cpp src/host/aot/target.cpp)
+if(APPLE)
+  target_sources(blofeld_host_aot PRIVATE src/host/aot/jit_memory_darwin.cpp)
+endif()
 target_include_directories(blofeld_host_aot PUBLIC src/host)
 target_include_directories(blofeld_host_aot SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
 target_link_libraries(blofeld_host_aot PUBLIC blofeld_quality llvm_native_sites PRIVATE LLVM blofeld_host_files)
@@ -218,6 +221,9 @@ target_link_libraries(blofeld-render-controls PRIVATE blofeld_app_memory)
 target_include_directories(blofeld-headless PRIVATE src/app)
 if(TARGET blofeld_host_midi_input)
   add_library(blofeld_app_live src/app/live.cpp)
+  if(APPLE)
+    target_sources(blofeld_app_live PRIVATE src/app/audio/mcu_wake.cpp)
+  endif()
   target_include_directories(blofeld_app_live PUBLIC src/app)
   target_link_libraries(blofeld_app_live PUBLIC blofeld_app_runtime blofeld_app_audio
     blofeld_app_display blofeld_app_live_clock blofeld_host_midi_input)

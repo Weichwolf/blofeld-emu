@@ -4,7 +4,6 @@
 #include "audio/pcm_clock.hpp"
 #include "io/midi_port.hpp"
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -15,12 +14,8 @@
 namespace blofeld::app {
 namespace {
 constexpr std::uint64_t ns_per_second = 1000000000;
+constexpr std::uint64_t delivery_ns = 1000000;
 constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
-
-std::uint64_t add(const std::uint64_t a, const std::uint64_t b) {
-  if (b > maximum - a) { throw std::overflow_error("Live MIDI timeline exhausted"); }
-  return a + b;
-}
 }
 
 LiveClock::LiveClock(const Grant grant) : uncertainty_(grant.uncertainty_ns) {
@@ -38,9 +33,6 @@ LiveClock::LiveClock(const Grant grant) : uncertainty_(grant.uncertainty_ns) {
                              std::to_string(queue_frames) + " rate=" + std::to_string(rate));
   }
   prime_ = (frames * vi::MidiPort::reference_hz + rate - 1) / rate;
-  lead_ =
-      prime_ + ((delivery_ns + uncertainty_ns) * vi::MidiPort::reference_hz + ns_per_second - 1) /
-                   ns_per_second;
 }
 
 const PcmClock::Point &LiveClock::point(const std::size_t index) const noexcept {
@@ -56,12 +48,17 @@ void LiveClock::observe(const PcmClock::Point next) {
   if (size_ != 0) {
     const auto &previous = point(size_ - 1);
     if (next == previous) { return; }
-    if (next.epoch != previous.epoch || next.audio_epoch != previous.audio_epoch) {
-      throw std::runtime_error("Live audio epoch changed; a new readiness handshake is required");
+    const bool reset = next.epoch != previous.epoch || next.audio_epoch != previous.audio_epoch;
+    if (reset && (next.epoch <= previous.epoch || next.audio_epoch <= previous.audio_epoch)) {
+      throw std::runtime_error("Live audio and DSP reset epochs do not advance together");
     }
-    if (next.host_ns <= previous.host_ns || next.ticks <= previous.ticks ||
-        next.host_ns - previous.host_ns > maximum_gap_ns) {
-      throw std::runtime_error("Live audio correlation moved backwards or missed its deadline");
+    if (next.host_ns <= previous.host_ns || next.ticks <= previous.ticks) {
+      throw std::runtime_error("Live audio correlation moved backwards");
+    }
+    if (reset || next.host_ns - previous.host_ns > maximum_gap_ns) {
+      // Correlation starts again after a reset or a gap in native observations.
+      head_ = 0;
+      size_ = 0;
     }
   }
   if (size_ == capacity) {
@@ -72,14 +69,17 @@ void LiveClock::observe(const PcmClock::Point next) {
   ++size_;
 }
 
-std::optional<std::uint64_t> LiveClock::at(const std::uint64_t timestamp) const {
-  if (size_ == 0 || timestamp < point(0).host_ns) { return {}; }
+std::optional<std::uint64_t> LiveClock::correlate(const std::uint64_t host_ns,
+                                                  const std::uint64_t audio_epoch) const {
+  if (size_ == 0 || point(0).audio_epoch != audio_epoch || host_ns < point(0).host_ns) {
+    return {};
+  }
   for (std::size_t index = 0; index < size_; ++index) {
     const auto &right = point(index);
-    if (timestamp == right.host_ns) { return add(right.ticks, lead_); }
-    if (timestamp > right.host_ns) { continue; }
+    if (host_ns == right.host_ns) { return right.ticks; }
+    if (host_ns > right.host_ns) { continue; }
     const auto &left = point(index - 1);
-    const auto offset = timestamp - left.host_ns;
+    const auto offset = host_ns - left.host_ns;
     const auto ticks = right.ticks - left.ticks;
     const auto span = right.host_ns - left.host_ns;
     if (offset > maximum / ticks) {
@@ -87,45 +87,9 @@ std::optional<std::uint64_t> LiveClock::at(const std::uint64_t timestamp) const 
     }
     const auto product = offset * ticks;
     const auto delta = (product / span) + (product % span != 0 ? 1U : 0U);
-    return add(add(left.ticks, delta), lead_);
+    return left.ticks + delta;
   }
   return {};
 }
 
-std::optional<LiveClock::Window> LiveClock::window(const std::uint64_t now) {
-  if (previous_poll_ && now < *previous_poll_) {
-    throw std::runtime_error("Live input host clock moved backwards");
-  }
-  previous_poll_ = now;
-  if (size_ == 0) { return {}; }
-  const auto last = point(size_ - 1).host_ns;
-  if (now > last && now - last > maximum_gap_ns) {
-    throw std::runtime_error("Live audio correlation expired");
-  }
-  const auto delay = delivery_ns + uncertainty_;
-  if (now < delay) { return {}; }
-  const auto cutoff = std::min(now - delay, last);
-  const auto ticks = at(cutoff);
-  if (!ticks) { return {}; }
-  return Window{.host_ns = cutoff, .ticks = *ticks};
-}
-
-std::uint64_t LiveClock::event(const std::uint64_t timestamp) {
-  if ((committed_ && timestamp < *committed_) ||
-      (previous_event_ && timestamp < *previous_event_)) {
-    throw std::runtime_error("Native MIDI event missed committed time or moved backwards");
-  }
-  const auto ticks = at(timestamp);
-  if (!ticks) { throw std::runtime_error("Native MIDI event has no retained audio interval"); }
-  previous_event_ = timestamp;
-  return *ticks;
-}
-
-void LiveClock::commit(const Window window) {
-  const auto ticks = at(window.host_ns);
-  if (!ticks || *ticks != window.ticks || (committed_ && window.host_ns < *committed_)) {
-    throw std::logic_error("Live MIDI admission is not backed by a retained native interval");
-  }
-  committed_ = window.host_ns;
-}
 }

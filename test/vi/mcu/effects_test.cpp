@@ -417,6 +417,45 @@ void unconfirmed_input_admission() {
           "Rollback retains admission for live input legal at the confirmed origin");
 }
 
+void promoted_prefix() {
+  constexpr Effects::Entry before{.ticks = 3, .value = first, .kind = Effects::Kind::midi};
+  constexpr Effects::Entry after{.ticks = 5, .value = last, .kind = Effects::Kind::midi};
+  constexpr Effects::Entry future{.ticks = 7, .value = transmitted, .kind = Effects::Kind::midi};
+  std::array<Effects::Entry, 8> storage{};
+  Effects effects(storage, 2);
+  require(effects.append(before) && effects.append(after) && effects.append(future) &&
+              effects.promote({.ticks = 4, .known = 6, .position = 1, .received = 2}) &&
+              effects.acknowledge(2, 6) && effects.rollback(),
+          "The receiver has consumed both sides of the promoted checkpoint");
+  require(effects.append(after) && effects.finish_replay() && effects.size() == 2 &&
+              effects.append(future),
+          "Rollback regenerates the consumed suffix once and discards unconsumed speculation");
+  require(effects.acknowledge(3, 8) && effects.checkpoint(7) &&
+              effects.append({.ticks = 8, .value = first, .kind = Effects::Kind::midi}) &&
+              effects.acknowledge(1, 9) && effects.rollback() && !effects.finish_replay(),
+          "The full checkpoint resets the retained prefix for the next epoch");
+  Effects unsettled(storage, 2);
+  require(unsettled.append(before) &&
+              !unsettled.promote({.ticks = 3, .known = 4, .position = 1, .received = 0}) &&
+              unsettled.error() == Effects::Error::phase,
+          "An unconsumed effect prevents promoting a checkpoint");
+}
+
+void quiet_checkpoint_rollback() {
+  std::array<Effects::Entry, 8> storage{};
+  Effects effects(storage, 1);
+  const Effects::Entry committed{.ticks = 4, .value = 1, .kind = Effects::Kind::midi};
+  const Effects::Entry speculative{.ticks = 12, .value = 2, .kind = Effects::Kind::midi};
+  require(effects.append(committed) && effects.append(speculative) && effects.acknowledge(1, 5) &&
+              effects.promote({.ticks = 8, .known = 10, .position = 1, .received = 1}),
+          "The DSP frontier confirms a checkpoint in a quiet effect interval");
+  require(effects.acknowledge(1, 5) && effects.rollback() && effects.finish_replay() &&
+              effects.entries().size() == 1 && effects.entries().back() == committed,
+          "Rollback retains the posted cut and discards only unconsumed effects");
+  require(!effects.append(committed) && effects.error() == Effects::Error::time,
+          "Restored production cannot append before the promoted checkpoint");
+}
+
 void prefix_errors() {
   constexpr Effects::Entry original{.ticks = 1, .value = first, .kind = Effects::Kind::midi};
   std::array<Effects::Entry, 8> storage{};
@@ -458,10 +497,12 @@ void prefix_errors() {
 }
 
 int main() try {
+  quiet_checkpoint_rollback();
   masked_peer_observations();
   fused_outputs(false);
   fused_outputs(true);
   unconfirmed_input_admission();
+  promoted_prefix();
   prefix_errors();
 } catch (const std::exception &error) {
 

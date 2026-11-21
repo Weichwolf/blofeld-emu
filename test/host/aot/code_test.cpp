@@ -248,14 +248,16 @@ std::vector<std::filesystem::path> cache_files(const std::filesystem::path &root
   return files;
 }
 
-template <unsigned Instance> void cached_imports(const std::filesystem::path &root) {
+template <unsigned Instance>
+void cached_imports(const std::filesystem::path &root,
+                    const Code::ExecutableMemory memory = Code::ExecutableMemory::standard) {
   ImportInputs inputs;
   inputs.imports[0].address = std::bit_cast<const void *>(&native_step<Instance>);
   inputs.imports[1].address = std::bit_cast<const void *>(&native_event<Instance>);
   const auto begun = native_started[Instance].load();
   const auto ended = native_finished[Instance].load();
   {
-    const Code code(inputs.modules(), inputs.imports, root);
+    const Code code(inputs.modules(), inputs.imports, root, memory);
     require(native_started[Instance].load() == begun + 1 &&
                 native_finished[Instance].load() == ended,
             "Cached code initializes against its current imports before publication");
@@ -331,6 +333,9 @@ void cached_code() {
   const auto object = blofeld::host::read_file(objects.front(), limit);
   const auto object_modified = std::filesystem::last_write_time(objects.front());
   cached_imports<1>(root);
+#if defined(__APPLE__) && defined(__aarch64__)
+  cached_imports<1>(root, Code::ExecutableMemory::jit);
+#endif
   require(cache_files(root).size() == 1 &&
               blofeld::host::read_file(files.front(), limit) == original &&
               std::filesystem::last_write_time(files.front()) == modified &&

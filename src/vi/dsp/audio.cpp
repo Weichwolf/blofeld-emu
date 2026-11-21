@@ -180,7 +180,11 @@ bool Audio::clock() {
 }
 
 bool Audio::submit(const bool partial) {
-  if (used_ == 0 || (!partial && used_ != frames_.size())) { return true; }
+  if (used_ == 0) { return true; }
+  if (!partial && used_ != frames_.size() &&
+      (output_.submit_partial == nullptr || !output_.submit_partial(output_.owner, used_))) {
+    return true;
+  }
   const PcmOutput::Block block{.frames = std::span(frames_).first(used_),
                                .ticks = std::span(ticks_).first(used_),
                                .epoch = epoch_,

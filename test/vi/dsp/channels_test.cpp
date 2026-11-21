@@ -97,15 +97,17 @@ void report_output() {
   PeerPort peer;
   constexpr std::uint8_t byte_mask = 0xff;
   constexpr std::uint8_t report = 0x0d;
-  blofeld_dsp_peer_data(&peer, byte_mask, byte_mask, report);
-  require(blofeld_dsp_peer_ready(&peer, true) && blofeld_dsp_peer_ready(&peer, false) &&
+  require(blofeld_dsp_peer_ports(&peer, byte_mask, byte_mask, report, true, true) &&
+              blofeld_dsp_peer_ports(&peer, byte_mask, byte_mask, report, true, false) &&
               peer.mcu_interrupt() == 1 && peer.mcu_strobe(true) && peer.mcu_strobe(false),
           "The native report announcement and genuine MCU request establish response ownership");
   constexpr PeerPort::Sample data{.mask = 0xff, .known = 0x73, .value = 0xa5};
-  blofeld_dsp_peer_data(&peer, data.mask, data.known, data.value);
-  require(peer.dsp_data() == data, "Output publication retains unknown bits and drive direction");
+  require(!blofeld_dsp_peer_ports(&peer, data.mask, data.known, data.value, false, true) &&
+              peer.dsp_data() == data && !peer.view().ready,
+          "An unknown ready line leaves its level unchanged after publishing the data pins");
   constexpr std::uint64_t written = 31;
-  require(blofeld_dsp_peer_write(&peer, written) && blofeld_dsp_peer_ready(&peer, true),
+  require(blofeld_dsp_peer_write(&peer, written) &&
+              blofeld_dsp_peer_ports(&peer, data.mask, data.known, data.value, true, true),
           "An actual data write records the current sample with its original timestamp");
   require(!peer.read_dsp_data({.mask = byte_mask, .ticks = written - 1}) &&
               peer.read_dsp_data({.mask = byte_mask, .ticks = written}) == data,

@@ -98,13 +98,36 @@ public:
     return true;
   }
 
+  struct Promotion {
+    std::uint64_t ticks, known;
+    std::size_t position, received;
+  };
+
+  [[nodiscard]] bool promote(const Promotion promotion) noexcept {
+    const auto [ticks, known, position, received] = promotion;
+    if (error_ != Error::none) { return false; }
+    if (replaying_ || position < first_ || position > received || received > written_) {
+      return fail(Error::phase);
+    }
+    if (ticks < origin_ || ticks >= known ||
+        (position != first_ && storage_[position - 1].ticks > ticks) ||
+        (position != written_ && storage_[position].ticks < ticks)) {
+      return fail(Error::time);
+    }
+    first_ = replayed_ = position;
+    applied_ = applied_ < position ? position : applied_;
+    origin_ = ticks;
+    position_ = position_ < ticks ? ticks : position_;
+    return true;
+  }
+
   [[nodiscard]] bool rollback() noexcept {
     if (error_ != Error::none) { return false; }
     if (replaying_) { return fail(Error::phase); }
     written_ = applied_;
-    replayed_ = 0;
+    replayed_ = first_;
     position_ = origin_;
-    replaying_ = applied_ != 0;
+    replaying_ = applied_ != first_;
     return true;
   }
 
@@ -119,7 +142,7 @@ public:
     if (ticks < position_ || ticks >= attained_) { return fail(Error::time); }
     origin_ = position_ = ticks;
     attained_ = ticks;
-    written_ = applied_ = replayed_ = 0;
+    first_ = written_ = applied_ = replayed_ = 0;
     return true;
   }
 
@@ -139,7 +162,7 @@ private:
 
   Entry expected_{}, refused_{};
   std::span<Entry> storage_;
-  std::size_t reserve_, written_ = 0, applied_ = 0, replayed_ = 0;
+  std::size_t reserve_, first_ = 0, written_ = 0, applied_ = 0, replayed_ = 0;
   std::uint64_t origin_ = 0, position_ = 0, attained_ = 0;
   Error error_ = Error::none;
   bool replaying_ = false;

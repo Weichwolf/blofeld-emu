@@ -110,12 +110,23 @@ dsp56300::RunResult run_observed(Io &io) {
 }
 #endif
 
+bool complete_instance(Io &io,
+                       MidiPort *const midi,
+                       const std::stop_token &stop,
+                       ExecutionReport &report) {
+  if (midi == nullptr || !midi->audio_driven()) { return io.complete_events(report); }
+  const auto stamp = io.timestamp();
+  if (!stamp) { throw std::overflow_error("DSP completion input timestamp overflows"); }
+  return midi->prepare_audio(stamp->ticks, stop) && io.complete_events(report);
+}
+
 bool run_instance(Io &io,
                   DspReset &reset,
                   const std::uint64_t epoch,
                   const std::stop_token &stop,
                   ExecutionReport &report,
-                  Coupling *coupling) {
+                  Coupling *coupling,
+                  MidiPort *midi) {
   dsp56300::Core core(dsp56300::Memory::external(), &io);
   io.bind(core, epoch);
   const Coupled connected(coupling, io, core);
@@ -195,7 +206,7 @@ bool run_instance(Io &io,
       restart = true;
       break;
     }
-    if (!io.complete_events(report)) {
+    if (!complete_instance(io, midi, stop, report)) {
       restart = io.reset_interrupted();
       break;
     }
@@ -271,7 +282,7 @@ ExecutionReport execute(const BootRom boot,
       }
       continue;
     }
-    if (!run_instance(io, reset, applied, stop, report, coupling)) { break; }
+    if (!run_instance(io, reset, applied, stop, report, coupling, midi)) { break; }
   }
   return report;
 }

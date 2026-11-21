@@ -37,9 +37,8 @@ public:
         reinterpret_cast<const void *>(&blofeld_dsp_shi_read),
         reinterpret_cast<const void *>(&blofeld_dsp_shi_write),
         reinterpret_cast<const void *>(&blofeld_dsp_peer_sample),
-        reinterpret_cast<const void *>(&blofeld_dsp_peer_data),
+        reinterpret_cast<const void *>(&blofeld_dsp_peer_ports),
         reinterpret_cast<const void *>(&blofeld_dsp_peer_write),
-        reinterpret_cast<const void *>(&blofeld_dsp_peer_ready),
         reinterpret_cast<const void *>(&blofeld_dsp_peer_interrupt),
 #if defined(BLOFELD_CENSUS)
         reinterpret_cast<const void *>(&vi::Census::unit_entry),
@@ -77,9 +76,8 @@ private:
       "blofeld_dsp_shi_read",
       "blofeld_dsp_shi_write",
       "blofeld_dsp_peer_sample",
-      "blofeld_dsp_peer_data",
+      "blofeld_dsp_peer_ports",
       "blofeld_dsp_peer_write",
-      "blofeld_dsp_peer_ready",
       "blofeld_dsp_peer_interrupt",
 #if defined(BLOFELD_CENSUS)
       "blofeld_census_unit_entry",
@@ -131,7 +129,13 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
   const std::array modules{native::Module{.bitcode = semantic.bitcode(), .exports = exports},
                            native::Module{.bitcode = detail::dsp_bindings, .exports = {}}};
   const Channels channels(detail::dsp_bindings);
-  const auto code = std::make_shared<native::Code>(modules, channels.entries(), cache);
+#if defined(__APPLE__) && defined(__aarch64__)
+  constexpr auto executable_memory = native::Code::ExecutableMemory::jit;
+#else
+  constexpr auto executable_memory = native::Code::ExecutableMemory::standard;
+#endif
+  const auto code =
+      std::make_shared<native::Code>(modules, channels.entries(), cache, executable_memory);
   std::vector<dsp56300::NativeSymbol> symbols;
   for (const auto symbol : semantic.exports()) {
     symbols.push_back({.name = symbol.name, .address = code->address(symbol.name)});

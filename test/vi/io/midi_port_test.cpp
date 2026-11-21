@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <initializer_list>
 #include <iostream>
 #include <limits>
 #include <optional>
@@ -83,6 +84,88 @@ void stream_frontiers() {
   require(serialized.write_input(message, 0) && serialized.write_input(message, 0) &&
               serialized.input_limit() == message.size() * 2 * MidiPort::byte_ticks,
           "Same-time packets retain DIN serialization rather than violating the frontier");
+}
+
+void audio_frontiers() {
+  MidiPort port(MidiPort::InputMode::audio);
+  constexpr std::uint64_t frontier = 100;
+  constexpr auto duration = message.size() * MidiPort::byte_ticks;
+  require(port.advance_input(frontier), "Grant a silent audio interval without a MIDI packet");
+  const auto late = port.stage_input(message, frontier - 1);
+  const auto same_time = port.stage_input(message, frontier - 1);
+  require(late.status == MidiPort::InputStatus::admitted && late.tick == frontier &&
+              same_time.status == MidiPort::InputStatus::admitted &&
+              same_time.tick == frontier + duration && port.input_limit() == frontier &&
+              !port.peek_input() && !port.peek_input(MidiPort::Receiver::dsp),
+          "Place late packets in DIN order under the next audio grant");
+  require(port.advance_input(frontier + MidiPort::byte_ticks),
+          "Publish a common exclusive audio horizon");
+  for (const auto receiver : {MidiPort::Receiver::mcu, MidiPort::Receiver::dsp}) {
+    require(port.peek_input(receiver) == MidiPort::Event{.ticks = frontier, .byte = note_on} &&
+                !port.peek_input(receiver, 1),
+            "Both receivers see only characters inside the grant");
+  }
+  require(port.advance_input(frontier + duration + 1), "Commit the next serialized note");
+  for (const auto receiver : {MidiPort::Receiver::mcu, MidiPort::Receiver::dsp}) {
+    require(port.peek_input(receiver, message.size()) ==
+                MidiPort::Event{.ticks = frontier + duration, .byte = note_on},
+            "The second packet only becomes visible after the explicit grant");
+  }
+}
+
+void audio_queue_full() {
+  MidiPort port(MidiPort::InputMode::audio);
+  constexpr std::array<std::uint8_t, MidiPort::capacity> packet{};
+  constexpr std::uint64_t next = MidiPort::capacity * MidiPort::byte_ticks;
+  require(port.stage_input(packet, 0).status == MidiPort::InputStatus::admitted,
+          "Fill the MIDI queue");
+  const auto full = port.stage_input(message, 0);
+  require(full.status == MidiPort::InputStatus::full && full.tick == next &&
+              port.error() == nullptr && port.input_limit() == 0 && port.advance_input(next),
+          "A full queue leaves the next tick available as an exclusive nonblocking grant");
+  for (std::size_t count = 0; count < message.size(); ++count) {
+    port.pop_input(MidiPort::Receiver::mcu);
+  }
+  require(port.stage_input(message, 0).status == MidiPort::InputStatus::full,
+          "One receiver cannot release input slots still owned by the other");
+  for (std::size_t count = 0; count < message.size(); ++count) {
+    port.pop_input(MidiPort::Receiver::dsp);
+  }
+  const auto retry = port.stage_input(message, 0);
+  require(retry.status == MidiPort::InputStatus::admitted && retry.tick == next &&
+              port.input_limit() == next,
+          "Retry at the same wire tick after both receivers make room");
+}
+
+void audio_completion_request() {
+  MidiPort port(MidiPort::InputMode::audio);
+
+  struct RenderOwner {
+    MidiPort &port;
+    unsigned calls = 0;
+  } render{.port = port};
+
+  port.audio_source({.owner = &render,
+                     .refill = [](void *owner, const std::uint64_t tick, const std::stop_token &) {
+                       auto &state = *static_cast<RenderOwner *>(owner);
+                       ++state.calls;
+                       return state.port.advance_input(tick + 1);
+                     }});
+  constexpr std::uint64_t first = 100;
+  require(port.advance_input(first) && port.prepare_audio(first - 1, {}) && render.calls == 0,
+          "A completion inside the existing horizon needs no refill");
+  require(port.prepare_audio(first, {}) && port.input_limit() == first + 1 && render.calls == 1,
+          "A completion at the exclusive tick asks the render owner for a common grant");
+  const std::stop_source cancelled;
+  std::stop_source{cancelled}.request_stop();
+  require(!port.prepare_audio(first + 1, cancelled.get_token()) && render.calls == 1,
+          "Stopped audio work neither advances the guest nor asks for another grant");
+
+  port.audio_source(
+      {.refill = [](void *, std::uint64_t, const std::stop_token &) { return true; }});
+  require(!port.prepare_audio(first + 1, {}) && port.error() != nullptr &&
+              port.requested_input() == 0,
+          "An incomplete audio grant fails without requesting or waiting for MIDI");
 }
 
 void frontier_waits() {
@@ -459,6 +542,9 @@ int main() try {
   invalid_times();
   concurrent_exchange();
   stream_frontiers();
+  audio_frontiers();
+  audio_queue_full();
+  audio_completion_request();
   frontier_waits();
   blocking_admission();
   frontier_registration();

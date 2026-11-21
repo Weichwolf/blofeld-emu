@@ -5,18 +5,30 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 #include <stop_token>
 
 namespace blofeld::vi {
+struct CheckpointWait {
+  const std::uint64_t &generation;
+  std::uint64_t observed, command;
+};
+
 // Separate host input/output owners; MCU SCI and DSP Timer0 observe the same DIN input
 // independently. Input slots remain immutable until both observers retire them. Only SCI sends DIN
 // output. Character starts use the common 60 MHz instrument timeline.
 class MidiPort {
 public:
   enum class Receiver : std::uint8_t { mcu, dsp };
-  enum class InputMode : std::uint8_t { live, stream };
+  enum class InputMode : std::uint8_t { live, stream, audio };
+  enum class InputStatus : std::uint8_t { admitted, full, refused };
+
+  struct Admission {
+    InputStatus status = InputStatus::refused;
+    std::uint64_t tick = 0;
+  };
 
   struct Event {
     std::uint64_t ticks = 0;
@@ -35,11 +47,46 @@ public:
     wake_notify_ = notify;
   }
 
+  struct AudioSource {
+    void *owner = nullptr;
+    bool (*refill)(void *, std::uint64_t, const std::stop_token &) = nullptr;
+    void (*before_mcu_wait)(void *, std::uint64_t) noexcept = nullptr;
+    bool (*before_checkpoint_wait)(void *, CheckpointWait) noexcept = nullptr;
+  };
+
+  void audio_source(AudioSource source) noexcept { audio_source_ = source; }
+
+  void before_mcu_wait(std::uint64_t tick) const noexcept {
+    if (audio_source_.before_mcu_wait != nullptr) {
+      audio_source_.before_mcu_wait(audio_source_.owner, tick);
+    }
+  }
+
+  [[nodiscard]] bool audio_driven() const noexcept { return input_mode_ == InputMode::audio; }
+
+  [[nodiscard]] bool before_checkpoint_wait(const CheckpointWait wait) const noexcept {
+    return audio_source_.before_checkpoint_wait != nullptr &&
+           audio_source_.before_checkpoint_wait(audio_source_.owner, wait);
+  }
+
+  void begin_rendering(std::uint64_t origin) noexcept {
+    render_origin_.store(origin, std::memory_order_release);
+  }
+
+  [[nodiscard]] bool rendering_at(std::uint64_t tick) const noexcept {
+    return tick >= render_origin_.load(std::memory_order_acquire);
+  }
+
+  [[nodiscard]] bool prepare_audio(std::uint64_t ticks, const std::stop_token &stop);
+
   // Input producer: packets are serialized on this DIN input, without reordering.
   [[nodiscard]] bool write_input(std::span<const std::uint8_t> bytes, std::uint64_t ticks) noexcept;
   [[nodiscard]] bool write_input(std::span<const std::uint8_t> bytes,
                                  std::uint64_t ticks,
                                  const std::stop_token &stop) noexcept;
+  // Audio owner stages packets without advancing the exclusive input frontier.
+  [[nodiscard]] Admission stage_input(std::span<const std::uint8_t> bytes,
+                                      std::uint64_t ticks) noexcept;
   [[nodiscard]] bool advance_input(std::uint64_t ticks) noexcept;
   [[nodiscard]] bool finish_input() noexcept;
   void abort_input() noexcept;
@@ -100,21 +147,26 @@ private:
   await(std::atomic<unsigned> &waiters, const std::stop_token &stop, Ready ready) noexcept;
   void signal() noexcept;
   void notify() noexcept;
-  [[nodiscard]] bool admit(std::span<const std::uint8_t> bytes,
-                           std::uint64_t ticks,
-                           const std::stop_token *stop) noexcept;
+  void signal_output() noexcept;
+  [[nodiscard]] Admission admit(std::span<const std::uint8_t> bytes,
+                                std::uint64_t ticks,
+                                const std::stop_token *stop,
+                                bool staged) noexcept;
   [[nodiscard]] bool fail(const char *message) noexcept;
   void *wake_owner_ = nullptr;
   void (*wake_notify_)(void *) noexcept = nullptr;
   const InputMode input_mode_;
+  AudioSource audio_source_;
   std::atomic<Phase> phase_{Phase::active};
   Input input_;
   Queue output_;
   std::uint64_t next_input_ = 0, last_input_ = 0, last_output_ = 0;
   std::atomic<std::uint64_t> input_until_{0}, changed_{0};
-  std::atomic<unsigned> input_waiters_{0}, space_waiters_{0}, output_waiters_{0};
+  std::atomic<unsigned> input_waiters_{0}, space_waiters_{0};
+  std::atomic<std::uint64_t> output_changed_{0};
   std::atomic<std::uint64_t> time_{0};
   std::atomic<const char *> error_{nullptr};
   std::atomic<std::uint64_t> input_requested_{0};
+  std::atomic<std::uint64_t> render_origin_{std::numeric_limits<std::uint64_t>::max()};
 };
 }
