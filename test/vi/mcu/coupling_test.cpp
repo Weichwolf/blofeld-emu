@@ -260,6 +260,43 @@ void streaming_frontier() {
   }
 }
 
+void output_publication() {
+  constexpr std::uint64_t ticks = 200;
+  vi::PeerPort peer;
+  vi::Shi shi;
+  vi::DspReset reset;
+  vi::ExecutionTime time;
+  vi::MidiPort midi;
+  const std::stop_source stop;
+  vi::Coupling coupling(
+      peer, shi, reset, time, midi, stop.get_token(), vi::Coupling::default_window);
+  coupling.request(ticks);
+  const auto before = coupling.observation();
+  coupling.request(ticks);
+  if (coupling.observation() != before) {
+    throw std::runtime_error("An unchanged MCU frontier woke the DSP");
+  }
+
+  peer.dsp_data({.mask = byte_mask, .known = byte_mask, .value = byte_mask});
+  auto sent = std::async(std::launch::async, [&] { return coupling.outputs(ticks); });
+  const auto bound = std::chrono::steady_clock::now() + std::chrono::seconds{1};
+  while (coupling.observation() == before && std::chrono::steady_clock::now() < bound) {
+    std::this_thread::yield();
+  }
+  const auto input = coupling.input(0);
+  if (coupling.observation() != before + 1 || coupling.known() != ticks || !input ||
+      input->ticks != ticks) {
+    stop.request_stop();
+    throw std::runtime_error("The DSP must publish progress and input before one wake");
+  }
+  coupling.acknowledge(input->serial);
+  if (sent.wait_for(std::chrono::seconds{1}) != std::future_status::ready) {
+    stop.request_stop();
+    throw std::runtime_error("The MCU acknowledgment did not wake the DSP");
+  }
+  if (!sent.get()) { throw std::runtime_error("The DSP output was refused"); }
+}
+
 void exercise(const bool dense) {
   const auto code = dsp_code(dense);
   const std::array spans{dsp56300::CodeSpan{.address = 0xff0000, .words = code}};
@@ -300,6 +337,7 @@ void exercise(const bool dense) {
 int main() try {
   live_input_demand();
   streaming_frontier();
+  output_publication();
   for (const bool dense : {false, true}) { exercise(dense); }
 } catch (const std::exception &error) {
 

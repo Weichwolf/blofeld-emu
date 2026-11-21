@@ -115,7 +115,7 @@ private:
   [[nodiscard]] mcu::InputHistory::Values sample();
   [[nodiscard]] bool service_held();
   void refresh() noexcept;
-  void attained(std::uint64_t exclusive) noexcept;
+  void attained(std::uint64_t exclusive, bool wake = true) noexcept;
   [[nodiscard]] bool checkpoint_barrier();
   [[nodiscard]] Grant grant(Stamp stamp) const noexcept;
 

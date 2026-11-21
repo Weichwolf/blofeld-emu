@@ -104,8 +104,8 @@ void Coupling::publish(const std::span<const mcu::Effects::Entry> entries,
 }
 
 void Coupling::request(const std::uint64_t ticks) noexcept {
-  const auto old = frontier_.load(std::memory_order_relaxed);
-  if (ticks > old) { frontier_.store(ticks, std::memory_order_release); }
+  if (ticks <= frontier_.load(std::memory_order_relaxed)) { return; }
+  frontier_.store(ticks, std::memory_order_release);
   notify();
 }
 
@@ -173,12 +173,10 @@ void Coupling::refresh() noexcept {
   consumed_.store(0, std::memory_order_release);
 }
 
-void Coupling::attained(const std::uint64_t exclusive) noexcept {
-  const auto old = known_.load(std::memory_order_relaxed);
-  if (exclusive > old) {
-    known_.store(exclusive, std::memory_order_release);
-    notify();
-  }
+void Coupling::attained(const std::uint64_t exclusive, const bool wake) noexcept {
+  if (exclusive <= known_.load(std::memory_order_relaxed)) { return; }
+  known_.store(exclusive, std::memory_order_release);
+  if (wake) { notify(); }
 }
 
 mcu::InputHistory::Values Coupling::sample() {
@@ -209,7 +207,8 @@ bool Coupling::outputs(const std::uint64_t ticks) {
     return fail("DSP published another input before the preceding validation");
   }
   previous_ = values;
-  attained(ticks);
+  // Wake the MCU once both progress and its next input are published.
+  attained(ticks, false);
   input_ = {.ticks = ticks, .serial = ++serial_, .values = values};
   message_.store(serial_, std::memory_order_release);
   notify();
