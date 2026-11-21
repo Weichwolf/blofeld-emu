@@ -16,6 +16,17 @@ namespace {
 constexpr std::uint64_t ns_per_second = 1000000000;
 constexpr std::uint64_t delivery_ns = 1000000;
 constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+
+std::uint64_t
+tick_offset(const std::uint64_t offset, const PcmClock::Point &left, const PcmClock::Point &right) {
+  const auto ticks = right.ticks - left.ticks;
+  const auto span = right.host_ns - left.host_ns;
+  if (offset > maximum / ticks) {
+    throw std::overflow_error("Live audio correlation is not representable");
+  }
+  const auto product = offset * ticks;
+  return (product / span) + (product % span != 0 ? 1U : 0U);
+}
 }
 
 LiveClock::LiveClock(const Grant grant) : uncertainty_(grant.uncertainty_ns) {
@@ -79,17 +90,18 @@ std::optional<std::uint64_t> LiveClock::correlate(const std::uint64_t host_ns,
     if (host_ns == right.host_ns) { return right.ticks; }
     if (host_ns > right.host_ns) { continue; }
     const auto &left = point(index - 1);
-    const auto offset = host_ns - left.host_ns;
-    const auto ticks = right.ticks - left.ticks;
-    const auto span = right.host_ns - left.host_ns;
-    if (offset > maximum / ticks) {
-      throw std::overflow_error("Live audio interpolation is not representable");
-    }
-    const auto product = offset * ticks;
-    const auto delta = (product / span) + (product % span != 0 ? 1U : 0U);
-    return left.ticks + delta;
+    return left.ticks + tick_offset(host_ns - left.host_ns, left, right);
   }
-  return {};
+  if (size_ < 2) { return {}; }
+  const auto &right = point(size_ - 1);
+  const auto &left = point(size_ - 2);
+  const auto ahead = host_ns - right.host_ns;
+  // A native MIDI timestamp can be newer than the latest audio observation.
+  // Bound the projection by both the device uncertainty and the observed interval.
+  if (ahead > uncertainty_ || ahead > right.host_ns - left.host_ns) { return {}; }
+  const auto delta = tick_offset(ahead, left, right);
+  if (delta > maximum - right.ticks) { return {}; }
+  return right.ticks + delta;
 }
 
 }
