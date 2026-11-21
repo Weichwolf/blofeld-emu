@@ -17,6 +17,7 @@
 #include "support/mcu.hpp"
 #include "vm_context.hpp"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cpu12/memory.hpp>
@@ -208,7 +209,7 @@ void live_input_demand() {
   }
   if (!midi.advance_input(needed) ||
       dsp_ready.wait_for(std::chrono::seconds{1}) != std::future_status::ready ||
-      dsp_ready.get() != vi::Coupling::Grant{.until = needed} ||
+      dsp_ready.get() != vi::Coupling::Grant{.until = needed, .quiet_until = needed} ||
       mcu_ready.wait_for(std::chrono::milliseconds{1}) == std::future_status::ready) {
     throw std::runtime_error("Real silence releases only the exclusive horizon it establishes");
   }
@@ -225,6 +226,7 @@ void live_input_demand() {
 void streaming_frontier() {
   constexpr std::uint64_t step = 20;
   constexpr std::uint64_t end = 2 * step;
+  constexpr std::uint64_t data_at = step + (step / 2);
   constexpr std::uint64_t source_frontier = 1000;
   vi::PeerPort peer;
   vi::Shi shi;
@@ -234,8 +236,10 @@ void streaming_frontier() {
   const std::stop_source stop;
   vi::Coupling coupling(
       peer, shi, reset, time, midi, stop.get_token(), vi::Coupling::default_window);
+  auto effects = coupling.source_storage().first(1);
+  effects[0] = {.ticks = data_at, .value = 0, .kind = vi::mcu::Effects::Kind::data};
   coupling.bind();
-  coupling.publish({}, source_frontier);
+  coupling.publish(effects, source_frontier);
   for (const auto ticks : {std::uint64_t{0}, step, end}) {
     auto result = std::async(std::launch::async,
                              [&coupling, ticks] { return coupling.receiver({.ticks = ticks}); });
@@ -248,8 +252,9 @@ void streaming_frontier() {
       throw std::runtime_error("Publishing MIDI knowledge did not wake the DSP receiver");
     }
     const auto grant = result.get();
-    if (!grant || grant->kind != vi::Coupling::Grant::Kind::frontier ||
-        grant->until != (ticks == end ? source_frontier : ticks + step)) {
+    const auto until = ticks == end ? source_frontier : ticks + step;
+    const auto quiet = ticks < data_at ? std::min(until, data_at) : until;
+    if (grant != vi::Coupling::Grant{.until = until, .quiet_until = quiet}) {
       throw std::runtime_error("DSP grant differs from the common MCU/MIDI frontier");
     }
   }

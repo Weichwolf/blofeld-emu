@@ -305,7 +305,8 @@ Coupling::Grant Coupling::grant(const Stamp stamp) const noexcept {
   if (until <= stamp.ticks) {
     return {.until = stamp.ticks + 1, .kind = Coupling::Grant::Kind::current};
   }
-  return {.until = until};
+  const auto quiet = cursor_ < count ? std::min(until, storage_[cursor_].ticks) : until;
+  return {.until = until, .quiet_until = quiet};
 }
 
 std::optional<Coupling::Grant> Coupling::receiver(const Stamp stamp) {

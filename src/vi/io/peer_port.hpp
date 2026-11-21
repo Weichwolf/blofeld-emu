@@ -42,6 +42,14 @@ public:
   // DSP owner applies only changes at or before its actual instrument time.
   // Repeated reads retain the same sample; reading never consumes future data.
   [[nodiscard]] Sample sample_mcu_data(std::uint64_t ticks) noexcept;
+
+  [[nodiscard]] bool cached_mcu_data(Sample &sample) const noexcept {
+    const auto consumed = inputs_.consumed.load(std::memory_order_relaxed);
+    if (consumed != inputs_.published.load(std::memory_order_acquire)) { return false; }
+    sample = inputs_.sample;
+    return true;
+  }
+
   // Retain MCU inputs under reset; retire old DSP work before publishing at release.
   void hold_reset() noexcept;
   [[nodiscard]] bool release_mcu_data(std::uint64_t ticks, const std::stop_token &stop);

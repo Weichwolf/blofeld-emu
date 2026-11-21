@@ -27,6 +27,8 @@ public:
     enum class Kind : std::uint8_t { frontier, current };
     std::uint64_t until;
     Kind kind = Kind::frontier;
+    // Exclusive horizon for reads that reuse an already admitted input sample.
+    std::uint64_t quiet_until = 0;
     bool operator==(const Grant &) const = default;
   };
 

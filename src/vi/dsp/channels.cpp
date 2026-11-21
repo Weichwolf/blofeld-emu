@@ -40,6 +40,7 @@ bool Coupled::service() const noexcept {
   const auto stamp = io_.timestamp();
   const bool accepted = stamp && coupling_->service(*stamp) && !io_.coupling_interrupted();
   if (!accepted || coupling_->revision() != before) {
+    io_.invalidate_peer_read();
 #if defined(BLOFELD_CENSUS)
     io_.trace(Census::Event::coupling_service);
 #endif
@@ -53,6 +54,7 @@ bool Coupled::changed() const noexcept {
   const auto stamp = io_.timestamp();
   const bool accepted = stamp && coupling_->outputs(stamp->ceil());
   if (!accepted || coupling_->revision() != before) {
+    io_.invalidate_peer_read();
 #if defined(BLOFELD_CENSUS)
     io_.trace(Census::Event::coupling_output);
 #endif
