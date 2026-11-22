@@ -97,7 +97,11 @@ int main(const int argc, char **argv) try {
   std::filesystem::create_directories(display_path);
   blofeld::app::DisplayPublication display(display_path);
   std::cerr << "Display: " << display_path << '\n';
+#if defined(__linux__)
+  blofeld::host::audio::Playback audio(sample_rate, "blofeld-emu", options.alsa_device);
+#else
   blofeld::host::audio::Playback audio(sample_rate, "blofeld-emu");
+#endif
   blofeld::app::Live live(audio, display, options);
   blofeld::vi::VmContext vm(std::move(image),
                             std::move(boot),

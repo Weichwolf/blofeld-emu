@@ -31,8 +31,17 @@ template <typename T> T number(const std::string_view value, const char *message
   return result;
 }
 
-bool midi_route(Options &result, Provided &provided, const Argument argument) {
+bool live_route(Options &result, Provided &provided, const Argument argument) {
   const auto [key, value] = argument;
+#if defined(__linux__)
+  if (key == "--alsa-device" && result.alsa_device.empty()) {
+    if (!value.starts_with("hw:") || value.size() == 3) {
+      throw std::invalid_argument("--alsa-device requires an ALSA hw: PCM device");
+    }
+    result.alsa_device = value;
+    return true;
+  }
+#endif
   if (key == "--midi-source" && !result.midi_source) {
     result.midi_source = number<std::int32_t>(value, "--midi-source requires a signed native ID");
     return true;
@@ -51,6 +60,11 @@ bool midi_route(Options &result, Provided &provided, const Argument argument) {
 }
 
 void validate(const Options &result, const Provided &provided) {
+#if defined(__linux__)
+  if (!result.alsa_device.empty() && (result.midi || result.wav)) {
+    throw std::invalid_argument("Direct ALSA PCM is only available in live mode");
+  }
+#endif
   if (result.midi && (result.midi_source || result.midi_destination || provided.group)) {
     throw std::invalid_argument("Native MIDI routing is only available in live mode");
   }
@@ -73,7 +87,7 @@ Options options(const std::span<const char *const> arguments) {
     if (++index == arguments.size()) { throw std::invalid_argument("Missing option value"); }
     const std::string_view value(arguments[index]);
     if (value.empty()) { throw std::invalid_argument("Empty option value"); }
-    if (midi_route(result, provided, {.key = key, .value = value})) { continue; }
+    if (live_route(result, provided, {.key = key, .value = value})) { continue; }
     if (key == "--profile" && !provided.profile) {
       provided.profile = true;
       result.profile = value;
@@ -93,6 +107,9 @@ Options options(const std::span<const char *const> arguments) {
       throw std::invalid_argument(
           "Usage: blofeld-headless [--profile FILE] [--midi-source ID] "
           "[--midi-destination ID] [--midi-group 0..15] "
+#if defined(__linux__)
+          "[--alsa-device hw:CARD,DEVICE] "
+#endif
           "[--midi FILE --wav FILE [--tail SECONDS] [--startup-watchdog SECONDS]]");
     }
   }
