@@ -92,11 +92,15 @@ public:
   [[nodiscard]] bool service(Stamp stamp);
   [[nodiscard]] bool outputs(std::uint64_t ticks);
 
+  [[nodiscard]] bool reply_idle() const noexcept {
+    return previous_[static_cast<std::size_t>(mcu::Epoch::Signal::reply)] == 0;
+  }
+
   [[nodiscard]] bool ready_unchanged(const bool active) const noexcept {
     using Signal = mcu::Epoch::Signal;
     // The DSP owner applies reset and reply activation. During acknowledgement
     // the MCU can finish a reply that was active in the published snapshot.
-    return !stopped() && previous_[static_cast<std::size_t>(Signal::reply)] == 0 &&
+    return !stopped() && reply_idle() &&
            previous_[static_cast<std::size_t>(Signal::interrupt)] == std::uint64_t{active};
   }
 

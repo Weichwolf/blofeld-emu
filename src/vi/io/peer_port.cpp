@@ -128,10 +128,11 @@ void PeerPort::retire_mcu_data() noexcept {
   if (through > inputs_.consumed.load(std::memory_order_relaxed)) { release_input_space(through); }
 }
 
-void PeerPort::dsp_data(const Sample value) noexcept {
-  if (dsp_held_.load(std::memory_order_acquire)) { return; }
+bool PeerPort::dsp_data(const Sample value) noexcept {
+  if (dsp_held_.load(std::memory_order_acquire)) { return false; }
   const auto word = encode(value);
-  if (dsp_.load(std::memory_order_relaxed) != word) {
+  const bool changed = dsp_.load(std::memory_order_relaxed) != word;
+  if (changed) {
     reply_.announced.store(false, std::memory_order_release);
     dsp_.store(word, std::memory_order_release);
   }
@@ -143,6 +144,7 @@ void PeerPort::dsp_data(const Sample value) noexcept {
       static_cast<void>(fail("DSP released an incomplete peer response block"));
     }
   }
+  return changed;
 }
 
 PeerPort::View PeerPort::view() const noexcept {

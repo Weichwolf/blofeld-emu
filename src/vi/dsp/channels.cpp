@@ -49,10 +49,14 @@ bool Coupled::service() const noexcept {
   return accepted;
 }
 
-bool Coupled::changed() const noexcept {
+bool Coupled::changed(const bool peer_data_unchanged) const noexcept {
   const auto before = coupling_->revision();
   const auto stamp = io_.timestamp();
-  const bool accepted = stamp && coupling_->outputs(stamp->ceil());
+  // A GPIO data write can leave the published inputs unchanged. An
+  // active reply still needs sampling because the MCU can finish it.
+  const bool accepted = stamp && ((peer_data_unchanged && coupling_->reply_idle())
+                                      ? !coupling_->stopped()
+                                      : coupling_->outputs(stamp->ceil()));
   if (!accepted || coupling_->revision() != before) {
     io_.invalidate_peer_read();
 #if defined(BLOFELD_CENSUS)
@@ -101,9 +105,9 @@ bool blofeld_dsp_peer_ports(PeerPort *const channel,
                             const std::uint8_t value,
                             const bool ready_known,
                             const bool active) noexcept {
-  channel->dsp_data({.mask = mask, .known = known, .value = value});
+  const bool data_changed = channel->dsp_data({.mask = mask, .known = known, .value = value});
   const auto *coupled = Coupled::current();
-  const bool observed = coupled != nullptr && coupled->changed();
+  const bool observed = coupled != nullptr && coupled->changed(!data_changed);
   if (!ready_known || !channel->dsp_ready(active)) { return false; }
   return coupled == nullptr || (observed && coupled->ready_unchanged(active)) || coupled->changed();
 }

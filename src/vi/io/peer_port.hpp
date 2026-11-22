@@ -37,7 +37,7 @@ public:
   // MCU owner publishes ordered data/direction changes; full transport waits
   // for actual space without advancing device time. Equal states need no slot.
   [[nodiscard]] bool mcu_data(Sample value, std::uint64_t ticks, const std::stop_token &stop = {});
-  void dsp_data(Sample value) noexcept;
+  bool dsp_data(Sample value) noexcept;
   [[nodiscard]] Sample mcu_data() const noexcept;
   // DSP owner applies only changes at or before its actual instrument time.
   // Repeated reads retain the same sample; reading never consumes future data.

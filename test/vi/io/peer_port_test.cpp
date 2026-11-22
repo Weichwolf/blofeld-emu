@@ -29,7 +29,8 @@ void data_views() {
   constexpr PeerPort::Sample mcu{.mask = 0xff, .known = 0xf0, .value = 0xa5};
   constexpr PeerPort::Sample dsp{.mask = 0x7f, .known = 0x73, .value = 0x52};
   require(peer.mcu_data(mcu, 0), "Publish the actual MCU data and direction");
-  peer.dsp_data(dsp);
+  require(peer.dsp_data(dsp) && !peer.dsp_data(dsp),
+          "An identical DSP write keeps the already published latch value");
   require(peer.mcu_data() == mcu && peer.mcu_data() == mcu && peer.dsp_data() == dsp,
           "Each endpoint retains its genuine drive mask, unknown bits and output latch");
   peer.reset_dsp();
@@ -488,8 +489,8 @@ void reset_disconnects_outputs() {
           "Start a genuine pending reply before hardware reset");
   const auto previous = peer.mcu_interrupt();
   peer.hold_reset();
-  peer.dsp_data({.mask = byte_mask, .known = 0, .value = byte_mask});
-  require(previous && peer.dsp_data() == PeerPort::Sample{} && !peer.mcu_interrupt() &&
+  const bool changed = peer.dsp_data({.mask = byte_mask, .known = 0, .value = byte_mask});
+  require(previous && !changed && peer.dsp_data() == PeerPort::Sample{} && !peer.mcu_interrupt() &&
               peer.dsp_ready(true) && peer.dsp_write(payload, 1) &&
               peer.read_dsp_data({.mask = byte_mask, .ticks = 0}) == PeerPort::Sample{} &&
               peer.mcu_strobe(false) && peer.mcu_strobe(true) && peer.error() == nullptr,
