@@ -3,6 +3,7 @@
 
 #include "storage/media_image.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -217,6 +218,23 @@ bool MemoryController::write(const Write access) noexcept {
   }
   controls_ = controls;
   return true;
+}
+
+std::span<const std::uint8_t> MemoryController::read_run(const std::uint32_t count) noexcept {
+  if (count == 0 || error_ != nullptr || status_mode_ || pending() || phase_ != Phase::read ||
+      (controls_ & strobes) != strobes || buffer_.empty() ||
+      count > MediaImage::page_bytes - column_) {
+    return {};
+  }
+  const auto range = buffer_.subspan(std::size_t{column_} * 2, std::size_t{count} * 2);
+  constexpr std::uint8_t all_bits = 0xff;
+  auto known = all_bits;
+  for (std::size_t offset = 1; offset < range.size(); offset += 2) { known &= range[offset]; }
+  if (known != all_bits) { return {}; }
+  column_ += count;
+  if (column_ == MediaImage::page_bytes) { phase_ = Phase::end; }
+  output_ = range[range.size() - 2];
+  return range;
 }
 
 bool MemoryController::complete() {

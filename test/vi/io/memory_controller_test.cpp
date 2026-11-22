@@ -116,6 +116,31 @@ void released_reads(MemoryController &controller) {
           "A real command clears the retained data without manufacturing a reset reply");
 }
 
+void read_runs(MemoryController &controller) {
+  controller.reset();
+  begin(controller, {});
+  require(read(controller) == 0, "Take the first byte through the original strobe path");
+  constexpr std::array<std::uint8_t, 4> expected{1, erased, 2, erased};
+  require(std::ranges::equal(controller.read_run(2), expected) && controller.output() == 2 &&
+              read(controller) == 3,
+          "Bulk strobes expose each original byte and retain the final latch exactly once");
+
+  constexpr std::uint32_t next_page = 32;
+  begin(controller, {.page = next_page, .column = unknown_column - 2});
+  const auto last_known = read(controller);
+  require(controller.read_run(2).empty() && controller.output() == last_known &&
+              read(controller) == static_cast<std::uint8_t>(next_page + unknown_column - 1),
+          "The unknown byte rejects the full run before the latch or cursor changes");
+  constexpr std::uint8_t expected_tail = 46;
+  begin(controller, {.page = last_block_page, .column = 15, .plane = spare});
+  require(controller.read_run(2).empty() && !controller.output(),
+          "A complete run cannot cross the hardware page boundary");
+  const auto tail = controller.read_run(1);
+  require(tail.size() == 2 && tail.front() == expected_tail &&
+              controller.output() == expected_tail && controller.read_run(1).empty(),
+          "The final byte retains its latch and completes the page");
+}
+
 void inactive_read_strobes(MemoryController &controller) {
   controller.reset();
   const auto epoch = controller.epoch();
@@ -457,6 +482,7 @@ int main(const int argc, char **argv) try {
   MemoryController controller(&image);
   reads(controller);
   released_reads(controller);
+  read_runs(controller);
   inactive_read_strobes(controller);
   input_mode_setup(controller);
   cancel_and_reset(controller);

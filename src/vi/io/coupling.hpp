@@ -92,6 +92,8 @@ public:
   [[nodiscard]] bool service(Stamp stamp);
   [[nodiscard]] bool outputs(std::uint64_t ticks);
 
+  [[nodiscard]] bool outputs_unchanged() { return !stopped() && sample() == previous_; }
+
   [[nodiscard]] bool reply_idle() const noexcept {
     return previous_[static_cast<std::size_t>(mcu::Epoch::Signal::reply)] == 0;
   }

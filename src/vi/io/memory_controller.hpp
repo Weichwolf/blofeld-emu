@@ -37,6 +37,10 @@ public:
   // of host work and PLL multiplication. These are not fitted chip timings.
   [[nodiscard]] unsigned reference_ticks() const noexcept;
 
+  // Consume a complete run of read strobes only when every byte is known.
+  // Returned bytes are interleaved value and known mask. The owner must first
+  // admit the complete time and destination writes. Failure leaves state intact.
+  [[nodiscard]] std::span<const std::uint8_t> read_run(std::uint32_t count) noexcept;
   [[nodiscard]] bool complete();
   [[nodiscard]] bool ready(bool &value) const noexcept;
 
