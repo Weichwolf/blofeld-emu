@@ -238,6 +238,39 @@ void triggered_modes_and_chaining() {
           "Address updates wrap at 24 guest bits without host overflow");
 }
 
+void simultaneous_sources() {
+  constexpr unsigned esai_request = 22;
+  constexpr unsigned dax_request = 10;
+  constexpr unsigned unrelated_request = 18;
+  constexpr unsigned request_shift = 11;
+  constexpr unsigned priority_shift = 17;
+  constexpr Word repeated_word = 0x280000;
+  constexpr Word esai_source = 12;
+  constexpr Word dax_source = 31;
+  constexpr Word unrelated_source = 70;
+  const auto request = [](const unsigned source, const Word priority) {
+    return enable | repeated_word | fixed_xy | (source << request_shift) |
+           (priority << priority_shift);
+  };
+  Dma dma;
+  configure(dma, {.source = esai_source, .count = 1, .control = request(esai_request, 0)});
+  configure(dma,
+            {.channel = 1, .source = dax_source, .count = 1, .control = request(dax_request, 2)});
+  configure(dma,
+            {.channel = 2,
+             .source = unrelated_source,
+             .count = 1,
+             .control = request(unrelated_request, 3)});
+  Memory memory;
+  dma.trigger_sources((1U << esai_request) | (1U << dax_request));
+  require(memory.service(dma) && memory.stores.size() == 2 &&
+              memory.stores[0].value == dax_source && memory.stores[1].value == esai_source,
+          "Two simultaneous sources enter the same priority arbitration");
+  dma.trigger_sources(0);
+  require(memory.service(dma) && memory.stores.size() == 2,
+          "An absent request source never schedules a transfer");
+}
+
 void arbitration_and_errors() {
   for (const bool continuous : {false, true}) {
     Dma dma;
@@ -281,6 +314,7 @@ int main() try {
   audio_ring_requests();
   triggered_modes_and_chaining();
   arbitration_and_errors();
+  simultaneous_sources();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

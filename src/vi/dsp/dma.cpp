@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <dsp56300/memory.hpp>
 #include <optional>
 
@@ -132,22 +133,26 @@ bool Dma::write(const Write access) noexcept {
 
 bool Dma::trigger(const unsigned source) noexcept {
   if (source >= 32) { return false; }
-  for (unsigned index = 0; index < channel_count; ++index) {
-    const auto control = channels_[index].control;
-    if ((control & enable) != 0 && ((control >> 11U) & request_mask) == source &&
-        ((control >> transfer_shift) & 7) != 3) {
-      pending_ |= 1U << index;
-    }
-  }
+  trigger_sources(1U << source);
   return true;
 }
 
-unsigned Dma::select() const noexcept {
-  unsigned best = 0;
+void Dma::trigger_sources(const unsigned sources) noexcept {
+  if (sources == 0) { return; }
   for (unsigned index = 0; index < channel_count; ++index) {
-    if ((pending_ & (1U << index)) == 0) { continue; }
-    const auto priority = (channels_[index].control >> priority_shift) & 3;
-    best = std::max(priority, best);
+    const auto control = channels_[index].control;
+    if ((control & enable) != 0 && ((control >> transfer_shift) & 7) != 3) {
+      pending_ |= ((sources >> ((control >> 11U) & request_mask)) & 1U) << index;
+    }
+  }
+}
+
+unsigned Dma::select() const noexcept {
+  if (std::has_single_bit(pending_)) { return static_cast<unsigned>(std::countr_zero(pending_)); }
+  unsigned best = 0;
+  for (auto remaining = pending_; remaining != 0; remaining &= remaining - 1U) {
+    const auto index = static_cast<unsigned>(std::countr_zero(remaining));
+    best = std::max((channels_[index].control >> priority_shift) & 3U, best);
   }
   const auto previous = last_[best];
   if (last_valid_[best] && (pending_ & (1U << previous)) != 0 &&
