@@ -35,6 +35,10 @@ struct PlaybackStatus {
 
 // Push-mode native client. One producer supplies complete stereo frames. The
 // I/O owner handles device events; render callbacks only consume prepared frames.
+#if defined(__linux__)
+class AlsaPlayback;
+#endif
+
 class Playback {
 public:
   // Darwin permanently opts the dedicated producer thread out of QoS scheduling.
@@ -56,6 +60,9 @@ public:
   };
 
   explicit Playback(unsigned rate, std::string_view name = "Virtual instrument");
+#if defined(__linux__)
+  Playback(unsigned rate, std::string_view name, std::string_view alsa_device);
+#endif
   ~Playback();
   Playback(const Playback &) = delete;
   Playback &operator=(const Playback &) = delete;
@@ -74,5 +81,8 @@ public:
 private:
   struct Impl;
   std::unique_ptr<Impl> impl_;
+#if defined(__linux__)
+  std::unique_ptr<AlsaPlayback> alsa_;
+#endif
 };
 }

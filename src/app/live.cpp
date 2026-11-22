@@ -65,7 +65,9 @@ std::uint64_t host_time(const PcmClock::Point clock, const std::uint64_t tick) {
 std::size_t queue_grant(const host::audio::Grants &grants) {
   std::cerr << "Audio: s24-in-32 stereo " << grants.rate << "Hz -> " << grants.sink_format << ' '
             << grants.sink_rate << "Hz on " << grants.sink << "; buffer=" << grants.target_frames
-            << " max=" << grants.maximum_frames << '\n';
+            << " max=" << grants.maximum_frames;
+  if (grants.minimum_request_frames) { std::cerr << " quantum=" << *grants.minimum_request_frames; }
+  std::cerr << '\n';
   if (!grants.position_history_frames || *grants.position_history_frames == 0 ||
       !grants.maximum_position_uncertainty_ns) {
     throw std::runtime_error("Live MIDI requires native positions, history and uncertainty grants");

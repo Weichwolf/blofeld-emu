@@ -28,6 +28,15 @@ int main() try {
   using blofeld::app::options;
   const auto live = options(std::array{"--profile", "local.profile"});
   require(live.profile == "local.profile" && !live.midi && !live.wav, "Profile selects live mode");
+#if defined(__linux__)
+  const auto direct = options(std::array{"--profile", "p", "--alsa-device", "hw:Card,0"});
+  require(live.alsa_device.empty() && direct.alsa_device == "hw:Card,0",
+          "Select direct hardware without changing the default session route");
+  rejects(std::array{"--alsa-device", "plughw:Card,0"});
+  rejects(std::array{"--alsa-device", "hw:"});
+  rejects(std::array{"--alsa-device", "hw:A,0", "--alsa-device", "hw:B,0"});
+  rejects(std::array{"--alsa-device", "hw:A,0", "--midi", "m", "--wav", "w"});
+#endif
   const auto render = options(std::array{
       "--wav", "out.wav", "--profile", "local.profile", "--tail", "12", "--midi", "score.mid"});
   require(render.wav == "out.wav" && render.midi == "score.mid" && render.tail_seconds == 12 &&

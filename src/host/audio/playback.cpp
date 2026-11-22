@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "audio/playback.hpp"
 
+#include "audio/alsa_playback.hpp"
 #include "audio/buffer.hpp"
 #include "audio/pulse_position.hpp"
 #include "audio/render_position.hpp"
@@ -474,8 +475,13 @@ struct Playback::Impl {
   }
 };
 
-Playback::Playback(const unsigned rate, const std::string_view name)
-    : impl_(std::make_unique<Impl>(rate, name)) {}
+Playback::Playback(const unsigned rate, const std::string_view name) : Playback(rate, name, {}) {}
+
+Playback::Playback(const unsigned rate,
+                   const std::string_view name,
+                   const std::string_view alsa_device)
+    : impl_(alsa_device.empty() ? std::make_unique<Impl>(rate, name) : nullptr),
+      alsa_(alsa_device.empty() ? nullptr : std::make_unique<AlsaPlayback>(rate, alsa_device)) {}
 
 Playback::~Playback() = default;
 
@@ -485,18 +491,27 @@ Playback::Producer Playback::producer() const {
 }
 
 void Playback::stop() noexcept {
-  impl_->stop();
+  if (alsa_) {
+    alsa_->stop();
+  } else {
+    impl_->stop();
+  }
 }
 
 const Grants &Playback::grants() const noexcept {
-  return impl_->granted;
+  return alsa_ ? alsa_->grants() : impl_->granted;
 }
 
 void Playback::check() const {
+  if (alsa_) {
+    alsa_->check();
+    return;
+  }
   if (impl_->failed.load(std::memory_order_acquire)) { std::rethrow_exception(impl_->error); }
 }
 
 bool Playback::write(std::span<const Frame> frames, const std::stop_token &stop) {
+  if (alsa_) { return alsa_->write(frames, stop); }
   while (!frames.empty() && !stop.stop_requested() && !impl_->buffer.closed()) {
     const auto count = impl_->buffer.produce(frames);
     if (count != 0) {
@@ -510,6 +525,7 @@ bool Playback::write(std::span<const Frame> frames, const std::stop_token &stop)
 }
 
 bool Playback::reset(const std::stop_token &stop) {
+  if (alsa_) { return alsa_->reset(stop); }
   if (stop.stop_requested() || impl_->buffer.closed()) { return false; }
   impl_->reset_pending.store(true, std::memory_order_release);
   pa_mainloop_wakeup(impl_->loop.get());
@@ -523,6 +539,7 @@ bool Playback::reset(const std::stop_token &stop) {
 }
 
 PlaybackStatus Playback::status() const noexcept {
+  if (alsa_) { return alsa_->status(); }
   const auto delay = impl_->latency.load(std::memory_order_relaxed);
   return {.submitted_frames = impl_->submitted.load(std::memory_order_relaxed),
           .underruns = impl_->underruns.load(std::memory_order_relaxed),

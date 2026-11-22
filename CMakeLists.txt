@@ -71,7 +71,9 @@ if(APPLE)
   set(blofeld_signals src/host/process/signals_darwin.cpp)
 else()
   include(cmake/PulseAudio.cmake)
-  set(blofeld_playback src/host/audio/playback.cpp src/host/audio/producer.cpp
+  find_package(ALSA REQUIRED)
+  set(blofeld_playback src/host/audio/playback.cpp src/host/audio/alsa_playback.cpp
+    src/host/audio/producer.cpp
     src/host/audio/pulse_position.cpp)
   set(blofeld_signals src/host/process/signals.cpp)
 endif()
@@ -173,7 +175,7 @@ if(APPLE)
   target_link_libraries(blofeld_host_audio PRIVATE
     "${BLOFELD_COREAUDIO}" "${BLOFELD_AUDIOTOOLBOX}" "${BLOFELD_COREFOUNDATION}")
 else()
-  target_link_libraries(blofeld_host_audio PRIVATE PkgConfig::BLOFELD_PULSE)
+  target_link_libraries(blofeld_host_audio PRIVATE ALSA::ALSA PkgConfig::BLOFELD_PULSE)
 endif()
 add_library(blofeld_host_wav src/host/audio/wav.cpp)
 target_include_directories(blofeld_host_wav PUBLIC src/host)

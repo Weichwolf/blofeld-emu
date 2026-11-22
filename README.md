@@ -27,7 +27,7 @@ select them with `BLOFELD_CPU12_ROOT` and `BLOFELD_DSP56300_ROOT`.
 Linux:
 
 ```sh
-sudo apt install clang-19 clang-tidy-19 clang-format-19 llvm-19-dev cmake ninja-build ccache python3-dev libpulse-dev zlib1g-dev
+sudo apt install clang-19 clang-tidy-19 clang-format-19 llvm-19-dev cmake ninja-build ccache python3-dev libasound2-dev libpulse-dev zlib1g-dev
 cmake --preset release
 cmake --build --preset release --target quality
 ```
@@ -113,6 +113,9 @@ queues, underruns and disconnects. SIGINT/SIGTERM requests coordinated shutdown.
 Use `--midi-destination ID` to deliver firmware DIN replies to an ALSA sequencer
 or CoreMIDI destination with timestamps from the native audio epoch. ALSA IDs
 encode the sequencer client and port as `client * 256 + port`.
+On Linux, `--alsa-device hw:CARD,DEVICE` selects a free hardware PCM directly.
+For example, `--alsa-device hw:OCTACAPTURE,0` sends stereo PCM to its first two
+output channels. The command reports the actual period and buffer grant.
 
 `--midi` and `--wav` are paired. Offline rendering opens no host audio or viewer;
 `--tail` selects whole seconds after serialized MIDI/file end, default five.

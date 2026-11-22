@@ -499,7 +499,13 @@ on its owner before thread exit, including unwinding. Reject invalid, repeated o
 discontinuous render intervals before consuming queued PCM. Reset establishes a
 new timeline; a failed stream must reopen. Join callbacks before state teardown.
 
-Linux uses a dedicated PulseAudio owner, actual server format/buffer grants,
+Linux uses a dedicated audio owner. A selected direct ALSA hardware PCM uses
+nonblocking writes, exact sample format/rate and granted period/ring sizes.
+Send stereo PCM on the first two hardware channels and zero any additional
+channels. Derive consumption from actual ALSA ring occupancy, with monotonic
+status timestamps and bounded query uncertainty. Drop/prepare on reset;
+an exhausted ring is terminal. Log the granted device period.
+The default PulseAudio route uses actual server format/buffer grants,
 priming before uncork and cork/flush on reset. Backpressure stays outside native
 callbacks. Explicit asynchronous timing requests supply raw consumption indices
 within measured send/receipt bounds; reject corrupt/backwards/unsubmitted indices,
