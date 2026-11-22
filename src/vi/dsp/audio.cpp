@@ -23,24 +23,27 @@ std::int32_t sample(const dsp56300::Word word) noexcept {
 }
 
 std::optional<std::uint64_t> Audio::Pulse::deadline() const noexcept {
-  if (numerator == 0) { return {}; }
+  if (step == 0) { return {}; }
   return floor + (remainder != 0 ? 1U : 0U);
 }
 
 bool Audio::Pulse::configure(const std::uint64_t now,
-                             const std::uint32_t next_numerator,
+                             const std::uint32_t numerator,
                              const std::uint32_t next_denominator) noexcept {
-  if (numerator == next_numerator && denominator == next_denominator) { return true; }
-  if (next_numerator == 0) {
+  if (denominator == next_denominator && step * denominator + step_remainder == numerator) {
+    return true;
+  }
+  if (numerator == 0) {
     *this = {};
     return true;
   }
-  if (next_denominator == 0 || next_numerator < next_denominator ||
+  if (next_denominator == 0 || numerator < next_denominator ||
       now == std::numeric_limits<std::uint64_t>::max()) {
     return false;
   }
-  numerator = next_numerator;
   denominator = next_denominator;
+  step = numerator / denominator;
+  step_remainder = numerator % denominator;
   // Divide before multiplying to retain phase without overflowing now * denominator.
   const auto index =
       ((now / numerator) * denominator) + (((now % numerator) * denominator) / numerator) + 1;
@@ -53,11 +56,12 @@ bool Audio::Pulse::configure(const std::uint64_t now,
 }
 
 bool Audio::Pulse::advance() noexcept {
-  const auto fraction = remainder + (numerator % denominator);
-  const auto delta = (numerator / denominator) + (fraction / denominator);
+  const auto fraction = std::uint64_t{remainder} + step_remainder;
+  const auto carry = fraction >= denominator;
+  const auto delta = std::uint64_t{step} + static_cast<std::uint64_t>(carry);
   if (floor > std::numeric_limits<std::uint64_t>::max() - delta - 1) { return false; }
   floor += delta;
-  remainder = fraction % denominator;
+  remainder = static_cast<std::uint32_t>(carry ? fraction - denominator : fraction);
   return true;
 }
 

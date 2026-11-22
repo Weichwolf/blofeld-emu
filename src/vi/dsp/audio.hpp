@@ -35,12 +35,11 @@ public:
 
 private:
   struct Pulse {
-    std::uint32_t numerator = 0, denominator = 1, remainder = 0;
+    std::uint32_t step = 0, step_remainder = 0, denominator = 1, remainder = 0;
     std::uint64_t floor = 0;
     [[nodiscard]] std::optional<std::uint64_t> deadline() const noexcept;
-    [[nodiscard]] bool configure(std::uint64_t now,
-                                 std::uint32_t next_numerator,
-                                 std::uint32_t next_denominator) noexcept;
+    [[nodiscard]] bool
+    configure(std::uint64_t now, std::uint32_t numerator, std::uint32_t next_denominator) noexcept;
     [[nodiscard]] bool advance() noexcept;
   };
 
