@@ -212,13 +212,7 @@ public:
   }
 
   bool service_dma(ExecutionReport &report) {
-    trigger_audio_requests();
-    const auto requests = timers_.take_requests();
-    for (unsigned index = 0; index < 3; ++index) {
-      if ((requests & (1U << index)) != 0) {
-        static_cast<void>(dma_.trigger(timer_request_first + index));
-      }
-    }
+    dma_.trigger_sources(audio_requests() | (timers_.take_requests() << timer_request_first));
     if (!dma_.service(
             dma_pc_,
             [this](const Dma::Address access, dsp56300::Word &value) {
@@ -617,9 +611,9 @@ private:
     return true;
   }
 
-  void trigger_audio_requests() noexcept {
-    if (esai_1_.request()) { static_cast<void>(dma_.trigger(esai1_transmit_request)); }
-    if (dax_.request()) { static_cast<void>(dma_.trigger(dax_request)); }
+  [[nodiscard]] unsigned audio_requests() const noexcept {
+    return (static_cast<unsigned>(esai_1_.request()) << esai1_transmit_request) |
+           (static_cast<unsigned>(dax_.request()) << dax_request);
   }
 
   [[nodiscard]] std::uint64_t device_cycles() const noexcept {
@@ -730,7 +724,7 @@ private:
 
   bool write_dma(const Dma::Write access, const dsp56300::Word pc) noexcept {
     if (!dma_.write(access)) { return false; }
-    trigger_audio_requests();
+    dma_.trigger_sources(audio_requests());
     if (dma_.pending() || dma_.interrupts() != 0) {
       dma_pc_ = pc;
 #if defined(BLOFELD_CENSUS)

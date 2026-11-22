@@ -29,6 +29,7 @@ public:
   [[nodiscard]] bool read(dsp56300::Word address, dsp56300::Word &value) const noexcept;
   [[nodiscard]] bool write(Write access) noexcept;
   [[nodiscard]] bool trigger(unsigned source) noexcept;
+  void trigger_sources(unsigned sources) noexcept;
 
   [[nodiscard]] bool pending() const noexcept { return pending_ != 0; }
 
