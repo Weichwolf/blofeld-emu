@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dsp/interrupts.hpp"
 
-#include <algorithm>
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <dsp56300/memory.hpp>
 #include <optional>
 #include <span>
@@ -18,51 +19,54 @@ constexpr std::array<Word, 43> order{
 constexpr Word external_first = 0x10, dma_first = 0x18, dma_last = 0x22;
 constexpr Word dax_first = 0x28, esai_first = 0x30, shi_first = 0x40;
 constexpr Word timer_first = 0x54, efcop_first = 0x68, esai1_first = 0x70;
+constexpr unsigned rank_bits = 6;
+
+struct Source {
+  std::uint8_t rank, shift;
+  bool core;
+};
+
+constexpr unsigned priority_shift(const Word vector) noexcept {
+  if (vector < dma_first) { return ((vector - external_first) / 2) * 3; }
+  if (vector <= dma_last) { return 12 + (vector - dma_first); }
+  if (vector >= esai1_first) { return 10; }
+  if (vector >= efcop_first) { return 16; }
+  if (vector >= timer_first) { return 8; }
+  if (vector >= shi_first) { return 2; }
+  return vector < esai_first && vector >= dax_first ? 6 : 0;
 }
 
-unsigned Interrupts::priority(const Word vector) const noexcept {
-  unsigned shift = 0;
-  if (vector < dma_first) {
-    shift = ((vector - external_first) / 2) * 3;
-    return (core_ >> shift) & 3;
+constexpr auto sources = [] {
+  constexpr std::size_t vector_slots = 0x80;
+  static_assert(order.size() < (1U << rank_bits));
+  std::array<Source, vector_slots> result{};
+  for (std::size_t index = 0; index < order.size(); ++index) {
+    const auto vector = order[index];
+    result[vector] = {.rank = static_cast<std::uint8_t>(order.size() - index),
+                      .shift = static_cast<std::uint8_t>(priority_shift(vector)),
+                      .core = vector <= dma_last};
   }
-  if (vector <= dma_last) {
-    shift = 12 + (vector - dma_first);
-    return (core_ >> shift) & 3;
-  }
-  if (vector >= esai1_first) {
-    shift = 10;
-  } else if (vector >= efcop_first) {
-    shift = 16;
-  } else if (vector >= timer_first) {
-    shift = 8;
-  } else if (vector >= shi_first) {
-    shift = 2;
-  } else if (vector >= esai_first) {
-    shift = 0;
-  } else if (vector >= dax_first) {
-    shift = 6;
-  }
-  return (peripheral_ >> shift) & 3;
+  return result;
+}();
 }
 
 std::optional<Interrupts::Request> Interrupts::select(const std::span<const Word> vectors,
                                                       const Word status) const noexcept {
-  const auto mask = (status >> 8U) & 3;
-  std::optional<Request> result;
-  const auto *previous = order.end();
+  const auto mask = interrupt_mask(status);
+  unsigned best = 0;
+  Word winner = 0;
   for (const auto vector : vectors) {
-    if (vector == 0) { continue; }
-    const auto *const rank = std::ranges::find(order, vector);
-    if (rank == order.end()) { continue; }
-    const auto configured = priority(vector);
-    if (configured == 0 || configured - 1 < mask) { continue; }
-    const auto level = configured - 1;
-    if (!result || level > result->level || (level == result->level && rank < previous)) {
-      result = Request{.vector = vector, .level = level};
-      previous = rank;
+    if (vector == 0 || vector >= sources.size()) { continue; }
+    const auto source = sources[vector];
+    if (source.rank == 0) { continue; }
+    const auto configured = ((source.core ? core_ : peripheral_) >> source.shift) & 3U;
+    const auto key = (configured << rank_bits) | source.rank;
+    if (configured > mask && key > best) {
+      best = key;
+      winner = vector;
     }
   }
-  return result;
+  if (best == 0) { return {}; }
+  return Request{.vector = winner, .level = (best >> rank_bits) - 1U};
 }
 }

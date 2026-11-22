@@ -16,6 +16,10 @@ public:
   struct Request {
     dsp56300::Word vector = 0; // Relative to VBA.
     unsigned level = 0;
+
+    [[nodiscard]] bool admitted(const dsp56300::Word status) const noexcept {
+      return level >= interrupt_mask(status);
+    }
     bool operator==(const Request &) const = default;
   };
 
@@ -56,7 +60,10 @@ public:
   }
 
 private:
-  [[nodiscard]] unsigned priority(dsp56300::Word vector) const noexcept;
+  [[nodiscard]] static unsigned interrupt_mask(const dsp56300::Word status) noexcept {
+    return (status >> 8U) & 3U;
+  }
+
   dsp56300::Word core_ = 0, peripheral_ = 0;
 };
 }
