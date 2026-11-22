@@ -32,6 +32,8 @@ public:
   // phase; changing PLL factors loses less than 2^-32 of one instrument tick.
   [[nodiscard]] bool advance(std::uint64_t cycles) noexcept;
 
+  [[nodiscard]] std::uint64_t cycles() const noexcept { return cycles_; }
+
   [[nodiscard]] std::uint64_t ticks() const noexcept { return ticks_; }
 
   [[nodiscard]] bool fractional() const noexcept { return fraction_ != 0; }

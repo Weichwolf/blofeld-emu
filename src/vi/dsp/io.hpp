@@ -91,13 +91,10 @@ public:
         preparation_(preparation) {}
 
   [[nodiscard]] std::optional<Coupling::Stamp> timestamp() const noexcept {
+    const auto now = device_cycles();
+    if (now == clock_.cycles()) { return clock_stamp(clock_); }
     auto projected = clock_;
-    if (!projected.advance(device_cycles()) ||
-        projected.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_ - 1) {
-      return {};
-    }
-    return Coupling::Stamp{.ticks = origin_ + projected.ticks(),
-                           .fractional = projected.fractional()};
+    return projected.advance(now) ? clock_stamp(projected) : std::nullopt;
   }
 
   void bind(dsp56300::Core &core, const std::uint64_t epoch) {
@@ -590,7 +587,7 @@ private:
       PeerPort::Sample sample;
       if (!blofeld_dsp_peer_sample(peer_, origin_ + clock_.ticks(), sample)) { return false; }
     }
-    const auto stamp = timestamp();
+    const auto stamp = clock_stamp(clock_);
     if (!stamp) { throw std::overflow_error("DSP coupling timestamp overflows"); }
     const auto limit = coupling_->receiver(*stamp);
     if (!limit) { return false; }
@@ -607,7 +604,9 @@ private:
       PeerPort::Sample input;
       if (peer_->cached_mcu_data(input)) {
         ports_.input(Port::c, {.mask = input.mask, .known = input.known, .value = input.value});
-        peer_read_until_ = clock_.deadline(limit->quiet_until - origin_).value_or(0);
+        peer_read_until_ = limit->quiet_until == limit->until
+                               ? *peer_deadline_
+                               : clock_.deadline(limit->quiet_until - origin_).value_or(0);
       }
     }
     return true;
@@ -620,6 +619,11 @@ private:
 
   [[nodiscard]] std::uint64_t device_cycles() const noexcept {
     return core_->progress().estimated_cycles + idle_;
+  }
+
+  [[nodiscard]] std::optional<Coupling::Stamp> clock_stamp(const Clock &clock) const noexcept {
+    if (clock.ticks() > std::numeric_limits<std::uint64_t>::max() - origin_ - 1) { return {}; }
+    return Coupling::Stamp{.ticks = origin_ + clock.ticks(), .fractional = clock.fractional()};
   }
 
   [[nodiscard]] std::optional<std::uint64_t> local_deadline() const noexcept {
