@@ -649,12 +649,7 @@ private:
   }
 
   [[nodiscard]] std::optional<std::uint64_t> peer_interrupt() const noexcept {
-    std::uint64_t generation = 0;
-    if (peer_ != nullptr &&
-        blofeld_dsp_peer_interrupt(peer_, interrupts_.external_edge(0x10), generation)) {
-      return generation;
-    }
-    return {};
+    return peer_ != nullptr ? peer_->dsp_interrupt(interrupts_.external_edge(0x10)) : std::nullopt;
   }
 
   [[nodiscard]] std::array<dsp56300::Word, 9> interrupt_sources() const noexcept {
@@ -895,7 +890,7 @@ private:
     return true;
   }
 
-  bool interrupted() noexcept {
+  [[gnu::noinline]] bool interrupted() noexcept {
     if (peer_interrupt()) {
       constexpr std::array<dsp56300::Word, 1> source{0x10};
       if (interrupts_.select(source, 0) && interrupts_.select(source, core_->registers().sr)) {

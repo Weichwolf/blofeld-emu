@@ -115,13 +115,4 @@ bool blofeld_dsp_peer_ports(PeerPort *const channel,
 bool blofeld_dsp_peer_write(PeerPort *const channel, const std::uint64_t ticks) noexcept {
   return channel->dsp_write(channel->dsp_data(), ticks);
 }
-
-bool blofeld_dsp_peer_interrupt(const PeerPort *const channel,
-                                const bool edge,
-                                std::uint64_t &generation) noexcept {
-  const auto pending = channel->dsp_interrupt(edge);
-  if (!pending) { return false; }
-  generation = *pending;
-  return true;
-}
 }

@@ -113,21 +113,6 @@ void report_output() {
               peer.read_dsp_data({.mask = byte_mask, .ticks = written}) == data,
           "A future reply read fails without consuming the later original data");
 }
-
-void interrupt_generations() {
-  PeerPort peer;
-  constexpr std::uint64_t untouched = 37;
-  std::uint64_t generation = untouched;
-  require(!blofeld_dsp_peer_interrupt(&peer, true, generation) && generation == untouched,
-          "A missing interrupt neither invents a generation nor overwrites the output");
-  require(peer.mcu_strobe(true) && peer.mcu_strobe(false) &&
-              !blofeld_dsp_peer_interrupt(&peer, false, generation) &&
-              blofeld_dsp_peer_interrupt(&peer, true, generation) && generation == 1,
-          "The binding preserves actual level versus retained-edge admission");
-  require(peer.mcu_strobe(true) && peer.acknowledge_dsp(generation) &&
-              blofeld_dsp_peer_interrupt(&peer, true, generation) && generation == 2,
-          "Acknowledging an older edge cannot erase the newer native request");
-}
 }
 
 int main() try {
@@ -135,7 +120,6 @@ int main() try {
   fifo_wakeup();
   timed_input();
   report_output();
-  interrupt_generations();
 } catch (const std::exception &error) {
 
   std::cerr << error.what() << '\n';

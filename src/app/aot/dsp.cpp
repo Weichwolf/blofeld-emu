@@ -48,7 +48,6 @@ public:
         reinterpret_cast<const void *>(&blofeld_dsp_peer_sample),
         reinterpret_cast<const void *>(&blofeld_dsp_peer_ports),
         reinterpret_cast<const void *>(&blofeld_dsp_peer_write),
-        reinterpret_cast<const void *>(&blofeld_dsp_peer_interrupt),
 #if defined(BLOFELD_CENSUS)
         reinterpret_cast<const void *>(&vi::Census::unit_entry),
         reinterpret_cast<const void *>(&vi::Census::unit_retired),
@@ -95,7 +94,6 @@ private:
       "blofeld_dsp_peer_sample",
       "blofeld_dsp_peer_ports",
       "blofeld_dsp_peer_write",
-      "blofeld_dsp_peer_interrupt",
 #if defined(BLOFELD_CENSUS)
       "blofeld_census_unit_entry",
       "blofeld_census_unit_retired",

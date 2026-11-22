@@ -77,7 +77,10 @@ public:
 
   [[nodiscard]] bool mcu_strobe(bool active) noexcept;
   [[nodiscard]] bool dsp_ready(bool active) noexcept;
-  [[nodiscard]] std::optional<std::uint64_t> dsp_interrupt(bool edge) const noexcept;
+
+  [[nodiscard]] std::optional<std::uint64_t> dsp_interrupt(const bool edge) const noexcept {
+    return to_dsp_.pending(edge);
+  }
   [[nodiscard]] std::optional<std::uint64_t> mcu_interrupt() const noexcept;
   [[nodiscard]] bool acknowledge_dsp(std::uint64_t observed) noexcept;
   [[nodiscard]] bool acknowledge_mcu(std::uint64_t observed) noexcept;
@@ -122,7 +125,14 @@ private:
     std::atomic<std::uint64_t> posted{0}, accepted{0};
     std::atomic<bool> active{false};
     [[nodiscard]] bool update(bool value) noexcept;
-    [[nodiscard]] std::optional<std::uint64_t> pending(bool edge) const noexcept;
+
+    [[nodiscard]] std::optional<std::uint64_t> pending(const bool edge) const noexcept {
+      const auto count = posted.load(std::memory_order_acquire);
+      if (!edge) {
+        return active.load(std::memory_order_acquire) ? std::optional{count} : std::nullopt;
+      }
+      return count > accepted.load(std::memory_order_relaxed) ? std::optional{count} : std::nullopt;
+    }
     [[nodiscard]] bool acknowledge(std::uint64_t observed) noexcept;
   };
 
