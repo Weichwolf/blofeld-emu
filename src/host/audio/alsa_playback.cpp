@@ -259,10 +259,8 @@ struct AlsaPlayback::Impl {
     if (state == SND_PCM_STATE_XRUN) { require(-EPIPE, "ALSA playback underrun"); }
     if (state != SND_PCM_STATE_RUNNING) { throw std::runtime_error("ALSA PCM stopped"); }
     const auto available = snd_pcm_status_get_avail(status);
-    if (available == length) { require(-EPIPE, "ALSA playback ring exhausted"); }
-    if (available > length || length - available > written) {
-      throw std::runtime_error("Invalid ALSA playback ring occupancy");
-    }
+    // The status can retain RUNNING from before ALSA updated its hardware pointer.
+    if (available >= length) { require(-EPIPE, "ALSA playback ring exhausted"); }
     const auto next = written - (length - available);
     const auto delay = snd_pcm_status_get_delay(status);
     if (next < consumed || delay < 0 || delay > static_cast<snd_pcm_sframes_t>(rate)) {
