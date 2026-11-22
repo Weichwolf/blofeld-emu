@@ -16,6 +16,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
 #include <filesystem>
@@ -23,15 +24,23 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace blofeld::app::aot {
 namespace {
 namespace native = host::aot;
 
+constexpr const char *paired_read_symbol = "blofeld_native_media_transfer";
+constexpr const char *paired_read_abi = "llvm19;cc=0;type=i64 (ptr, ptr, i64)";
+using PairedRead = std::uint64_t (*)(dsp56300::Io *,
+                                     const dsp56300::PairedPortTransfer *,
+                                     std::uint64_t) noexcept;
+static_assert(std::is_same_v<decltype(&vi::dsp::blofeld_native_media_transfer), PairedRead>);
+
 class Channels {
 public:
-  explicit Channels(const std::span<const std::byte> bitcode) {
+  Channels(const std::span<const std::byte> bitcode, const bool pair_reads) {
     using namespace vi::dsp;
     const std::array addresses{
         reinterpret_cast<const void *>(&blofeld_dsp_shi_read),
@@ -67,9 +76,17 @@ public:
       signatures_[index] = native::detail::abi(function);
       entries_[index] = {.name = name, .abi = signatures_[index], .address = addresses[index]};
     }
+    if (pair_reads) {
+      entries_[size_++] = {.name = paired_read_symbol,
+                           .abi = paired_read_abi,
+                           .address =
+                               reinterpret_cast<const void *>(&blofeld_native_media_transfer)};
+    }
   }
 
-  [[nodiscard]] std::span<const native::Import> entries() const noexcept { return entries_; }
+  [[nodiscard]] std::span<const native::Import> entries() const noexcept {
+    return std::span(entries_).first(size_);
+  }
 
 private:
   static constexpr std::array names{
@@ -87,7 +104,8 @@ private:
 #endif
   };
   std::array<std::string, names.size()> names_, signatures_;
-  std::array<native::Import, names.size()> entries_;
+  std::array<native::Import, names.size() + 1> entries_;
+  std::size_t size_ = names.size();
 };
 }
 
@@ -99,7 +117,7 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
                                   const dsp56300::CompileOptions::MemoryMode mode) {
   using dsp56300::CallbackBinding;
   using dsp56300::CallbackRole;
-  constexpr std::array callbacks{
+  std::vector callbacks{
       CallbackBinding{.role = CallbackRole::read, .symbol = "blofeld_dsp_read"},
       CallbackBinding{.role = CallbackRole::write, .symbol = "blofeld_dsp_write"},
       CallbackBinding{.role = CallbackRole::bit, .symbol = "blofeld_dsp_bit"},
@@ -110,6 +128,14 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
       CallbackBinding{.role = CallbackRole::retired, .symbol = "blofeld_dsp_retired"},
 #endif
   };
+#if defined(BLOFELD_CENSUS)
+  constexpr bool pair_reads = false;
+#else
+  const bool pair_reads = mode == dsp56300::CompileOptions::MemoryMode::direct;
+#endif
+  if (pair_reads) {
+    callbacks.push_back({.role = CallbackRole::paired_read, .symbol = paired_read_symbol});
+  }
   constexpr std::array region_modes{dsp56300::Word{0}, dsp56300::Word{1} << 11};
   const auto layouts = mode == dsp56300::CompileOptions::MemoryMode::direct
                            ? std::span<const dsp56300::VariantLayout>{}
@@ -128,7 +154,7 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
   }
   const std::array modules{native::Module{.bitcode = semantic.bitcode(), .exports = exports},
                            native::Module{.bitcode = detail::dsp_bindings, .exports = {}}};
-  const Channels channels(detail::dsp_bindings);
+  const Channels channels(detail::dsp_bindings, pair_reads);
 #if defined(__APPLE__) && defined(__aarch64__)
   constexpr auto executable_memory = native::Code::ExecutableMemory::jit;
 #else

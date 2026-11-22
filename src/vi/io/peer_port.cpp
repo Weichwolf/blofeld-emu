@@ -147,6 +147,14 @@ bool PeerPort::dsp_data(const Sample value) noexcept {
   return changed;
 }
 
+bool PeerPort::unchanged_dsp_writes(const Sample sample, const bool ready) const noexcept {
+  return !dsp_held_.load(std::memory_order_acquire) && error() == nullptr &&
+         !reply_.recording.load(std::memory_order_acquire) &&
+         !reply_.active.load(std::memory_order_acquire) &&
+         dsp_.load(std::memory_order_acquire) == encode(sample) &&
+         to_mcu_.active.load(std::memory_order_acquire) == ready;
+}
+
 PeerPort::View PeerPort::view() const noexcept {
   return {.data = dsp_data(),
           .generation = to_mcu_.posted.load(std::memory_order_acquire),

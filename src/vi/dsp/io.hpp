@@ -326,6 +326,19 @@ public:
     return result;
   }
 
+  struct MediaRun {
+    dsp56300::Word destination;
+    std::uint32_t words;
+    std::uint32_t turn_cycles, strobe_tail;
+  };
+
+  struct MediaResult {
+    dsp56300::Word word;
+    std::uint32_t words;
+  };
+
+  [[nodiscard]] std::optional<MediaResult> copy_media_run(MediaRun run) noexcept;
+
   [[nodiscard]] bool waiting_event() const noexcept {
     return waiting_ && (deadline() || interrupts_.select(interrupt_sources(), 0));
   }
@@ -841,6 +854,15 @@ private:
     }
     return origin_ + clock.ticks() + fraction;
   }
+
+  struct MediaTarget {
+    std::span<dsp56300::Word> words;
+    std::span<std::uint8_t> known;
+  };
+
+  [[nodiscard]] std::optional<MediaTarget> media_run_target(MediaRun run) noexcept;
+  [[nodiscard]] std::uint32_t media_run_words(MediaRun run, std::uint64_t now) const noexcept;
+  [[nodiscard]] bool media_ports_are_quiet() const noexcept;
 
   bool update_ports() noexcept {
     const bool esai_connected = esai_1_.connected();

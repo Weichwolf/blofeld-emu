@@ -6,6 +6,11 @@
 
 #include <cstdint>
 
+namespace dsp56300 {
+class Io;
+struct PairedPortTransfer;
+}
+
 namespace blofeld::vi::dsp {
 // Native channel boundaries shared by the concrete adapter and its compiled IR.
 // These functions retain the actual channel owners, synchronization and wakeups.
@@ -27,5 +32,9 @@ blofeld_dsp_peer_sample(PeerPort *channel, std::uint64_t ticks, PeerPort::Sample
 // A missing request leaves generation untouched; generation zero is not a sentinel.
 [[nodiscard]] bool
 blofeld_dsp_peer_interrupt(const PeerPort *channel, bool edge, std::uint64_t &generation) noexcept;
+[[nodiscard]] std::uint64_t
+blofeld_native_media_transfer(dsp56300::Io *owner,
+                              const dsp56300::PairedPortTransfer *transfer,
+                              std::uint64_t request) noexcept;
 }
 }

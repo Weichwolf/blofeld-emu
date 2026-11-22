@@ -33,6 +33,7 @@ public:
   };
 
   [[nodiscard]] View view() const noexcept;
+  [[nodiscard]] bool unchanged_dsp_writes(Sample sample, bool ready) const noexcept;
 
   // MCU owner publishes ordered data/direction changes; full transport waits
   // for actual space without advancing device time. Equal states need no slot.
