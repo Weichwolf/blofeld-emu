@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "aot/dsp.hpp"
 
+#include "aot/artifact.hpp"
 #include "aot/code.hpp"
 #include "aot/llvm.hpp"
 #include "aot/semantic.hpp"
@@ -112,7 +113,8 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
                                   const std::span<const dsp56300::InterruptRequest> interrupts,
                                   const std::span<const dsp56300::CodeTransition> transitions,
                                   const std::filesystem::path &cache,
-                                  const dsp56300::CompileOptions::MemoryMode mode) {
+                                  const dsp56300::CompileOptions::MemoryMode mode,
+                                  const host::aot::Preparation preparation) {
   using dsp56300::CallbackBinding;
   using dsp56300::CallbackRole;
   std::vector callbacks{
@@ -145,7 +147,8 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
                                          .bindings = {},
                                          .memory_mode = mode,
                                          .region_modes = region_modes};
-  const auto semantic = detail::prepare_semantic<dsp56300::Core>(image, options, cache);
+  const auto semantic =
+      detail::prepare_semantic<dsp56300::Core>(image, options, cache, preparation);
   std::vector<native::Export> exports;
   for (const auto symbol : semantic.exports()) {
     exports.push_back({.name = symbol.name, .abi = symbol.abi});
@@ -158,8 +161,8 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
 #else
   constexpr auto executable_memory = native::Code::ExecutableMemory::standard;
 #endif
-  const auto code =
-      std::make_shared<native::Code>(modules, channels.entries(), cache, executable_memory);
+  const auto code = std::make_shared<native::Code>(
+      modules, channels.entries(), cache, executable_memory, preparation);
   std::vector<dsp56300::NativeSymbol> symbols;
   for (const auto symbol : semantic.exports()) {
     symbols.push_back({.name = symbol.name, .address = code->address(symbol.name)});
@@ -192,8 +195,9 @@ vi::dsp::Program prepare_dsp_program(const dsp56300::CodeImage image,
                                      const std::span<const dsp56300::InterruptRequest> interrupts,
                                      const std::span<const dsp56300::CodeTransition> transitions,
                                      const std::filesystem::path &cache,
-                                     const dsp56300::CompileOptions::MemoryMode mode) {
-  return {prepare_dsp(image, memory, interrupts, transitions, cache, mode),
+                                     const dsp56300::CompileOptions::MemoryMode mode,
+                                     const host::aot::Preparation preparation) {
+  return {prepare_dsp(image, memory, interrupts, transitions, cache, mode, preparation),
           image,
           choices,
           transitions,

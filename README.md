@@ -55,11 +55,19 @@ cmake --build --preset strict --target quality --parallel 2
 ## Run
 
 ```sh
+build/release/blofeld-headless --prepare
 build/release/blofeld-headless
 build/release/blofeld-headless --profile /path/to/instrument.profile
 build/release/blofeld-headless --profile /path/to/instrument.profile \
   --midi /path/to/score.mid --wav /path/to/render.wav --tail 5
 ```
+
+Run `--prepare` once per profile after changing firmware, a code catalogue,
+or the emulator build. It prepares and validates the native MCU and DSP objects
+without opening the audio server or booting the instrument. Pass the same
+`--profile` to preparation and playback. Playback loads the prepared objects
+and runs the original reset and boot. Missing or damaged artifacts require
+another preparation.
 
 Offline startup allows 15 seconds of instrument time. The independent host hang
 watchdog defaults to 600 seconds after AOT; select another positive duration with

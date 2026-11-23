@@ -29,7 +29,13 @@ void rejects(const auto &arguments) {
 int main() try {
   using blofeld::app::options;
   const auto live = options(std::array{"--profile", "local.profile"});
-  require(live.profile == "local.profile" && !live.midi && !live.wav, "Profile selects live mode");
+  require(live.profile == "local.profile" && !live.midi && !live.wav && !live.prepare,
+          "Profile selects live mode");
+  const auto prepared = options(std::array{"--profile", "local.profile", "--prepare"});
+  require(prepared.prepare && prepared.profile == live.profile,
+          "Preparation selects the given profile");
+  rejects(std::array{"--prepare", "--prepare"});
+  rejects(std::array{"--prepare", "--midi", "m", "--wav", "w"});
   const auto render = options(std::array{
       "--wav", "out.wav", "--profile", "local.profile", "--tail", "12", "--midi", "score.mid"});
   require(render.wav == "out.wav" && render.midi == "score.mid" && render.tail_seconds == 12 &&

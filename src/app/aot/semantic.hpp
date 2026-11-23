@@ -96,8 +96,13 @@ semantic_inputs(const auto image, const auto options, const std::string_view com
 }
 
 template <class Core>
-auto prepare_semantic(const auto image, const auto options, const std::filesystem::path &cache) {
-  if (cache.empty()) { return Core::lower(image, options); }
+auto prepare_semantic(const auto image,
+                      const auto options,
+                      const std::filesystem::path &cache,
+                      const host::aot::Preparation preparation = host::aot::Preparation::allow) {
+  if (cache.empty() && preparation == host::aot::Preparation::allow) {
+    return Core::lower(image, options);
+  }
   const auto inputs = semantic_inputs(image, options, Core::compiler_identity());
   const host::aot::Artifact entry(cache, inputs.data);
   if (auto bytes = entry.load()) {
@@ -107,6 +112,10 @@ auto prepare_semantic(const auto image, const auto options, const std::filesyste
       // Discard the rejected record before a potentially large cold rebuild.
       bytes.reset();
     }
+  }
+  if (preparation == host::aot::Preparation::load_only) {
+    throw std::runtime_error(
+        "Missing or corrupt semantic AOT image. Run blofeld-headless --prepare.");
   }
   auto semantic = Core::lower(image, options);
   entry.store(semantic.artifact());

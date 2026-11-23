@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "aot/code.hpp"
 
+#include "aot/artifact.hpp"
 #include "aot/link_graph.hpp"
 #include "aot/llvm.hpp"
 #if defined(__APPLE__) && defined(__aarch64__)
@@ -19,9 +20,12 @@
 #include "llvm/ExecutionEngine/Orc/CompileUtils.h"
 #include "llvm/ExecutionEngine/Orc/IRCompileLayer.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/MemoryBuffer.h"
 
 #include <bit>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
@@ -39,6 +43,43 @@
 namespace blofeld::host::aot {
 namespace {
 using detail::Owner;
+using Buffer = Owner<LLVMMemoryBufferRef, LLVMDisposeMemoryBuffer>;
+constexpr const char *module_name = "blofeld-native";
+
+class Capture final : public llvm::ObjectCache {
+public:
+  void notifyObjectCompiled(const llvm::Module *module,
+                            const llvm::MemoryBufferRef object) override {
+    if (module->getModuleIdentifier() != module_name) { return; }
+    const auto data = object.getBuffer();
+    const auto bytes = std::as_bytes(std::span(data.data(), data.size()));
+    data_.assign(bytes.begin(), bytes.end());
+  }
+
+  std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module * /*module*/) override {
+    return {};
+  }
+
+  void publish(const Artifact &artifact) {
+    if (data_.empty()) { throw std::runtime_error("AOT did not emit its native object"); }
+    const auto data = std::move(data_);
+    artifact.store(data);
+  }
+
+private:
+  std::vector<std::byte> data_;
+};
+
+Buffer load_object(const Artifact &artifact) {
+  const auto record = artifact.load();
+  if (!record || record->empty()) { return {}; }
+  auto object = Buffer(LLVMCreateMemoryBufferWithMemoryRangeCopy(
+      reinterpret_cast<const char *>(record->data()), record->size(), module_name));
+  try {
+    if (detail::text_bytes(object.get()) != 0) { return object; }
+  } catch (const std::runtime_error &) { return {}; }
+  return {};
+}
 
 void checked(LLVMErrorRef error) {
   if (error == nullptr) { return; }
@@ -113,7 +154,82 @@ public:
     }
   }
 
-  std::unique_ptr<llvm::ObjectCache> objects;
+  void open(LLVMTargetMachineRef machine,
+            const detail::Imports &bindings,
+            const ExecutableMemory memory,
+            const bool capture) {
+    Owner<LLVMOrcLLJITBuilderRef, LLVMOrcDisposeLLJITBuilder> builder(LLVMOrcCreateLLJITBuilder());
+    platform(builder.get(), capture ? &object : nullptr, source, memory);
+    if (machine != nullptr) {
+      LLVMOrcLLJITBuilderSetJITTargetMachineBuilder(
+          builder.get(), LLVMOrcJITTargetMachineBuilderCreateFromTargetMachine(machine));
+    }
+    LLVMOrcLLJITRef raw = nullptr;
+    auto *failure = LLVMOrcCreateLLJIT(&raw, builder.release());
+    jit.reset(raw);
+    checked(failure);
+    detail::named_dependencies(native(raw));
+    bind_imports(raw, bindings);
+  }
+
+  void compile(const std::span<const Module> modules,
+               const detail::Imports &bindings,
+               const ExecutableMemory memory,
+               const bool capture) {
+    const Owner<LLVMOrcThreadSafeContextRef, LLVMOrcDisposeThreadSafeContext> context(
+        LLVMOrcCreateNewThreadSafeContext());
+    auto *llvm_context = LLVMOrcThreadSafeContextGetContext(context.get());
+    Owner<LLVMModuleRef, LLVMDisposeModule> module(
+        LLVMModuleCreateWithNameInContext(module_name, llvm_context));
+    detail::Exports exports;
+    std::vector<Owner<LLVMModuleRef, LLVMDisposeModule>> inputs;
+    for (const auto &input : modules) {
+      inputs.emplace_back(detail::parse(llvm_context, input, exports));
+      detail::validate_target(inputs.back().get());
+      detail::validate_imports(inputs.back().get(), bindings);
+    }
+    if (exports.empty()) { throw std::invalid_argument("AOT requires declared native exports"); }
+    for (const auto &expected : inputs) {
+      for (const auto &incoming : inputs) {
+        if (expected != incoming) { detail::validate_contracts(expected.get(), incoming.get()); }
+      }
+    }
+    for (auto &input : inputs) { detail::merge(module.get(), std::move(input)); }
+    detail::validate_exports(module.get(), exports);
+    detail::validate_imports(module.get(), bindings);
+    detail::validate_symbols(module.get(), bindings);
+    Owner<LLVMTargetMachineRef, LLVMDisposeTargetMachine> machine(detail::target(module.get()));
+    detail::optimize(module.get(), machine.get(), exports);
+    detail::validate_imports(module.get(), bindings);
+    auto active = bindings;
+    std::erase_if(active, [&](const auto &entry) {
+      return LLVMGetNamedFunction(module.get(), entry.first.c_str()) == nullptr;
+    });
+    detail::validate_symbols(module.get(), active);
+    detail::select_dsp_frame_pointers(module.get());
+    open(machine.release(), bindings, memory, capture);
+    auto *prepared = LLVMOrcCreateNewThreadSafeModule(module.release(), context.get());
+    checked(
+        LLVMOrcLLJITAddLLVMIRModule(jit.get(), LLVMOrcLLJITGetMainJITDylib(jit.get()), prepared));
+  }
+
+  void resolve(const std::span<const Module> modules) {
+    for (const auto &input : modules) {
+      for (const auto entry : input.exports) {
+        LLVMOrcExecutorAddress address = 0;
+        const std::string name(entry.name);
+        checked(LLVMOrcLLJITLookup(jit.get(), &address, name.c_str()));
+        symbols.emplace(name, std::bit_cast<const void *>(address));
+      }
+    }
+    auto &owner = native(jit.get());
+    if (auto initialization = owner.initialize(owner.getMainJITDylib())) {
+      throw std::runtime_error(llvm::toString(std::move(initialization)));
+    }
+    phase = Phase::initialized;
+  }
+
+  Capture object;
   llvm_native_sites::SourceMap source;
   Owner<LLVMOrcLLJITRef, dispose> jit;
   std::map<std::string, const void *, std::less<>> symbols;
@@ -123,57 +239,27 @@ public:
 Code::Code(const std::span<const Module> modules,
            const std::span<const Import> imports,
            const std::filesystem::path &cache,
-           const ExecutableMemory memory)
+           const ExecutableMemory memory,
+           const Preparation preparation)
     : impl_(std::make_unique<Impl>()) {
   const auto bindings = detail::imports(imports);
   detail::initialize();
-  const Owner<LLVMOrcThreadSafeContextRef, LLVMOrcDisposeThreadSafeContext> context(
-      LLVMOrcCreateNewThreadSafeContext());
-  auto *llvm_context = LLVMOrcThreadSafeContextGetContext(context.get());
-  Owner<LLVMModuleRef, LLVMDisposeModule> module(
-      LLVMModuleCreateWithNameInContext("blofeld-native", llvm_context));
-  detail::Exports exports;
-  std::vector<Owner<LLVMModuleRef, LLVMDisposeModule>> inputs;
-  for (const auto &input : modules) {
-    inputs.emplace_back(detail::parse(llvm_context, input, exports));
-    detail::validate_target(inputs.back().get());
-    detail::validate_imports(inputs.back().get(), bindings);
-  }
-  if (exports.empty()) { throw std::invalid_argument("AOT requires declared native exports"); }
-  for (const auto &expected : inputs) {
-    for (const auto &incoming : inputs) {
-      if (expected != incoming) { detail::validate_contracts(expected.get(), incoming.get()); }
+  const auto artifact = detail::native_object(cache, modules, bindings);
+  auto object = load_object(artifact);
+  const bool compiled = !object;
+  if (object) {
+    impl_->open(nullptr, bindings, memory, false);
+    checked(LLVMOrcLLJITAddObjectFile(
+        impl_->jit.get(), LLVMOrcLLJITGetMainJITDylib(impl_->jit.get()), object.release()));
+  } else {
+    if (preparation == Preparation::load_only) {
+      throw std::runtime_error(
+          "Missing or corrupt native AOT object. Run blofeld-headless --prepare.");
     }
+    impl_->compile(modules, bindings, memory, !cache.empty());
   }
-  for (auto &input : inputs) { detail::merge(module.get(), std::move(input)); }
-  detail::validate_exports(module.get(), exports);
-  detail::validate_imports(module.get(), bindings);
-  detail::validate_symbols(module.get(), bindings);
-  Owner<LLVMTargetMachineRef, LLVMDisposeTargetMachine> machine(detail::target(module.get()));
-  impl_->objects = detail::optimize(module, machine.get(), exports, bindings, cache);
-  Owner<LLVMOrcLLJITBuilderRef, LLVMOrcDisposeLLJITBuilder> builder(LLVMOrcCreateLLJITBuilder());
-  platform(builder.get(), impl_->objects.get(), impl_->source, memory);
-  LLVMOrcLLJITBuilderSetJITTargetMachineBuilder(
-      builder.get(), LLVMOrcJITTargetMachineBuilderCreateFromTargetMachine(machine.release()));
-  LLVMOrcLLJITRef raw_jit = nullptr;
-  auto *failure = LLVMOrcCreateLLJIT(&raw_jit, builder.release());
-  impl_->jit.reset(raw_jit);
-  checked(failure);
-  detail::named_dependencies(native(raw_jit));
-  bind_imports(raw_jit, bindings);
-  auto *prepared = LLVMOrcCreateNewThreadSafeModule(module.release(), context.get());
-  checked(LLVMOrcLLJITAddLLVMIRModule(raw_jit, LLVMOrcLLJITGetMainJITDylib(raw_jit), prepared));
-  for (const auto &[name, contract] : exports) {
-    static_cast<void>(contract);
-    LLVMOrcExecutorAddress address = 0;
-    checked(LLVMOrcLLJITLookup(raw_jit, &address, name.c_str()));
-    impl_->symbols.emplace(name, std::bit_cast<const void *>(address));
-  }
-  auto &jit = native(raw_jit);
-  if (auto initialization = jit.initialize(jit.getMainJITDylib())) {
-    throw std::runtime_error(llvm::toString(std::move(initialization)));
-  }
-  impl_->phase = Impl::Phase::initialized;
+  impl_->resolve(modules);
+  if (compiled && !cache.empty()) { impl_->object.publish(artifact); }
 }
 
 Code::~Code() = default;

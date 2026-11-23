@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "aot/artifact.hpp"
 #include "aot/dsp.hpp"
 #include "dsp/boot_rom.hpp"
 #include "dsp/code_source.hpp"
@@ -366,7 +367,8 @@ vi::dsp::Program prepare(const Object &root,
                          const vi::dsp::BootRom boot,
                          const std::span<const DspSource> sources,
                          const std::filesystem::path &cache,
-                         const dsp56300::CompileOptions::MemoryMode mode) {
+                         const dsp56300::CompileOptions::MemoryMode mode,
+                         const host::aot::Preparation preparation) {
   std::vector<Variant> owned;
   std::vector<dsp56300::VariantLayout> layouts;
   for (const auto &value : array(root, "variants")) {
@@ -418,7 +420,7 @@ vi::dsp::Program prepare(const Object &root,
     }
   }
   return prepare_dsp_program(
-      {.variants = source}, choices, layouts, interrupts, transitions, cache, mode);
+      {.variants = source}, choices, layouts, interrupts, transitions, cache, mode, preparation);
 }
 }
 
@@ -427,12 +429,13 @@ vi::dsp::Program prepare_dsp_catalogue(const std::string_view document,
                                        const vi::dsp::BootRom boot,
                                        const std::span<const DspSource> sources,
                                        const std::filesystem::path &cache,
-                                       const dsp56300::CompileOptions::MemoryMode mode) {
+                                       const dsp56300::CompileOptions::MemoryMode mode,
+                                       const host::aot::Preparation preparation) {
   auto parsed = llvm::json::parse(document);
   if (!parsed) { throw std::invalid_argument(llvm::toString(parsed.takeError())); }
   const auto &root = object(*parsed);
   if (number(root, "format") != 1) { invalid("format"); }
   inputs(root, firmware, boot, sources);
-  return prepare(root, firmware, boot, sources, cache, mode);
+  return prepare(root, firmware, boot, sources, cache, mode, preparation);
 }
 }

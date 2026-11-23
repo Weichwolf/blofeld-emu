@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "aot/artifact.hpp"
 #include "aot/code.hpp"
 #include "mcu/program.hpp"
 #include "profile.hpp"
@@ -39,15 +40,21 @@ struct McuSource {
 [[nodiscard]] cpu12::NativeImage
 prepare_mcu(cpu12::CodeImage image,
             std::span<const cpu12::CodeTransition> transitions = {},
-            const std::filesystem::path &cache = {});
+            const std::filesystem::path &cache = {},
+            host::aot::Preparation preparation = host::aot::Preparation::allow);
 [[nodiscard]] vi::mcu::Program
 prepare_mcu_program(cpu12::CodeImage image,
                     std::span<const cpu12::CodeTransition> transitions = {},
-                    const std::filesystem::path &cache = {});
-[[nodiscard]] vi::mcu::Program prepare_mcu_catalogue(std::string_view document,
-                                                     const vi::FirmwareUpdate &firmware,
-                                                     std::span<const McuSource> sources = {},
-                                                     const std::filesystem::path &cache = {});
-[[nodiscard]] vi::mcu::Program load_mcu_program(const Profile &profile);
+                    const std::filesystem::path &cache = {},
+                    host::aot::Preparation preparation = host::aot::Preparation::allow);
+[[nodiscard]] vi::mcu::Program
+prepare_mcu_catalogue(std::string_view document,
+                      const vi::FirmwareUpdate &firmware,
+                      std::span<const McuSource> sources = {},
+                      const std::filesystem::path &cache = {},
+                      host::aot::Preparation preparation = host::aot::Preparation::allow);
+[[nodiscard]] vi::mcu::Program
+load_mcu_program(const Profile &profile,
+                 host::aot::Preparation preparation = host::aot::Preparation::allow);
 
 }

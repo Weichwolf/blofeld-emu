@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "aot/artifact.hpp"
 #include "aot/mcu.hpp"
 #include "mcu/program.hpp"
 #include "storage/firmware.hpp"
@@ -143,7 +144,8 @@ Variant variant(const Object &input,
 vi::mcu::Program prepare_mcu_catalogue(const std::string_view document,
                                        const vi::FirmwareUpdate &firmware,
                                        const std::span<const McuSource> sources,
-                                       const std::filesystem::path &cache) {
+                                       const std::filesystem::path &cache,
+                                       const host::aot::Preparation preparation) {
   auto parsed = llvm::json::parse(document);
   if (!parsed) { throw std::invalid_argument(llvm::toString(parsed.takeError())); }
   const auto &root = object(*parsed);
@@ -171,6 +173,6 @@ vi::mcu::Program prepare_mcu_catalogue(const std::string_view document,
       }
     }
   }
-  return prepare_mcu_program({.variants = variants}, transitions, cache);
+  return prepare_mcu_program({.variants = variants}, transitions, cache, preparation);
 }
 }

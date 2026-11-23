@@ -189,14 +189,15 @@ or component. Borrowed compiler inputs may expire after binding.
 Development and operation may reuse fully validated code artifacts keyed by
 source/variant hashes, core/LLVM pipeline, target/features, generation
 mode and binding ABI. Store relocations, never instance pointers or device-state
-snapshots. Reject corrupt/incompatible artifacts and rebuild before playback.
+snapshots. Prepare corrupt/incompatible artifacts with `--prepare`.
 Keep derived source, IR, objects, catalogues and executables untracked in build/.
 The semantic cache keys the inputs passed to Core::lower. Concrete device IR
 that only joins during native composition belongs to the final cache key.
-Use the build's aot-cache/ for pre-platform optimized bitcode. Validate current
-inputs before lookup; key the composed module, ABI sets, target/features and
-compiler/build pipeline. Verify artifact identity and payload before import.
-Relocate, resolve exports and initialize fresh native instances through ORC.
+Use the build's aot-cache/ for semantic artifacts and relocatable native objects.
+Key objects by ordered module bytes and ABI sets, target/features and the
+compiler/build pipeline. Validate IR before emitting an object. Publish it after
+relocation and initialization succeed. On startup verify its identity and digest,
+then relocate, resolve exports and initialize fresh native instances through ORC.
 Preserve original boot/device effects; caching changes startup, not warm speed.
 
 ### Local MCU catalogue, JSON format 1

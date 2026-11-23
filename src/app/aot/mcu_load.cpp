@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "aot/artifact.hpp"
 #include "aot/mcu.hpp"
 #include "files/read.hpp"
 #include "firmware.hpp"
@@ -46,7 +47,8 @@ Sources load_sources(const std::string_view document, const std::filesystem::pat
 }
 }
 
-vi::mcu::Program load_mcu_program(const Profile &profile) {
+vi::mcu::Program load_mcu_program(const Profile &profile,
+                                  const host::aot::Preparation preparation) {
   if (profile.firmware.empty() || profile.mcu_catalogue.empty()) {
     throw std::invalid_argument("AOT requires firmware and mcu-catalogue profile paths");
   }
@@ -58,6 +60,7 @@ vi::mcu::Program load_mcu_program(const Profile &profile) {
   return prepare_mcu_catalogue(document,
                                load_firmware(profile.firmware),
                                sources,
-                               std::filesystem::path{BLOFELD_AOT_CACHE_DIRECTORY});
+                               std::filesystem::path{BLOFELD_AOT_CACHE_DIRECTORY},
+                               preparation);
 }
 }

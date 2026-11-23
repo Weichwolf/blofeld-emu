@@ -36,7 +36,9 @@ public:
     bool save_storage;
   };
 
-  [[nodiscard]] Result run(vi::VmContext &vm, const host::Signals &signals);
+  [[nodiscard]] Result run(vi::VmContext &vm,
+                           const host::Signals &signals,
+                           std::chrono::steady_clock::time_point launched);
 
 private:
   enum class Phase : std::uint8_t { booting, arming, priming, audio_ready, playing, closed };

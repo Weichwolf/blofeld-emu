@@ -7,6 +7,7 @@
 #include "llvm-c/TargetMachine.h"
 #include "llvm-c/Transforms/PassBuilder.h"
 #include "llvm-c/Types.h"
+#include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Transforms/IPO/Internalize.h"
@@ -59,5 +60,20 @@ void optimize(LLVMModuleRef module, LLVMTargetMachineRef machine, const Exports 
 #endif
   verify(module);
   validate_exports(module, exports);
+}
+
+void select_dsp_frame_pointers(LLVMModuleRef module) {
+#if defined(__linux__) && defined(__x86_64__) && defined(NDEBUG) &&                                \
+    !__has_feature(address_sanitizer) && !__has_feature(thread_sanitizer) &&                       \
+    !__has_feature(undefined_behavior_sanitizer)
+  for (auto &function : *llvm::unwrap(module)) {
+    if (!function.isDeclaration() && function.hasFnAttribute("dsp56300-image-part")) {
+      // Keep RBP available to the allocator. Fault attribution uses the saved PC.
+      function.addFnAttr("frame-pointer", "none");
+    }
+  }
+#else
+  static_cast<void>(module);
+#endif
 }
 }

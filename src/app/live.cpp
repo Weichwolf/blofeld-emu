@@ -165,11 +165,15 @@ void Live::status(const bool terminal) const {
   if (!terminal) { std::cerr << '\n'; }
 }
 
-Live::Result Live::run(vi::VmContext &vm, const host::Signals &signals) {
+Live::Result Live::run(vi::VmContext &vm,
+                       const host::Signals &signals,
+                       const std::chrono::steady_clock::time_point launched) {
   if (vm_ != nullptr) { throw std::logic_error("A live session can only run once"); }
   vm_ = &vm;
   attach_audio_source();
+  const auto booting = std::chrono::steady_clock::now();
   const auto origin = startup(signals);
+  const auto booted = std::chrono::steady_clock::now();
   if (!origin) {
     vm.request_stop();
     const auto reports = vm.wait();
@@ -191,7 +195,10 @@ Live::Result Live::run(vi::VmContext &vm, const host::Signals &signals) {
   while (!vm.finished()) {
     control();
     if (phase_.load(std::memory_order_acquire) == Phase::playing && !announced) {
-      std::cerr << "Live MIDI input active: native audio started.\n";
+      const std::chrono::duration<double> boot = booted - booting;
+      const std::chrono::duration<double> elapsed = std::chrono::steady_clock::now() - launched;
+      std::cerr << "Live MIDI input active: native audio started. Firmware boot=" << boot.count()
+                << " s, startup=" << elapsed.count() << " s\n";
       announced = true;
     }
     discard_midi_replies();
