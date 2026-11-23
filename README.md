@@ -116,9 +116,10 @@ See the [MCU](doc/architecture.md#local-mcu-catalogue-json-format-1) and
 [DSP](doc/architecture.md#local-dsp-catalogue-json-format-1) catalogue contracts.
 
 Live mode uses an independent LCD viewer. SIGINT/SIGTERM requests coordinated
-shutdown. On Linux, start a JACK server at 44.1 kHz with a period of 128 frames
-or less. The client exposes `audio_l`, `audio_r`, `midi_in` and `midi_out`. Use
-the DAW graph or `jack_connect` to route them. For hardware playback:
+shutdown. On Linux, start a real-time JACK server at 44.1 kHz with a period of
+128 frames or less. Enable real-time scheduling for the user running the
+emulator. The client exposes `audio_l`, `audio_r`, `midi_in` and `midi_out`.
+Use the DAW graph or `jack_connect` to route them. For hardware playback:
 
 ```sh
 jack_connect blofeld-emu:audio_l system:playback_1

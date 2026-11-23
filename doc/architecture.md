@@ -508,8 +508,10 @@ frontier, even for an empty cycle. A fixed frame lead covers the PCM queue and
 the guest block. Convert JACK frames to instrument ticks once at admission and
 serialize the bytes through the original DIN interface. Output uses completed
 firmware messages and JACK frame offsets. The server's MIDI port bounds the
-maximum size of a single SysEx event. Device faults and underruns terminate
-the live stream. The callback never waits for PCM or MIDI.
+maximum size of a single SysEx event. A host PCM underrun pads the missing
+frames with silence, counts the event and discards late PCM when it arrives.
+JACK cycle timestamps include skipped periods in the same playback timeline.
+Device faults terminate playback. The callback never waits for PCM or MIDI.
 
 On macOS, use Core Audio device observations to time MIDI.
 Publish coherent bounded-read correlation snapshots: source frame range/index,

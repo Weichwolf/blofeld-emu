@@ -43,6 +43,7 @@ public:
 private:
   enum class Phase : std::uint8_t { booting, arming, priming, audio_ready, playing, closed };
   [[nodiscard]] std::optional<std::uint64_t> startup(const host::Signals &signals);
+  void start_owners();
   [[nodiscard]] bool refill(std::uint64_t required, const std::stop_token &stop);
   [[nodiscard]] bool release_input(const AudioConsumer::InputGrant &grant, std::uint64_t required);
   [[nodiscard]] std::uint64_t arm_input(std::uint64_t origin);

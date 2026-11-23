@@ -10,11 +10,15 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <pthread.h>
+#include <sched.h>
 #include <stdexcept>
 #include <stop_token>
+#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -38,6 +42,19 @@ Live::Live(host::audio::Playback &audio, DisplayPublication &display, const Opti
   }
   const auto &name = audio.grants().sink;
   std::cerr << "JACK ports: " << name << ":{audio_l,audio_r,midi_in,midi_out}\n";
+}
+
+void Live::start_owners() {
+  vm_->start([] {
+    if (::sched_getscheduler(0) != SCHED_OTHER) { return; }
+    // Keep PCM production above normal tasks and below a real-time JACK callback.
+    // NOLINTNEXTLINE(misc-include-cleaner) sched.h declares the POSIX type.
+    const sched_param realtime{.sched_priority = ::sched_get_priority_min(SCHED_RR)};
+    const auto error = ::pthread_setschedparam(::pthread_self(), SCHED_RR, &realtime);
+    if (error != 0 && error != EPERM) {
+      throw std::system_error(error, std::generic_category(), "Set live VM scheduling");
+    }
+  });
 }
 
 void Live::control() {

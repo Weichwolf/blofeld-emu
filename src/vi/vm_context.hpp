@@ -78,7 +78,8 @@ public:
 
   [[nodiscard]] const mcu::StateProbe *state_probe() const noexcept { return state_probe_.get(); }
 #endif
-  void start();
+  using OwnerSetup = void (*)();
+  void start(OwnerSetup setup = nullptr);
 
   [[nodiscard]] bool finished() const noexcept {
     return completed_.load(std::memory_order_acquire) != 0;

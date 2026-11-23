@@ -94,7 +94,7 @@ std::optional<std::uint64_t> Live::startup(const host::Signals &signals) {
   MidiStartup startup;
   static_cast<void>(startup.poll(vm_->midi(), {}));
   const auto started = std::chrono::steady_clock::now();
-  vm_->start();
+  start_owners();
   while (!vm_->finished()) {
     if (signals.wait(startup_poll)) { break; }
     audio_.check();
@@ -125,16 +125,12 @@ bool Live::refill(const std::uint64_t required, const std::stop_token &stop) {
   if (phase_.load(std::memory_order_acquire) == Phase::booting) {
     return port.await_input(required, stop);
   }
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(10);
   while (!stop.stop_requested()) {
     if (const auto known = port.input_limit(); known && *known > required) { return true; }
     audio_.check();
     const auto transfer = phase_.load(std::memory_order_acquire) == Phase::arming;
     const auto grant = transfer ? std::nullopt : consumer_.input_grant(audio_.status());
     if (grant && grant->exclusive > required && release_input(*grant, required)) { return true; }
-    if (std::chrono::steady_clock::now() >= deadline) {
-      throw std::runtime_error("PCM queue did not grant the required instrument time");
-    }
     std::this_thread::sleep_for(input_poll);
   }
   return false;

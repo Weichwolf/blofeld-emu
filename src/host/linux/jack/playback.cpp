@@ -14,6 +14,7 @@
 #include <jack/jack.h>
 #include <jack/midiport.h>
 #include <jack/types.h>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <span>
@@ -116,7 +117,6 @@ struct Playback::Impl {
     if (!self.closed.load(std::memory_order_acquire) &&
         self.frontier.load(std::memory_order_relaxed) != 0) {
       self.underruns.fetch_add(1, std::memory_order_relaxed);
-      self.fail("JACK server xrun");
     }
     return 0;
   }
@@ -173,6 +173,7 @@ struct Playback::Impl {
     if (resetting.load(std::memory_order_acquire)) {
       pcm.discard();
       primed = false;
+      late_frames = 0;
       resetting.store(false, std::memory_order_release);
     }
     if (closed.load(std::memory_order_acquire) ||
@@ -181,14 +182,24 @@ struct Playback::Impl {
       std::ranges::fill(r, 0.0F);
       return;
     }
+    const auto was_primed = primed;
     if (!primed) { primed = pcm.queued() == pcm.capacity(); }
-    if (primed) {
-      const auto copied = pcm.render(l, r);
-      submitted.fetch_add(copied, std::memory_order_relaxed);
-      if (copied != frames) {
-        underruns.fetch_add(1, std::memory_order_relaxed);
-        fail("JACK playback underrun");
+    if (primed || frame != 0) {
+      const auto current = jack_last_frame_time(client.get());
+      if (previous_cycle) {
+        const auto elapsed = current - *previous_cycle;
+        if (elapsed > frames && elapsed < std::numeric_limits<jack_nframes_t>::max() / 2U) {
+          const auto skipped = elapsed - frames;
+          frame += skipped;
+          if (was_primed) { late_frames += skipped; }
+        }
       }
+      previous_cycle = current;
+    }
+    if (primed) {
+      const auto copied = pcm.render(l, r, &late_frames);
+      submitted.fetch_add(copied, std::memory_order_relaxed);
+      if (copied != frames) { underruns.fetch_add(1, std::memory_order_relaxed); }
     } else {
       std::ranges::fill(l, 0.0F);
       std::ranges::fill(r, 0.0F);
@@ -210,7 +221,9 @@ struct Playback::Impl {
   std::atomic<bool> closed{false}, resetting{false};
   std::atomic<const char *> error{nullptr};
   std::atomic<std::uint64_t> frontier{0}, submitted{0}, underruns{0};
+  std::optional<jack_nframes_t> previous_cycle;
   std::uint64_t frame = 0;
+  std::size_t late_frames = 0;
   bool primed = false;
 };
 

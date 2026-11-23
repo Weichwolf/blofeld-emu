@@ -33,9 +33,16 @@ std::size_t RenderBuffer::produce(const std::span<const Frame> frames) {
 }
 
 template <typename Store>
-std::size_t RenderBuffer::render_frames(const std::size_t frames, const Store store) noexcept {
-  const auto tail = tail_.load(std::memory_order_relaxed);
+std::size_t RenderBuffer::render_frames(const std::size_t frames,
+                                        const Store store,
+                                        std::size_t *const late) noexcept {
+  auto tail = tail_.load(std::memory_order_relaxed);
   const auto head = head_.load(std::memory_order_acquire);
+  if (late != nullptr) {
+    const auto expired = std::min(*late, static_cast<std::size_t>(head - tail));
+    tail += expired;
+    *late -= expired;
+  }
   const auto count = std::min(frames, static_cast<std::size_t>(head - tail));
   constexpr float scale = 1.0F / 8388608.0F;
   std::size_t copied = 0;
@@ -51,22 +58,28 @@ std::size_t RenderBuffer::render_frames(const std::size_t frames, const Store st
   }
   for (std::size_t index = count; index < frames; ++index) { store(index, FloatFrame{}); }
   tail_.store(tail + count, std::memory_order_release);
+  if (late != nullptr) { *late += frames - count; }
   return count;
 }
 
-std::size_t RenderBuffer::render(const std::span<FloatFrame> output) noexcept
-    [[clang::nonblocking]] {
-  return render_frames(output.size(), [output](std::size_t index, FloatFrame frame) noexcept {
-    output[index] = frame;
-  });
+std::size_t RenderBuffer::render(const std::span<FloatFrame> output,
+                                 std::size_t *const late) noexcept [[clang::nonblocking]] {
+  return render_frames(
+      output.size(),
+      [output](std::size_t index, FloatFrame frame) noexcept { output[index] = frame; },
+      late);
 }
 
-std::size_t RenderBuffer::render(const std::span<float> left, const std::span<float> right) noexcept
-    [[clang::nonblocking]] {
-  return render_frames(left.size(), [left, right](std::size_t index, FloatFrame frame) noexcept {
-    left[index] = frame[0];
-    right[index] = frame[1];
-  });
+std::size_t RenderBuffer::render(const std::span<float> left,
+                                 const std::span<float> right,
+                                 std::size_t *const late) noexcept [[clang::nonblocking]] {
+  return render_frames(
+      left.size(),
+      [left, right](std::size_t index, FloatFrame frame) noexcept {
+        left[index] = frame[0];
+        right[index] = frame[1];
+      },
+      late);
 }
 
 std::size_t RenderBuffer::queued() const noexcept {

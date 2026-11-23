@@ -81,12 +81,13 @@ void VmContext::request_stop() noexcept {
   stop_.request_stop();
 }
 
-void VmContext::start() {
+void VmContext::start(const OwnerSetup setup) {
   if (started_) { throw std::logic_error("VM execution can only be started once"); }
   started_ = true;
-  mcu_ = std::jthread([this] {
+  mcu_ = std::jthread([this, setup] {
     const auto stop = stop_.get_token();
     try {
+      if (setup != nullptr) { setup(); }
 #if defined(BLOFELD_CENSUS)
       const Census::Scope observed(census_, Census::Actor::mcu);
       const mcu::StateProbe::Scope probed(state_probe_.get());
@@ -106,9 +107,10 @@ void VmContext::start() {
     completed_.fetch_add(1, std::memory_order_release);
     completed_.notify_one();
   });
-  dsp_ = std::jthread([this] {
+  dsp_ = std::jthread([this, setup] {
     const auto stop = stop_.get_token();
     try {
+      if (setup != nullptr) { setup(); }
 #if defined(BLOFELD_CENSUS)
       const Census::Scope observed(census_, Census::Actor::dsp);
 #endif
