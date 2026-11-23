@@ -241,14 +241,6 @@ bool PeerPort::Request::update(const bool value) noexcept {
   return true;
 }
 
-std::optional<std::uint64_t> PeerPort::Request::pending(const bool edge) const noexcept {
-  const auto count = posted.load(std::memory_order_acquire);
-  if (!edge) {
-    return active.load(std::memory_order_acquire) ? std::optional{count} : std::nullopt;
-  }
-  return count > accepted.load(std::memory_order_relaxed) ? std::optional{count} : std::nullopt;
-}
-
 bool PeerPort::Request::acknowledge(const std::uint64_t observed) noexcept {
   if (observed > posted.load(std::memory_order_acquire)) { return false; }
   auto before = accepted.load(std::memory_order_relaxed);
@@ -306,10 +298,6 @@ bool PeerPort::dsp_ready(const bool active) noexcept {
         admission, admission | notified, std::memory_order_acq_rel, std::memory_order_acquire));
   }
   return true;
-}
-
-std::optional<std::uint64_t> PeerPort::dsp_interrupt(const bool edge) const noexcept {
-  return to_dsp_.pending(edge);
 }
 
 std::optional<std::uint64_t> PeerPort::mcu_interrupt() const noexcept {

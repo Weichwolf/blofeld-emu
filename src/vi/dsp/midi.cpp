@@ -31,29 +31,35 @@ bool MidiInput::await_current(const std::stop_token &stop) const noexcept {
   return port_ == nullptr || port_->await_input(time_, stop);
 }
 
-void MidiInput::sample() noexcept {
+void MidiInput::sample(const std::optional<MidiPort::Event> &event) noexcept {
   level_ = true;
-  if (port_ == nullptr) { return; }
-  const auto event = port_->peek_input(receiver);
-  if (!event || event->ticks > time_) { return; }
-  const auto bit = (time_ - event->ticks) / bit_ticks;
-  if (bit == 0) {
-    level_ = false;
-  } else if (bit <= data_bits) {
-    level_ = ((unsigned{event->byte} >> (bit - 1)) & 1U) != 0;
+  deadline_.reset();
+  if (!event) { return; }
+  if (event->ticks > time_) {
+    deadline_ = event->ticks;
+    return;
   }
+  const auto bit = static_cast<unsigned>((time_ - event->ticks) / bit_ticks);
+  constexpr unsigned stop_bit = 1U << (data_bits + 1);
+  constexpr unsigned end = 1U << character_bits;
+  const auto levels = stop_bit | (unsigned{event->byte} << 1U);
+  level_ = ((levels >> bit) & 1U) != 0;
+  // The current level and next transition use the same published character.
+  const auto changes = ((levels ^ (levels << 1U)) & (end - 1U)) | end;
+  const auto first = bit + 1;
+  const auto next = first + static_cast<unsigned>(std::countr_zero(changes >> first));
+  deadline_ = event->ticks + (next * bit_ticks);
 }
 
 void MidiInput::reset(const std::uint64_t now) noexcept {
   time_ = now;
   error_ = nullptr;
-  if (port_ != nullptr) {
-    while (const auto event = port_->peek_input(receiver)) {
-      if (now < event->ticks + MidiPort::byte_ticks) { break; }
-      port_->pop_input(receiver);
-    }
+  auto event = port_ == nullptr ? std::nullopt : port_->peek_input(receiver);
+  while (event && now >= event->ticks + MidiPort::byte_ticks) {
+    port_->pop_input(receiver);
+    event = port_->peek_input(receiver);
   }
-  sample();
+  sample(event);
 }
 
 bool MidiInput::advance(const std::uint64_t now) noexcept {
@@ -62,36 +68,18 @@ bool MidiInput::advance(const std::uint64_t now) noexcept {
     error_ = "DSP DIN-MIDI time moved backwards";
     return false;
   }
-  if (port_ != nullptr) {
-    while (const auto event = port_->peek_input(receiver)) {
-      if (now < event->ticks + MidiPort::byte_ticks) { break; }
-      if (time_ < event->ticks) {
-        error_ = "DSP execution missed a complete DIN-MIDI character";
-        return false;
-      }
-      port_->pop_input(receiver);
+  auto event = port_ == nullptr ? std::nullopt : port_->peek_input(receiver);
+  while (event && now >= event->ticks + MidiPort::byte_ticks) {
+    if (time_ < event->ticks) {
+      error_ = "DSP execution missed a complete DIN-MIDI character";
+      return false;
     }
+    port_->pop_input(receiver);
+    event = port_->peek_input(receiver);
   }
   time_ = now;
-  sample();
+  sample(event);
   return error() == nullptr;
-}
-
-std::optional<std::uint64_t> MidiInput::deadline() const noexcept {
-  if (port_ == nullptr) { return {}; }
-  const auto event = port_->peek_input(receiver);
-  if (!event) { return {}; }
-  if (event->ticks > time_) { return event->ticks; }
-  const auto elapsed = time_ - event->ticks;
-  if (elapsed >= MidiPort::byte_ticks) { return event->ticks + MidiPort::byte_ticks; }
-  const auto first = static_cast<unsigned>(elapsed / bit_ticks) + 1;
-  constexpr unsigned stop_bit = 1U << (data_bits + 1);
-  constexpr unsigned end = 1U << character_bits;
-  const auto levels = stop_bit | (unsigned{event->byte} << 1U);
-  // Wake the DSP at a real transition or when this cursor must retire the byte.
-  const auto changes = ((levels ^ (levels << 1U)) & (end - 1U)) | end;
-  const auto next = first + static_cast<unsigned>(std::countr_zero(changes >> first));
-  return event->ticks + (next * bit_ticks);
 }
 
 const char *MidiInput::error() const noexcept {

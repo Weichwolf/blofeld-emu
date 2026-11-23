@@ -285,11 +285,9 @@ public:
 #endif
       return completed(core_->run_until(core_->progress().estimated_cycles));
     }
-    const auto sources = interrupt_sources();
-    if (interrupts_.select(sources, 0)) {
+    if (const auto request = interrupts_.select(interrupt_sources(), 0)) {
       const auto state = core_->registers();
-      const auto request = interrupts_.select(sources, state.sr);
-      if (request) {
+      if (request->admitted(state.sr)) {
         if (core_->interrupt_ready()) {
           const auto external =
               peer_ != nullptr && request->vector == 0x10 ? peer_interrupt() : std::nullopt;
@@ -505,7 +503,11 @@ private:
 #endif
 
   void advance_waiting() {
-    if (!waiting_ || interrupts_.select(interrupt_sources(), core_->registers().sr)) { return; }
+    if (!waiting_) { return; }
+    if (const auto request = interrupts_.select(interrupt_sources(), 0);
+        request && request->admitted(core_->registers().sr)) {
+      return;
+    }
     if (const auto next = deadline()) {
       idle_ = *next - core_->progress().estimated_cycles;
       if (!synchronize_timers() || !synchronize_midi()) { throw std::runtime_error(error()); }
@@ -649,12 +651,7 @@ private:
   }
 
   [[nodiscard]] std::optional<std::uint64_t> peer_interrupt() const noexcept {
-    std::uint64_t generation = 0;
-    if (peer_ != nullptr &&
-        blofeld_dsp_peer_interrupt(peer_, interrupts_.external_edge(0x10), generation)) {
-      return generation;
-    }
-    return {};
+    return peer_ != nullptr ? peer_->dsp_interrupt(interrupts_.external_edge(0x10)) : std::nullopt;
   }
 
   [[nodiscard]] std::array<dsp56300::Word, 9> interrupt_sources() const noexcept {
@@ -895,10 +892,11 @@ private:
     return true;
   }
 
-  bool interrupted() noexcept {
+  [[gnu::noinline]] bool interrupted() noexcept {
     if (peer_interrupt()) {
       constexpr std::array<dsp56300::Word, 1> source{0x10};
-      if (interrupts_.select(source, 0) && interrupts_.select(source, core_->registers().sr)) {
+      if (const auto request = interrupts_.select(source, 0);
+          request && request->admitted(core_->registers().sr)) {
 #if defined(BLOFELD_CENSUS)
         trace(Census::Event::pending_interrupt);
 #endif

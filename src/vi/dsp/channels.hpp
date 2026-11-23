@@ -29,9 +29,6 @@ blofeld_dsp_peer_sample(PeerPort *channel, std::uint64_t ticks, PeerPort::Sample
                                           bool active) noexcept;
 // Record the currently published output only on an actual PDRC data write.
 [[nodiscard]] bool blofeld_dsp_peer_write(PeerPort *channel, std::uint64_t ticks) noexcept;
-// A missing request leaves generation untouched; generation zero is not a sentinel.
-[[nodiscard]] bool
-blofeld_dsp_peer_interrupt(const PeerPort *channel, bool edge, std::uint64_t &generation) noexcept;
 [[nodiscard]] std::uint64_t
 blofeld_native_media_transfer(dsp56300::Io *owner,
                               const dsp56300::PairedPortTransfer *transfer,

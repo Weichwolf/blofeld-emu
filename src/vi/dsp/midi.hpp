@@ -25,13 +25,15 @@ public:
 
   [[nodiscard]] bool level() const noexcept { return level_; }
 
-  [[nodiscard]] std::optional<std::uint64_t> deadline() const noexcept;
+  [[nodiscard]] std::optional<std::uint64_t> deadline() const noexcept { return deadline_; }
+
   [[nodiscard]] const char *error() const noexcept;
 
 private:
-  void sample() noexcept;
+  void sample(const std::optional<MidiPort::Event> &event) noexcept;
   MidiPort *port_;
   std::uint64_t time_ = 0;
+  std::optional<std::uint64_t> deadline_;
   bool level_ = true;
   const char *error_ = nullptr;
 };
