@@ -10,7 +10,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/SHA256.h"
+#include "llvm/Support/BLAKE3.h"
 
 #include <algorithm>
 #include <array>
@@ -46,7 +46,7 @@ std::span<const std::uint8_t> payload(const std::span<const std::uint8_t> record
     throw std::invalid_argument("AOT cache has an invalid input identity");
   }
   const auto result = record.subspan(header_bytes);
-  const auto digest = llvm::SHA256::hash(llvm::ArrayRef(result.data(), result.size()));
+  const auto digest = llvm::BLAKE3::hash(llvm::ArrayRef(result.data(), result.size()));
   if (!std::ranges::equal(record.subspan(key.size(), key.size()), digest)) {
     throw std::invalid_argument("AOT cache has a corrupt payload");
   }
@@ -57,7 +57,7 @@ void store(const std::filesystem::path &root,
            const std::string &name,
            const Digest &key,
            const std::span<const std::uint8_t> payload) {
-  const auto digest = llvm::SHA256::hash(llvm::ArrayRef(payload.data(), payload.size()));
+  const auto digest = llvm::BLAKE3::hash(llvm::ArrayRef(payload.data(), payload.size()));
   if (payload.size() > maximum_bytes - header_bytes) {
     throw std::length_error("AOT cache exceeds its artifact size limit");
   }
@@ -76,7 +76,7 @@ Artifact native_object(const std::filesystem::path &root,
                        const std::span<const Module> modules,
                        const Imports &imports) {
   if (root.empty()) { return {{}, {}, Artifact::Kind::native}; }
-  llvm::SHA256 hash;
+  llvm::BLAKE3 hash;
   const auto count = [&](const std::uint64_t size) {
     hash.update(llvm::StringRef(reinterpret_cast<const char *>(&size), sizeof(size)));
   };
@@ -111,12 +111,12 @@ Artifact::Artifact(std::filesystem::path root,
     : root_(std::move(root)) {
   if (root_.empty()) { return; }
   if (!root_.is_absolute()) { throw std::invalid_argument("AOT cache must be an absolute path"); }
-  llvm::SHA256 hash;
+  llvm::BLAKE3 hash;
   const auto text = [&](const std::string_view value) {
     hash.update(llvm::StringRef(value.data(), value.size()));
     hash.update(llvm::StringRef("\0", 1));
   };
-  text(kind == Kind::native ? "native-object-1" : "preparation-artifact-1");
+  text(kind == Kind::native ? "native-object-2" : "preparation-artifact-2");
   text(BLOFELD_AOT_PIPELINE);
   const detail::Owner<char *, LLVMDisposeMessage> triple(LLVMGetDefaultTargetTriple());
   const detail::Owner<char *, LLVMDisposeMessage> cpu(LLVMGetHostCPUName());

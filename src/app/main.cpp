@@ -57,6 +57,16 @@ int main(const int argc, char **argv) try {
   const auto mode = blofeld::app::dsp_memory_mode();
   using blofeld::host::aot::Preparation;
   const auto preparation = options.prepare ? Preparation::allow : Preparation::load_only;
+  blofeld::host::FileRevision media_revision;
+  std::future<std::unique_ptr<blofeld::vi::MediaImage>> media_input;
+  if (!options.prepare) {
+    media_input = std::async(std::launch::async, [&profile, &media_revision, offline] {
+      return std::make_unique<blofeld::vi::MediaImage>(
+          blofeld::host::read_file(profile.storage,
+                                   blofeld::vi::MediaImage::max_bytes,
+                                   offline ? nullptr : &media_revision));
+    });
+  }
   const auto loading = std::chrono::steady_clock::now();
   auto mcu = std::async(std::launch::async, [&profile, preparation] {
     return blofeld::app::aot::load_mcu_program(profile, preparation);
@@ -73,14 +83,12 @@ int main(const int argc, char **argv) try {
   }
   if (!offline) { std::cerr << "Native modules loaded in " << modules.count() << " s\n"; }
   blofeld::host::FileRevision device_revision;
-  blofeld::host::FileRevision media_revision;
   const auto device_state = blofeld::host::read_file(profile.device_state,
                                                      blofeld::vi::FlashImage::file_bytes,
                                                      offline ? nullptr : &device_revision);
   auto image =
       std::make_unique<blofeld::vi::FlashImage>(blofeld::vi::FlashImage::decode(device_state));
-  auto media = std::make_unique<blofeld::vi::MediaImage>(blofeld::host::read_file(
-      profile.storage, blofeld::vi::MediaImage::max_bytes, offline ? nullptr : &media_revision));
+  auto media = media_input.get();
   const auto memory =
       mode == dsp56300::CompileOptions::MemoryMode::direct
           ? std::make_unique<blofeld::app::DspMemory>(blofeld::vi::dsp::BootRom::document(boot))

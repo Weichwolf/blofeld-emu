@@ -113,7 +113,8 @@ struct Playback::Impl {
 
   static int xrun(void *context) noexcept {
     auto &self = *static_cast<Impl *>(context);
-    if (self.frontier.load(std::memory_order_relaxed) != 0) {
+    if (!self.closed.load(std::memory_order_acquire) &&
+        self.frontier.load(std::memory_order_relaxed) != 0) {
       self.underruns.fetch_add(1, std::memory_order_relaxed);
       self.fail("JACK server xrun");
     }
@@ -174,7 +175,8 @@ struct Playback::Impl {
       primed = false;
       resetting.store(false, std::memory_order_release);
     }
-    if (error.load(std::memory_order_relaxed) != nullptr) {
+    if (closed.load(std::memory_order_acquire) ||
+        error.load(std::memory_order_relaxed) != nullptr) {
       std::ranges::fill(l, 0.0F);
       std::ranges::fill(r, 0.0F);
       return;

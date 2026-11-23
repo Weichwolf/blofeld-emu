@@ -213,9 +213,9 @@ Live::Result Live::run(vi::VmContext &vm,
   }
   midi_output.request_stop();
   vm.request_stop();
+  audio_.stop();
   const auto reports = vm.wait();
   if (midi_output.joinable()) { midi_output.join(); }
-  audio_.stop();
   publish_display();
   if (terminal) { std::cerr << '\n'; }
   status(false);
