@@ -27,7 +27,7 @@ select them with `BLOFELD_CPU12_ROOT` and `BLOFELD_DSP56300_ROOT`.
 Linux:
 
 ```sh
-sudo apt install clang-19 clang-tidy-19 clang-format-19 llvm-19-dev cmake ninja-build ccache python3-dev libasound2-dev libpulse-dev zlib1g-dev
+sudo apt install clang-19 clang-tidy-19 clang-format-19 llvm-19-dev cmake ninja-build ccache python3-dev libjack-jackd2-dev zlib1g-dev
 cmake --preset release
 cmake --build --preset release --target quality
 ```
@@ -107,15 +107,21 @@ Mismatched inputs or incomplete translation fail before VM execution.
 See the [MCU](doc/architecture.md#local-mcu-catalogue-json-format-1) and
 [DSP](doc/architecture.md#local-dsp-catalogue-json-format-1) catalogue contracts.
 
-Live mode uses the normal host audio output, an external MIDI keyboard and the
-independent viewer. Query actual rates/buffer grants and report native faults,
-queues, underruns and disconnects. SIGINT/SIGTERM requests coordinated shutdown.
-Use `--midi-destination ID` to deliver firmware DIN replies to an ALSA sequencer
-or CoreMIDI destination with timestamps from the native audio epoch. ALSA IDs
-encode the sequencer client and port as `client * 256 + port`.
-On Linux, `--alsa-device hw:CARD,DEVICE` selects a free hardware PCM directly.
-For example, `--alsa-device hw:OCTACAPTURE,0` sends stereo PCM to its first two
-output channels. The command reports the actual period and buffer grant.
+Live mode uses an independent LCD viewer. SIGINT/SIGTERM requests coordinated
+shutdown. On Linux, start a JACK server at 44.1 kHz with a period of 128 frames
+or less. The client exposes `audio_l`, `audio_r`, `midi_in` and `midi_out`. Use
+the DAW graph or `jack_connect` to route them. For hardware playback:
+
+```sh
+jack_connect blofeld-emu:audio_l system:playback_1
+jack_connect blofeld-emu:audio_r system:playback_2
+jack_lsp -A -t
+```
+
+Connect the keyboard or DAW MIDI output to `blofeld-emu:midi_in` and connect
+`blofeld-emu:midi_out` to the destination for firmware replies.
+On macOS, Core Audio uses the system output. Core MIDI routing uses
+`--midi-source ID`, `--midi-destination ID` and `--midi-group 0..15`.
 
 `--midi` and `--wav` are paired. Offline rendering opens no host audio or viewer;
 `--tail` selects whole seconds after serialized MIDI/file end, default five.

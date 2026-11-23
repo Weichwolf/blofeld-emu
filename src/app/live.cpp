@@ -2,157 +2,79 @@
 #include "live.hpp"
 
 #include "audio/consumer.hpp"
-#include "audio/pcm_clock.hpp"
 #include "audio/playback.hpp"
 #include "display/lcd_image.hpp"
 #include "display/publication.hpp"
 #include "io/midi_port.hpp"
 #include "io/pcm_output.hpp"
-#include "midi/input.hpp"
-#include "midi/live_clock.hpp"
-#include "midi/output.hpp"
 #include "midi/startup.hpp"
-#include "midi/ump.hpp"
-#include "options.hpp"
 #include "process/signals.hpp"
 #include "report.hpp"
 #include "vm_context.hpp"
 
-#include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <iomanip>
 #include <ios>
 #include <iostream>
-#include <limits>
-#include <memory>
 #include <optional>
 #include <ratio>
 #include <stdexcept>
 #include <stop_token>
 #include <thread>
 #include <unistd.h>
-#include <utility>
 
 namespace blofeld::app {
 namespace {
 constexpr std::chrono::milliseconds startup_poll{1}, control_poll{10};
+#if defined(__APPLE__)
 constexpr std::chrono::microseconds input_poll{250};
-constexpr std::size_t packet_batch = 1024;
+#else
+constexpr std::chrono::microseconds input_poll{25};
+#endif
 
 constexpr const char *yes_no(const bool value) noexcept {
   return value ? "yes" : "no";
 }
 
-std::uint64_t host_time(const PcmClock::Point clock, const std::uint64_t tick) {
-  const auto later = tick >= clock.ticks;
-  const auto ticks = later ? tick - clock.ticks : clock.ticks - tick;
-  using Nanoseconds = std::ratio<std::nano::den, vi::MidiPort::reference_hz>;
-  constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
-  if (ticks > maximum / Nanoseconds::num) {
-    throw std::overflow_error("MIDI output time exceeds the audio clock range");
-  }
-  const auto distance = ticks * Nanoseconds::num / Nanoseconds::den;
-  if (distance > (later ? maximum - clock.host_ns : clock.host_ns)) {
-    throw std::overflow_error("MIDI output time exceeds the host clock range");
-  }
-  return later ? clock.host_ns + distance : clock.host_ns - distance;
 }
 
-std::size_t queue_grant(const host::audio::Grants &grants) {
+void Live::print_audio_grants() const {
+  const auto &grants = audio_.grants();
   std::cerr << "Audio: s24-in-32 stereo " << grants.rate << "Hz -> " << grants.sink_format << ' '
             << grants.sink_rate << "Hz on " << grants.sink << "; buffer=" << grants.target_frames
             << " max=" << grants.maximum_frames;
   if (grants.minimum_request_frames) { std::cerr << " quantum=" << *grants.minimum_request_frames; }
   std::cerr << '\n';
-  if (!grants.position_history_frames || *grants.position_history_frames == 0 ||
-      !grants.maximum_position_uncertainty_ns) {
-    throw std::runtime_error("Live MIDI requires native positions, history and uncertainty grants");
-  }
-  return grants.maximum_frames;
-}
-}
-
-Live::Live(host::audio::Playback &audio, DisplayPublication &display, const Options &options)
-    : audio_(audio),
-      display_(display),
-      consumer_(audio, true),
-      clock_({.rate = audio.grants().rate,
-              .queue_frames = queue_grant(audio.grants()),
-              .uncertainty_ns = audio.grants().maximum_position_uncertainty_ns.value_or(0)}),
-      source_id_(options.midi_source),
-      group_(options.midi_group) {
-  std::cerr << "Live MIDI uses the native audio playhead; physical key-to-output latency is "
-               "unmeasured.\n";
-  connect();
-  if (options.midi_destination) {
-    midi_output_.emplace(*options.midi_destination);
-    std::cerr << "MIDI output: ID=" << *options.midi_destination << '\n';
-  }
-}
-
-void Live::connect() {
-  auto sources = host::midi::Input::sources();
-  const auto selected = std::ranges::find_if(sources, [&](const auto &source) {
-    return source_id_ ? source.id == *source_id_ : sources.size() == 1;
-  });
-  if (selected != sources.end()) {
-    input_ = std::make_unique<host::midi::Input>(
-        host::midi::Input::Route{.source = selected->id, .group = group_});
-    std::cerr << "MIDI input: " << selected->name << " ID=" << selected->id
-              << " group=" << static_cast<unsigned>(group_) << '\n';
-    active_input_.store(input_.get(), std::memory_order_release);
-    return;
-  }
-  if (!sources_ || !std::ranges::equal(*sources_, sources, [](const auto &left, const auto &right) {
-        return left.id == right.id && left.name == right.name;
-      })) {
-    std::cerr << "Waiting for native MIDI source; select an ID with --midi-source if ambiguous.\n";
-    for (const auto &source : sources) {
-      std::cerr << "MIDI source: " << source.id << ' ' << source.name << '\n';
-    }
-    sources_ = std::move(sources);
-  }
-}
-
-void Live::control() {
-  publish_display();
-  const auto now = std::chrono::steady_clock::now();
-  if (!input_ && now >= next_connect_) {
-    next_connect_ = now + std::chrono::seconds(1);
-    connect();
-  }
 }
 
 vi::PcmOutput Live::output() noexcept {
+  return {
+      .owner = this,
+      .write =
+          [](void *owner, const vi::PcmOutput::Block block, const std::stop_token &stop) {
+            auto &live = *static_cast<Live *>(owner);
+            auto &port = live.vm_->midi();
+            if (!block.ticks.empty() && !port.prepare_audio(block.ticks.back(), stop)) {
+              return false;
+            }
+            const auto output = live.consumer_.output();
+            return output.write(output.owner, block, stop);
+          },
+      .close =
+          [](void *owner) noexcept {
+            auto &live = *static_cast<Live *>(owner);
+            const auto output = live.consumer_.output();
+            output.close(output.owner);
+          },
 #if defined(__APPLE__)
-  constexpr auto submit_partial = +[](void *owner, const std::size_t pending) noexcept {
-    return static_cast<const Live *>(owner)->audio_.fills_render_quantum(pending);
-  };
-#else
-  constexpr decltype(vi::PcmOutput::submit_partial) submit_partial = nullptr;
+      .submit_partial =
+          [](void *owner, const auto pending) noexcept {
+            return static_cast<const Live *>(owner)->audio_.fills_render_quantum(pending);
+          },
 #endif
-  return {.owner = this,
-          .write =
-              [](void *owner, const vi::PcmOutput::Block block, const std::stop_token &stop) {
-                auto &live = *static_cast<Live *>(owner);
-                auto &port = live.vm_->midi();
-                if (!block.ticks.empty() && !port.prepare_audio(block.ticks.back(), stop)) {
-                  return false;
-                }
-                const auto output = live.consumer_.output();
-                return output.write(output.owner, block, stop);
-              },
-          .close =
-              [](void *owner) noexcept {
-                auto &live = *static_cast<Live *>(owner);
-                const auto output = live.consumer_.output();
-                output.close(output.owner);
-              },
-          .submit_partial = submit_partial};
+  };
 }
 
 void Live::publish_display() {
@@ -168,17 +90,6 @@ void Live::publish_display() {
   }
 }
 
-void Live::discard(const std::uint64_t now) {
-  auto *input = active_input_.load(std::memory_order_acquire);
-  if (input == nullptr) { return; }
-  for (std::size_t count = 0; count < packet_batch; ++count) {
-    if (!pending_) { pending_ = input->read(); }
-    if (!pending_ || pending_->timestamp > now) { return; }
-    ignored_ += pending_->size;
-    pending_.reset();
-  }
-}
-
 std::optional<std::uint64_t> Live::startup(const host::Signals &signals) {
   MidiStartup startup;
   static_cast<void>(startup.poll(vm_->midi(), {}));
@@ -187,7 +98,7 @@ std::optional<std::uint64_t> Live::startup(const host::Signals &signals) {
   while (!vm_->finished()) {
     if (signals.wait(startup_poll)) { break; }
     audio_.check();
-    discard(host::midi::Input::now());
+    discard();
     control();
     const auto origin = startup.poll(vm_->midi(), this, [](void *owner) noexcept {
       const auto &live = *static_cast<Live *>(owner);
@@ -209,125 +120,24 @@ std::optional<std::uint64_t> Live::startup(const host::Signals &signals) {
   return {};
 }
 
-std::uint64_t Live::receive(host::midi::Input &input,
-                            const std::uint64_t committed,
-                            const AudioConsumer::InputGrant &grant,
-                            const std::uint64_t now) {
-  auto &port = vm_->midi();
-  const auto exclusive = grant.exclusive;
-  for (;;) {
-    if (!pending_) { pending_ = input.read(); }
-    if (!pending_ || pending_->timestamp > now) { return exclusive; }
-    if (pending_->timestamp < ready_host_ns_) {
-      ignored_ += pending_->size;
-      pending_.reset();
-      continue;
-    }
-    const auto intended = clock_.correlate(pending_->timestamp, grant.audio_epoch);
-    const auto requested = std::max(last_requested_, intended.value_or(committed));
-    if (requested >= exclusive) { return exclusive; }
-    const auto admission = port.stage_input(pending_->data(), requested);
-    if (admission.status == vi::MidiPort::InputStatus::full) {
-      return std::min(exclusive, admission.tick);
-    }
-    if (admission.status == vi::MidiPort::InputStatus::refused) {
-      const auto *error = port.error();
-      throw std::runtime_error(error != nullptr ? error : "Live MIDI admission failed");
-    }
-    if (!intended) {
-      ++uncorrelated_packets_;
-    } else if (admission.tick > *intended) {
-      ++late_packets_;
-      maximum_late_ticks_ = std::max(maximum_late_ticks_, admission.tick - *intended);
-    }
-    last_requested_ = requested;
-    received_ += pending_->size;
-    pending_.reset();
-  }
-}
-
-void Live::release_input(const AudioConsumer::InputGrant &grant, const std::uint64_t required) {
-  auto &port = vm_->midi();
-  const auto known = port.input_limit();
-  if (!known) { throw std::logic_error("Live MIDI lost its exclusive audio frontier"); }
-  if (grant.playhead) { clock_.observe(*grant.playhead); }
-  const bool ready = grant.started || phase_.load(std::memory_order_acquire) != Phase::priming;
-  auto *const input = ready ? active_input_.load(std::memory_order_acquire) : nullptr;
-  const auto cutoff =
-      input == nullptr ? grant.exclusive : receive(*input, *known, grant, host::midi::Input::now());
-  if (cutoff <= required || !port.advance_input(cutoff)) {
-    const auto *error = port.error();
-    throw std::runtime_error(
-        error != nullptr ? error : "Neither MIDI receiver can retire input before the audio grant");
-  }
-  if (ready) {
-    phase_.store(input == nullptr ? Phase::audio_ready : Phase::playing, std::memory_order_release);
-  }
-}
-
 bool Live::refill(const std::uint64_t required, const std::stop_token &stop) {
   auto &port = vm_->midi();
   if (phase_.load(std::memory_order_acquire) == Phase::booting) {
     return port.await_input(required, stop);
   }
-  const auto deadline =
-      std::chrono::steady_clock::now() + std::chrono::nanoseconds(LiveClock::maximum_gap_ns);
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(10);
   while (!stop.stop_requested()) {
     if (const auto known = port.input_limit(); known && *known > required) { return true; }
     audio_.check();
     const auto transfer = phase_.load(std::memory_order_acquire) == Phase::arming;
     const auto grant = transfer ? std::nullopt : consumer_.input_grant(audio_.status());
-    if (grant && grant->exclusive > required) {
-      release_input(*grant, required);
-      return true;
-    }
+    if (grant && grant->exclusive > required && release_input(*grant, required)) { return true; }
     if (std::chrono::steady_clock::now() >= deadline) {
       throw std::runtime_error("PCM queue did not grant the required instrument time");
     }
     std::this_thread::sleep_for(input_poll);
   }
   return false;
-}
-
-void Live::send_midi(host::midi::Output &output, const std::stop_token &stop) {
-  host::midi::DinEncoder encoder(group_);
-  auto &port = vm_->midi();
-  while (!stop.stop_requested() && port.await_output(stop)) {
-    const auto event = port.read_output();
-    if (!event) { continue; }
-    const auto packets = encoder.push(event->byte);
-    if (packets.size == 0) { continue; }
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::nanoseconds(LiveClock::maximum_gap_ns);
-    auto clock = consumer_.clock();
-    while (!clock && !stop.stop_requested()) {
-      if (std::chrono::steady_clock::now() >= deadline) {
-        throw std::runtime_error("Original MIDI output needs a native audio clock");
-      }
-      std::this_thread::sleep_for(input_poll);
-      clock = consumer_.clock();
-    }
-    if (!clock) { return; }
-    output.send(packets.data(), host_time(*clock, event->ticks));
-  }
-}
-
-std::jthread Live::output_worker() {
-  if (!midi_output_) { return {}; }
-  return std::jthread([this, output = &*midi_output_](const std::stop_token &stop) {
-    try {
-      send_midi(*output, stop);
-    } catch (const std::exception &error) {
-      std::cerr << "MIDI output stopped: " << error.what() << '\n';
-      auto &port = vm_->midi();
-      while (port.await_output(stop)) { static_cast<void>(port.read_output()); }
-    }
-  });
-}
-
-void Live::discard_midi_replies() {
-  if (midi_output_) { return; }
-  while (vm_->midi().read_output()) {}
 }
 
 void Live::status(const bool terminal) const {
@@ -355,27 +165,6 @@ void Live::status(const bool terminal) const {
   if (!terminal) { std::cerr << '\n'; }
 }
 
-void Live::attach_audio_source() {
-  vm_->midi().audio_source({
-      .owner = this,
-      .refill =
-          [](void *owner, const std::uint64_t tick, const std::stop_token &stop) {
-            return static_cast<Live *>(owner)->refill(tick, stop);
-          },
-#if defined(__APPLE__)
-      .before_mcu_wait =
-          [](void *owner, std::uint64_t) noexcept {
-            auto &live = *static_cast<Live *>(owner);
-            if (!live.mcu_wake_.schedule()) { live.vm_->request_stop(); }
-          },
-      .before_checkpoint_wait =
-          [](void *owner, const vi::CheckpointWait wait) noexcept {
-            return static_cast<Live *>(owner)->mcu_wake_.wait_checkpoint(wait);
-          },
-#endif
-  });
-}
-
 Live::Result Live::run(vi::VmContext &vm, const host::Signals &signals) {
   if (vm_ != nullptr) { throw std::logic_error("A live session can only run once"); }
   vm_ = &vm;
@@ -388,17 +177,9 @@ Live::Result Live::run(vi::VmContext &vm, const host::Signals &signals) {
     return {.status = report_execution(reports) ? 2 : 1, .save_storage = false};
   }
   consumer_.begin_at(*origin);
-  ready_host_ns_ = host::midi::Input::now();
-#if defined(__APPLE__)
-  mcu_wake_.start(audio_.device_period());
-  vm.midi().begin_rendering(*origin);
-#endif
+  const auto priming_cutoff = arm_input(*origin);
   phase_.store(Phase::arming, std::memory_order_release);
   std::cerr << "Firmware ready: original MIDI identity and PCM; musical origin=" << *origin << '\n';
-  if (*origin > std::numeric_limits<std::uint64_t>::max() - clock_.prime_ticks()) {
-    throw std::overflow_error("Live priming timeline exhausted");
-  }
-  const auto priming_cutoff = *origin + clock_.prime_ticks();
   if (!vm.midi().advance_input(priming_cutoff)) {
     throw std::runtime_error("Cannot admit live priming PCM");
   }
@@ -410,8 +191,7 @@ Live::Result Live::run(vi::VmContext &vm, const host::Signals &signals) {
   while (!vm.finished()) {
     control();
     if (phase_.load(std::memory_order_acquire) == Phase::playing && !announced) {
-      std::cerr << "Live MIDI input active: native audio started; correlation-budget="
-                << clock_.uncertainty_ns() << "ns.\n";
+      std::cerr << "Live MIDI input active: native audio started.\n";
       announced = true;
     }
     discard_midi_replies();
@@ -437,11 +217,9 @@ Live::Result Live::run(vi::VmContext &vm, const host::Signals &signals) {
   std::cerr << "Live MIDI bytes admitted=" << received_ << " pre-live=" << ignored_
             << " late-packets=" << late_packets_ << " without-correlation=" << uncorrelated_packets_
             << " maximum-late-ticks=" << maximum_late_ticks_
-            << " clock-ready=" << yes_no(clock_.has_observation())
-            << " input-active=" << yes_no(playing) << '\n';
-#if defined(__APPLE__)
-  mcu_wake_.check();
-#endif
+            << " clock-ready=" << yes_no(clock_ready()) << " input-active=" << yes_no(playing)
+            << '\n';
+  check_platform();
   if (!report_execution(reports)) {
     audio_.check();
     return {.status = 1, .save_storage = false};

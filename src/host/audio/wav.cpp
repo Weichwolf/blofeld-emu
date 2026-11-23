@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "audio/wav.hpp"
 
-#include "audio/buffer.hpp"
+#include "audio/pcm_frame.hpp"
 
 #include <algorithm>
 #include <array>

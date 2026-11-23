@@ -5,7 +5,9 @@
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#if defined(__APPLE__)
 #include <limits>
+#endif
 #include <stdexcept>
 
 namespace {
@@ -28,15 +30,6 @@ int main() try {
   using blofeld::app::options;
   const auto live = options(std::array{"--profile", "local.profile"});
   require(live.profile == "local.profile" && !live.midi && !live.wav, "Profile selects live mode");
-#if defined(__linux__)
-  const auto direct = options(std::array{"--profile", "p", "--alsa-device", "hw:Card,0"});
-  require(live.alsa_device.empty() && direct.alsa_device == "hw:Card,0",
-          "Select direct hardware without changing the default session route");
-  rejects(std::array{"--alsa-device", "plughw:Card,0"});
-  rejects(std::array{"--alsa-device", "hw:"});
-  rejects(std::array{"--alsa-device", "hw:A,0", "--alsa-device", "hw:B,0"});
-  rejects(std::array{"--alsa-device", "hw:A,0", "--midi", "m", "--wav", "w"});
-#endif
   const auto render = options(std::array{
       "--wav", "out.wav", "--profile", "local.profile", "--tail", "12", "--midi", "score.mid"});
   require(render.wav == "out.wav" && render.midi == "score.mid" && render.tail_seconds == 12 &&
@@ -53,6 +46,7 @@ int main() try {
   rejects(std::array{"--profile", "p", "--midi", "m", "--wav", "w", "--startup-watchdog", "0"});
   rejects(std::array{
       "--midi", "m", "--wav", "w", "--startup-watchdog", "1", "--startup-watchdog", "2"});
+#if defined(__APPLE__)
   const auto routed = options(std::array{"--profile",
                                          "p",
                                          "--midi-group",
@@ -73,6 +67,7 @@ int main() try {
   rejects(std::array{"--midi-source", "1", "--midi", "m", "--wav", "w"});
   rejects(std::array{"--midi-destination", "1", "--midi", "m", "--wav", "w"});
   rejects(std::array{"--midi-group", "0", "--midi", "m", "--wav", "w"});
+#endif
   rejects(std::array{"--profile"});
   rejects(std::array{"--profile", "p", "--midi", "m"});
   rejects(std::array{"--profile", "p", "--wav", "w"});

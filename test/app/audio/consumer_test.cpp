@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "audio/buffer.hpp"
 #include "audio/consumer.hpp"
 #include "audio/pcm_clock.hpp"
+#include "audio/pcm_frame.hpp"
 #include "audio/playback.hpp"
 #include "audio/render_position.hpp"
 #include "io/pcm_output.hpp"

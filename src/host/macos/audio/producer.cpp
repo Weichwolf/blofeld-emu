@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "audio/deadline_coreaudio.hpp"
 #include "audio/playback.hpp"
+#include "macos/audio/deadline_coreaudio.hpp"
 
 #include <AudioToolbox/AudioWorkInterval.h>
 #include <array>

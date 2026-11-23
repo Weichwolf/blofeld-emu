@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "audio/buffer.hpp"
+#include "audio/pcm_frame.hpp"
 #include "audio/render_position.hpp"
+
+#if defined(__linux__)
+#include "midi/ump.hpp"
+#endif
 
 #include <chrono>
 #include <cstddef>
@@ -35,10 +39,6 @@ struct PlaybackStatus {
 
 // Push-mode native client. One producer supplies complete stereo frames. The
 // I/O owner handles device events; render callbacks only consume prepared frames.
-#if defined(__linux__)
-class AlsaPlayback;
-#endif
-
 class Playback {
 public:
   // Darwin permanently opts the dedicated producer thread out of QoS scheduling.
@@ -60,9 +60,6 @@ public:
   };
 
   explicit Playback(unsigned rate, std::string_view name = "Virtual instrument");
-#if defined(__linux__)
-  Playback(unsigned rate, std::string_view name, std::string_view alsa_device);
-#endif
   ~Playback();
   Playback(const Playback &) = delete;
   Playback &operator=(const Playback &) = delete;
@@ -76,13 +73,15 @@ public:
 #if defined(__APPLE__)
   [[nodiscard]] std::chrono::nanoseconds device_period() const noexcept;
   [[nodiscard]] bool fills_render_quantum(std::size_t pending) const noexcept;
+#elif defined(__linux__)
+  // Frame zero starts the first live JACK cycle. The frontier starts the next cycle.
+  [[nodiscard]] std::uint64_t midi_frontier() const noexcept;
+  [[nodiscard]] std::optional<midi::Packet> read_midi(std::uint64_t before) noexcept;
+  void write_midi(std::span<const std::uint8_t> message, std::uint64_t frame);
 #endif
 
 private:
   struct Impl;
   std::unique_ptr<Impl> impl_;
-#if defined(__linux__)
-  std::unique_ptr<AlsaPlayback> alsa_;
-#endif
 };
 }

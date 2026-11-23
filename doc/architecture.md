@@ -499,19 +499,18 @@ on its owner before thread exit, including unwinding. Reject invalid, repeated o
 discontinuous render intervals before consuming queued PCM. Reset establishes a
 new timeline; a failed stream must reopen. Join callbacks before state teardown.
 
-Linux uses a dedicated audio owner. A selected direct ALSA hardware PCM uses
-nonblocking writes, exact sample format/rate and granted period/ring sizes.
-Send stereo PCM on the first two hardware channels and zero any additional
-channels. Derive consumption from actual ALSA ring occupancy, with monotonic
-status timestamps and bounded query uncertainty. Drop/prepare on reset;
-an exhausted ring is terminal. Log the granted device period.
-The default PulseAudio route uses actual server format/buffer grants,
-priming before uncork and cork/flush on reset. Backpressure stays outside native
-callbacks. Explicit asynchronous timing requests supply raw consumption indices
-within measured send/receipt bounds; reject corrupt/backwards/unsubmitted indices,
-and stopped consumption. Drop overdue timing queries while playback continues.
-Use only bounded real observations to correlate host MIDI time.
+Linux uses one JACK client with two audio outputs and bidirectional MIDI.
+The callback drains a preallocated stereo queue and converts signed 24-bit
+samples to exact float32. It copies incoming MIDI to a bounded queue with the
+frame offset from the current JACK cycle and publishes the completed input
+frontier, even for an empty cycle. A fixed frame lead covers the PCM queue and
+the guest block. Convert JACK frames to instrument ticks once at admission and
+serialize the bytes through the original DIN interface. Output uses completed
+firmware messages and JACK frame offsets. The server's MIDI port bounds the
+maximum size of a single SysEx event. Device faults and underruns terminate
+the live stream. The callback never waits for PCM or MIDI.
 
+On macOS, use Core Audio device observations to time MIDI.
 Publish coherent bounded-read correlation snapshots: source frame range/index,
 native epoch, monotonic time and uncertainty. Retain enough accepted original frame
 completion times for the granted maximum lookback; never interpolate guest time
@@ -528,11 +527,6 @@ realtime bytes interleave. Reject malformed/backwards/missing timestamps and
 unsupported protocols. Keep the first owned CFRunLoop/client alive, dispose
 callbacks before storage, and detect selected-source disappearance independently
 of unrelated endpoint changes.
-
-Linux binds ALSA sequencer UAPI directly: prefer MIDI1 UMP, otherwise adapt legacy
-events with group0. Bound kernel and decoded queues. A dedicated owner records
-CLOCK_MONOTONIC receipt points and handles poll cancellation/disconnect. Do not
-reinterpret foreign queue-relative timestamps as monotonic hardware arrival.
 
 ## Display and persistent state
 
@@ -589,7 +583,7 @@ designs without importing a foreign core or changing reference checkouts:
 - LLVM19 LLJIT: native initialization, relocation and resource lifetime.
 - Misra, Distributed Discrete-Event Simulation, sections3-4: channel bounds,
   deadlock and demand-driven progress.
-- Apple CoreAudio/CoreMIDI/audio-workgroup, ALSA UAPI and PulseAudio contracts:
+- Apple CoreAudio/CoreMIDI/audio-workgroup and JACK contracts:
   host scheduling, timestamps, buffer grants and lifecycle.
 
 Host API references:
@@ -597,6 +591,5 @@ Host API references:
 [render callback](https://developer.apple.com/documentation/audiotoolbox/aurendercallback),
 [audio workgroups](https://developer.apple.com/documentation/audiotoolbox/understanding-audio-workgroups),
 [CoreMIDI input](https://developer.apple.com/documentation/coremidi/midireceiveblock),
-[ALSA sequencer](https://www.alsa-project.org/alsa-doc/alsa-lib/seq.html),
-[ALSA UAPI](https://github.com/torvalds/linux/blob/v6.12/include/uapi/sound/asequencer.h),
-[PulseAudio timing](https://www.freedesktop.org/software/pulseaudio/doxygen/structpa__timing__info.html).
+[JACK audio callback](https://jackaudio.org/api/group__ClientCallbacks.html),
+[JACK MIDI](https://jackaudio.org/api/group__MIDIAPI.html).

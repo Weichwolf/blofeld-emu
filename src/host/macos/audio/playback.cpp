@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "audio/buffer.hpp"
-#include "audio/device_buffer.hpp"
 #include "audio/playback.hpp"
+
+#include "audio/pcm_frame.hpp"
 #include "audio/render_buffer.hpp"
 #include "audio/render_position.hpp"
 #include "audio/render_timeline.hpp"
+#include "macos/audio/device_buffer.hpp"
 
 #include <AudioToolbox/AUComponent.h>
 #include <AudioToolbox/AudioComponent.h>

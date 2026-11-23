@@ -15,11 +15,10 @@
 namespace blofeld::app {
 namespace {
 struct Provided {
-  bool profile = false, tail = false, group = false, watchdog = false;
-};
-
-struct Argument {
-  std::string_view key, value;
+  bool profile = false, tail = false, watchdog = false;
+#if defined(__APPLE__)
+  bool group = false;
+#endif
 };
 
 template <typename T> T number(const std::string_view value, const char *message) {
@@ -31,17 +30,8 @@ template <typename T> T number(const std::string_view value, const char *message
   return result;
 }
 
-bool live_route(Options &result, Provided &provided, const Argument argument) {
-  const auto [key, value] = argument;
-#if defined(__linux__)
-  if (key == "--alsa-device" && result.alsa_device.empty()) {
-    if (!value.starts_with("hw:") || value.size() == 3) {
-      throw std::invalid_argument("--alsa-device requires an ALSA hw: PCM device");
-    }
-    result.alsa_device = value;
-    return true;
-  }
-#endif
+#if defined(__APPLE__)
+bool live_route(Options &result, Provided &provided, std::string_view key, std::string_view value) {
   if (key == "--midi-source" && !result.midi_source) {
     result.midi_source = number<std::int32_t>(value, "--midi-source requires a signed native ID");
     return true;
@@ -59,15 +49,14 @@ bool live_route(Options &result, Provided &provided, const Argument argument) {
   return true;
 }
 
-void validate(const Options &result, const Provided &provided) {
-#if defined(__linux__)
-  if (!result.alsa_device.empty() && (result.midi || result.wav)) {
-    throw std::invalid_argument("Direct ALSA PCM is only available in live mode");
-  }
 #endif
+
+void validate(const Options &result, const Provided &provided) {
+#if defined(__APPLE__)
   if (result.midi && (result.midi_source || result.midi_destination || provided.group)) {
     throw std::invalid_argument("Native MIDI routing is only available in live mode");
   }
+#endif
   if (result.midi.has_value() != result.wav.has_value() ||
       ((provided.tail || provided.watchdog) && !result.midi)) {
     throw std::invalid_argument("Offline rendering requires both --midi and --wav");
@@ -87,7 +76,9 @@ Options options(const std::span<const char *const> arguments) {
     if (++index == arguments.size()) { throw std::invalid_argument("Missing option value"); }
     const std::string_view value(arguments[index]);
     if (value.empty()) { throw std::invalid_argument("Empty option value"); }
-    if (live_route(result, provided, {.key = key, .value = value})) { continue; }
+#if defined(__APPLE__)
+    if (live_route(result, provided, key, value)) { continue; }
+#endif
     if (key == "--profile" && !provided.profile) {
       provided.profile = true;
       result.profile = value;
@@ -105,10 +96,9 @@ Options options(const std::span<const char *const> arguments) {
           number<std::uint64_t>(value, "--startup-watchdog requires positive whole seconds");
     } else {
       throw std::invalid_argument(
-          "Usage: blofeld-headless [--profile FILE] [--midi-source ID] "
-          "[--midi-destination ID] [--midi-group 0..15] "
-#if defined(__linux__)
-          "[--alsa-device hw:CARD,DEVICE] "
+          "Usage: blofeld-headless [--profile FILE] "
+#if defined(__APPLE__)
+          "[--midi-source ID] [--midi-destination ID] [--midi-group 0..15] "
 #endif
           "[--midi FILE --wav FILE [--tail SECONDS] [--startup-watchdog SECONDS]]");
     }
