@@ -128,6 +128,12 @@ Y:`ffff7f` read zero from the rounded views on both listed host page sizes.
 Those values describe the host mappings. Only Y:`016000` and Y:`ffffff` are
 established guest zero reads.
 
+In MS=1/MSW=11, Reverb reads X at its Y ring cursor in
+`010000..015fff`. This X interval has no RAM backing. The read and address
+update execute normally. Reverb overwrites the fetched word before consuming
+it, so the VM represents the vacant interval with a read-only zero view.
+The exact and direct ranges coincide on both host page sizes.
+
 X has no corresponding last-page read mapping. X:`ffff7f` therefore remains an
 unmapped ordinary read. From `ffff80` onward, the X/Y peripheral decoder takes
 priority over the view in both modes. The last X and Y write pages remain

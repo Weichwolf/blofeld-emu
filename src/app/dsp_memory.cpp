@@ -69,6 +69,11 @@ DspMemory::DspMemory(const vi::dsp::BootRom boot)
                          .known = {}}}};
     mappings_[index].program = std::span(program_[index]).first(has_eeprom ? 2U : 1U);
   }
+  constexpr auto reverb_x_view = ((vi::dsp::Memory::mapping_count - 1) * 6) + 2;
+  constexpr auto first = vi::dsp::Memory::reverb_x_first;
+  constexpr auto end = vi::dsp::Memory::reverb_x_end;
+  spaces_[reverb_x_view]->map(
+      {.address = first * sizeof(Word), .size = (end - first) * sizeof(Word)});
 }
 
 void DspMemory::mapping(const std::size_t index, const bool has_eeprom) {
