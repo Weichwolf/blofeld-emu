@@ -98,6 +98,18 @@ void every_character() {
   }
 }
 
+void audio_publication_at_current_time() {
+  MidiPort port(MidiPort::InputMode::audio);
+  MidiInput input(&port);
+  input.reset(start);
+  require(port.stage_input(std::array{datum}, start).status == MidiPort::InputStatus::admitted &&
+              input.advance(start) && input.level() && !input.deadline(),
+          "A staged character stays hidden until its input frontier is published");
+  require(port.advance_input(start + 1) && input.advance(start) && !input.level() &&
+              input.deadline() == start + bit_ticks,
+          "Rechecking the same tick observes publication and samples the character consistently");
+}
+
 void missing_boundaries_and_invalid_time() {
   MidiPort port;
   MidiInput input(&port);
@@ -120,6 +132,7 @@ int main() try {
   framing_and_ownership();
   adjacent_characters_and_reset();
   every_character();
+  audio_publication_at_current_time();
   missing_boundaries_and_invalid_time();
 } catch (const std::exception &error) {
 
