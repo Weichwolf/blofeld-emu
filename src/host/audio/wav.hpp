@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "audio/buffer.hpp"
+#include "audio/pcm_frame.hpp"
 
 #include <cstdint>
 #include <filesystem>

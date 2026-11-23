@@ -1,26 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "aot/dsp.hpp"
 #include "aot/mcu.hpp"
+#include "audio/playback.hpp"
 #include "boot_rom.hpp"
+#include "display/publication.hpp"
 #include "dsp/boot_rom.hpp"
 #include "dsp/memory.hpp"
 #include "dsp/program.hpp"
 #include "dsp_memory.hpp"
+#include "files/directory.hpp"
 #include "files/read.hpp"
 #include "io/coupling.hpp"
 #include "io/midi_port.hpp"
+#include "live.hpp"
 #include "mcu/program.hpp"
 #include "memory/faults.hpp"
 #include "options.hpp"
-#if defined(BLOFELD_NATIVE_MIDI)
-#include "audio/playback.hpp"
-#include "display/publication.hpp"
-#include "files/directory.hpp"
-#include "live.hpp"
 #include "process/configuration.hpp"
-
-#include <filesystem>
-#endif
 #include "process/signals.hpp"
 #include "profile.hpp"
 #include "render.hpp"
@@ -33,12 +29,12 @@
 #include <cstdint>
 #include <dsp56300/core.hpp>
 #include <exception>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <span>
 #include <utility>
 
-#if defined(BLOFELD_NATIVE_MIDI)
 namespace {
 void commit_storage(const std::filesystem::path &path,
                     const std::span<const std::uint8_t> bytes,
@@ -47,7 +43,6 @@ void commit_storage(const std::filesystem::path &path,
   directory.commit(path.filename().native(), bytes, revision);
 }
 }
-#endif
 
 int main(const int argc, char **argv) try {
   const auto launched = std::chrono::steady_clock::now();
@@ -91,17 +86,12 @@ int main(const int argc, char **argv) try {
                               dsp_storage);
     return render.run(vm, signals, launched);
   }
-#if defined(BLOFELD_NATIVE_MIDI)
   constexpr unsigned sample_rate = 44100;
   const auto display_path = blofeld::host::runtime_home() / "blofeld-emu";
   std::filesystem::create_directories(display_path);
   blofeld::app::DisplayPublication display(display_path);
   std::cerr << "Display: " << display_path << '\n';
-#if defined(__linux__)
-  blofeld::host::audio::Playback audio(sample_rate, "blofeld-emu", options.alsa_device);
-#else
   blofeld::host::audio::Playback audio(sample_rate, "blofeld-emu");
-#endif
   blofeld::app::Live live(audio, display, options);
   blofeld::vi::VmContext vm(std::move(image),
                             std::move(boot),
@@ -123,10 +113,6 @@ int main(const int argc, char **argv) try {
     }
   }
   return result.status;
-#else
-  std::cerr << "Native MIDI input backend is unavailable on this platform.\n";
-  return 2;
-#endif
 } catch (const std::exception &error) {
 
   std::cerr << "blofeld-headless: " << error.what() << '\n';

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "audio/buffer.hpp"
+#include "audio/pcm_frame.hpp"
 #include "audio/render_buffer.hpp"
 
 #include <array>
@@ -60,6 +60,13 @@ void boundaries() {
   require(queue.queued() == 0 && queue.render(output) == 0,
           "A quiescent epoch reset cannot replay old frames");
   for (const auto &frame : output) { require(frame == FloatFrame{}, "Empty render is silent"); }
+  require(queue.produce(input) != 0, "Planar rendering reads the same original PCM");
+  std::array<float, 3> left{};
+  std::array<float, 3> right{};
+  require(queue.render(left, right) == left.size() &&
+              left == std::array{1.0F - unit, 0.0F, -unit} &&
+              right == std::array{-1.0F, unit, 0.0F},
+          "JACK channel buffers preserve the exact 24-bit values and channel order");
 }
 
 void concurrent() {

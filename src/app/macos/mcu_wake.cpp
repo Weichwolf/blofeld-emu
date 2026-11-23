@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "audio/mcu_wake.hpp"
+#include "macos/mcu_wake.hpp"
 
-#include "audio/deadline_coreaudio.hpp"
 #include "io/midi_port.hpp"
+#include "macos/audio/deadline_coreaudio.hpp"
 
 #include <chrono>
 #include <cstdint>

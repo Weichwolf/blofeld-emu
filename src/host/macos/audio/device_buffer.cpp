@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "audio/device_buffer.hpp"
+#include "macos/audio/device_buffer.hpp"
 
 #include <CoreAudio/AudioHardware.h>
 #include <CoreAudio/AudioHardwareBase.h>

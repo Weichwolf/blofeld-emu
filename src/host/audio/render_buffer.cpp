@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "audio/render_buffer.hpp"
 
-#include "audio/buffer.hpp"
+#include "audio/pcm_frame.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -32,11 +32,11 @@ std::size_t RenderBuffer::produce(const std::span<const Frame> frames) {
   return count;
 }
 
-std::size_t RenderBuffer::render(const std::span<FloatFrame> output) noexcept
-    [[clang::nonblocking]] {
+template <typename Store>
+std::size_t RenderBuffer::render_frames(const std::size_t frames, const Store store) noexcept {
   const auto tail = tail_.load(std::memory_order_relaxed);
   const auto head = head_.load(std::memory_order_acquire);
-  const auto count = std::min(output.size(), static_cast<std::size_t>(head - tail));
+  const auto count = std::min(frames, static_cast<std::size_t>(head - tail));
   constexpr float scale = 1.0F / 8388608.0F;
   std::size_t copied = 0;
   while (copied < count) {
@@ -44,14 +44,29 @@ std::size_t RenderBuffer::render(const std::span<FloatFrame> output) noexcept
     const auto chunk = std::min(count - copied, capacity() - begin);
     for (std::size_t index = 0; index < chunk; ++index) {
       const auto &frame = frames_[begin + index];
-      output[copied + index] = {static_cast<float>(frame[0]) * scale,
-                                static_cast<float>(frame[1]) * scale};
+      store(copied + index,
+            FloatFrame{static_cast<float>(frame[0]) * scale, static_cast<float>(frame[1]) * scale});
     }
     copied += chunk;
   }
-  std::ranges::fill(output.subspan(count), FloatFrame{});
+  for (std::size_t index = count; index < frames; ++index) { store(index, FloatFrame{}); }
   tail_.store(tail + count, std::memory_order_release);
   return count;
+}
+
+std::size_t RenderBuffer::render(const std::span<FloatFrame> output) noexcept
+    [[clang::nonblocking]] {
+  return render_frames(output.size(), [output](std::size_t index, FloatFrame frame) noexcept {
+    output[index] = frame;
+  });
+}
+
+std::size_t RenderBuffer::render(const std::span<float> left, const std::span<float> right) noexcept
+    [[clang::nonblocking]] {
+  return render_frames(left.size(), [left, right](std::size_t index, FloatFrame frame) noexcept {
+    left[index] = frame[0];
+    right[index] = frame[1];
+  });
 }
 
 std::size_t RenderBuffer::queued() const noexcept {
