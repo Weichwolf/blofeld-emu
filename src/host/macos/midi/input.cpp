@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "midi/input.hpp"
-#include "midi/output.hpp"
+#include "macos/midi/input.hpp"
+
+#include "macos/midi/output.hpp"
 #include "midi/ump.hpp"
 
 #include <CoreFoundation/CFBase.h>

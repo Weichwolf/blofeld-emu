@@ -10,9 +10,9 @@
 #include "vm_context.hpp"
 #if defined(__APPLE__)
 #include "macos/mcu_wake.hpp"
-#include "midi/input.hpp"
+#include "macos/midi/input.hpp"
+#include "macos/midi/output.hpp"
 #include "midi/live_clock.hpp"
-#include "midi/output.hpp"
 #endif
 
 #include <atomic>

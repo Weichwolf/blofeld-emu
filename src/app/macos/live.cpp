@@ -5,8 +5,8 @@
 #include "audio/playback.hpp"
 #include "display/publication.hpp"
 #include "io/midi_port.hpp"
-#include "midi/input.hpp"
-#include "midi/output.hpp"
+#include "macos/midi/input.hpp"
+#include "macos/midi/output.hpp"
 #include "midi/ump.hpp"
 #include "options.hpp"
 
