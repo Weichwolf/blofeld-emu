@@ -93,6 +93,7 @@ struct AlsaPlayback::Impl {
   using Pcm = std::unique_ptr<snd_pcm_t, decltype(&snd_pcm_close)>;
   Pcm pcm{nullptr, snd_pcm_close};
   Wake wake;
+  decltype(&snd_pcm_writei) transfer = snd_pcm_writei;
   Buffer buffer;
   RenderPositionStore position;
   Grants granted;
@@ -151,8 +152,13 @@ struct AlsaPlayback::Impl {
     snd_pcm_hw_params_t *hardware;
     snd_pcm_hw_params_alloca(&hardware);
     require(snd_pcm_hw_params_any(raw, hardware), "Query ALSA hardware");
-    require(snd_pcm_hw_params_set_access(raw, hardware, SND_PCM_ACCESS_RW_INTERLEAVED),
-            "Set ALSA interleaved access");
+    snd_pcm_access_mask_t *interleaved;
+    snd_pcm_access_mask_alloca(&interleaved);
+    snd_pcm_access_mask_none(interleaved);
+    snd_pcm_access_mask_set(interleaved, SND_PCM_ACCESS_MMAP_INTERLEAVED);
+    snd_pcm_access_mask_set(interleaved, SND_PCM_ACCESS_RW_INTERLEAVED);
+    require(snd_pcm_hw_params_set_access_mask(raw, hardware, interleaved),
+            "Limit ALSA access to interleaved transfers");
     require(snd_pcm_hw_params_set_rate(raw, hardware, rate, 0), "Set native ALSA sample rate");
     const auto format = exact_format(raw, hardware);
     require(snd_pcm_hw_params_set_format(raw, hardware, format), "Set ALSA sample format");
@@ -165,6 +171,11 @@ struct AlsaPlayback::Impl {
     require(snd_pcm_hw_params_set_period_size_near(raw, hardware, &period, nullptr),
             "Request ALSA period");
     require(snd_pcm_hw_params_set_buffer_size_near(raw, hardware, &length), "Request ALSA ring");
+    const bool mapped =
+        snd_pcm_hw_params_test_access(raw, hardware, SND_PCM_ACCESS_MMAP_INTERLEAVED) == 0;
+    const auto access = mapped ? SND_PCM_ACCESS_MMAP_INTERLEAVED : SND_PCM_ACCESS_RW_INTERLEAVED;
+    require(snd_pcm_hw_params_set_access(raw, hardware, access), "Set ALSA interleaved access");
+    transfer = mapped ? snd_pcm_mmap_writei : snd_pcm_writei;
     require(snd_pcm_hw_params(raw, hardware), "Apply ALSA hardware parameters");
     require(snd_pcm_get_params(raw, &length, &period), "Read ALSA grants");
     if (period == 0 || period >= length || length > rate) {
@@ -237,7 +248,7 @@ struct AlsaPlayback::Impl {
           }
         }
       }
-      const auto count = snd_pcm_writei(pcm.get(), packed.data(), frames.size());
+      const auto count = transfer(pcm.get(), packed.data(), frames.size());
       if (count == -EAGAIN || count == 0) { return; }
       require(static_cast<int>(count), "Submit ALSA PCM");
       const auto accepted = static_cast<std::size_t>(count);
