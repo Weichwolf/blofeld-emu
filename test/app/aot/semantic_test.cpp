@@ -14,6 +14,7 @@
 #include "llvm-c/Transforms/PassBuilder.h"
 #include "llvm-c/Types.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/Support/BLAKE3.h"
 #include "llvm/Support/SHA256.h"
 
 #include <algorithm>
@@ -124,7 +125,7 @@ void stale(std::vector<std::uint8_t> &bytes, const std::string_view compiler) {
   const auto inner = llvm::SHA256::hash(
       llvm::ArrayRef(semantic.data() + digest_bytes, semantic.size() - digest_bytes));
   std::ranges::copy(inner, semantic.begin());
-  const auto outer = llvm::SHA256::hash(llvm::ArrayRef(semantic.data(), semantic.size()));
+  const auto outer = llvm::BLAKE3::hash(llvm::ArrayRef(semantic.data(), semantic.size()));
   std::ranges::copy(outer, bytes.begin() + digest_bytes);
 }
 

@@ -10,6 +10,7 @@ namespace blofeld::app {
 struct Options {
   static constexpr std::uint64_t default_startup_watchdog_seconds = 600;
   std::filesystem::path profile;
+  bool prepare = false;
   std::optional<std::filesystem::path> midi, wav;
 #if defined(__APPLE__)
   std::optional<std::int32_t> midi_source, midi_destination;

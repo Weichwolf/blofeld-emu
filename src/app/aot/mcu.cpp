@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "aot/mcu.hpp"
 
+#include "aot/artifact.hpp"
 #include "aot/code.hpp"
 #include "aot/llvm.hpp"
 #include "aot/semantic.hpp"
@@ -79,7 +80,8 @@ std::span<const std::byte> McuBinding::bitcode() noexcept {
 
 cpu12::NativeImage prepare_mcu(const cpu12::CodeImage image,
                                const std::span<const cpu12::CodeTransition> transitions,
-                               const std::filesystem::path &cache) {
+                               const std::filesystem::path &cache,
+                               const host::aot::Preparation preparation) {
   using cpu12::CallbackBinding;
   using cpu12::CallbackRole;
   constexpr std::array callbacks{
@@ -102,7 +104,7 @@ cpu12::NativeImage prepare_mcu(const cpu12::CodeImage image,
                                       .callbacks = callbacks,
                                       .bindings = {},
                                       .topology = cpu12::MemoryTopology::dynamic};
-  const auto semantic = detail::prepare_semantic<cpu12::Core>(image, options, cache);
+  const auto semantic = detail::prepare_semantic<cpu12::Core>(image, options, cache, preparation);
   namespace native = host::aot;
   const McuBinding binding;
   std::vector<native::Export> exports;
@@ -112,7 +114,8 @@ cpu12::NativeImage prepare_mcu(const cpu12::CodeImage image,
   }
   const std::array modules{native::Module{.bitcode = semantic.bitcode(), .exports = exports},
                            native::Module{.bitcode = McuBinding::bitcode(), .exports = {}}};
-  const auto code = std::make_shared<native::Code>(modules, binding.imports(), cache);
+  const auto code = std::make_shared<native::Code>(
+      modules, binding.imports(), cache, native::Code::ExecutableMemory::standard, preparation);
   std::vector<cpu12::NativeSymbol> symbols;
   symbols.reserve(semantic.exports().size());
   for (const auto symbol : semantic.exports()) {
@@ -127,8 +130,9 @@ cpu12::NativeImage prepare_mcu(const cpu12::CodeImage image,
 
 vi::mcu::Program prepare_mcu_program(const cpu12::CodeImage image,
                                      const std::span<const cpu12::CodeTransition> transitions,
-                                     const std::filesystem::path &cache) {
-  return {prepare_mcu(image, transitions, cache), image};
+                                     const std::filesystem::path &cache,
+                                     const host::aot::Preparation preparation) {
+  return {prepare_mcu(image, transitions, cache, preparation), image};
 }
 
 }

@@ -197,13 +197,13 @@ struct Playback::Impl {
   RenderPositionStore position;
   mach_timebase_info_data_t timebase{};
   std::uint64_t epoch = 0, rendered_frame = 0;
+  std::size_t late_frames = 0;
   std::optional<RenderTimeline::Fault> timing_fault;
   std::exception_ptr error;
   std::atomic<Phase> phase{Phase::opening};
   std::atomic<OSStatus> render_error{noErr};
   std::atomic<bool> reset_pending{false};
   std::atomic<std::uint64_t> submitted{0}, underruns{0}, renders{0};
-  std::atomic<std::uint64_t> underrun_frames{0};
   std::binary_semaphore reset_done{0};
   std::mutex wake_mutex;
   std::condition_variable wake;
@@ -282,20 +282,18 @@ struct Playback::Impl {
       self.render_error.store(kAudio_ParamError, std::memory_order_release);
       return kAudio_ParamError;
     }
-    const auto supplied = self.buffer->render(output);
-    if (supplied == frames && !self.position.publish({.epoch = self.epoch,
-                                                      .first_frame = self.rendered_frame,
-                                                      .host_ns = *host,
-                                                      .frames = frames})) {
+    const auto supplied = self.buffer->render(output, &self.late_frames);
+    if (!self.position.publish({.epoch = self.epoch,
+                                .first_frame = self.rendered_frame,
+                                .host_ns = *host,
+                                .frames = static_cast<std::uint32_t>(supplied)})) {
       self.render_error.store(kAudio_ParamError, std::memory_order_release);
       return kAudio_ParamError;
     }
-    self.rendered_frame += supplied;
+    self.rendered_frame += frames;
     self.submitted.fetch_add(supplied, std::memory_order_relaxed);
     self.renders.fetch_add(1, std::memory_order_release);
     if (supplied != frames) {
-      self.underrun_frames.store((std::uint64_t{frames} << 32) | supplied,
-                                 std::memory_order_relaxed);
       self.underruns.fetch_add(1, std::memory_order_release);
     } else if (current == Phase::starting) {
       auto expected = Phase::starting;
@@ -441,6 +439,7 @@ struct Playback::Impl {
     }
     ++epoch;
     rendered_frame = 0;
+    late_frames = 0;
     buffer->discard();
     reset_done.release();
   }
@@ -498,12 +497,6 @@ struct Playback::Impl {
       throw std::runtime_error(timing_failure(*timing_fault));
     }
     require(render, "Native render format changed");
-    if (underruns.load(std::memory_order_acquire) != 0) {
-      const auto frames = underrun_frames.load(std::memory_order_relaxed);
-      throw std::runtime_error(
-          "Native audio output underrun: requested=" + std::to_string(frames >> 32) +
-          " supplied=" + std::to_string(static_cast<std::uint32_t>(frames)));
-    }
   }
 
   void run(const unsigned rate, const std::stop_token &stop) noexcept {
@@ -612,8 +605,7 @@ PlaybackStatus Playback::status() const noexcept {
           .started = phase == Impl::Phase::playing,
           .failed = phase == Impl::Phase::failed,
           .position = phase == Impl::Phase::playing &&
-                              impl_->render_error.load(std::memory_order_acquire) == noErr &&
-                              impl_->underruns.load(std::memory_order_acquire) == 0
+                              impl_->render_error.load(std::memory_order_acquire) == noErr
                           ? impl_->position.read()
                           : std::nullopt};
 }

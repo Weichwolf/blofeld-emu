@@ -69,6 +69,33 @@ void boundaries() {
           "JACK channel buffers preserve the exact 24-bit values and channel order");
 }
 
+void underrun_recovery() {
+  RenderBuffer queue(8);
+  constexpr std::int32_t unit = 1024;
+  constexpr float sample = 1.0F / 8192.0F;
+  constexpr std::array initial{Frame{unit, -unit}, Frame{2 * unit, -2 * unit}};
+  std::array<FloatFrame, 3> output{};
+  std::size_t late = 0;
+  require(queue.produce(initial) == initial.size() && queue.render(output, &late) == 2 &&
+              late == 1 &&
+              output == std::array{FloatFrame{sample, -sample},
+                                   FloatFrame{2 * sample, -2 * sample},
+                                   FloatFrame{}},
+          "An underrun silences the missing frame and preserves the submitted prefix");
+  constexpr std::array resumed{
+      Frame{3 * unit, -3 * unit}, Frame{4 * unit, -4 * unit}, Frame{5 * unit, -5 * unit}};
+  std::array<float, 2> left{};
+  std::array<float, 2> right{};
+  require(queue.produce(resumed) == resumed.size() && queue.render(left, right, &late) == 2 &&
+              late == 0 && left == std::array{4 * sample, 5 * sample} &&
+              right == std::array{-4 * sample, -5 * sample},
+          "The next callback skips expired PCM and resumes on the hardware timeline");
+  late = 4;
+  require(queue.produce(initial) == initial.size() && queue.render(left, right, &late) == 0 &&
+              late == 4 && left == std::array<float, 2>{} && right == std::array<float, 2>{},
+          "A skipped host cycle can consume a complete queue without replaying expired PCM");
+}
+
 void concurrent() {
   constexpr std::size_t count = 4096;
   constexpr std::size_t capacity = 31;
@@ -102,6 +129,7 @@ void concurrent() {
 
 int main() try {
   boundaries();
+  underrun_recovery();
   concurrent();
 } catch (const std::exception &error) {
 

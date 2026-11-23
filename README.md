@@ -55,11 +55,19 @@ cmake --build --preset strict --target quality --parallel 2
 ## Run
 
 ```sh
+build/release/blofeld-headless --prepare
 build/release/blofeld-headless
 build/release/blofeld-headless --profile /path/to/instrument.profile
 build/release/blofeld-headless --profile /path/to/instrument.profile \
   --midi /path/to/score.mid --wav /path/to/render.wav --tail 5
 ```
+
+Run `--prepare` once per profile after changing firmware, a code catalogue,
+or the emulator build. It prepares and validates the native MCU and DSP objects
+without opening the audio server or booting the instrument. Pass the same
+`--profile` to preparation and playback. Playback loads the prepared objects
+and runs the original reset and boot. Missing or damaged artifacts require
+another preparation.
 
 Offline startup allows 15 seconds of instrument time. The independent host hang
 watchdog defaults to 600 seconds after AOT; select another positive duration with
@@ -108,9 +116,10 @@ See the [MCU](doc/architecture.md#local-mcu-catalogue-json-format-1) and
 [DSP](doc/architecture.md#local-dsp-catalogue-json-format-1) catalogue contracts.
 
 Live mode uses an independent LCD viewer. SIGINT/SIGTERM requests coordinated
-shutdown. On Linux, start a JACK server at 44.1 kHz with a period of 128 frames
-or less. The client exposes `audio_l`, `audio_r`, `midi_in` and `midi_out`. Use
-the DAW graph or `jack_connect` to route them. For hardware playback:
+shutdown. On Linux, start a real-time JACK server at 44.1 kHz with a period of
+128 frames or less. Enable real-time scheduling for the user running the
+emulator. The client exposes `audio_l`, `audio_r`, `midi_in` and `midi_out`.
+Use the DAW graph or `jack_connect` to route them. For hardware playback:
 
 ```sh
 jack_connect blofeld-emu:audio_l system:playback_1

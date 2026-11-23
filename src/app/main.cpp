@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "aot/artifact.hpp"
 #include "aot/dsp.hpp"
 #include "aot/mcu.hpp"
 #include "audio/playback.hpp"
@@ -30,6 +31,7 @@
 #include <dsp56300/core.hpp>
 #include <exception>
 #include <filesystem>
+#include <future>
 #include <iostream>
 #include <memory>
 #include <span>
@@ -51,28 +53,48 @@ int main(const int argc, char **argv) try {
       std::span<const char *const>(argv + 1, static_cast<std::size_t>(argc - 1)));
   const auto profile = blofeld::app::load_profile(options.profile);
   const bool offline = options.midi && options.wav;
-  blofeld::host::FileRevision device_revision;
+  auto boot = blofeld::app::load_boot_rom(profile.boot_rom, profile.boot_format);
+  const auto mode = blofeld::app::dsp_memory_mode();
+  using blofeld::host::aot::Preparation;
+  const auto preparation = options.prepare ? Preparation::allow : Preparation::load_only;
   blofeld::host::FileRevision media_revision;
+  std::future<std::unique_ptr<blofeld::vi::MediaImage>> media_input;
+  if (!options.prepare) {
+    media_input = std::async(std::launch::async, [&profile, &media_revision, offline] {
+      return std::make_unique<blofeld::vi::MediaImage>(
+          blofeld::host::read_file(profile.storage,
+                                   blofeld::vi::MediaImage::max_bytes,
+                                   offline ? nullptr : &media_revision));
+    });
+  }
+  const auto loading = std::chrono::steady_clock::now();
+  auto mcu = std::async(std::launch::async, [&profile, preparation] {
+    return blofeld::app::aot::load_mcu_program(profile, preparation);
+  });
+  const auto program =
+      std::make_shared<blofeld::vi::dsp::Program>(blofeld::app::aot::load_dsp_program(
+          profile, blofeld::vi::dsp::BootRom::document(boot), mode, preparation));
+  const auto mcu_program = std::make_shared<blofeld::vi::mcu::Program>(mcu.get());
+  const auto loaded = std::chrono::steady_clock::now();
+  const std::chrono::duration<double> modules = loaded - loading;
+  if (options.prepare) {
+    std::cerr << "AOT preparation complete in " << modules.count() << " s\n";
+    return 0;
+  }
+  if (!offline) { std::cerr << "Native modules loaded in " << modules.count() << " s\n"; }
+  blofeld::host::FileRevision device_revision;
   const auto device_state = blofeld::host::read_file(profile.device_state,
                                                      blofeld::vi::FlashImage::file_bytes,
                                                      offline ? nullptr : &device_revision);
   auto image =
       std::make_unique<blofeld::vi::FlashImage>(blofeld::vi::FlashImage::decode(device_state));
-  auto media = std::make_unique<blofeld::vi::MediaImage>(blofeld::host::read_file(
-      profile.storage, blofeld::vi::MediaImage::max_bytes, offline ? nullptr : &media_revision));
-  auto boot = blofeld::app::load_boot_rom(profile.boot_rom, profile.boot_format);
-  const auto mode = blofeld::app::dsp_memory_mode();
+  auto media = media_input.get();
   const auto memory =
       mode == dsp56300::CompileOptions::MemoryMode::direct
           ? std::make_unique<blofeld::app::DspMemory>(blofeld::vi::dsp::BootRom::document(boot))
           : nullptr;
   const auto dsp_storage = memory ? memory->storage() : blofeld::vi::dsp::Memory::Storage{};
   const blofeld::host::memory::Faults faults(dsp56300::Core::host_fault);
-  const auto mcu_program =
-      std::make_shared<blofeld::vi::mcu::Program>(blofeld::app::aot::load_mcu_program(profile));
-  const auto program =
-      std::make_shared<blofeld::vi::dsp::Program>(blofeld::app::aot::load_dsp_program(
-          profile, blofeld::vi::dsp::BootRom::document(boot), mode));
   if (offline) {
     blofeld::app::OfflineRender render(options);
     blofeld::vi::VmContext vm(std::move(image),
@@ -102,7 +124,7 @@ int main(const int argc, char **argv) try {
                             program,
                             blofeld::vi::Coupling::default_window,
                             dsp_storage);
-  const auto result = live.run(vm, signals);
+  const auto result = live.run(vm, signals, launched);
   if (result.save_storage) {
     const auto storage = vm.stopped_storage();
     if (storage.device != device_state) {

@@ -189,14 +189,15 @@ or component. Borrowed compiler inputs may expire after binding.
 Development and operation may reuse fully validated code artifacts keyed by
 source/variant hashes, core/LLVM pipeline, target/features, generation
 mode and binding ABI. Store relocations, never instance pointers or device-state
-snapshots. Reject corrupt/incompatible artifacts and rebuild before playback.
+snapshots. Prepare corrupt/incompatible artifacts with `--prepare`.
 Keep derived source, IR, objects, catalogues and executables untracked in build/.
 The semantic cache keys the inputs passed to Core::lower. Concrete device IR
 that only joins during native composition belongs to the final cache key.
-Use the build's aot-cache/ for pre-platform optimized bitcode. Validate current
-inputs before lookup; key the composed module, ABI sets, target/features and
-compiler/build pipeline. Verify artifact identity and payload before import.
-Relocate, resolve exports and initialize fresh native instances through ORC.
+Use the build's aot-cache/ for semantic artifacts and relocatable native objects.
+Key objects by ordered module bytes and ABI sets, target/features and the
+compiler/build pipeline. Validate IR before emitting an object. Publish it after
+relocation and initialization succeed. On startup verify its identity and digest,
+then relocate, resolve exports and initialize fresh native instances through ORC.
 Preserve original boot/device effects; caching changes startup, not warm speed.
 
 ### Local MCU catalogue, JSON format 1
@@ -507,8 +508,12 @@ frontier, even for an empty cycle. A fixed frame lead covers the PCM queue and
 the guest block. Convert JACK frames to instrument ticks once at admission and
 serialize the bytes through the original DIN interface. Output uses completed
 firmware messages and JACK frame offsets. The server's MIDI port bounds the
-maximum size of a single SysEx event. Device faults and underruns terminate
-the live stream. The callback never waits for PCM or MIDI.
+maximum size of a single SysEx event. A host PCM underrun pads the missing
+frames with silence, counts the event and discards late PCM when it arrives.
+JACK cycle timestamps include skipped periods in the same playback timeline.
+Device faults terminate playback. The callback never waits for PCM or MIDI.
+On Linux, use disjoint physical-core masks for the firmware owners when SMT
+topology and the process affinity permit it.
 
 On macOS, use Core Audio device observations to time MIDI.
 Publish coherent bounded-read correlation snapshots: source frame range/index,

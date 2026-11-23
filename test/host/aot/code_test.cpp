@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "aot/artifact.hpp"
 #include "aot/code.hpp"
 #include "calls.hpp"
 #include "files/directory.hpp"
@@ -237,27 +238,28 @@ template <unsigned Instance> std::shared_ptr<const Code> imported_code() {
   return std::make_shared<const Code>(inputs.modules(), inputs.imports);
 }
 
-std::vector<std::filesystem::path> cache_files(const std::filesystem::path &root,
-                                               const std::string_view extension = ".bc") {
+std::vector<std::filesystem::path> cache_files(const std::filesystem::path &root) {
   std::vector<std::filesystem::path> files;
   for (const auto &entry : std::filesystem::directory_iterator(root)) {
     const auto suffix = entry.path().extension();
-    require(suffix == ".bc" || suffix == ".o", "A cache exposes only complete artifacts");
-    if (suffix == extension) { files.push_back(entry.path()); }
+    require(suffix == ".o", "A native cache contains only relocatable objects");
+    files.push_back(entry.path());
   }
   return files;
 }
 
 template <unsigned Instance>
-void cached_imports(const std::filesystem::path &root,
-                    const Code::ExecutableMemory memory = Code::ExecutableMemory::standard) {
+void cached_imports(
+    const std::filesystem::path &root,
+    const Code::ExecutableMemory memory = Code::ExecutableMemory::standard,
+    const blofeld::host::aot::Preparation preparation = blofeld::host::aot::Preparation::allow) {
   ImportInputs inputs;
   inputs.imports[0].address = std::bit_cast<const void *>(&native_step<Instance>);
   inputs.imports[1].address = std::bit_cast<const void *>(&native_event<Instance>);
   const auto begun = native_started[Instance].load();
   const auto ended = native_finished[Instance].load();
   {
-    const Code code(inputs.modules(), inputs.imports, root, memory);
+    const Code code(inputs.modules(), inputs.imports, root, memory, preparation);
     require(native_started[Instance].load() == begun + 1 &&
                 native_finished[Instance].load() == ended,
             "Cached code initializes against its current imports before publication");
@@ -306,12 +308,16 @@ void damaged_artifacts(const std::filesystem::path &path) {
       directory.replace(path.filename().string(), corrupt);
     }
     const auto passes = calls().optimizations;
+    bool refused = false;
+    try {
+      cached_imports<0>(
+          root, Code::ExecutableMemory::standard, blofeld::host::aot::Preparation::load_only);
+    } catch (const std::runtime_error &) { refused = true; }
+    require(refused && calls().optimizations == passes,
+            "A regular start refuses corrupt artifacts without entering LLVM optimization");
     cached_imports<0>(root);
-    require(blofeld::host::read_file(path, limit) == original,
-            "Wrong identity, corruption and truncation rebuild the exact valid artifact");
-    require(path.extension() == ".o" ? calls().optimizations == passes
-                                     : calls().optimizations > passes,
-            "Only damaged bitcode needs O3; damaged objects reuse the valid optimized module");
+    require(blofeld::host::read_file(path, limit) == original && calls().optimizations > passes,
+            "Preparation rebuilds exactly the same native object after cache damage");
   }
 }
 
@@ -323,28 +329,22 @@ void cached_code() {
   const auto optimized = calls().optimizations;
   require(optimized > before, "A cold artifact is produced by the actual LLVM optimizer");
   const auto files = cache_files(root);
-  const auto objects = cache_files(root, ".o");
-  require(files.size() == 1 && objects.size() == 1 &&
-              files.front().stem() == objects.front().stem(),
-          "Cold preparation publishes optimized bitcode and a relocatable object under one key");
+  require(files.size() == 1, "Explicit preparation publishes one relocatable object");
   constexpr std::size_t limit = std::size_t{1} << 24U;
-  const auto original = blofeld::host::read_file(files.front(), limit);
+  const auto object = blofeld::host::read_file(files.front(), limit);
   const auto modified = std::filesystem::last_write_time(files.front());
-  const auto object = blofeld::host::read_file(objects.front(), limit);
-  const auto object_modified = std::filesystem::last_write_time(objects.front());
-  cached_imports<1>(root);
+  const auto added_ir = calls().modules;
+  cached_imports<1>(
+      root, Code::ExecutableMemory::standard, blofeld::host::aot::Preparation::load_only);
 #if defined(__APPLE__) && defined(__aarch64__)
-  cached_imports<1>(root, Code::ExecutableMemory::jit);
+  cached_imports<1>(root, Code::ExecutableMemory::jit, blofeld::host::aot::Preparation::load_only);
 #endif
   require(cache_files(root).size() == 1 &&
-              blofeld::host::read_file(files.front(), limit) == original &&
+              blofeld::host::read_file(files.front(), limit) == object &&
               std::filesystem::last_write_time(files.front()) == modified &&
-              blofeld::host::read_file(objects.front(), limit) == object &&
-              std::filesystem::last_write_time(objects.front()) == object_modified &&
-              calls().optimizations == optimized,
-          "A warm instance reuses both immutable artifacts without O3 or native compilation");
+              calls().optimizations == optimized && calls().modules == added_ir,
+          "A warm instance relinks the object without submitting IR or rewriting the cache");
   damaged_artifacts(files.front());
-  damaged_artifacts(objects.front());
   const ImportInputs input;
   const auto begun = native_started[0].load();
   auto invalid = input;
@@ -371,8 +371,8 @@ void cached_code() {
     using Step = unsigned (*)(unsigned, unsigned *) noexcept;
     auto state = 5U;
     require(std::bit_cast<Step>(code.address("aot_import_step"))(11, &state) == changed_result &&
-                state == 7 && cache_files(root).size() == 2 && cache_files(root, ".o").size() == 2,
-            "Changed source semantics require new optimized IR and native object artifacts");
+                state == 7 && cache_files(root).size() == 2,
+            "Changed source semantics require a different native object");
   }
   cached_imports<0>(root);
   require(cache_files(root).size() == 2, "Distinct immutable source artifacts coexist");

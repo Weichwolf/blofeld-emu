@@ -94,7 +94,7 @@ std::optional<std::uint64_t> Live::startup(const host::Signals &signals) {
   MidiStartup startup;
   static_cast<void>(startup.poll(vm_->midi(), {}));
   const auto started = std::chrono::steady_clock::now();
-  vm_->start();
+  start_owners();
   while (!vm_->finished()) {
     if (signals.wait(startup_poll)) { break; }
     audio_.check();
@@ -125,16 +125,12 @@ bool Live::refill(const std::uint64_t required, const std::stop_token &stop) {
   if (phase_.load(std::memory_order_acquire) == Phase::booting) {
     return port.await_input(required, stop);
   }
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(10);
   while (!stop.stop_requested()) {
     if (const auto known = port.input_limit(); known && *known > required) { return true; }
     audio_.check();
     const auto transfer = phase_.load(std::memory_order_acquire) == Phase::arming;
     const auto grant = transfer ? std::nullopt : consumer_.input_grant(audio_.status());
     if (grant && grant->exclusive > required && release_input(*grant, required)) { return true; }
-    if (std::chrono::steady_clock::now() >= deadline) {
-      throw std::runtime_error("PCM queue did not grant the required instrument time");
-    }
     std::this_thread::sleep_for(input_poll);
   }
   return false;
@@ -165,11 +161,15 @@ void Live::status(const bool terminal) const {
   if (!terminal) { std::cerr << '\n'; }
 }
 
-Live::Result Live::run(vi::VmContext &vm, const host::Signals &signals) {
+Live::Result Live::run(vi::VmContext &vm,
+                       const host::Signals &signals,
+                       const std::chrono::steady_clock::time_point launched) {
   if (vm_ != nullptr) { throw std::logic_error("A live session can only run once"); }
   vm_ = &vm;
   attach_audio_source();
+  const auto booting = std::chrono::steady_clock::now();
   const auto origin = startup(signals);
+  const auto booted = std::chrono::steady_clock::now();
   if (!origin) {
     vm.request_stop();
     const auto reports = vm.wait();
@@ -191,7 +191,10 @@ Live::Result Live::run(vi::VmContext &vm, const host::Signals &signals) {
   while (!vm.finished()) {
     control();
     if (phase_.load(std::memory_order_acquire) == Phase::playing && !announced) {
-      std::cerr << "Live MIDI input active: native audio started.\n";
+      const std::chrono::duration<double> boot = booted - booting;
+      const std::chrono::duration<double> elapsed = std::chrono::steady_clock::now() - launched;
+      std::cerr << "Live MIDI input active: native audio started. Firmware boot=" << boot.count()
+                << " s, startup=" << elapsed.count() << " s\n";
       announced = true;
     }
     discard_midi_replies();
@@ -206,9 +209,9 @@ Live::Result Live::run(vi::VmContext &vm, const host::Signals &signals) {
   }
   midi_output.request_stop();
   vm.request_stop();
+  audio_.stop();
   const auto reports = vm.wait();
   if (midi_output.joinable()) { midi_output.join(); }
-  audio_.stop();
   publish_display();
   if (terminal) { std::cerr << '\n'; }
   status(false);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
+#include "aot/artifact.hpp"
 #include "native_sites.hpp"
 
 #include <cstddef>
@@ -34,7 +35,8 @@ public:
   explicit Code(std::span<const Module> modules,
                 std::span<const Import> imports = {},
                 const std::filesystem::path &cache = {},
-                ExecutableMemory memory = ExecutableMemory::standard);
+                ExecutableMemory memory = ExecutableMemory::standard,
+                Preparation preparation = Preparation::allow);
   ~Code();
   Code(const Code &) = delete;
   Code &operator=(const Code &) = delete;

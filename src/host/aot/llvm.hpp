@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "aot/artifact.hpp"
 #include "aot/code.hpp"
 
 #include "llvm-c/Core.h"
@@ -14,10 +15,6 @@
 #include <span>
 #include <string>
 #include <type_traits>
-
-namespace llvm {
-class ObjectCache;
-}
 
 namespace blofeld::host::aot::detail {
 template <auto Dispose> struct Delete {
@@ -39,12 +36,10 @@ void validate_symbols(LLVMModuleRef module, const Imports &imports);
 [[nodiscard]] LLVMModuleRef parse(LLVMContextRef context, const Module &source, Exports &exports);
 void merge(LLVMModuleRef destination, Owner<LLVMModuleRef, LLVMDisposeModule> module);
 void optimize(LLVMModuleRef module, LLVMTargetMachineRef machine, const Exports &exports);
-[[nodiscard]] std::unique_ptr<llvm::ObjectCache>
-optimize(Owner<LLVMModuleRef, LLVMDisposeModule> &module,
-         LLVMTargetMachineRef machine,
-         const Exports &exports,
-         const Imports &imports,
-         const std::filesystem::path &cache);
+[[nodiscard]] Artifact native_object(const std::filesystem::path &root,
+                                     std::span<const Module> modules,
+                                     const Imports &imports);
+void select_dsp_frame_pointers(LLVMModuleRef module);
 [[nodiscard]] LLVMTargetMachineRef target(LLVMModuleRef module);
 [[nodiscard]] std::uint64_t text_bytes(LLVMMemoryBufferRef object);
 void initialize();

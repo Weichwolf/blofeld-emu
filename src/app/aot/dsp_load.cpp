@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "aot/artifact.hpp"
 #include "aot/dsp.hpp"
 #include "dsp/boot_rom.hpp"
 #include "dsp/program.hpp"
@@ -50,7 +51,8 @@ Sources load_sources(const std::string_view document, const std::filesystem::pat
 
 vi::dsp::Program load_dsp_program(const Profile &profile,
                                   const vi::dsp::BootRom boot,
-                                  const dsp56300::CompileOptions::MemoryMode mode) {
+                                  const dsp56300::CompileOptions::MemoryMode mode,
+                                  const host::aot::Preparation preparation) {
   if (profile.firmware.empty() || profile.dsp_catalogue.empty()) {
     throw std::invalid_argument("AOT requires firmware and dsp-catalogue profile paths");
   }
@@ -64,6 +66,7 @@ vi::dsp::Program load_dsp_program(const Profile &profile,
                                boot,
                                sources,
                                std::filesystem::path{BLOFELD_AOT_CACHE_DIRECTORY},
-                               mode);
+                               mode,
+                               preparation);
 }
 }

@@ -97,6 +97,10 @@ void Live::connect() {
   }
 }
 
+void Live::start_owners() {
+  vm_->start();
+}
+
 void Live::control() {
   publish_display();
   const auto now = std::chrono::steady_clock::now();
@@ -183,13 +187,9 @@ void Live::send_midi(host::midi::Output &output, const std::stop_token &stop) {
     if (!event) { continue; }
     const auto packets = encoder.push(event->byte);
     if (packets.size == 0) { continue; }
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::nanoseconds(LiveClock::maximum_gap_ns);
     auto clock = consumer_.clock();
     while (!clock && !stop.stop_requested()) {
-      if (std::chrono::steady_clock::now() >= deadline) {
-        throw std::runtime_error("Original MIDI output needs a native audio clock");
-      }
+      audio_.check();
       std::this_thread::sleep_for(input_poll);
       clock = consumer_.clock();
     }

@@ -53,13 +53,17 @@ bool live_route(Options &result, Provided &provided, std::string_view key, std::
 
 void validate(const Options &result, const Provided &provided) {
 #if defined(__APPLE__)
-  if (result.midi && (result.midi_source || result.midi_destination || provided.group)) {
+  if ((result.midi || result.prepare) &&
+      (result.midi_source || result.midi_destination || provided.group)) {
     throw std::invalid_argument("Native MIDI routing is only available in live mode");
   }
 #endif
   if (result.midi.has_value() != result.wav.has_value() ||
       ((provided.tail || provided.watchdog) && !result.midi)) {
     throw std::invalid_argument("Offline rendering requires both --midi and --wav");
+  }
+  if (result.prepare && result.midi) {
+    throw std::invalid_argument("--prepare cannot render MIDI to WAV");
   }
   if (result.startup_watchdog_seconds == 0) {
     throw std::invalid_argument("--startup-watchdog requires positive whole seconds");
@@ -73,6 +77,10 @@ Options options(const std::span<const char *const> arguments) {
   Provided provided;
   for (std::size_t index = 0; index < arguments.size(); ++index) {
     const std::string_view key(arguments[index]);
+    if (key == "--prepare" && !result.prepare) {
+      result.prepare = true;
+      continue;
+    }
     if (++index == arguments.size()) { throw std::invalid_argument("Missing option value"); }
     const std::string_view value(arguments[index]);
     if (value.empty()) { throw std::invalid_argument("Empty option value"); }
@@ -96,7 +104,7 @@ Options options(const std::span<const char *const> arguments) {
           number<std::uint64_t>(value, "--startup-watchdog requires positive whole seconds");
     } else {
       throw std::invalid_argument(
-          "Usage: blofeld-headless [--profile FILE] "
+          "Usage: blofeld-headless [--profile FILE] [--prepare] "
 #if defined(__APPLE__)
           "[--midi-source ID] [--midi-destination ID] [--midi-group 0..15] "
 #endif
