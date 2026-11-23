@@ -512,6 +512,8 @@ maximum size of a single SysEx event. A host PCM underrun pads the missing
 frames with silence, counts the event and discards late PCM when it arrives.
 JACK cycle timestamps include skipped periods in the same playback timeline.
 Device faults terminate playback. The callback never waits for PCM or MIDI.
+On Linux, use disjoint physical-core masks for the firmware owners when SMT
+topology and the process affinity permit it.
 
 On macOS, use Core Audio device observations to time MIDI.
 Publish coherent bounded-read correlation snapshots: source frame range/index,

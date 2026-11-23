@@ -27,6 +27,7 @@
 #include <atomic>
 #include <cstdint>
 #include <dsp56300/memory.hpp>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -78,8 +79,9 @@ public:
 
   [[nodiscard]] const mcu::StateProbe *state_probe() const noexcept { return state_probe_.get(); }
 #endif
-  using OwnerSetup = void (*)();
-  void start(OwnerSetup setup = nullptr);
+  enum class Owner : std::uint8_t { mcu, dsp };
+  using OwnerSetup = std::function<void(Owner)>;
+  void start(const OwnerSetup &setup = {});
 
   [[nodiscard]] bool finished() const noexcept {
     return completed_.load(std::memory_order_acquire) != 0;

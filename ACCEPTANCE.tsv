@@ -1,5 +1,6 @@
 id	profiles	source	function_and_variants	stimulus_and_required_observation	macos_arm64	linux_x86_64	hardware_reference
 BOOT-START	D	M18;F-D	Power on/off and firmware/profile indication	Cold start with retained NVM; original version/display and usable MIDI/audio; no bad-DSP success	pending	pending	pending
+STARTUP-JACK	D	#47	Linux process launch to playable JACK audio/MIDI under five seconds	Reset original 1.25 and verify stereo onset for a JACK Note On. Three cold starts 4.40–4.45 s and three warm starts 4.14–4.26 s. Preparation and firmware startup measurements in #49.	not_applicable	passed	not_applicable
 BOOT-RESET-ACTIONS	D	F-D	Documented startup encoder, repeated Shift+Multi and five power cycles	Replay each documented input sequence offline; record actual original reset/recovery behavior and retained settings, never replace it with a host reset shortcut	pending	pending	pending
 BOOT-LICENSE	D	F-D;S2	Fixed Desktop identity with active SL sample capability	Qualified persisted SL-capable unit data enables original sample functions and startup indication; no model switch, firmware patch or host license-success response	pending	pending	pending
 HOST-MIDI	D	M14-16	Bidirectional USB MIDI	External host enumerates original descriptors; independent note/CC/SysEx traffic and replies; no USB audio	pending	pending	pending
