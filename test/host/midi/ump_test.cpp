@@ -114,6 +114,11 @@ void outgoing() {
   constexpr std::array<std::uint32_t, 7> fragments{
       0x30124301, 0, 0x10f80000, 0x30260203, 0x04050607, 0x30310800, 0};
   encoded(fragmented, fragments);
+  constexpr std::array<std::uint8_t, 13> interrupted{
+      0xf0, 1, 0xf7, 0x8c, 0xf8, 0xf0, 2, 0xf7, 0x22, 0x90, 60, 0xc0, 7};
+  constexpr std::array<std::uint32_t, 6> resynchronized{
+      0x30010100, 0, 0x10f80000, 0x30010200, 0, 0x20c00700};
+  encoded(interrupted, resynchronized);
   const auto rejects = [](const std::span<const std::uint8_t> bytes) {
     DinEncoder encoder(0);
     try {
@@ -121,15 +126,9 @@ void outgoing() {
     } catch (const std::runtime_error &) { return; }
     throw std::runtime_error("Malformed DIN stream was accepted");
   };
-  constexpr std::array<std::uint8_t, 1> orphan{1};
   constexpr std::array<std::uint8_t, 1> undefined{0xf9};
   constexpr std::array<std::uint8_t, 3> broken_sysex{0xf0, 1, 0x90};
-  constexpr std::array<std::uint8_t, 3> interrupted{0x90, 60, 0xc0};
-  constexpr std::array<std::uint8_t, 4> cancelled_running{0xc0, 5, 0xf6, 7};
-  rejects(orphan);
   rejects(broken_sysex);
-  rejects(interrupted);
-  rejects(cancelled_running);
   rejects(undefined);
 }
 
