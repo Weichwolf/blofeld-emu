@@ -162,6 +162,39 @@ std::vector<dsp56300::Word> dsp_code(const bool dense) {
 }
 
 namespace {
+void progress_wake() {
+  vi::PeerPort peer;
+  vi::Shi shi;
+  vi::DspReset reset;
+  vi::ExecutionTime time;
+  vi::MidiPort midi(vi::MidiPort::InputMode::stream);
+  const std::stop_source stop;
+  vi::Coupling coupling(
+      peer, shi, reset, time, midi, stop.get_token(), vi::Coupling::default_window);
+  if (!midi.finish_input()) { throw std::runtime_error("Input EOF refused"); }
+  const auto observed = coupling.observation();
+  coupling.bind();
+  constexpr std::uint64_t boundary = 20;
+  coupling.publish({}, boundary + 2);
+  if (coupling.observation() != observed) {
+    throw std::runtime_error("An MCU publication woke the MCU");
+  }
+  auto waiter = std::async(std::launch::async, [&] {
+    coupling.wait_for_progress({.observed = observed, .ticks = boundary});
+  });
+  if (!coupling.receiver({.ticks = boundary}) || coupling.observation() != observed ||
+      waiter.wait_for(std::chrono::milliseconds{2}) == std::future_status::ready) {
+    stop.request_stop();
+    throw std::runtime_error("MCU woke before the exclusive DSP boundary");
+  }
+  if (!coupling.receiver({.ticks = boundary + 1}) ||
+      waiter.wait_for(std::chrono::seconds{1}) != std::future_status::ready) {
+    stop.request_stop();
+    throw std::runtime_error("DSP progress did not release the waiting MCU");
+  }
+  waiter.get();
+}
+
 void live_input_demand() {
   constexpr std::uint64_t known = 20;
   constexpr std::uint64_t needed = 40;
@@ -298,6 +331,7 @@ void exercise(const bool dense) {
 }
 
 int main() try {
+  progress_wake();
   live_input_demand();
   streaming_frontier();
   for (const bool dense : {false, true}) { exercise(dense); }
