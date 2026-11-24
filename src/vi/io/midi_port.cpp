@@ -57,18 +57,14 @@ void MidiPort::Queue::pop() noexcept {
   read.store(read.load(std::memory_order_relaxed) + 1, std::memory_order_release);
 }
 
-void MidiPort::signal() noexcept {
-  if (wake_notify_ != nullptr) { wake_notify_(wake_owner_); }
+void MidiPort::signal_input() noexcept {
   changed_.fetch_add(1, std::memory_order_seq_cst);
   changed_.notify_all();
 }
 
-void MidiPort::notify() noexcept {
+void MidiPort::notify_input(const bool force) noexcept {
   if (wake_notify_ != nullptr) { wake_notify_(wake_owner_); }
-  if (input_waiters_.load(std::memory_order_seq_cst) != 0 ||
-      space_waiters_.load(std::memory_order_seq_cst) != 0) {
-    signal();
-  }
+  if (force || input_waiters_.load(std::memory_order_seq_cst) != 0) { signal_input(); }
 }
 
 template <typename Ready>
@@ -79,7 +75,7 @@ bool MidiPort::await(std::atomic<unsigned> &waiters,
   if (ready()) { return true; }
   // Each blocked owner retains its registration until its own exit.
   const Waiting registered{waiters};
-  const std::stop_callback cancelled(stop, [this] { signal(); });
+  const std::stop_callback cancelled(stop, [this] { signal_input(); });
   for (;;) {
     const auto observed = changed_.load(std::memory_order_seq_cst);
     if (stop.stop_requested() || error() != nullptr) { return false; }
@@ -99,7 +95,7 @@ void MidiPort::signal_output() noexcept {
 bool MidiPort::fail(const char *message) noexcept {
   const char *empty = nullptr;
   error_.compare_exchange_strong(empty, message, std::memory_order_release);
-  signal();
+  notify_input(true);
   signal_output();
   return false;
 }
@@ -173,7 +169,7 @@ MidiPort::Admission MidiPort::admit(const std::span<const std::uint8_t> bytes,
   input_.written.store(at + bytes.size(), std::memory_order_release);
   if (!staged && input_mode_ != InputMode::live) {
     input_until_.store(next_input_, std::memory_order_seq_cst);
-    notify();
+    notify_input();
   }
   return {.status = InputStatus::admitted, .tick = first};
 }
@@ -195,11 +191,11 @@ bool MidiPort::advance_input(const std::uint64_t ticks) noexcept {
   if (input_mode_ == InputMode::live || phase_.load(std::memory_order_seq_cst) == Phase::ended) {
     return fail("MIDI input has no active stream frontier");
   }
-  if (ticks < input_until_.load(std::memory_order_seq_cst)) {
-    return fail("MIDI stream frontier moved backwards");
-  }
+  const auto previous = input_until_.load(std::memory_order_seq_cst);
+  if (ticks < previous) { return fail("MIDI stream frontier moved backwards"); }
+  if (ticks == previous) { return true; }
   input_until_.store(ticks, std::memory_order_seq_cst);
-  notify();
+  notify_input();
   return true;
 }
 
@@ -208,8 +204,10 @@ bool MidiPort::finish_input() noexcept {
   if (input_mode_ != InputMode::stream) {
     return fail("Live MIDI input cannot declare stream EOF");
   }
-  phase_.store(Phase::ended, std::memory_order_seq_cst);
-  notify();
+  if (phase_.load(std::memory_order_seq_cst) != Phase::ended) {
+    phase_.store(Phase::ended, std::memory_order_seq_cst);
+    notify_input();
+  }
   return true;
 }
 
@@ -254,7 +252,7 @@ std::optional<MidiPort::Event> MidiPort::peek_input(const Receiver receiver,
 
 void MidiPort::pop_input(const Receiver receiver) noexcept {
   input_.pop(receiver);
-  notify();
+  if (space_waiters_.load(std::memory_order_seq_cst) != 0) { signal_input(); }
 }
 
 bool MidiPort::write_output(const Event event) noexcept {
@@ -269,7 +267,6 @@ bool MidiPort::write_output(const Event event) noexcept {
   last_output_ = event.ticks;
   output_.written.store(at + 1, std::memory_order_seq_cst);
   signal_output();
-  notify();
   return true;
 }
 

@@ -88,6 +88,8 @@ void stream_frontiers() {
 
 void audio_frontiers() {
   MidiPort port(MidiPort::InputMode::audio);
+  unsigned notifications = 0;
+  port.wake(&notifications, [](void *count) noexcept { ++*static_cast<unsigned *>(count); });
   constexpr std::uint64_t frontier = 100;
   constexpr auto duration = message.size() * MidiPort::byte_ticks;
   require(port.advance_input(frontier), "Grant a silent audio interval without a MIDI packet");
@@ -111,6 +113,15 @@ void audio_frontiers() {
                 MidiPort::Event{.ticks = frontier + duration, .byte = note_on},
             "The second packet only becomes visible after the explicit grant");
   }
+  require(notifications == 3, "Each new input horizon wakes the firmware owners once");
+  port.pop_input();
+  port.pop_input(MidiPort::Receiver::dsp);
+  constexpr MidiPort::Event reply{.ticks = frontier, .byte = note_on};
+  require(port.advance_input(frontier + duration + 1) && port.write_output(reply) &&
+              port.read_output() == reply && notifications == 3,
+          "Queue credit, replies and unchanged horizons leave firmware owners asleep");
+  port.abort_input();
+  require(notifications == 4, "An input failure wakes firmware owners");
 }
 
 void audio_queue_full() {
@@ -245,6 +256,8 @@ void blocking_admission() {
 void frontier_registration() {
   MidiPort stream(MidiPort::InputMode::stream);
   constexpr std::uint64_t rounds = 1024;
+  unsigned notifications = 0;
+  stream.wake(&notifications, [](void *count) noexcept { ++*static_cast<unsigned *>(count); });
   std::atomic<std::uint64_t> acknowledged{0};
   bool coherent = true;
   std::jthread mcu([&](const std::stop_token &stop) {
@@ -264,6 +277,7 @@ void frontier_registration() {
   mcu.join();
   require(coherent && stream.input_limit() == rounds && !stream.peek_input() && stream.time() == 0,
           "Repeated handoff transfers knowledge without synthetic traffic or device-time steps");
+  require(notifications == rounds, "An input waiter shares one firmware wake per grant");
 }
 
 void echo_input(MidiPort &port,

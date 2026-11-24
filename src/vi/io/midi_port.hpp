@@ -145,8 +145,8 @@ private:
   template <typename Ready>
   [[nodiscard]] bool
   await(std::atomic<unsigned> &waiters, const std::stop_token &stop, Ready ready) noexcept;
-  void signal() noexcept;
-  void notify() noexcept;
+  void signal_input() noexcept;
+  void notify_input(bool force = false) noexcept;
   void signal_output() noexcept;
   [[nodiscard]] Admission admit(std::span<const std::uint8_t> bytes,
                                 std::uint64_t ticks,
