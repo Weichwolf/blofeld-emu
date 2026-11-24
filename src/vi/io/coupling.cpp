@@ -60,34 +60,21 @@ void Coupling::Cancel::operator()() const noexcept {
   owner->notify();
 }
 
-std::uint64_t Coupling::Wake::observe() const noexcept {
-  return std::atomic_ref(generation).load(std::memory_order_seq_cst);
-}
-
-void Coupling::Wake::notify() noexcept {
-  auto changed = std::atomic_ref(generation);
-  changed.fetch_add(1, std::memory_order_seq_cst);
-  if (waiting.load(std::memory_order_seq_cst)) { changed.notify_one(); }
-}
-
 void Coupling::notify() noexcept {
-  mcu_wake_.notify();
-  dsp_wake_.notify();
+  auto changed = std::atomic_ref(changed_);
+  changed.fetch_add(1, std::memory_order_seq_cst);
+  if (waiting_.load(std::memory_order_seq_cst) != 0) { changed.notify_all(); }
 }
 
-void Coupling::wait(Wake &wake, const std::uint64_t observed) const noexcept {
-  wake.waiting.store(true, std::memory_order_seq_cst);
+void Coupling::wait(const std::uint64_t observed) noexcept {
+  waiting_.fetch_add(1, std::memory_order_seq_cst);
   if (!stopped()) {
 #if defined(BLOFELD_CENSUS)
     const Census::Wait observed_wait;
 #endif
-    std::atomic_ref(wake.generation).wait(observed, std::memory_order_acquire);
+    std::atomic_ref(changed_).wait(observed, std::memory_order_acquire);
   }
-  wake.waiting.store(false, std::memory_order_seq_cst);
-}
-
-void Coupling::wait(const std::uint64_t observed) noexcept {
-  wait(mcu_wake_, observed);
+  waiting_.fetch_sub(1, std::memory_order_seq_cst);
 }
 
 void Coupling::wait_for_progress(const ProgressWait progress) noexcept {
@@ -99,9 +86,8 @@ void Coupling::wait_for_progress(const ProgressWait progress) noexcept {
 }
 
 void Coupling::wait_checkpoint(const std::uint64_t observed) noexcept {
-  if (!midi_.before_checkpoint_wait({.generation = mcu_wake_.generation,
-                                     .observed = observed,
-                                     .command = checkpoint_sequence_})) {
+  if (!midi_.before_checkpoint_wait(
+          {.generation = changed_, .observed = observed, .command = checkpoint_sequence_})) {
     wait(observed);
   }
 }
@@ -115,20 +101,20 @@ bool Coupling::fail(const char *const message) noexcept {
 
 void Coupling::bind() noexcept {
   bound_.store(true, std::memory_order_release);
-  dsp_wake_.notify();
+  notify();
 }
 
 void Coupling::publish(const std::span<const mcu::Effects::Entry> entries,
                        const std::uint64_t frontier) noexcept {
   published_.store(entries.size(), std::memory_order_release);
   frontier_.store(frontier, std::memory_order_release);
-  dsp_wake_.notify();
+  notify();
 }
 
 void Coupling::request(const std::uint64_t ticks) noexcept {
   const auto old = frontier_.load(std::memory_order_relaxed);
   if (ticks > old) { frontier_.store(ticks, std::memory_order_release); }
-  dsp_wake_.notify();
+  notify();
 }
 
 std::optional<Coupling::Input> Coupling::input(const std::uint64_t seen) const noexcept {
@@ -142,7 +128,7 @@ void Coupling::acknowledge(const std::uint64_t serial) noexcept {
   if (!message_.compare_exchange_strong(expected, 0, std::memory_order_acq_rel)) {
     static_cast<void>(fail("DSP input acknowledgement does not match the pending event"));
   }
-  dsp_wake_.notify();
+  notify();
 }
 
 std::size_t Coupling::consumed() const noexcept {
@@ -171,12 +157,12 @@ void Coupling::checkpoint(const std::uint64_t ticks) noexcept {
   }
   checkpoint_ticks_.store(ticks, std::memory_order_relaxed);
   checkpoint_request_.store(++checkpoint_sequence_, std::memory_order_release);
-  dsp_wake_.notify();
+  notify();
 }
 
 void Coupling::cancel_checkpoint() noexcept {
   checkpoint_request_.store(0, std::memory_order_release);
-  dsp_wake_.notify();
+  notify();
 }
 
 void Coupling::replace(const std::uint64_t origin) noexcept {
@@ -200,7 +186,7 @@ void Coupling::attained(const std::uint64_t exclusive) noexcept {
   if (exclusive > old) {
     known_.store(exclusive, std::memory_order_seq_cst);
     const auto target = mcu_wait_after_.load(std::memory_order_seq_cst);
-    if (old <= target && target < exclusive) { mcu_wake_.notify(); }
+    if (old <= target && target < exclusive) { notify(); }
   }
 }
 
@@ -235,10 +221,10 @@ bool Coupling::outputs(const std::uint64_t ticks) {
   attained(ticks);
   input_ = {.ticks = ticks, .serial = ++serial_, .values = values};
   message_.store(serial_, std::memory_order_release);
-  mcu_wake_.notify();
+  notify();
   while (!stopped() && message_.load(std::memory_order_acquire) != 0) {
-    const auto observed = dsp_wake_.observe();
-    if (message_.load(std::memory_order_acquire) != 0) { wait(dsp_wake_, observed); }
+    const auto observed = observation();
+    if (message_.load(std::memory_order_acquire) != 0) { wait(observed); }
   }
   return !stopped();
 }
@@ -300,12 +286,10 @@ bool Coupling::checkpoint_barrier() {
   }
   cut_.store(known() + std::uint64_t{reset_.state().held}, std::memory_order_release);
   checkpoint_ready_.store(command, std::memory_order_release);
-  mcu_wake_.notify();
+  notify();
   while (!stopped() && checkpoint_request_.load(std::memory_order_acquire) == command) {
-    const auto observed = dsp_wake_.observe();
-    if (checkpoint_request_.load(std::memory_order_acquire) == command) {
-      wait(dsp_wake_, observed);
-    }
+    const auto observed = observation();
+    if (checkpoint_request_.load(std::memory_order_acquire) == command) { wait(observed); }
   }
   return true;
 }
@@ -336,7 +320,7 @@ Coupling::Grant Coupling::grant(const Stamp stamp) const noexcept {
 
 std::optional<Coupling::Grant> Coupling::receiver(const Stamp stamp) {
   while (!stopped()) {
-    const auto observed = dsp_wake_.observe();
+    const auto observed = observation();
     if (!service(stamp)) { return {}; }
     attained(stamp.ceil());
     if (reset_.state().held) { return {}; }
@@ -355,7 +339,7 @@ std::optional<Coupling::Grant> Coupling::receiver(const Stamp stamp) {
     }
     if (!stopped() && frontier_.load(std::memory_order_acquire) == frontier &&
         generation_.load(std::memory_order_acquire) == receiver_generation_) {
-      wait(dsp_wake_, observed);
+      wait(observed);
     }
   }
   return {};
@@ -379,11 +363,11 @@ bool Coupling::service_held() {
 
 bool Coupling::held() {
   while (!stopped() && reset_.state().held) {
-    const auto observed = dsp_wake_.observe();
+    const auto observed = observation();
     if (!service_held()) { return false; }
     if (!reset_.state().held) { return true; }
     if (checkpoint_barrier()) { continue; }
-    if (!stopped()) { wait(dsp_wake_, observed); }
+    if (!stopped()) { wait(observed); }
   }
   return !stopped();
 }

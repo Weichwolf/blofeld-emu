@@ -172,13 +172,10 @@ void progress_wake() {
   vi::Coupling coupling(
       peer, shi, reset, time, midi, stop.get_token(), vi::Coupling::default_window);
   if (!midi.finish_input()) { throw std::runtime_error("Input EOF refused"); }
-  const auto observed = coupling.observation();
   coupling.bind();
   constexpr std::uint64_t boundary = 20;
   coupling.publish({}, boundary + 2);
-  if (coupling.observation() != observed) {
-    throw std::runtime_error("An MCU publication woke the MCU");
-  }
+  const auto observed = coupling.observation();
   auto waiter = std::async(std::launch::async, [&] {
     coupling.wait_for_progress({.observed = observed, .ticks = boundary});
   });
