@@ -166,7 +166,6 @@ def write_case(output, name, tracks, requirements, tempo_change=False, end=END, 
             "note_on_events": sum(1 for events in tracks for _, data in events
                                   if data[0] & 0xf0 == 0x90),
             "channels": len(tracks),
-            "ppqn": ppqn,
             "file_duration_us": duration // ppqn,
             "requirements": requirements}
 
@@ -202,10 +201,12 @@ def main():
         cases.append(case)
     score = nachtmusik()
     # At 500,000 us per quarter, one tick is exactly one 44.1 kHz frame.
-    cases.append(write_case(args.output, "nachtmusik", [score], [
+    case = write_case(args.output, "nachtmusik", [score], [
         "Replay the JACK regression excerpt with A013 (BloStrings) in Single mode",
         "Use a zero-second render tail; the SMF includes the final half-second",
-    ], end=score[-1][0] + NACHTMUSIK_RATE // 2, ppqn=NACHTMUSIK_RATE // 2))
+    ], end=score[-1][0] + NACHTMUSIK_RATE // 2, ppqn=NACHTMUSIK_RATE // 2)
+    case["ppqn"] = NACHTMUSIK_RATE // 2
+    cases.append(case)
     manifest = {
         "scope": "Authored deterministic MIDI workload inputs, not instrument qualification",
         "ppqn": PPQN,
