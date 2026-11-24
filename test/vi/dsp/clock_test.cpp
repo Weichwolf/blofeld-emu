@@ -146,6 +146,12 @@ void large_advances_and_deadlines() {
 void instrument_clock_changes() {
   Clock clock;
   constexpr dsp56300::Word full_output = 0x02a012;
+  constexpr std::uint64_t fractional_deadline = 451;
+  constexpr std::uint64_t first_complete_cycle = 1527;
+  require(clock.advance(1) && clock.write(full_output) &&
+              clock.deadline(fractional_deadline) == first_complete_cycle,
+          "A deadline rounds up when only the low Q32 bits of the division remainder are set");
+  clock.reset(true);
   require(clock.advance(1) && clock.ticks() == 0 && clock.write(full_output) && clock.advance(2) &&
               clock.ticks() == 1 && clock.deadline(2) == 6,
           "A PLL change preserves the elapsed fractional reference time");
