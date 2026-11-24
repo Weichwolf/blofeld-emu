@@ -11,6 +11,9 @@ import struct
 PPQN = 480
 END = 36 * PPQN
 RELEASE = 32 * PPQN
+NACHTMUSIK_RATE = 44100
+NACHTMUSIK_EVENTS = (Path(__file__).resolve().parents[1] /
+                     "test/app/linux/nachtmusik-jack.events")
 
 
 def vlq(value):
@@ -137,14 +140,23 @@ def sl_samples():
     return [events]
 
 
-def write_case(output, name, tracks, requirements, tempo_change=False, end=END):
+def nachtmusik():
+    events = []
+    for line in NACHTMUSIK_EVENTS.read_text().splitlines():
+        frame, status, data1, data2 = map(int, line.split())
+        data = (data1,) if (status & 0xf0) in (0xc0, 0xd0) else (data1, data2)
+        events.append(message(frame, status, *data))
+    return events
+
+
+def write_case(output, name, tracks, requirements, tempo_change=False, end=END, ppqn=PPQN):
     conductor = [message(0, 0xff, 0x51, 3, 7, 0xa1, 0x20)]
     duration = end * 500000
     if tempo_change:
-        change_at = 16 * PPQN
+        change_at = 16 * ppqn
         conductor.append(message(change_at, 0xff, 0x51, 3, 6, 0x1a, 0x80))
         duration -= (end - change_at) * 100000
-    encoded = b"MThd" + struct.pack(">IHHH", 6, 1, len(tracks) + 1, PPQN)
+    encoded = b"MThd" + struct.pack(">IHHH", 6, 1, len(tracks) + 1, ppqn)
     encoded += track(conductor, end) + b"".join(track(events, end) for events in tracks)
     path = output / (name + ".mid")
     with path.open("xb") as stream:
@@ -154,7 +166,8 @@ def write_case(output, name, tracks, requirements, tempo_change=False, end=END):
             "note_on_events": sum(1 for events in tracks for _, data in events
                                   if data[0] & 0xf0 == 0x90),
             "channels": len(tracks),
-            "file_duration_us": duration // PPQN,
+            "ppqn": ppqn,
+            "file_duration_us": duration // ppqn,
             "requirements": requirements}
 
 
@@ -187,6 +200,12 @@ def main():
         ], end=end)
         case["source_messages"] = sum(len(events) for events in tracks)
         cases.append(case)
+    score = nachtmusik()
+    # At 500,000 us per quarter, one tick is exactly one 44.1 kHz frame.
+    cases.append(write_case(args.output, "nachtmusik", [score], [
+        "Replay the JACK regression excerpt with A013 (BloStrings) in Single mode",
+        "Use a zero-second render tail; the SMF includes the final half-second",
+    ], end=score[-1][0] + NACHTMUSIK_RATE // 2, ppqn=NACHTMUSIK_RATE // 2))
     manifest = {
         "scope": "Authored deterministic MIDI workload inputs, not instrument qualification",
         "ppqn": PPQN,
