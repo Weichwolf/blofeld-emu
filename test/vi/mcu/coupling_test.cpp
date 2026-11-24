@@ -196,6 +196,17 @@ void progress_wake() {
   if (!coupling.receiver({.ticks = boundary + 2}) || coupling.observation() == playing) {
     throw std::runtime_error("DSP progress did not notify with coalescing disabled");
   }
+  const auto published = coupling.observation();
+  coupling.publish({}, boundary + 3);
+  if (coupling.observation() != published) {
+    throw std::runtime_error("Unchanged MCU publication notified a waiter");
+  }
+  const auto storage = coupling.source_storage();
+  storage.front() = {.ticks = boundary + 3, .value = 0, .kind = vi::mcu::Effects::Kind::wait};
+  coupling.publish(storage.first(1), boundary + 3);
+  if (coupling.observation() == published) {
+    throw std::runtime_error("New MCU effect at an unchanged boundary did not notify");
+  }
 }
 
 void live_input_demand() {

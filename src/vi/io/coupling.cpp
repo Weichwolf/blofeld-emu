@@ -106,6 +106,11 @@ void Coupling::bind() noexcept {
 
 void Coupling::publish(const std::span<const mcu::Effects::Entry> entries,
                        const std::uint64_t frontier) noexcept {
+  // Only the MCU owner publishes, and the visible effect prefix is immutable.
+  if (entries.size() == published_.load(std::memory_order_relaxed) &&
+      frontier == frontier_.load(std::memory_order_relaxed)) {
+    return;
+  }
   published_.store(entries.size(), std::memory_order_release);
   frontier_.store(frontier, std::memory_order_release);
   notify();
