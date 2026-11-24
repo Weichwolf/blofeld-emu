@@ -47,7 +47,7 @@ private:
     std::optional<Clock> current, previous;
     std::uint64_t since = 0, origin = 0;
     [[nodiscard]] bool configure(std::uint64_t cycles, const Clock &clock) noexcept;
-    [[nodiscard]] std::optional<std::uint64_t> at(std::uint64_t cycles) const noexcept;
+    [[nodiscard]] std::optional<std::uint64_t> at(std::uint64_t cycles) noexcept;
   };
 
   [[nodiscard]] bool capture(const Esai::Slot &slot, std::uint64_t cycles) noexcept;
