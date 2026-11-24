@@ -26,20 +26,15 @@ Word mask(const unsigned bits) noexcept {
   return (Word{1} << bits) - 1;
 }
 
-Word next_count(const Counter counter, const std::array<unsigned, 3> widths) noexcept {
-  Word result = counter.value;
-  unsigned shift = 0;
-  for (const auto width : widths) {
-    if (width == 0) { continue; }
-    const auto field = mask(width) << shift;
-    if ((result & field) != 0) {
-      result -= Word{1} << shift;
-      break;
-    }
-    result = (result & ~field) | (counter.reload & field);
-    shift += width;
-  }
-  return result;
+Word next_count(const Counter counter, const unsigned low, const unsigned middle) noexcept {
+  if (counter.value == 0) { return counter.reload; }
+  if ((counter.value & mask(low)) != 0) { return counter.value - 1; }
+  // Decrement the first nonzero field and reload the lower fields.
+  const auto first_set_bit = static_cast<unsigned>(std::countr_zero(counter.value));
+  const auto upper = low + middle;
+  const auto shift = first_set_bit < upper ? low : upper;
+  const auto step = Word{1} << shift;
+  return (counter.value - step) | (counter.reload & (step - 1));
 }
 }
 
@@ -236,13 +231,13 @@ std::optional<Dma::Plan> Dma::prepare(const unsigned index) noexcept {
   const auto destination_increment = increment(destination_mode, channel, low, middle);
   if (!destination_increment) { return {}; }
   constexpr std::array spaces{dsp56300::Space::x, dsp56300::Space::y, dsp56300::Space::program};
+  const auto count = next_count({.value = channel.count, .reload = channel.reload}, low, middle);
   return Plan{.source = {.space = spaces[control & 3], .address = channel.source},
               .destination = {.space = spaces[(control >> 2U) & 3], .address = channel.destination},
               .next_source = (channel.source + *source_increment) & dsp56300::word_mask,
               .next_destination =
                   (channel.destination + *destination_increment) & dsp56300::word_mask,
-              .next_count = next_count({.value = channel.count, .reload = channel.reload},
-                                       {low, middle, word_bits - low - middle}),
+              .next_count = count,
               .line_end = (channel.count & mask(low)) == 0,
               .block_end = channel.count == 0};
 }
