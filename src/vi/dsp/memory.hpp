@@ -28,6 +28,7 @@ public:
 
   static constexpr std::size_t physical_words = 0x16000, mapping_count = 5;
   static constexpr std::array<std::size_t, 5> bank_words{0x1000, 0x3000, 0x2000, 0x6000, 0xa000};
+  static constexpr dsp56300::Word reverb_x_first = 0x10000, reverb_x_end = 0x16000;
 
   struct Mapping {
     std::array<dsp56300::Memory::Views, 3> views;

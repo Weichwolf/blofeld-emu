@@ -89,7 +89,8 @@ void DinEncoder::system_exclusive(Batch &batch, const std::uint8_t byte) {
 }
 
 void DinEncoder::begin_message(Batch &batch, const std::uint8_t status) {
-  if (remaining_ != 0) { throw std::runtime_error("Incomplete DIN message before status"); }
+  // A new status replaces an incomplete non-realtime MIDI message.
+  remaining_ = 0;
   used_ = 0;
   status_ = status;
   if (status < exclusive_start) {
@@ -125,7 +126,7 @@ DinEncoder::Batch DinEncoder::push(const std::uint8_t byte) {
     begin_message(result, byte);
   } else {
     if (remaining_ == 0) {
-      if (running_ == 0) { throw std::runtime_error("DIN data has no MIDI status"); }
+      if (running_ == 0) { return result; }
       status_ = running_;
       remaining_ = channel_data(running_);
       used_ = 0;

@@ -186,9 +186,10 @@ void switched_maps() {
                   !memory.write({.space = Space::program, .address = map.program_end, .value = 1}),
               "The program limit follows the selected banks");
       Word value = 0;
+      const bool reverb = map.mode == 0x600080;
       require(memory.write({.space = Space::x, .address = map.x_end - 1, .value = 2}) &&
                   memory.read(Space::x, map.x_end - 1, value) && value == 2 &&
-                  !memory.read(Space::x, map.x_end, value),
+                  memory.read(Space::x, map.x_end, value) == reverb && (!reverb || value == 0),
               "Data RAM ends at its actual bank limit, not at an allocation size");
     }
   }
@@ -204,7 +205,7 @@ void retained_aliases() {
           "Fill physical X RAM");
   memory.configure(switched);
   Word value = 0;
-  require(!memory.read(Space::x, x_address, value) &&
+  require(memory.read(Space::x, x_address, value) && value == 0 &&
               memory.read(Space::program, p_address, value) && value == datum &&
               memory.write({.space = Space::program, .address = p_address, .value = 7}),
           "The switched bank has one physical value and no simultaneous X alias");
@@ -330,8 +331,9 @@ void reserved_y_read() {
               "Accepted discarded stores and refused peripheral stores create no writable latch");
       for (const auto space : {Space::program, Space::x, Space::y}) {
         value = canary;
-        require(!memory.read(space, last - 1, value) && value == canary,
-                "Adjacent unmapped reads still fail without replacing the output value");
+        const bool reverb = space == Space::x && mode == 0x600080 && last == boundary;
+        require(memory.read(space, last - 1, value) == reverb && value == (reverb ? 0U : canary),
+                "Adjacent unmapped reads fail outside the Reverb lookahead interval");
         if (space != Space::y) {
           require(!memory.read(space, last, value), "The reserved read belongs only to Y space");
         }

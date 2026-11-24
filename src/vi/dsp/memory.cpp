@@ -131,6 +131,13 @@ std::optional<Memory::Cell> Memory::locate(const dsp56300::Space space,
 bool Memory::read(const dsp56300::Space space,
                   const dsp56300::Word address,
                   dsp56300::Word &value) const noexcept {
+  // Reverb prefetches from X at its Y ring cursor. The fetched word is overwritten
+  // before use. The switched map leaves this X range vacant with no writable state.
+  if (space == dsp56300::Space::x && mapping_index(mapping_) == mapping_count - 1 &&
+      address >= reverb_x_first && address < reverb_x_end) {
+    value = 0;
+    return true;
+  }
   // The unchanged TASKING DSP56371 completes these reserved reads as zero.
   // Delay's staged clear leaves its first read at $16000; preserve that
   // address and its subsequent modulo update. Neither word grants RAM,

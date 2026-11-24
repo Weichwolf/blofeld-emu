@@ -50,6 +50,7 @@ int main() try {
     const auto &views = backing.storage().mappings[index].views;
     const auto *const p = static_cast<const volatile Word *>(views[0].read.data.data());
     auto *const x = static_cast<volatile Word *>(views[1].write.data.data());
+    const auto *const px = static_cast<const volatile Word *>(views[1].read.data.data());
     auto *const y = static_cast<volatile Word *>(views[2].write.data.data());
     const auto *const py = static_cast<const volatile Word *>(views[2].read.data.data());
     require(p[vi::dsp::BootRom::main_first] == value &&
@@ -69,6 +70,16 @@ int main() try {
     require(py[reserved_y] == 0 && py[last_y] == 0 && py[reserved_y_neighbor] == 0 &&
                 py[last_ordinary_word] == 0,
             "Direct Y pages read zero padding without granting checked RAM");
+    if (index == modes.size() - 1) {
+      constexpr auto first = vi::dsp::Memory::reverb_x_first;
+      constexpr auto end = vi::dsp::Memory::reverb_x_end;
+      x[first] = value;
+      x[end - 1] = value;
+      require(px[first] == 0 && px[end - 1] == 0 && memory.read(Space::x, first, result) &&
+                  result == 0 && memory.read(Space::x, end - 1, result) && result == 0 &&
+                  !memory.read(Space::x, end, result),
+              "Reverb X reads cannot expose scratch writes or extend beyond the Y ring");
+    }
     if (index != 0) {
       auto *const write_p = static_cast<volatile Word *>(views[0].write.data.data());
       write_p[0x1000] = value + 10;
