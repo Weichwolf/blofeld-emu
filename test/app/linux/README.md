@@ -16,3 +16,8 @@ JACK audio without connecting speakers. The event sequence is adapted from the
 `python3 tools/midi_bench_inputs.py --output build/nachtmusik-inputs` exports
 the same event sequence as `nachtmusik.mid`, with one SMF tick per 44.1 kHz
 frame. Render it in Single mode with the factory presets and `--tail 0`.
+
+For other generated workloads, pass the SMF to
+`build/release/jack-nachtmusik build/nachtmusik-inputs/<score>.mid` while the
+corresponding instrument profile is already playable. Replay ends at the SMF
+end-of-track time and reports how many MIDI events JACK accepted.
