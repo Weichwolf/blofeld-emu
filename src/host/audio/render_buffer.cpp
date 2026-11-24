@@ -21,9 +21,10 @@ RenderBuffer::RenderBuffer(const std::size_t capacity) : frames_(capacity) {
 std::size_t RenderBuffer::produce(const std::span<const Frame> frames) {
   const auto head = head_.load(std::memory_order_relaxed);
   const auto tail = tail_.load(std::memory_order_acquire);
+  const auto available = capacity() - static_cast<std::size_t>(head - tail);
+  if (available == 0 || frames.empty()) { return 0; }
   const auto begin = static_cast<std::size_t>(head % capacity());
-  const auto count = std::min(
-      {frames.size(), capacity() - static_cast<std::size_t>(head - tail), capacity() - begin});
+  const auto count = std::min({frames.size(), available, capacity() - begin});
   if (count > std::numeric_limits<std::uint64_t>::max() - head) {
     throw std::overflow_error("Render frame counter exhausted");
   }
