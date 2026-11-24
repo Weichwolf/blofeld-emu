@@ -30,6 +30,8 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
+#include <cstddef>
 #include <cstdint>
 #include <dsp56300/core.hpp>
 #include <dsp56300/memory.hpp>
@@ -236,7 +238,7 @@ public:
   [[nodiscard]] std::uint64_t program_revision() const noexcept override { return revision_; }
 
   [[nodiscard]] bool interrupt_pending(const dsp56300::Word status) const noexcept override {
-    return interrupts_.select(interrupt_sources(), status).has_value();
+    return interrupt_request(status).has_value();
   }
 
   [[nodiscard]] const char *error() const noexcept {
@@ -285,7 +287,7 @@ public:
 #endif
       return completed(core_->run_until(core_->progress().estimated_cycles));
     }
-    if (const auto request = interrupts_.select(interrupt_sources(), 0)) {
+    if (const auto request = interrupt_request()) {
       const auto state = core_->registers();
       if (request->admitted(state.sr)) {
         if (core_->interrupt_ready()) {
@@ -332,7 +334,7 @@ public:
   [[nodiscard]] std::optional<MediaResult> copy_media_run(MediaRun run) noexcept;
 
   [[nodiscard]] bool waiting_event() const noexcept {
-    return waiting_ && (deadline() || interrupts_.select(interrupt_sources(), 0));
+    return waiting_ && (deadline() || interrupt_request());
   }
 
   [[nodiscard]] bool coupling_interrupted() noexcept { return interrupted(); }
@@ -504,7 +506,7 @@ private:
 
   void advance_waiting() {
     if (!waiting_) { return; }
-    if (const auto request = interrupts_.select(interrupt_sources(), 0);
+    if (const auto request = interrupt_request();
         request && request->admitted(core_->registers().sr)) {
       return;
     }
@@ -654,16 +656,19 @@ private:
     return peer_ != nullptr ? peer_->dsp_interrupt(interrupts_.external_edge(0x10)) : std::nullopt;
   }
 
-  [[nodiscard]] std::array<dsp56300::Word, 9> interrupt_sources() const noexcept {
-    std::array<dsp56300::Word, 9> sources{};
-    const auto pending = dma_.interrupts();
-    for (unsigned channel = 0; channel < 6; ++channel) {
-      if ((pending & (1U << channel)) != 0) { sources[channel] = dma0_vector + (channel * 2); }
+  [[nodiscard]] std::optional<Interrupts::Request>
+  interrupt_request(const dsp56300::Word status = 0) const noexcept {
+    std::array<dsp56300::Word, 9> sources;
+    std::size_t count = 0;
+    for (auto pending = dma_.interrupts(); pending != 0; pending &= pending - 1U) {
+      const auto channel = static_cast<unsigned>(std::countr_zero(pending));
+      sources[count++] = dma0_vector + (channel * 2);
     }
-    sources[6] = timers_.interrupt().value_or(0);
-    sources[7] = dax_.interrupt().value_or(0);
-    if (peer_interrupt()) { sources[8] = 0x10; }
-    return sources;
+    if (const auto vector = timers_.interrupt()) { sources[count++] = *vector; }
+    if (const auto vector = dax_.interrupt()) { sources[count++] = *vector; }
+    if (peer_interrupt()) { sources[count++] = 0x10; }
+    if (count == 0) { return {}; }
+    return interrupts_.select(std::span(sources).first(count), status);
   }
 
   void acknowledge(const dsp56300::Word vector) {
