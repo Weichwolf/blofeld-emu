@@ -3,7 +3,6 @@
 
 #include "execution.hpp"
 
-#include <algorithm>
 #include <array>
 #include <bit>
 #include <cstdint>
@@ -185,24 +184,24 @@ void Dma::trigger_sources(unsigned sources) noexcept {
 unsigned Dma::select() const noexcept {
   if (std::has_single_bit(pending_)) { return static_cast<unsigned>(std::countr_zero(pending_)); }
   unsigned best = 0;
+  unsigned eligible = 0;
   for (auto remaining = pending_; remaining != 0; remaining &= remaining - 1U) {
     const auto index = static_cast<unsigned>(std::countr_zero(remaining));
-    best = std::max((channels_[index].control >> priority_shift) & 3U, best);
+    const auto priority = (channels_[index].control >> priority_shift) & 3U;
+    if (priority < best) { continue; }
+    if (priority > best) {
+      best = priority;
+      eligible = 0;
+    }
+    eligible |= 1U << index;
   }
   const auto previous = last_[best];
-  if (last_valid_[best] && (pending_ & (1U << previous)) != 0 &&
-      ((channels_[previous].control >> priority_shift) & 3) == best &&
+  if (last_valid_[best] && (eligible & (1U << previous)) != 0 &&
       (channels_[previous].control & continuous) != 0) {
     return previous;
   }
-  for (unsigned step = 1; step <= channel_count; ++step) {
-    const auto index = (previous + step) % channel_count;
-    if ((pending_ & (1U << index)) != 0 &&
-        ((channels_[index].control >> priority_shift) & 3) == best) {
-      return index;
-    }
-  }
-  return 0; // service() calls only with a nonempty pending set.
+  const auto after_previous = eligible & (~0U << (previous + 1U));
+  return static_cast<unsigned>(std::countr_zero(after_previous != 0 ? after_previous : eligible));
 }
 
 bool Dma::fail_operand(const Address address, Failure context, const char *reason) noexcept {
