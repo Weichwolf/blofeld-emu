@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cstdint>
 #include <dsp56300/memory.hpp>
 #include <optional>
 
@@ -17,6 +18,37 @@ constexpr Word last_control = 0xffffd8, enable = 0x800000, irq_enable = 0x400000
 constexpr Word continuous = 0x10000, three_dimensions = 0x400;
 constexpr unsigned channel_count = 6, priority_shift = 17, transfer_shift = 19;
 constexpr unsigned word_bits = 24, request_mask = 31;
+
+struct AddressLayout {
+  std::uint8_t source = 0, destination = 0, low = 0, middle = 0;
+};
+
+constexpr auto address_layouts = [] {
+  constexpr unsigned modes_per_dimension = 64;
+  constexpr unsigned layout_count = 2 * modes_per_dimension;
+  std::array<AddressLayout, layout_count> layouts{};
+  for (unsigned format = 0; format < layout_count; ++format) {
+    const auto modes = format & (modes_per_dimension - 1);
+    const auto source = static_cast<std::uint8_t>(modes & 7);
+    const auto destination = static_cast<std::uint8_t>(modes >> 3U);
+    if (format < modes_per_dimension) {
+      if (source < 6 && destination < 6) {
+        layouts[format] = {
+            .source = source,
+            .destination = destination,
+            .low = static_cast<std::uint8_t>(source < 4 || destination < 4 ? 12 : word_bits)};
+      }
+    } else if ((modes & 3) != 3) {
+      const bool source_selected = (modes & 4) != 0;
+      layouts[format] = {.source = static_cast<std::uint8_t>(source_selected ? destination : 6),
+                         .destination =
+                             static_cast<std::uint8_t>(source_selected ? 7 : destination),
+                         .low = static_cast<std::uint8_t>((modes & 3) == 2 ? 12 : 6),
+                         .middle = static_cast<std::uint8_t>((modes & 3) == 1 ? 12 : 6)};
+    }
+  }
+  return layouts;
+}();
 
 struct Counter {
   Word value = 0, reload = 0;
@@ -40,6 +72,7 @@ Word next_count(const Counter counter, const unsigned low, const unsigned middle
 
 void Dma::reset() noexcept {
   channels_ = {};
+  request_channels_ = {};
   offsets_ = {};
   last_.fill(channel_count - 1);
   last_valid_.fill(false);
@@ -114,7 +147,9 @@ bool Dma::write(const Write access) noexcept {
     default: return false;
   }
   const bool previous = (channel.control & enable) != 0;
+  route(index, false);
   channel.control = access.value;
+  route(index, true);
   const auto bit = 1U << index;
   if ((access.value & enable) != 0) {
     done_ &= ~bit;
@@ -132,13 +167,18 @@ bool Dma::trigger(const unsigned source) noexcept {
   return true;
 }
 
-void Dma::trigger_sources(const unsigned sources) noexcept {
-  if (sources == 0) { return; }
-  for (unsigned index = 0; index < channel_count; ++index) {
-    const auto control = channels_[index].control;
-    if ((control & enable) != 0 && ((control >> transfer_shift) & 7) != 3) {
-      pending_ |= ((sources >> ((control >> 11U) & request_mask)) & 1U) << index;
-    }
+void Dma::route(const unsigned index, const bool enabled) noexcept {
+  const auto control = channels_[index].control;
+  if ((control & enable) == 0 || ((control >> transfer_shift) & 7) == 3) { return; }
+  auto &channels = request_channels_[(control >> 11U) & request_mask];
+  const auto channel = 1U << index;
+  channels = static_cast<std::uint8_t>(enabled ? channels | channel : channels & ~channel);
+}
+
+void Dma::trigger_sources(unsigned sources) noexcept {
+  while (sources != 0) {
+    pending_ |= request_channels_[static_cast<unsigned>(std::countr_zero(sources))];
+    sources &= sources - 1U;
   }
 }
 
@@ -205,30 +245,19 @@ std::optional<Dma::Plan> Dma::prepare(const unsigned index) noexcept {
     static_cast<void>(fail_register(address, "Unknown DMA operand or unsupported transfer fields"));
     return {};
   }
-  const auto modes = (control >> 4U) & 63;
-  unsigned source_mode = modes & 7;
-  unsigned destination_mode = modes >> 3U;
-  unsigned low = word_bits;
-  unsigned middle = 0;
-  if ((control & three_dimensions) != 0) {
-    if ((modes & 3) == 3) {
-      static_cast<void>(fail_register(address - 3, "Reserved DMA counter mode"));
-      return {};
-    }
-    const auto selected = modes >> 3U;
-    source_mode = (modes & 4) != 0 ? selected : 6;
-    destination_mode = (modes & 4) != 0 ? 7 : selected;
-    low = (modes & 3) == 2 ? 12U : 6U;
-    middle = (modes & 3) == 1 ? 12U : 6U;
-  } else if (source_mode >= 6 || destination_mode >= 6) {
-    static_cast<void>(fail_register(address - 3, "Reserved DMA address mode"));
+  const auto layout = address_layouts[(control >> 4U) & (address_layouts.size() - 1)];
+  if (layout.low == 0) {
+    static_cast<void>(fail_register(address - 3,
+                                    (control & three_dimensions) != 0
+                                        ? "Reserved DMA counter mode"
+                                        : "Reserved DMA address mode"));
     return {};
-  } else if (source_mode < 4 || destination_mode < 4) {
-    low = 12;
   }
-  const auto source_increment = increment(source_mode, channel, low, middle);
+  const auto low = layout.low;
+  const auto middle = layout.middle;
+  const auto source_increment = increment(layout.source, channel, low, middle);
   if (!source_increment) { return {}; }
-  const auto destination_increment = increment(destination_mode, channel, low, middle);
+  const auto destination_increment = increment(layout.destination, channel, low, middle);
   if (!destination_increment) { return {}; }
   constexpr std::array spaces{dsp56300::Space::x, dsp56300::Space::y, dsp56300::Space::program};
   const auto count = next_count({.value = channel.count, .reload = channel.reload}, low, middle);
@@ -258,7 +287,10 @@ void Dma::advance(const unsigned index, const Plan &plan) noexcept {
   if (plan.block_end || (channel.control & enable) == 0) {
     done_ |= bit;
     if ((channel.control & irq_enable) != 0) { interrupts_ |= bit; }
-    if (mode <= 3) { channel.control &= ~enable; }
+    if (mode <= 3) {
+      route(index, false);
+      channel.control &= ~enable;
+    }
     static_cast<void>(trigger(4 + index));
   }
 }

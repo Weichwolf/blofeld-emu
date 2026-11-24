@@ -215,6 +215,7 @@ void triggered_modes_and_chaining() {
               line.trigger(0) && line_memory.service(line) && line_memory.stores.size() == 6 &&
               (read(line, first_source - 3) & enable) == 0,
           "Line mode consumes one inner row per request and stops at the full block boundary");
+  require(line.trigger(0) && !line.pending(), "A completed one-shot stops accepting its source");
   for (const unsigned mode : {0U, 4U}) {
     Dma dma;
     configure(
@@ -269,6 +270,16 @@ void simultaneous_sources() {
   dma.trigger_sources(0);
   require(memory.service(dma) && memory.stores.size() == 2,
           "An absent request source never schedules a transfer");
+  put(dma, {.address = first_source - 3, .value = request(dax_request, 0)});
+  dma.trigger_sources(1U << esai_request);
+  require(!dma.pending(), "Reprogramming a channel removes its previous source");
+  dma.trigger_sources(1U << dax_request);
+  require(memory.service(dma) && memory.stores.size() == 4 &&
+              memory.stores[2].value == dax_source && memory.stores[3].value == esai_source,
+          "The new source releases both subscribed channels in priority order");
+  dma.reset();
+  dma.trigger_sources(1U << dax_request);
+  require(!dma.pending(), "A reset clears the previously programmed request sources");
 }
 
 void arbitration_and_errors() {
