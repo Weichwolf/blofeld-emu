@@ -17,6 +17,10 @@ JACK audio without connecting speakers. The event sequence is adapted from the
 the same event sequence as `nachtmusik.mid`, with one SMF tick per 44.1 kHz
 frame. Render it in Single mode with the factory presets and `--tail 0`.
 
+Run `blofeld-render-controls` with `BLOFELD_PCM_TIMING=1` to record accepted
+WAV frames. Use `python3 tools/pcm_deadline_replay.py output.wav` to report
+deadline slack at 44.1 kHz with three 64-frame periods and an ideal callback clock.
+
 For other generated workloads, pass the SMF to
 `build/release/jack-nachtmusik build/nachtmusik-inputs/<score>.mid` while the
 corresponding instrument profile is already playable. Replay ends at the SMF

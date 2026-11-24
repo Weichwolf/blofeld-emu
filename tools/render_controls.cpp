@@ -44,7 +44,8 @@
 namespace {
 class PcmTiming {
 public:
-  explicit PcmTiming(const blofeld::vi::PcmOutput sink) : sink_(sink) {
+  explicit PcmTiming(blofeld::app::OfflineRender &render)
+      : render_(render), sink_(render.output()) {
     // Allocate before the DSP starts so recording does not grow the buffer mid-run.
     submissions_.reserve(maximum_submissions);
   }
@@ -60,11 +61,13 @@ public:
                   if (timing.submissions_.size() == maximum_submissions) {
                     throw std::runtime_error("PCM timing capture reached its block limit");
                   }
-                  timing.submissions_.push_back({.accepted = Clock::now(),
-                                                 .first_frame = block.first_frame,
-                                                 .first_tick = block.ticks.front(),
-                                                 .last_tick = block.ticks.back(),
-                                                 .frames = block.frames.size()});
+                  timing.submissions_.push_back(
+                      {.accepted = Clock::now(),
+                       .first_frame = block.first_frame,
+                       .first_tick = block.ticks.front(),
+                       .last_tick = block.ticks.back(),
+                       .frames = block.frames.size(),
+                       .written_frames = timing.render_.written_frames()});
                   return true;
                 },
             .close =
@@ -78,12 +81,12 @@ public:
     path += ".timing.tsv";
     std::ofstream out(path);
     out.exceptions(std::ios::failbit | std::ios::badbit);
-    out << "monotonic_ns\tfirst_frame\tframes\tfirst_tick\tlast_tick\n";
+    out << "monotonic_ns\tfirst_frame\tframes\tfirst_tick\tlast_tick\twritten_frames\n";
     for (const auto &block : submissions_) {
       const auto time =
           std::chrono::duration_cast<std::chrono::nanoseconds>(block.accepted.time_since_epoch());
       out << time.count() << '\t' << block.first_frame << '\t' << block.frames << '\t'
-          << block.first_tick << '\t' << block.last_tick << '\n';
+          << block.first_tick << '\t' << block.last_tick << '\t' << block.written_frames << '\n';
     }
     out.close();
   }
@@ -95,9 +98,11 @@ private:
     Clock::time_point accepted;
     std::uint64_t first_frame, first_tick, last_tick;
     std::size_t frames;
+    std::uint64_t written_frames;
   };
 
   static constexpr std::size_t maximum_submissions = 1U << 19U;
+  const blofeld::app::OfflineRender &render_;
   blofeld::vi::PcmOutput sink_;
   std::vector<Submission> submissions_;
 };
@@ -183,7 +188,7 @@ int main(int argc, char **argv) try {
     const auto storage = memory ? memory->storage() : blofeld::vi::dsp::Memory::Storage{};
     blofeld::app::OfflineRender render(options);
     std::optional<PcmTiming> timing;
-    if (capture_timing) { timing.emplace(render.output()); }
+    if (capture_timing) { timing.emplace(render); }
     blofeld::vi::VmContext vm(std::move(image),
                               boot,
                               mcu,
