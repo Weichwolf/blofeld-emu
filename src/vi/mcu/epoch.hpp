@@ -78,6 +78,7 @@ public:
   [[nodiscard]] bool attained(const std::uint64_t exclusive) noexcept {
     if (error_ != Error::none || phase_ == Phase::invalidated) { return false; }
     if (exclusive < attained_ || exclusive < source_) { return fail(Error::time); }
+    if (exclusive == attained_) [[likely]] { return true; }
     attained_ = exclusive;
     while (size_ != 0 && storage_[first_].ticks < attained_) {
       first_ = (first_ + 1) % storage_.size();
