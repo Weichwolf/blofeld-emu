@@ -23,6 +23,10 @@ class OfflineRender {
 public:
   explicit OfflineRender(const Options &options);
   [[nodiscard]] vi::PcmOutput output() noexcept;
+
+  // Read on the PCM owner or after run() has stopped it.
+  [[nodiscard]] std::uint64_t written_frames() const noexcept { return wav_.frames(); }
+
   int run(vi::VmContext &vm,
           const host::Signals &signals,
           std::chrono::steady_clock::time_point launched);

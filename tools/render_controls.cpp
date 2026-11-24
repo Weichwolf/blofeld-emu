@@ -9,6 +9,7 @@
 #include "files/read.hpp"
 #include "io/coupling.hpp"
 #include "io/midi_port.hpp"
+#include "io/pcm_output.hpp"
 #include "mcu/program.hpp"
 #include "memory/faults.hpp"
 #include "options.hpp"
@@ -26,16 +27,86 @@
 #include <cstdint>
 #include <dsp56300/core.hpp>
 #include <exception>
+#include <filesystem>
+#include <fstream>
+#include <ios>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
+#include <stop_token>
 #include <string_view>
 #include <system_error>
 #include <utility>
 #include <vector>
 
 namespace {
+class PcmTiming {
+public:
+  explicit PcmTiming(blofeld::app::OfflineRender &render)
+      : render_(render), sink_(render.output()) {
+    // Allocate before the DSP starts so recording does not grow the buffer mid-run.
+    submissions_.reserve(maximum_submissions);
+  }
+
+  [[nodiscard]] blofeld::vi::PcmOutput output() noexcept {
+    return {.owner = this,
+            .write =
+                [](void *const owner,
+                   const blofeld::vi::PcmOutput::Block block,
+                   const std::stop_token &stop) {
+                  auto &timing = *static_cast<PcmTiming *>(owner);
+                  if (!timing.sink_.write(timing.sink_.owner, block, stop)) { return false; }
+                  if (timing.submissions_.size() == maximum_submissions) {
+                    throw std::runtime_error("PCM timing capture reached its block limit");
+                  }
+                  timing.submissions_.push_back(
+                      {.accepted = Clock::now(),
+                       .first_frame = block.first_frame,
+                       .first_tick = block.ticks.front(),
+                       .last_tick = block.ticks.back(),
+                       .frames = block.frames.size(),
+                       .written_frames = timing.render_.written_frames()});
+                  return true;
+                },
+            .close =
+                [](void *const owner) noexcept {
+                  const auto sink = static_cast<PcmTiming *>(owner)->sink_;
+                  sink.close(sink.owner);
+                }};
+  }
+
+  void save(std::filesystem::path path) const {
+    path += ".timing.tsv";
+    std::ofstream out(path);
+    out.exceptions(std::ios::failbit | std::ios::badbit);
+    out << "monotonic_ns\tfirst_frame\tframes\tfirst_tick\tlast_tick\twritten_frames\n";
+    for (const auto &block : submissions_) {
+      const auto time =
+          std::chrono::duration_cast<std::chrono::nanoseconds>(block.accepted.time_since_epoch());
+      out << time.count() << '\t' << block.first_frame << '\t' << block.frames << '\t'
+          << block.first_tick << '\t' << block.last_tick << '\t' << block.written_frames << '\n';
+    }
+    out.close();
+  }
+
+private:
+  using Clock = std::chrono::steady_clock;
+
+  struct Submission {
+    Clock::time_point accepted;
+    std::uint64_t first_frame, first_tick, last_tick;
+    std::size_t frames;
+    std::uint64_t written_frames;
+  };
+
+  static constexpr std::size_t maximum_submissions = 1U << 19U;
+  const blofeld::app::OfflineRender &render_;
+  blofeld::vi::PcmOutput sink_;
+  std::vector<Submission> submissions_;
+};
+
 std::vector<std::uint64_t>
 settings(const std::string_view name, const std::size_t count, const std::uint64_t fallback = 0) {
   auto text = blofeld::host::inherited_setting(name);
@@ -84,6 +155,7 @@ int main(int argc, char **argv) try {
   }
   const auto windows =
       settings("BLOFELD_D2", workloads.size(), blofeld::vi::Coupling::default_window);
+  const bool capture_timing = blofeld::host::inherited_setting("BLOFELD_PCM_TIMING") == "1";
 #if defined(BLOFELD_CENSUS)
   const auto bounds = settings("BLOFELD_CENSUS_BOUNDS", 2 * workloads.size());
 #endif
@@ -115,11 +187,13 @@ int main(int argc, char **argv) try {
             : nullptr;
     const auto storage = memory ? memory->storage() : blofeld::vi::dsp::Memory::Storage{};
     blofeld::app::OfflineRender render(options);
+    std::optional<PcmTiming> timing;
+    if (capture_timing) { timing.emplace(render); }
     blofeld::vi::VmContext vm(std::move(image),
                               boot,
                               mcu,
                               std::move(media),
-                              render.output(),
+                              timing ? timing->output() : render.output(),
                               blofeld::vi::MidiPort::InputMode::stream,
                               dsp,
                               windows[workload],
@@ -137,6 +211,7 @@ int main(int argc, char **argv) try {
     if (const auto *probe = vm.state_probe()) { probe->report(std::cerr); }
 #endif
     if (result != 0) { return result; }
+    if (timing && options.wav) { timing->save(*options.wav); }
   }
   return 0;
 } catch (const std::exception &error) {

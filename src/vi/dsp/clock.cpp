@@ -91,12 +91,15 @@ bool Clock::advance(const std::uint64_t cycles) noexcept {
     scaled_fraction += (((elapsed % bottom_) * top_) % bottom_) * phase_unit;
   }
   // This numerator retains both the Q32 fraction and its exact rational residue.
-  const auto divisor = bottom_ * phase_unit;
-  const auto carry = scaled_fraction / divisor;
+  // Only the high word can contribute to the whole-tick quotient.
+  const auto upper = static_cast<std::uint32_t>(scaled_fraction >> phase_bits);
+  const auto divisor = static_cast<std::uint32_t>(bottom_);
+  const auto carry = upper / divisor;
   const auto maximum = std::numeric_limits<std::uint64_t>::max();
   if (whole > maximum - ticks_ || carry > maximum - ticks_ - whole) { return false; }
   ticks_ += whole + carry;
-  fraction_ = scaled_fraction % divisor;
+  fraction_ =
+      (std::uint64_t{upper % divisor} << phase_bits) | static_cast<std::uint32_t>(scaled_fraction);
   cycles_ = cycles;
   return true;
 }
@@ -107,8 +110,10 @@ std::optional<std::uint64_t> Clock::deadline(const std::uint64_t ticks) const no
   std::uint64_t delta = 0;
   if (elapsed <= deadline_limit_) {
     const auto numerator = (elapsed * (bottom_ * phase_unit)) - fraction_;
-    const auto divisor = top_ * phase_unit;
-    delta = (numerator / divisor) + std::uint64_t{numerator % divisor != 0};
+    const auto upper = static_cast<std::uint32_t>(numerator >> phase_bits);
+    const auto divisor = static_cast<std::uint32_t>(top_);
+    delta = std::uint64_t{upper / divisor} +
+            std::uint64_t{upper % divisor != 0 || static_cast<std::uint32_t>(numerator) != 0};
   } else {
     const auto whole = scaled(elapsed, bottom_, top_);
     if (!whole) { return {}; }
