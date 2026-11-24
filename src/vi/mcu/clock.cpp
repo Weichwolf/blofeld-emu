@@ -83,16 +83,22 @@ void Clock::lock(const bool ready) noexcept {
 }
 
 bool Clock::elapsed(const Cycle cycles) noexcept {
-  const auto period = bus_period();
-  if (cycles > (std::numeric_limits<Cycle>::max() - ticks_) / period) { return false; }
-  const auto span = cycles * period;
+  if (cycles == 0) { return true; }
+  Cycle span = 0;
+  Cycle next = 0;
+  if (__builtin_mul_overflow(cycles, bus_period(), &span) ||
+      __builtin_add_overflow(ticks_, span, &next)) {
+    return false;
+  }
   const auto rti = rti_period();
   if (rti != 0 && rti_running()) {
-    const auto partial = rti_phase_ + (span % rti);
-    if (span >= rti || partial >= rti) { flags_ |= rti_flag; }
-    rti_phase_ = partial % rti;
+    const bool spans_period = span >= rti;
+    const auto progress = rti_phase_ + (spans_period ? span % rti : span);
+    const bool wrapped = progress >= rti;
+    if (spans_period || wrapped) { flags_ |= rti_flag; }
+    rti_phase_ = wrapped ? progress - rti : progress;
   }
-  ticks_ += span;
+  ticks_ = next;
   time_ += cycles;
   return true;
 }
