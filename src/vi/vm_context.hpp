@@ -54,6 +54,8 @@ public:
   VmContext &operator=(const VmContext &) = delete;
   void request_stop() noexcept;
 
+  void coalesce_progress(const bool enabled) noexcept { coupling_->coalesce_progress(enabled); }
+
   void pedal(const bool level) noexcept { controls_.pedal(level); }
 
   [[nodiscard]] MidiPort &midi() noexcept { return midi_; }

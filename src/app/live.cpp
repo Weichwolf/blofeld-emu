@@ -12,6 +12,7 @@
 #include "report.hpp"
 #include "vm_context.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -60,7 +61,21 @@ vi::PcmOutput Live::output() noexcept {
               return false;
             }
             const auto output = live.consumer_.output();
-            return output.write(output.owner, block, stop);
+            if (!output.write(output.owner, block, stop)) { return false; }
+#if defined(__linux__)
+            const auto quantum = live.audio_.grants().minimum_request_frames.value_or(0);
+            const bool reserve = quantum != 0 && live.audio_.status().queued_frames >= quantum;
+            const bool midi_quiet = live.received_ == live.received_at_pcm_ && !live.pending_ &&
+                                    !port.peek_input() &&
+                                    !port.peek_input(vi::MidiPort::Receiver::dsp);
+            live.received_at_pcm_ = live.received_;
+            live.vm_->coalesce_progress(
+                midi_quiet && reserve && block.underruns == 0 &&
+                std::ranges::all_of(block.frames, [](const vi::PcmOutput::Frame frame) {
+                  return frame == vi::PcmOutput::Frame{};
+                }));
+#endif
+            return true;
           },
       .close =
           [](void *owner) noexcept {

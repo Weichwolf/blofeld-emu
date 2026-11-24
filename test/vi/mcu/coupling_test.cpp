@@ -174,7 +174,8 @@ void progress_wake() {
   if (!midi.finish_input()) { throw std::runtime_error("Input EOF refused"); }
   coupling.bind();
   constexpr std::uint64_t boundary = 20;
-  coupling.publish({}, boundary + 2);
+  coupling.publish({}, boundary + 3);
+  coupling.coalesce_progress(true);
   const auto observed = coupling.observation();
   auto waiter = std::async(std::launch::async, [&] {
     coupling.wait_for_progress({.observed = observed, .ticks = boundary});
@@ -190,6 +191,11 @@ void progress_wake() {
     throw std::runtime_error("DSP progress did not release the waiting MCU");
   }
   waiter.get();
+  coupling.coalesce_progress(false);
+  const auto playing = coupling.observation();
+  if (!coupling.receiver({.ticks = boundary + 2}) || coupling.observation() == playing) {
+    throw std::runtime_error("DSP progress did not notify with coalescing disabled");
+  }
 }
 
 void live_input_demand() {

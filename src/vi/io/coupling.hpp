@@ -92,6 +92,10 @@ public:
   };
 
   void wait_for_progress(ProgressWait progress) noexcept;
+
+  // Set by the DSP owner when the live consumer has silent PCM and reserve.
+  void coalesce_progress(bool enabled) noexcept { coalesce_progress_ = enabled; }
+
   void wait_checkpoint(std::uint64_t observed) noexcept;
   void notify() noexcept;
 
@@ -150,6 +154,7 @@ private:
   alignas(128) std::atomic<std::uint64_t> generation_{0};
   std::atomic<std::size_t> published_{0};
   std::atomic<bool> bound_{false};
+  bool coalesce_progress_ = false;
   std::atomic<std::uint64_t> checkpoint_ticks_{0}, checkpoint_request_{0}, checkpoint_ready_{0};
   std::uint64_t checkpoint_sequence_ = 0;
   alignas(128) std::atomic<std::uint64_t> known_{0};

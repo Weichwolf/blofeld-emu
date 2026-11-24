@@ -65,7 +65,7 @@ private:
   void send_midi(const std::stop_token &stop);
   [[nodiscard]] std::uint64_t tick_at(std::uint64_t frame) const noexcept;
   [[nodiscard]] std::uint64_t frame_at(std::uint64_t tick) const noexcept;
-  std::uint64_t origin_ = 0, lead_ = 0;
+  std::uint64_t origin_ = 0, lead_ = 0, received_at_pcm_ = 0;
   std::atomic<bool> midi_failed_{false};
 #endif
   void control();
