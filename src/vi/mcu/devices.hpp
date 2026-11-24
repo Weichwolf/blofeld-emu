@@ -138,8 +138,10 @@ struct Devices {
   [[nodiscard]] std::optional<std::uint64_t> timestamp(const cpu12::Core &core) const noexcept {
     const auto cycles = core.progress().estimated_cycles;
     if (idle > std::numeric_limits<Timer::Cycle>::max() - cycles) { return {}; }
+    const auto now = cycles + idle;
+    if (now == clock.cycles()) { return clock.ticks(); }
     auto projected = clock;
-    if (!projected.advance(cycles + idle)) { return {}; }
+    if (!projected.advance(now)) { return {}; }
     return projected.ticks();
   }
 
