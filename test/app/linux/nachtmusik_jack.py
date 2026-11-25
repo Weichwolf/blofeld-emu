@@ -40,13 +40,18 @@ def main():
     scratch = Path(__file__).resolve().parents[3] / "build/local"
     scratch.mkdir(parents=True, exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix="nachtmusik-jack-", dir=scratch))
-    profile = isolate_profile(args.profile, directory)
+    with tempfile.TemporaryDirectory(prefix="instrument.", dir=directory) as state:
+        profile = isolate_profile(args.profile, Path(state))
+        return check_live(args.binary_dir, profile, inputs, directory)
+
+
+def check_live(binary_dir, profile, inputs, directory):
     runtime = directory / "runtime"
     runtime.mkdir(mode=0o700)
     log = directory / "emulator.log"
     with log.open("w") as output:
         emulator = subprocess.Popen(
-            [args.binary_dir / "blofeld-headless", "--profile", profile],
+            [binary_dir / "blofeld-headless", "--profile", profile],
             env=os.environ | {"XDG_RUNTIME_DIR": str(runtime)}, stdout=output, stderr=output)
     try:
         until = time.monotonic() + 15
@@ -54,7 +59,7 @@ def main():
             if emulator.poll() is not None or time.monotonic() >= until:
                 raise RuntimeError(f"Original firmware did not become playable. See {log}")
             time.sleep(0.04)
-        replay = subprocess.run([args.binary_dir / "jack-nachtmusik", inputs], timeout=43)
+        replay = subprocess.run([binary_dir / "jack-nachtmusik", inputs], timeout=43)
         display = (runtime / "blofeld-emu" / "display.pbm").read_bytes()
         glyph = b"".join(display[10+16*row:13+16*row] for row in range(11, 18))
     finally:
