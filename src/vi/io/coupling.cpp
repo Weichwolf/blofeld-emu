@@ -188,16 +188,11 @@ void Coupling::refresh() noexcept {
 
 void Coupling::attained(const std::uint64_t exclusive) noexcept {
   const auto old = known_.load(std::memory_order_relaxed);
-  if (exclusive > old) {
-    if (!coalesce_progress_) {
-      known_.store(exclusive, std::memory_order_release);
-      notify();
-      return;
-    }
-    known_.store(exclusive, std::memory_order_seq_cst);
-    const auto target = mcu_wait_after_.load(std::memory_order_seq_cst);
-    if (old <= target && target < exclusive) { notify(); }
-  }
+  if (exclusive <= old) { return; }
+  // Checkpoints and device messages publish their own wakeups.
+  known_.store(exclusive, std::memory_order_seq_cst);
+  const auto target = mcu_wait_after_.load(std::memory_order_seq_cst);
+  if (old <= target && target < exclusive) { notify(); }
 }
 
 mcu::InputHistory::Values Coupling::sample() {

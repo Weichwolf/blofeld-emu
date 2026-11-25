@@ -177,7 +177,6 @@ bool Live::release_input(const AudioConsumer::InputGrant &grant, const std::uint
     if (!pending_) { break; }
     const auto requested = tick_at(pending_->timestamp + lead_);
     if (requested >= cutoff) { break; }
-    vm_->coalesce_progress(false);
     const auto admission = port.stage_input(pending_->data(), requested);
     if (admission.status == vi::MidiPort::InputStatus::full) {
       cutoff = std::min(cutoff, admission.tick);

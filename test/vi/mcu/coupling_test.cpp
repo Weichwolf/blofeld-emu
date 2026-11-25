@@ -175,7 +175,6 @@ void progress_wake() {
   coupling.bind();
   constexpr std::uint64_t boundary = 20;
   coupling.publish({}, boundary + 3);
-  coupling.coalesce_progress(true);
   const auto observed = coupling.observation();
   auto waiter = std::async(std::launch::async, [&] {
     coupling.wait_for_progress({.observed = observed, .ticks = boundary});
@@ -191,10 +190,9 @@ void progress_wake() {
     throw std::runtime_error("DSP progress did not release the waiting MCU");
   }
   waiter.get();
-  coupling.coalesce_progress(false);
-  const auto playing = coupling.observation();
-  if (!coupling.receiver({.ticks = boundary + 2}) || coupling.observation() == playing) {
-    throw std::runtime_error("DSP progress did not notify with coalescing disabled");
+  const auto settled = coupling.observation();
+  if (!coupling.receiver({.ticks = boundary + 2}) || coupling.observation() != settled) {
+    throw std::runtime_error("DSP progress notified after the MCU wait was satisfied");
   }
   const auto published = coupling.observation();
   coupling.publish({}, boundary + 3);
