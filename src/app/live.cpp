@@ -72,7 +72,11 @@ vi::PcmOutput Live::output() noexcept {
             live.vm_->coalesce_progress(
                 midi_quiet && reserve && block.underruns == 0 &&
                 std::ranges::all_of(block.frames, [](const vi::PcmOutput::Frame frame) {
-                  return frame == vi::PcmOutput::Frame{};
+                  // Only progress notifications are coalesced.
+                  // The guest PCM has already been submitted unchanged.
+                  constexpr std::int32_t residue = 32;
+                  return frame[0] >= -residue && frame[0] <= residue && frame[1] >= -residue &&
+                         frame[1] <= residue;
                 }));
 #endif
             return true;
