@@ -433,6 +433,8 @@ void invalid_catalogues(const Fixture &fixture) {
           [](auto &input) { variant(input)["code"] = code_range(Array{dsp56300::word_mask, 2}); });
   rejects(fixture, [](auto &input) { variant(input)["code"] = code_range(Array{0, 1}); });
   rejects(fixture, [](auto &input) { variant(input)["failed_fetches"] = false; });
+  rejects(fixture, [](auto &input) { variant(input)["region_starts"] = false; });
+  rejects(fixture, [](auto &input) { variant(input)["region_starts"] = Array{0}; });
   rejects(fixture, [](auto &input) {
     variant(input)["guard_sets"] =
         Array{Array{Object{{.K = "address", .V = 0}, {.K = "value", .V = literal}}}};

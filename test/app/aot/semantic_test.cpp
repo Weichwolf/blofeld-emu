@@ -148,6 +148,27 @@ template <class Input> void region_modes(const std::filesystem::path &root) {
   }
 }
 
+void dsp_region_starts(const std::filesystem::path &root) {
+  DspInput input;
+  auto &variant = input.variants.front();
+  const std::array first{DspInput::start};
+  const std::array second{DspInput::start + 1};
+  const auto prepare = [&] {
+    return aot::prepare_semantic<DspInput::Core>(input.image(), input.options(), root);
+  };
+  variant.region_starts = first;
+  const auto first_artifact = prepare();
+  variant.region_starts = second;
+  const auto second_artifact = prepare();
+  require(first_artifact.identity() != second_artifact.identity() && records(root).size() == 2,
+          "Different region starts keep separate semantic cache records");
+  const auto before = builders + passes;
+  variant.region_starts = first;
+  require(prepare().identity() == first_artifact.identity() && before == builders + passes &&
+              records(root).size() == 2,
+          "An earlier set of region starts still restores without lowering");
+}
+
 void dsp_memory_modes(const std::filesystem::path &root) {
   const DspInput input;
   auto options = input.options();
@@ -254,6 +275,7 @@ int main(const int argc, const char *const *const argv) try {
   lifecycle<CpuInput>(root / "cpu12");
   lifecycle<DspInput>(root / "dsp56300");
   region_modes<DspInput>(root / "region-modes");
+  dsp_region_starts(root / "region-starts");
   dsp_memory_modes(root / "memory-modes");
   std::cout << "Verified actual cold/warm semantic reuse and deterministic rejection/rebuild for "
                "both cores.\n";
