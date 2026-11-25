@@ -284,6 +284,12 @@ PlaybackStatus Playback::status() const noexcept {
           .position = {}};
 }
 
+bool Playback::fills_render_quantum(const std::size_t pending) const noexcept {
+  if (midi_frontier() == 0) { return false; }
+  const auto queued = impl_->pcm.queued();
+  return queued < impl_->block && pending >= impl_->block - queued;
+}
+
 std::uint64_t Playback::midi_frontier() const noexcept {
   return impl_->frontier.load(std::memory_order_acquire);
 }
