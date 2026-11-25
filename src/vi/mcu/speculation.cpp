@@ -141,6 +141,12 @@ std::optional<std::uint64_t> Speculation::input(const Epoch::Signal signal,
                                                 const std::uint64_t time,
                                                 const std::uint64_t mask) noexcept {
   if (!poll()) { return {}; }
+  return sample_input(signal, time, mask);
+}
+
+std::optional<std::uint64_t> Speculation::sample_input(const Epoch::Signal signal,
+                                                       const std::uint64_t time,
+                                                       const std::uint64_t mask) noexcept {
   const auto value = history_.at(time, signal);
   if (!value || !epoch_.record({.ticks = time, .value = *value, .mask = mask, .signal = signal})) {
     return {};
@@ -232,17 +238,20 @@ bool Speculation::read(const std::uint8_t mask,
 }
 
 std::optional<std::uint64_t> Speculation::pending_irq() noexcept {
-  if (state_.reset.held || !state_.ready) { return {}; }
+  if (state_.reset.held || !state_.ready || !poll()) { return {}; }
   const auto time = ticks();
-  const auto level = input(Epoch::Signal::interrupt, time, 1);
-  const auto announcement = input(Epoch::Signal::announce, time);
-  const auto generation = input(Epoch::Signal::generation, time);
-  if (!level || !announcement || !generation) { return {}; }
-  if (*level != 0 || (*announcement != 0 && *announcement != state_.accepted_announcement) ||
-      history_.raised(Epoch::Signal::interrupt, state_.irq_window, time)) {
-    return generation;
+  // Observe one peer state at this guest tick. Later input still invalidates each recorded read.
+  const auto level = sample_input(Epoch::Signal::interrupt, time, 1);
+  if (!level) { return {}; }
+  if (*level == 0) {
+    const auto announcement = sample_input(Epoch::Signal::announce, time);
+    if (!announcement) { return {}; }
+    const bool announced = *announcement != 0 && *announcement != state_.accepted_announcement;
+    if (!announced && !history_.raised(Epoch::Signal::interrupt, state_.irq_window, time)) {
+      return {};
+    }
   }
-  return {};
+  return sample_input(Epoch::Signal::generation, time);
 }
 
 bool Speculation::irq(std::uint64_t &generation) noexcept {
