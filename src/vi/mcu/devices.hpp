@@ -140,9 +140,7 @@ struct Devices {
     if (idle > std::numeric_limits<Timer::Cycle>::max() - cycles) { return {}; }
     const auto now = cycles + idle;
     if (now == clock.cycles()) { return clock.ticks(); }
-    auto projected = clock;
-    if (!projected.advance(now)) { return {}; }
-    return projected.ticks();
+    return clock.ticks_at(now);
   }
 
   bool advance(const cpu12::Core &core) noexcept {

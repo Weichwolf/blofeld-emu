@@ -40,6 +40,9 @@ public:
 
   [[nodiscard]] Cycle cycles() const noexcept { return time_; }
 
+  // Project 60 MHz time at a bus cycle without advancing the clock.
+  [[nodiscard]] std::optional<Cycle> ticks_at(Cycle now) const noexcept;
+
   // Current bus-period projection; callers also honor the next clock event.
   [[nodiscard]] std::optional<Cycle> at_ticks(Cycle ticks) const noexcept;
 

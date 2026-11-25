@@ -26,6 +26,16 @@ constexpr std::uint16_t rti_vector = 0xfff0, lock_vector = 0xffc6;
 Clock::Cycle ceiling(const Clock::Cycle value, const unsigned divisor) noexcept {
   return (value / divisor) + (value % divisor != 0 ? 1U : 0U);
 }
+
+bool next_ticks(Clock::Cycle &ticks, const Clock::Cycle cycles, const unsigned period) noexcept {
+  Clock::Cycle span = 0;
+  Clock::Cycle next = 0;
+  if (__builtin_mul_overflow(cycles, period, &span) || __builtin_add_overflow(ticks, span, &next)) {
+    return false;
+  }
+  ticks = next;
+  return true;
+}
 }
 
 bool Clock::contains(const std::uint16_t offset) noexcept {
@@ -84,12 +94,9 @@ void Clock::lock(const bool ready) noexcept {
 
 bool Clock::elapsed(const Cycle cycles) noexcept {
   if (cycles == 0) { return true; }
-  Cycle span = 0;
-  Cycle next = 0;
-  if (__builtin_mul_overflow(cycles, bus_period(), &span) ||
-      __builtin_add_overflow(ticks_, span, &next)) {
-    return false;
-  }
+  const auto before = ticks_;
+  if (!next_ticks(ticks_, cycles, bus_period())) { return false; }
+  const auto span = ticks_ - before;
   const auto rti = rti_period();
   if (rti != 0 && rti_running()) {
     const bool spans_period = span >= rti;
@@ -98,7 +105,6 @@ bool Clock::elapsed(const Cycle cycles) noexcept {
     if (spans_period || wrapped) { flags_ |= rti_flag; }
     rti_phase_ = wrapped ? progress - rti : progress;
   }
-  ticks_ = next;
   time_ += cycles;
   return true;
 }
@@ -137,6 +143,19 @@ std::optional<Clock::Cycle> Clock::deadline() const noexcept {
   }
   if (!delta || *delta > std::numeric_limits<Cycle>::max() - time_) { return {}; }
   return time_ + *delta;
+}
+
+std::optional<Clock::Cycle> Clock::ticks_at(const Cycle now) const noexcept {
+  if (now < time_) { return {}; }
+  if (qualification_) {
+    // Qualification can change the bus period within the projected span.
+    auto projected = *this;
+    if (!projected.advance(now)) { return {}; }
+    return projected.ticks();
+  }
+  auto ticks = ticks_;
+  if (!next_ticks(ticks, now - time_, bus_period())) { return {}; }
+  return ticks;
 }
 
 std::optional<Clock::Cycle> Clock::at_ticks(const Cycle ticks) const noexcept {

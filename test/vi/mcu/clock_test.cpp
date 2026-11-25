@@ -98,10 +98,20 @@ void local_flag_accesses() {
 
 void clock_switch_during_span() {
   Clock clock;
+  constexpr Clock::Cycle oscillator = 10;
+  constexpr Clock::Cycle phy = 2;
+  constexpr Clock::Cycle qualification = 2;
+  constexpr Clock::Cycle target = 5;
+  constexpr auto at_lock = qualification * oscillator;
+  constexpr auto at_target = at_lock + ((target - qualification) * phy);
   write(clock, {.offset = usb_control, .value = usb_clock, .bytes = 2});
   write(clock, {.offset = select, .value = pll});
-  require(clock.bus_period() == 10, "PLLSEL falls back to the oscillator until LOCK");
-  require(clock.advance(5) && clock.bus_period() == 2 && clock.ticks() == (2 * 10) + (3 * 2),
+  require(clock.bus_period() == oscillator, "PLLSEL falls back to the oscillator until LOCK");
+  require(clock.ticks_at(1) == oscillator && clock.ticks_at(qualification) == at_lock &&
+              clock.ticks_at(target) == at_target && clock.cycles() == 0 && clock.ticks() == 0 &&
+              clock.bus_period() == oscillator,
+          "A read-only projection uses both bus periods without qualifying the live clock");
+  require(clock.advance(target) && clock.bus_period() == phy && clock.ticks() == at_target,
           "A long span uses two oscillator bus periods then three qualified PHY periods");
   write(clock, {.offset = usb_control, .value = usb_suspended, .bytes = 2});
   require((read(clock, flags) & locked) != 0,
@@ -197,6 +207,9 @@ void controls_and_limits() {
   constexpr Clock::Cycle many = 1'000'000'000'000;
   require(large.advance(many) && large.ticks() == many * 10 && (read(large, flags) & rti) != 0,
           "Large spans latch periodic flags in constant time");
+  require(!large.ticks_at(many - 1) && !large.ticks_at(std::numeric_limits<Clock::Cycle>::max()) &&
+              large.cycles() == many && large.ticks() == many * 10,
+          "Backward and overflowing read-only projections leave device time intact");
   require(!large.advance(many - 1) && !large.advance(std::numeric_limits<Clock::Cycle>::max()),
           "Backward time and unrepresentable nominal timestamps fail explicitly");
   std::uint8_t value = 0;
