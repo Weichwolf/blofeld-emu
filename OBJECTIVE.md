@@ -57,8 +57,12 @@ Keep manufacturer inputs/generated artifacts local with source/size/hash identit
   zero underruns, missed deadlines, lost frames and repeated frames.
   Require real-time playback in every reference scenario. Once each scenario
   meets that floor, use W5 to decide performance trade-offs.
+- On the local Linux host, qualify sustained idle at no more than 3% of total
+  host CPU capacity at 44.1 kHz and 64 JACK frames. Measure each owner before
+  and after, including after release and effect tails. Record the result in #52.
 - Close issues against their scoped live, functional and qualification criteria.
-  The offline throughput milestones have their own acceptance in #103 and #104.
+  The deferred throughput and idle milestones have their own acceptance in #103
+  and #104.
 - Count valid original frames once against monotonic host processing time. Report
   compilation, boot/readiness, warm-up, active rendering, pacing and conversion
   separately. Require exact PCM with every frame delivered once at its original
@@ -83,10 +87,13 @@ Keep manufacturer inputs/generated artifacts local with source/size/hash identit
   finite guards, allow startup, fail unless playable and stop promptly on faults;
   no unchanged failed repetition without new evidence.
 
-## Deferred offline throughput
+## Deferred throughput and idle targets
 
 After the remaining live, functional and qualification issues are closed, qualify
-sustained W5 headless rendering at 2× real time in #103, then 4× in #104. At
-44.1 kHz these targets are 88,200 and 176,400 valid stereo frames per host second.
-Use exact original PCM and guest timing over the full workload. Report W1–W5 and
-A013 throughput with startup and preparation measured separately.
+sustained 2× W5 headless rendering and at most 2% idle CPU on the local Linux
+i5-1135G7 at 2.4 GHz in #103. Use the JACK setup from #52. Then qualify 4× W5
+rendering and at most 1% idle CPU on A18 Pro in #104. Use native CoreAudio for
+its idle measurement and record the actual buffer size. At 44.1 kHz, the
+render targets are 88,200 and 176,400 valid stereo frames per host second.
+Use exact original PCM and guest timing over the full workload. Report W1–W5
+and A013 throughput with startup and preparation measured separately.
