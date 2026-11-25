@@ -51,6 +51,9 @@ semantic_inputs(const auto image, const auto options, const std::string_view com
     if constexpr (requires { variant.failed_fetches; }) {
       key.bytes(std::as_bytes(variant.failed_fetches));
     }
+    if constexpr (requires { variant.region_starts; }) {
+      key.bytes(std::as_bytes(variant.region_starts));
+    }
   });
   key.sequence(options.memory, [&](const auto &variant) {
     key.number(variant.id);

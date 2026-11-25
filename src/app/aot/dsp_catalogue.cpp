@@ -260,7 +260,7 @@ using Guards = std::vector<vi::dsp::ProgramWord>;
 struct Variant {
   std::uint64_t id;
   vi::dsp::CodeSource code;
-  std::vector<Word> entries, resumes, failed_fetches;
+  std::vector<Word> entries, resumes, failed_fetches, region_starts;
   std::vector<Guards> guard_sets;
   std::vector<dsp56300::RegionLayout> memory;
   Word mode_mask = 0, mode = 0;
@@ -282,6 +282,9 @@ Guards guards(const Array &input) {
 
 void admission(Variant &variant, const Object &input) {
   variant.entries = addresses(array(input, "entries"));
+  if (input.get("region_starts") != nullptr) {
+    variant.region_starts = addresses(array(input, "region_starts"));
+  }
   variant.resumes = addresses(array(input, "resumes"));
   std::ranges::sort(variant.resumes);
   if (input.get("failed_fetches") != nullptr) {
@@ -387,7 +390,8 @@ vi::dsp::Program prepare(const Object &root,
     source.push_back({.id = variant.id,
                       .code = variant.code.code(),
                       .entries = variant.entries,
-                      .failed_fetches = variant.failed_fetches});
+                      .failed_fetches = variant.failed_fetches,
+                      .region_starts = variant.region_starts});
     for (const auto &words : variant.guard_sets) {
       choices.push_back({.variant = variant.id,
                          .resumes = variant.resumes,
