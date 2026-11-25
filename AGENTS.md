@@ -31,6 +31,8 @@ Decide everything else yourself.
   load on each reference host. Offline throughput diagnoses headroom. Report
   startup and preparation separately.
   ACCEPTANCE.tsv records qualification.
+- Close each issue on its own live, functional and qualification evidence.
+  Track 2× and 4× offline rendering as separate follow-ups in #103 and #104.
 - Less code is better. Report the src/ and test/ line delta with each published
   increment.
 

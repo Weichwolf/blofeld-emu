@@ -57,13 +57,12 @@ Keep manufacturer inputs/generated artifacts local with source/size/hash identit
   zero underruns, missed deadlines, lost frames and repeated frames.
   Require real-time playback in every reference scenario. Once each scenario
   meets that floor, use W5 to decide performance trade-offs.
+- Close issues against their scoped live, functional and qualification criteria.
+  The offline throughput milestones have their own acceptance in #103 and #104.
 - Count valid original frames once against monotonic host processing time. Report
   compilation, boot/readiness, warm-up, active rendering, pacing and conversion
-  separately. Require exact PCM and sustainable W5 offline throughput of at
-  least 176,400 valid stereo frames per host second at the 44.1 kHz reference
-  rate (4× real time). No lost, repeated or retimed frames; core/silent-startup
-  results do not qualify. Compare authored core algorithms with equivalent
-  Clang19 O3 C++.
+  separately. Require exact PCM with every frame delivered once at its original
+  timestamp. Compare authored core algorithms with equivalent Clang19 O3 C++.
 - Physical keyboard-actuation-to-analog latency targets **2-5 ms**, maximum **10 ms**,
   including scan, transport, firmware, queues, driver and DAC. Qualify an immediate-
   attack original sound under representative load; identify devices and report
@@ -83,3 +82,11 @@ Keep manufacturer inputs/generated artifacts local with source/size/hash identit
   their native host with identical inputs/settings. Probes use purpose-specific
   finite guards, allow startup, fail unless playable and stop promptly on faults;
   no unchanged failed repetition without new evidence.
+
+## Deferred offline throughput
+
+After the remaining live, functional and qualification issues are closed, qualify
+sustained W5 headless rendering at 2× real time in #103, then 4× in #104. At
+44.1 kHz these targets are 88,200 and 176,400 valid stereo frames per host second.
+Use exact original PCM and guest timing over the full workload. Report W1–W5 and
+A013 throughput with startup and preparation measured separately.
