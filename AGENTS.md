@@ -47,6 +47,8 @@ lives here and reaches the cores through their public interfaces.
 
 - German with the user; English code, comments, docs and commits. C++23, LLVM 19,
   CMake/Ninja, warnings as errors, clang-format, clang-tidy clean.
+- Run compiler builds and AOT preparation with `nice -n 15`. Keep builds
+  outside live measurement intervals.
 - Commit reviewed increments. Validate your native host without breaking the
   other. Both platforms use identical firmware, images and settings.
   Shared presets come from ../blofeld-src/tools/blofeld_image.py.
