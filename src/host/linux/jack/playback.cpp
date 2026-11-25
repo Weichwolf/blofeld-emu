@@ -17,6 +17,8 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <pthread.h>
+#include <sched.h>
 #include <span>
 #include <stdexcept>
 #include <stop_token>
@@ -288,6 +290,18 @@ bool Playback::fills_render_quantum(const std::size_t pending) const noexcept {
   if (midi_frontier() == 0) { return false; }
   const auto queued = impl_->pcm.queued();
   return queued < impl_->block && pending >= impl_->block - queued;
+}
+
+bool Playback::pin_callback(const cpu_set_t &mask) noexcept {
+  const auto thread = jack_client_thread_id(impl_->client.get());
+  cpu_set_t allowed{};
+  if (thread == decltype(thread){} ||
+      ::pthread_getaffinity_np(thread, sizeof(allowed), &allowed) != 0) {
+    return false;
+  }
+  CPU_AND(&allowed, &allowed, &mask);
+  return CPU_COUNT(&allowed) != 0 &&
+         ::pthread_setaffinity_np(thread, sizeof(allowed), &allowed) == 0;
 }
 
 std::uint64_t Playback::midi_frontier() const noexcept {

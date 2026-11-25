@@ -50,16 +50,39 @@ cpu_set_t thread_siblings(const int cpu) {
   return mask;
 }
 
-std::array<cpu_set_t, 2> owner_affinity() {
+std::vector<cpu_set_t> physical_cores(cpu_set_t remaining) {
+  std::vector<cpu_set_t> physical;
+  const auto first = std::max(0, ::sched_getcpu());
+  for (int offset = 0; offset < CPU_SETSIZE; ++offset) {
+    const auto cpu = (first + offset) % CPU_SETSIZE;
+    if (!CPU_ISSET(cpu, &remaining)) { continue; }
+    auto core = thread_siblings(cpu);
+    CPU_AND(&core, &core, &remaining);
+    if (!CPU_ISSET(cpu, &core)) { return {}; }
+    physical.push_back(core);
+    CPU_XOR(&remaining, &remaining, &core);
+  }
+  return physical;
+}
+
+std::array<cpu_set_t, 2> owner_affinity(host::audio::Playback &audio) {
   cpu_set_t allowed{};
   if (::sched_getaffinity(0, sizeof(allowed), &allowed) != 0) { return {}; }
-  const auto current = ::sched_getcpu();
-  if (current < 0) { return {}; }
-  auto mcu = thread_siblings(current);
-  CPU_AND(&mcu, &mcu, &allowed);
+  const auto physical = physical_cores(allowed);
+  if (physical.size() < 2) { return {}; }
+
+  auto mcu = physical.front();
+  // Keep the three deadline-sensitive threads off each other's SMT siblings.
+  if (physical.size() > 2) {
+    for (auto core = physical.rbegin(); core != physical.rend(); ++core) {
+      if (!audio.pin_callback(*core)) { continue; }
+      CPU_XOR(&allowed, &allowed, &*core);
+      if (CPU_EQUAL(&mcu, &*core)) { mcu = physical[1]; }
+      break;
+    }
+  }
   cpu_set_t dsp{};
   CPU_XOR(&dsp, &allowed, &mcu);
-  if (CPU_COUNT(&mcu) < 2 || CPU_COUNT(&dsp) == 0) { return {}; }
   return {mcu, dsp};
 }
 }
@@ -79,7 +102,7 @@ Live::Live(host::audio::Playback &audio, DisplayPublication &display, const Opti
 }
 
 void Live::start_owners() {
-  vm_->start([masks = owner_affinity()](const vi::VmContext::Owner owner) {
+  vm_->start([masks = owner_affinity(audio_)](const vi::VmContext::Owner owner) {
     const auto &mask = masks[owner == vi::VmContext::Owner::mcu ? 0U : 1U];
     if (CPU_COUNT(&mask) != 0) {
       static_cast<void>(::pthread_setaffinity_np(::pthread_self(), sizeof(mask), &mask));
