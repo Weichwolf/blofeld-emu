@@ -117,8 +117,8 @@ void Coupling::publish(const std::span<const mcu::Effects::Entry> entries,
 }
 
 void Coupling::request(const std::uint64_t ticks) noexcept {
-  const auto old = frontier_.load(std::memory_order_relaxed);
-  if (ticks > old) { frontier_.store(ticks, std::memory_order_release); }
+  if (ticks <= frontier_.load(std::memory_order_relaxed)) { return; }
+  frontier_.store(ticks, std::memory_order_release);
   notify();
 }
 

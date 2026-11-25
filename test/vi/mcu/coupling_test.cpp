@@ -198,14 +198,21 @@ void progress_wake() {
   }
   const auto published = coupling.observation();
   coupling.publish({}, boundary + 3);
+  coupling.request(boundary + 3);
+  coupling.request(boundary + 2);
   if (coupling.observation() != published) {
-    throw std::runtime_error("Unchanged MCU publication notified a waiter");
+    throw std::runtime_error("Unchanged MCU horizon notified a waiter");
   }
   const auto storage = coupling.source_storage();
   storage.front() = {.ticks = boundary + 3, .value = 0, .kind = vi::mcu::Effects::Kind::wait};
   coupling.publish(storage.first(1), boundary + 3);
   if (coupling.observation() == published) {
     throw std::runtime_error("New MCU effect at an unchanged boundary did not notify");
+  }
+  const auto effects = coupling.observation();
+  coupling.request(boundary + 4);
+  if (coupling.observation() == effects) {
+    throw std::runtime_error("Extending the MCU horizon did not notify");
   }
 }
 
