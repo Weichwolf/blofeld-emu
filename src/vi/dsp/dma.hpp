@@ -83,6 +83,7 @@ private:
   [[nodiscard]] unsigned select() const noexcept;
   [[nodiscard]] std::optional<Plan> prepare(unsigned index) noexcept;
   void advance(unsigned index, const Plan &plan) noexcept;
+  void route(unsigned index, bool enabled) noexcept;
   [[nodiscard]] bool fail_operand(Address address, Failure context, const char *reason) noexcept;
   [[nodiscard]] bool fail_register(dsp56300::Word address, const char *reason) noexcept;
   [[nodiscard]] std::optional<dsp56300::Word> increment(unsigned mode,
@@ -90,6 +91,7 @@ private:
                                                         unsigned low_bits,
                                                         unsigned middle_bits) noexcept;
   std::array<Channel, 6> channels_{};
+  std::array<std::uint8_t, 32> request_channels_{};
   std::array<std::optional<dsp56300::Word>, 4> offsets_;
   std::array<unsigned, 4> last_{5, 5, 5, 5};
   std::array<bool, 4> last_valid_{};

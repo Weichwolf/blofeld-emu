@@ -75,8 +75,10 @@ bool Audio::Projection::configure(const std::uint64_t cycles, const Clock &clock
   return true;
 }
 
-std::optional<std::uint64_t> Audio::Projection::at(const std::uint64_t cycles) const noexcept {
-  auto point = cycles < since ? previous : current;
+std::optional<std::uint64_t> Audio::Projection::at(const std::uint64_t cycles) noexcept {
+  // Slot deadlines are consumed in order. Carry the exact fractional phase
+  // forward so the next frame only projects the elapsed cycles since this one.
+  auto &point = cycles < since ? previous : current;
   if (!point || !point->advance(cycles) ||
       point->ticks() > std::numeric_limits<std::uint64_t>::max() - origin) {
     return {};

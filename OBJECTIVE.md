@@ -57,13 +57,18 @@ Keep manufacturer inputs/generated artifacts local with source/size/hash identit
   zero underruns, missed deadlines, lost frames and repeated frames.
   Require real-time playback in every reference scenario. Once each scenario
   meets that floor, use W5 to decide performance trade-offs.
+- On the local Linux host, qualify sustained idle at no more than 3% of total
+  host CPU capacity at the configured maximum clock, 44.1 kHz, and 64 JACK
+  frames. Report measured CPU time and effective clock per owner before and
+  after, including after release and effect tails. Label any clock-normalized
+  estimate separately. Record the result in #52.
+- Close issues against their scoped live, functional and qualification criteria.
+  The deferred throughput and idle milestones have their own acceptance in #103
+  and #104.
 - Count valid original frames once against monotonic host processing time. Report
   compilation, boot/readiness, warm-up, active rendering, pacing and conversion
-  separately. Require exact PCM and sustainable W5 offline throughput of at
-  least 176,400 valid stereo frames per host second at the 44.1 kHz reference
-  rate (4× real time). No lost, repeated or retimed frames; core/silent-startup
-  results do not qualify. Compare authored core algorithms with equivalent
-  Clang19 O3 C++.
+  separately. Require exact PCM with every frame delivered once at its original
+  timestamp. Compare authored core algorithms with equivalent Clang19 O3 C++.
 - Physical keyboard-actuation-to-analog latency targets **2-5 ms**, maximum **10 ms**,
   including scan, transport, firmware, queues, driver and DAC. Qualify an immediate-
   attack original sound under representative load; identify devices and report
@@ -83,3 +88,14 @@ Keep manufacturer inputs/generated artifacts local with source/size/hash identit
   their native host with identical inputs/settings. Probes use purpose-specific
   finite guards, allow startup, fail unless playable and stop promptly on faults;
   no unchanged failed repetition without new evidence.
+
+## Deferred throughput and idle targets
+
+After the remaining live, functional and qualification issues are closed, qualify
+sustained 2× W5 headless rendering and at most 2% idle CPU on the local Linux
+i5-1135G7 at 2.4 GHz in #103. Use the JACK setup from #52. Then qualify 4× W5
+rendering and at most 1% idle CPU on A18 Pro in #104. Use native CoreAudio for
+its idle measurement and record the actual buffer size. At 44.1 kHz, the
+render targets are 88,200 and 176,400 valid stereo frames per host second.
+Use exact original PCM and guest timing over the full workload. Report W1–W5
+and A013 throughput with startup and preparation measured separately.

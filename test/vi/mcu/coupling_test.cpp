@@ -162,6 +162,58 @@ std::vector<dsp56300::Word> dsp_code(const bool dense) {
 }
 
 namespace {
+void progress_wake() {
+  vi::PeerPort peer;
+  vi::Shi shi;
+  vi::DspReset reset;
+  vi::ExecutionTime time;
+  vi::MidiPort midi(vi::MidiPort::InputMode::stream);
+  const std::stop_source stop;
+  vi::Coupling coupling(
+      peer, shi, reset, time, midi, stop.get_token(), vi::Coupling::default_window);
+  if (!midi.finish_input()) { throw std::runtime_error("Input EOF refused"); }
+  coupling.bind();
+  constexpr std::uint64_t boundary = 20;
+  coupling.publish({}, boundary + 3);
+  const auto observed = coupling.observation();
+  auto waiter = std::async(std::launch::async, [&] {
+    coupling.wait_for_progress({.observed = observed, .ticks = boundary});
+  });
+  if (!coupling.receiver({.ticks = boundary}) || coupling.observation() != observed ||
+      waiter.wait_for(std::chrono::milliseconds{2}) == std::future_status::ready) {
+    stop.request_stop();
+    throw std::runtime_error("MCU woke before the exclusive DSP boundary");
+  }
+  if (!coupling.receiver({.ticks = boundary + 1}) ||
+      waiter.wait_for(std::chrono::seconds{1}) != std::future_status::ready) {
+    stop.request_stop();
+    throw std::runtime_error("DSP progress did not release the waiting MCU");
+  }
+  waiter.get();
+  const auto settled = coupling.observation();
+  if (!coupling.receiver({.ticks = boundary + 2}) || coupling.observation() != settled) {
+    throw std::runtime_error("DSP progress notified after the MCU wait was satisfied");
+  }
+  const auto published = coupling.observation();
+  coupling.publish({}, boundary + 3);
+  coupling.request(boundary + 3);
+  coupling.request(boundary + 2);
+  if (coupling.observation() != published) {
+    throw std::runtime_error("Unchanged MCU horizon notified a waiter");
+  }
+  const auto storage = coupling.source_storage();
+  storage.front() = {.ticks = boundary + 3, .value = 0, .kind = vi::mcu::Effects::Kind::wait};
+  coupling.publish(storage.first(1), boundary + 3);
+  if (coupling.observation() == published) {
+    throw std::runtime_error("New MCU effect at an unchanged boundary did not notify");
+  }
+  const auto effects = coupling.observation();
+  coupling.request(boundary + 4);
+  if (coupling.observation() == effects) {
+    throw std::runtime_error("Extending the MCU horizon did not notify");
+  }
+}
+
 void live_input_demand() {
   constexpr std::uint64_t known = 20;
   constexpr std::uint64_t needed = 40;
@@ -298,6 +350,7 @@ void exercise(const bool dense) {
 }
 
 int main() try {
+  progress_wake();
   live_input_demand();
   streaming_frontier();
   for (const bool dense : {false, true}) { exercise(dense); }

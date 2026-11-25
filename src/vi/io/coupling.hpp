@@ -14,6 +14,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 #include <stop_token>
@@ -85,6 +86,13 @@ public:
   }
 
   void wait(std::uint64_t observed) noexcept;
+
+  struct ProgressWait {
+    std::uint64_t observed, ticks;
+  };
+
+  void wait_for_progress(ProgressWait progress) noexcept;
+
   void wait_checkpoint(std::uint64_t observed) noexcept;
   void notify() noexcept;
 
@@ -146,7 +154,10 @@ private:
   std::atomic<std::uint64_t> checkpoint_ticks_{0}, checkpoint_request_{0}, checkpoint_ready_{0};
   std::uint64_t checkpoint_sequence_ = 0;
   alignas(128) std::atomic<std::uint64_t> known_{0};
-  [[maybe_unused]] std::array<std::byte, 128 - sizeof(known_)> known_padding_;
+  static constexpr auto no_wait_target = std::numeric_limits<std::uint64_t>::max();
+  std::atomic<std::uint64_t> mcu_wait_after_{no_wait_target};
+  [[maybe_unused]] std::array<std::byte, 128 - sizeof(known_) - sizeof(mcu_wait_after_)>
+      known_padding_;
   alignas(128) std::atomic<std::uint64_t> cut_{0}, message_{0};
   std::atomic<std::size_t> consumed_{0};
   alignas(128) mutable std::uint64_t changed_ = 0;

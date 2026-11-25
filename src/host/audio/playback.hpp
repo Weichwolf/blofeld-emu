@@ -6,6 +6,8 @@
 
 #if defined(__linux__)
 #include "midi/ump.hpp"
+
+#include <sched.h>
 #endif
 
 #include <chrono>
@@ -70,10 +72,11 @@ public:
   [[nodiscard]] const Grants &grants() const noexcept;
   [[nodiscard]] PlaybackStatus status() const noexcept;
   [[nodiscard]] Producer producer() const;
+  [[nodiscard]] bool fills_render_quantum(std::size_t pending) const noexcept;
 #if defined(__APPLE__)
   [[nodiscard]] std::chrono::nanoseconds device_period() const noexcept;
-  [[nodiscard]] bool fills_render_quantum(std::size_t pending) const noexcept;
 #elif defined(__linux__)
+  [[nodiscard]] bool pin_callback(const cpu_set_t &mask) noexcept;
   // Frame zero starts the first live JACK cycle. The frontier starts the next cycle.
   [[nodiscard]] std::uint64_t midi_frontier() const noexcept;
   [[nodiscard]] std::optional<midi::Packet> read_midi(std::uint64_t before) noexcept;

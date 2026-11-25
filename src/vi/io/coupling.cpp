@@ -77,6 +77,14 @@ void Coupling::wait(const std::uint64_t observed) noexcept {
   waiting_.fetch_sub(1, std::memory_order_seq_cst);
 }
 
+void Coupling::wait_for_progress(const ProgressWait progress) noexcept {
+  // Pair publication of the wait target with attained() and recheck before
+  // sleeping so a concurrent crossing cannot be missed.
+  mcu_wait_after_.store(progress.ticks, std::memory_order_seq_cst);
+  if (known_.load(std::memory_order_seq_cst) <= progress.ticks) { wait(progress.observed); }
+  mcu_wait_after_.store(no_wait_target, std::memory_order_seq_cst);
+}
+
 void Coupling::wait_checkpoint(const std::uint64_t observed) noexcept {
   if (!midi_.before_checkpoint_wait(
           {.generation = changed_, .observed = observed, .command = checkpoint_sequence_})) {
@@ -98,14 +106,19 @@ void Coupling::bind() noexcept {
 
 void Coupling::publish(const std::span<const mcu::Effects::Entry> entries,
                        const std::uint64_t frontier) noexcept {
+  // Only the MCU owner publishes, and the visible effect prefix is immutable.
+  if (entries.size() == published_.load(std::memory_order_relaxed) &&
+      frontier == frontier_.load(std::memory_order_relaxed)) {
+    return;
+  }
   published_.store(entries.size(), std::memory_order_release);
   frontier_.store(frontier, std::memory_order_release);
   notify();
 }
 
 void Coupling::request(const std::uint64_t ticks) noexcept {
-  const auto old = frontier_.load(std::memory_order_relaxed);
-  if (ticks > old) { frontier_.store(ticks, std::memory_order_release); }
+  if (ticks <= frontier_.load(std::memory_order_relaxed)) { return; }
+  frontier_.store(ticks, std::memory_order_release);
   notify();
 }
 
@@ -175,10 +188,11 @@ void Coupling::refresh() noexcept {
 
 void Coupling::attained(const std::uint64_t exclusive) noexcept {
   const auto old = known_.load(std::memory_order_relaxed);
-  if (exclusive > old) {
-    known_.store(exclusive, std::memory_order_release);
-    notify();
-  }
+  if (exclusive <= old) { return; }
+  // Checkpoints and device messages publish their own wakeups.
+  known_.store(exclusive, std::memory_order_seq_cst);
+  const auto target = mcu_wait_after_.load(std::memory_order_seq_cst);
+  if (old <= target && target < exclusive) { notify(); }
 }
 
 mcu::InputHistory::Values Coupling::sample() {

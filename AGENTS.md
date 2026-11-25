@@ -31,6 +31,8 @@ Decide everything else yourself.
   load on each reference host. Offline throughput diagnoses headroom. Report
   startup and preparation separately.
   ACCEPTANCE.tsv records qualification.
+- Close each issue on its own live, functional and qualification evidence.
+  Track 2× and 4× offline rendering as separate follow-ups in #103 and #104.
 - Less code is better. Report the src/ and test/ line delta with each published
   increment.
 
@@ -47,6 +49,8 @@ lives here and reaches the cores through their public interfaces.
 
 - German with the user; English code, comments, docs and commits. C++23, LLVM 19,
   CMake/Ninja, warnings as errors, clang-format, clang-tidy clean.
+- Run compiler builds and AOT preparation with `nice -n 15`. Keep builds
+  outside live measurement intervals.
 - Commit reviewed increments. Validate your native host without breaking the
   other. Both platforms use identical firmware, images and settings.
   Shared presets come from ../blofeld-src/tools/blofeld_image.py.

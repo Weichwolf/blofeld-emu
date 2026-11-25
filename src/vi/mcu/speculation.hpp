@@ -90,6 +90,8 @@ private:
   [[nodiscard]] bool settle(std::uint64_t time) noexcept;
   [[nodiscard]] std::optional<std::uint64_t>
   input(Epoch::Signal signal, std::uint64_t time, std::uint64_t mask = ~std::uint64_t{0}) noexcept;
+  [[nodiscard]] std::optional<std::uint64_t> sample_input(
+      Epoch::Signal signal, std::uint64_t time, std::uint64_t mask = ~std::uint64_t{0}) noexcept;
   [[nodiscard]] std::optional<std::uint64_t> pending_irq() noexcept;
   void bind();
   void advance();

@@ -68,12 +68,10 @@ vi::PcmOutput Live::output() noexcept {
             const auto output = live.consumer_.output();
             output.close(output.owner);
           },
-#if defined(__APPLE__)
       .submit_partial =
           [](void *owner, const auto pending) noexcept {
             return static_cast<const Live *>(owner)->audio_.fills_render_quantum(pending);
           },
-#endif
   };
 }
 

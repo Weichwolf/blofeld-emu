@@ -310,7 +310,7 @@ void held_reset_boundary() {
   require(
       empty.attained(10) && empty.checkpoint_quiescent(10),
       "An externally proved quiescent source commits an empty read-set at its attained instant");
-  require(empty.record({.ticks = 10, .value = 0, .mask = 1}) &&
+  require(empty.record({.ticks = 10, .value = 0, .mask = 1}) && empty.attained(10) &&
               !empty.changed({.ticks = 10, .value = 1, .mask = 1}) && empty.cancelled(),
           "Quiescent checkpoint does not invent knowledge about new inputs at the same instant");
   Epoch pending(storage, 2);
@@ -321,6 +321,10 @@ void held_reset_boundary() {
   require(atomic.attained(10) && atomic.consume(9, [] { return true; }) &&
               !atomic.checkpoint_quiescent(10) && atomic.error() == Epoch::Error::unsettled,
           "Quiescence cannot replace confirmation after a destructive native instruction");
+  Epoch changed(storage, 2);
+  require(changed.attained(10) && changed.changed({.ticks = 11}) && !changed.attained(10) &&
+              changed.error() == Epoch::Error::time,
+          "An unchanged frontier cannot precede a source event");
 }
 
 void promoted_read_set() {
