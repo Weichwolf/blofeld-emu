@@ -70,11 +70,12 @@ def check_live(binary_dir, profile, inputs, directory):
             except subprocess.TimeoutExpired:
                 emulator.kill()
                 emulator.wait(timeout=3)
-    counters = re.findall(r"underruns=(\d+)/(\d+) playing=", log.read_text())
-    print(f"A013 selected={glyph == A013}, host/guest underruns="
-          f"{'/'.join(counters[-1]) if counters else 'unavailable'}. Log: {log}")
+    counters = re.findall(r"underruns=(\d+)/(\d+) playing=\w+ jack-xruns=(\d+)", log.read_text())
+    host, guest, xruns = counters[-1] if counters else ("unavailable",) * 3
+    print(f"A013 selected={glyph == A013}, host/guest underruns={host}/{guest}, "
+          f"JACK xruns={xruns}. Log: {log}")
     return int(replay.returncode != 0 or glyph != A013 or emulator.returncode != 0 or
-               not counters or any(pair != ("0", "0") for pair in counters))
+               not counters or any(sample != ("0", "0", "0") for sample in counters))
 
 if __name__ == "__main__":
     raise SystemExit(main())
