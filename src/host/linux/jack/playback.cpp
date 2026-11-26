@@ -118,7 +118,7 @@ struct Playback::Impl {
     auto &self = *static_cast<Impl *>(context);
     if (!self.closed.load(std::memory_order_acquire) &&
         self.frontier.load(std::memory_order_relaxed) != 0) {
-      self.underruns.fetch_add(1, std::memory_order_relaxed);
+      self.jack_xruns.fetch_add(1, std::memory_order_relaxed);
     }
     return 0;
   }
@@ -222,7 +222,7 @@ struct Playback::Impl {
   JackMidiQueue incoming, outgoing;
   std::atomic<bool> closed{false}, resetting{false};
   std::atomic<const char *> error{nullptr};
-  std::atomic<std::uint64_t> frontier{0}, submitted{0}, underruns{0};
+  std::atomic<std::uint64_t> frontier{0}, submitted{0}, underruns{0}, jack_xruns{0};
   std::optional<jack_nframes_t> previous_cycle;
   std::uint64_t frame = 0;
   std::size_t late_frames = 0;
@@ -302,6 +302,10 @@ bool Playback::pin_callback(const cpu_set_t &mask) noexcept {
   CPU_AND(&allowed, &allowed, &mask);
   return CPU_COUNT(&allowed) != 0 &&
          ::pthread_setaffinity_np(thread, sizeof(allowed), &allowed) == 0;
+}
+
+std::uint64_t Playback::jack_xruns() const noexcept {
+  return impl_->jack_xruns.load(std::memory_order_relaxed);
 }
 
 std::uint64_t Playback::midi_frontier() const noexcept {
