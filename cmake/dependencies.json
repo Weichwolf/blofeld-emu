@@ -7,11 +7,19 @@
   "dsp56300_assembly_tool": {
     "source": "https://github.com/xemu-project/dsp56300",
     "version": "1.0.0",
-    "usage": "Optional offline DSP assembler; not a runtime dependency.",
-    "artifact": "https://github.com/xemu-project/dsp56300/releases/download/v1.0.0/dsp56300-1.0.0-x86_64-unknown-linux-gnu.tar.gz",
-    "sha256": "e16ef45da9572815d43ab89d030029b898e71226a265468a22591e0171df4b60",
     "license": "MIT",
-    "source_revision": "aab3649fc452daf03da8b5e36fdc0c308d874101"
+    "source_revision": "aab3649fc452daf03da8b5e36fdc0c308d874101",
+    "usage": "Offline assembler for local DSP bootstrap preparation.",
+    "platforms": {
+      "Linux-x86_64": {
+        "target": "x86_64-unknown-linux-gnu",
+        "sha256": "e16ef45da9572815d43ab89d030029b898e71226a265468a22591e0171df4b60"
+      },
+      "Darwin-arm64": {
+        "target": "aarch64-apple-darwin",
+        "sha256": "a97c73ad57a8f53b7412c671ae42cad2626bfbaab3c4492ccc1d9e91d8d001e3"
+      }
+    }
   },
   "independent_cpu12": {
     "source": "https://github.com/Weichwolf/cpu12",

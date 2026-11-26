@@ -42,11 +42,11 @@ Native session audio client:
   LICENSES/libsndfile.txt preserves the notice for retained optional reference inputs;
   libsndfile and Meson are not direct build/runtime dependencies of this project.
 
-Optional offline DSP assembly tool:
+Offline DSP assembly tool:
   https://github.com/xemu-project/dsp56300
   dsp56300-asm 1.0.0, Matt Borgerson, MIT license.
-  Optional assembler for ignored local DSP references. It is not linked or distributed with the emulator. Its source
-  and binary notices remain in the separately downloaded local tool package.
+  Assembles the local DSP bootstrap during Desktop profile preparation. The
+  pinned release archive contains its notices and is downloaded separately.
 
 Optional offline silicon test corpus:
   https://github.com/mborgerson/dsp56300

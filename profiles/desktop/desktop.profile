@@ -1,0 +1,6 @@
+firmware "firmware.zip"
+boot-rom "boot-rom.bin"
+mcu-catalogue "mcu/mcu-catalogue.json"
+dsp-catalogue "dsp/dsp-catalogue.json"
+device-state "device.bfnvm"
+nand "samples.bfnand"
