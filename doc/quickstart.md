@@ -1,4 +1,4 @@
-# Linux quickstart
+# Quickstart
 
 ## Build and prepare
 
@@ -86,3 +86,10 @@ python3 tools/midi_bench_inputs.py --output build/nachtmusik-inputs
 build/release/blofeld-headless --profile build/release/desktop/desktop.profile \
   --midi build/nachtmusik-inputs/nachtmusik.mid --wav build/nachtmusik.wav --tail 0
 ```
+
+## macOS
+
+Use LLVM 19 (`llvm@19` in Homebrew) and Poppler for the build and preparation.
+Audio goes to the system output. Select Core MIDI endpoints with
+`--midi-source ID` and `--midi-destination ID`. The LCD viewer uses GTK 4,
+PyGObject and Cairo.
