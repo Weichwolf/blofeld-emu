@@ -77,6 +77,7 @@ public:
   [[nodiscard]] std::chrono::nanoseconds device_period() const noexcept;
 #elif defined(__linux__)
   [[nodiscard]] bool pin_callback(const cpu_set_t &mask) noexcept;
+  [[nodiscard]] std::uint64_t jack_xruns() const noexcept;
   // Frame zero starts the first live JACK cycle. The frontier starts the next cycle.
   [[nodiscard]] std::uint64_t midi_frontier() const noexcept;
   [[nodiscard]] std::optional<midi::Packet> read_midi(std::uint64_t before) noexcept;

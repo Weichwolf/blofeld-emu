@@ -57,11 +57,12 @@ Keep manufacturer inputs/generated artifacts local with source/size/hash identit
   zero underruns, missed deadlines, lost frames and repeated frames.
   Require real-time playback in every reference scenario. Once each scenario
   meets that floor, use W5 to decide performance trade-offs.
-- On the local Linux host, qualify sustained idle at no more than 3% of total
-  host CPU capacity at the configured maximum clock, 44.1 kHz, and 64 JACK
-  frames. Report measured CPU time and effective clock per owner before and
-  after, including after release and effect tails. Label any clock-normalized
-  estimate separately. Record the result in #52.
+- On the local Linux host, qualify sustained idle at no more than 2.0% of total
+  host CPU capacity at the configured 4.2 GHz maximum, 44.1 kHz, and 64 JACK
+  frames. About 3.5% at 2.4 GHz is a planning estimate. Report measured CPU time,
+  effective clock and wakeups per owner before and after, including after
+  release and effect tails. Label any clock-normalized estimate separately.
+  Record the result in #52.
 - Close issues against their scoped live, functional and qualification criteria.
   The deferred throughput and idle milestones have their own acceptance in #103
   and #104.
