@@ -191,18 +191,16 @@ struct Playback::Impl {
     if (!primed) { primed = pcm.queued() == pcm.capacity(); }
     if (primed || frame != 0) {
       const auto current = jack_last_frame_time(client.get());
-      if (previous_cycle) {
-        const auto elapsed = current - *previous_cycle;
-        // JACK can repeat a cycle position while recovering from an xrun.
-        if (elapsed == 0) {
-          silence();
-          return;
-        }
-        if (elapsed > frames && elapsed < std::numeric_limits<jack_nframes_t>::max() / 2U) {
-          const auto skipped = elapsed - frames;
-          frame += skipped;
-          if (was_primed) { late_frames += skipped; }
-        }
+      const auto elapsed = current - previous_cycle.value_or(current - frames);
+      // JACK can repeat a cycle position while recovering from an xrun.
+      if (elapsed == 0) {
+        silence();
+        return;
+      }
+      if (elapsed > frames && elapsed < std::numeric_limits<jack_nframes_t>::max() / 2U) {
+        const auto skipped = elapsed - frames;
+        frame += skipped;
+        if (was_primed) { late_frames += skipped; }
       }
       previous_cycle = current;
     }
