@@ -221,4 +221,16 @@ bool Esai::active() const noexcept {
 bool Esai::request() const noexcept {
   return active() && (status_ & empty) != 0;
 }
+
+bool Esai::continuous_stereo_dma() const noexcept {
+  constexpr Word stereo = 3;
+  constexpr Word audio_control = 0x7d01;
+  constexpr Word audio_clock = 0x640301;
+  constexpr Word left_align = 0x100;
+  return connected_ && error_ == nullptr && !skip_ && control_ == audio_control &&
+         clock_ == audio_clock && (common_ & left_align) == 0 &&
+         (transmit_mask_ & stereo) == stereo &&
+         (slot_ == 0 || (active_transmitters_ == 1 && (frame_mask_ & stereo) == stereo)) &&
+         (written_ & known_ & 1U) != 0 && !request();
+}
 }

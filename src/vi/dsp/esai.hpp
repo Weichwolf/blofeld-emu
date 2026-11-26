@@ -39,6 +39,7 @@ public:
   [[nodiscard]] bool write(Write access) noexcept;
   [[nodiscard]] std::optional<Format> format() const noexcept;
   [[nodiscard]] std::optional<Slot> clock_slot() noexcept;
+  [[nodiscard]] bool continuous_stereo_dma() const noexcept;
   [[nodiscard]] bool request() const noexcept;
 
   [[nodiscard]] const char *error() const noexcept { return error_; }

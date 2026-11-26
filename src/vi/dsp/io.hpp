@@ -241,6 +241,47 @@ public:
     return interrupt_request(status).has_value();
   }
 
+  [[nodiscard]] std::uint64_t
+  stable_reads_until(const std::span<const dsp56300::StableRead> reads) const noexcept override {
+    constexpr dsp56300::StableRead dma_source{.space = dsp56300::Space::x, .address = 0xffffef};
+    if (reads.size() != 1 || reads.front() != dma_source || coupling_ == nullptr ||
+        !peer_deadline_ || stop_.stop_requested() || reset_.pending(epoch_) || dma_.pending() ||
+        interrupt_pending(core_->registers().sr)) {
+      return 0;
+    }
+    const auto next = deadline();
+    const auto now = device_cycles();
+    return next && *next > now ? *next - idle_ : 0;
+  }
+
+  [[nodiscard]] std::uint64_t stable_masked_reads_until(
+      const std::span<const dsp56300::StableRead> reads,
+      const std::span<const dsp56300::Word> masks,
+      const std::span<const dsp56300::StableRead> stores) const noexcept override {
+    constexpr dsp56300::StableRead phase{.space = dsp56300::Space::x, .address = 0xffffef};
+    constexpr dsp56300::Word stable_mask = 0x800020;
+    if (reads.size() != 1 || reads.front() != phase || masks.size() != 1 ||
+        (masks.front() & ~stable_mask) != 0 || !audio_grant_safe(stores)) {
+      return 0;
+    }
+    const auto slots = dma_.slots_to_audio_phase();
+    const auto next = slots ? audio_.transmit_deadline(*slots) : std::nullopt;
+    if (!next) { return 0; }
+    auto until = *next;
+    for (const auto event : {peer_deadline_, midi_deadline_, media_deadline_, timers_.deadline()}) {
+      if (event) { until = std::min(until, *event); }
+    }
+    const auto audio_event = audio_.deadline();
+    if (!audio_event || until <= *audio_event || *audio_event <= device_cycles()) { return 0; }
+    return until - idle_;
+  }
+
+  [[nodiscard]] bool stable_read_value(const dsp56300::StableRead read,
+                                       dsp56300::Word &value) const noexcept override {
+    constexpr dsp56300::StableRead dma_source{.space = dsp56300::Space::x, .address = 0xffffef};
+    return read == dma_source && dma_.read(read.address, value);
+  }
+
   [[nodiscard]] const char *error() const noexcept {
     if (coupling_ != nullptr && coupling_->error() != nullptr) { return coupling_->error(); }
     if (peer_ != nullptr && peer_->error() != nullptr) { return peer_->error(); }
@@ -313,7 +354,10 @@ public:
 #if defined(BLOFELD_CENSUS)
     const auto deadlines = deadline_endings(next);
 #endif
-    const auto result = completed(next ? core_->run_until(*next - idle_) : core_->run());
+    const auto result = completed(
+        next ? core_->run_until({.base_cycle_deadline = peer_deadline_.value_or(*next) - idle_,
+                                 .precise_deadline = *next - idle_})
+             : core_->run());
 #if defined(BLOFELD_CENSUS)
     if (next && device_cycles() >= *next) { endings_ |= deadlines; }
 #endif
@@ -613,6 +657,24 @@ private:
       }
     }
     return true;
+  }
+
+  [[nodiscard]] bool
+  audio_grant_safe(const std::span<const dsp56300::StableRead> stores) const noexcept {
+    if (audio_dirty_ || coupling_ == nullptr || !peer_deadline_ || stop_.stop_requested() ||
+        reset_.pending(epoch_) || !esai_1_.continuous_stereo_dma() ||
+        !dax_.audio_dma_without_interrupts() || interrupt_pending(core_->registers().sr)) {
+      return false;
+    }
+    constexpr auto first = Dma::audio_ring_first;
+    constexpr auto count = Dma::audio_ring_words;
+    // A pass can restore a word it wrote, yet DMA could see the intermediate value.
+    return std::ranges::none_of(stores,
+                                [](dsp56300::StableRead store) {
+                                  return store.space == dsp56300::Space::x &&
+                                         store.address >= first && store.address - first < count;
+                                }) &&
+           memory_.known_low_x(first, count);
   }
 
   [[nodiscard]] unsigned audio_requests() const noexcept {

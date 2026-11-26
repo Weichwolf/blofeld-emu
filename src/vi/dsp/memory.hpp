@@ -54,6 +54,7 @@ public:
   Memory &operator=(const Memory &) = delete;
   void configure(dsp56300::Word omr) noexcept;
   // Publish only at an owner boundary with a new native mapping revision.
+  [[nodiscard]] bool known_low_x(std::size_t first, std::size_t count) const noexcept;
   [[nodiscard]] bool promote_initialized() noexcept;
   [[nodiscard]] bool
   read(dsp56300::Space space, dsp56300::Word address, dsp56300::Word &value) const noexcept;

@@ -197,9 +197,18 @@ dsp56300::Memory Memory::loan() {
     }
     return std::span<const dsp56300::MemoryWindow>(native).first(source.size());
   };
-  return dsp56300::Memory::complete(
-      {mapping.program, bind(dsp56300::Space::x, native_x_), bind(dsp56300::Space::y, native_y_)},
-      mapping.views);
+  return dsp56300::Memory::complete({mapping.program,
+                                     bind(dsp56300::Space::x, native_x_),
+                                     bind(dsp56300::Space::y, native_y_)},
+                                    mapping.views)
+      .with_canonical_data();
+}
+
+bool Memory::known_low_x(const std::size_t first, const std::size_t count) const noexcept {
+  const auto &low = x_windows_[0];
+  if (first > low.words.size() || count > low.words.size() - first) { return false; }
+  return low.known.empty() || std::ranges::all_of(low.known.subspan(first, count),
+                                                  [](auto known) { return known != 0; });
 }
 
 bool Memory::promote_initialized() noexcept {

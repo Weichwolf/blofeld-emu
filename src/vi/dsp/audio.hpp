@@ -28,6 +28,7 @@ public:
   [[nodiscard]] std::optional<std::uint64_t> deadline() const noexcept;
   // Consume only the next due event. The caller services its real DMA requests
   // before advancing to another event or submitting a complete PCM block.
+  [[nodiscard]] std::optional<std::uint64_t> transmit_deadline(unsigned slots) const noexcept;
   [[nodiscard]] bool clock();
   [[nodiscard]] bool submit(bool partial = false);
 

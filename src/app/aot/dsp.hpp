@@ -28,7 +28,8 @@ prepare_dsp(dsp56300::CodeImage image,
             std::span<const dsp56300::CodeTransition> transitions = {},
             const std::filesystem::path &cache = {},
             dsp56300::CompileOptions::MemoryMode mode = dsp56300::CompileOptions::MemoryMode::exact,
-            host::aot::Preparation preparation = host::aot::Preparation::allow);
+            host::aot::Preparation preparation = host::aot::Preparation::allow,
+            std::span<const dsp56300::FixedPassDeclaration> passes = {});
 [[nodiscard]] vi::dsp::Program prepare_dsp_program(
     dsp56300::CodeImage image,
     std::span<const vi::dsp::ProgramChoice> choices,
@@ -37,7 +38,8 @@ prepare_dsp(dsp56300::CodeImage image,
     std::span<const dsp56300::CodeTransition> transitions = {},
     const std::filesystem::path &cache = {},
     dsp56300::CompileOptions::MemoryMode mode = dsp56300::CompileOptions::MemoryMode::exact,
-    host::aot::Preparation preparation = host::aot::Preparation::allow);
+    host::aot::Preparation preparation = host::aot::Preparation::allow,
+    std::span<const dsp56300::FixedPassDeclaration> passes = {});
 // Bind a local source catalogue to the exact decoded firmware and ROM inputs.
 // Source construction and compilation execute no device or guest state.
 [[nodiscard]] vi::dsp::Program prepare_dsp_catalogue(

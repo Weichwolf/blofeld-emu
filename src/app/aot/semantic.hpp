@@ -95,6 +95,16 @@ semantic_inputs(const auto image, const auto options, const std::string_view com
     key.number(options.region_modes.has_value());
     if (options.region_modes) { key.bytes(std::as_bytes(*options.region_modes)); }
   }
+  if constexpr (requires { options.fixed_passes; }) {
+    key.sequence(options.fixed_passes, [&](const auto &pass) {
+      key.number(pass.variant);
+      key.bytes(std::as_bytes(pass.path));
+      key.sequence(pass.device_reads, [&](const auto &read) {
+        key.number(static_cast<std::uint64_t>(read.space));
+        key.number(read.address);
+      });
+    });
+  }
   return key;
 }
 

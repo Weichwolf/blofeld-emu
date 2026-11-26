@@ -156,6 +156,17 @@ std::vector<Word> addresses(const Array &input) {
   return result;
 }
 
+std::vector<std::vector<Word>> fixed_paths(const Object &input) {
+  std::vector<std::vector<Word>> result;
+  if (input.get("fixed_passes") == nullptr) { return result; }
+  for (const auto &value : array(input, "fixed_passes")) {
+    const auto *path = value.getAsArray();
+    if (path == nullptr || path->empty()) { invalid("fixed_passes"); }
+    result.push_back(addresses(*path));
+  }
+  return result;
+}
+
 std::vector<vi::dsp::CodeRange> ranges(const Array &input) {
   std::vector<vi::dsp::CodeRange> result;
   for (const auto &value : input) {
@@ -261,6 +272,7 @@ struct Variant {
   std::uint64_t id;
   vi::dsp::CodeSource code;
   std::vector<Word> entries, resumes, failed_fetches, region_starts;
+  std::vector<std::vector<Word>> fixed_passes;
   std::vector<Guards> guard_sets;
   std::vector<dsp56300::RegionLayout> memory;
   Word mode_mask = 0, mode = 0;
@@ -382,16 +394,23 @@ vi::dsp::Program prepare(const Object &root,
     }
     auto &variant = owned.emplace_back(number(input, "id"), stored.classify(array(input, "code")));
     admission(variant, input);
+    variant.fixed_passes = fixed_paths(input);
   }
   validate_admissions(owned);
   std::vector<dsp56300::CodeVariant> source;
   std::vector<vi::dsp::ProgramChoice> choices;
+  std::vector<dsp56300::FixedPassDeclaration> passes;
+  static constexpr std::array stable_reads{
+      dsp56300::StableRead{.space = dsp56300::Space::x, .address = 0xffffef}};
   for (const auto &variant : owned) {
     source.push_back({.id = variant.id,
                       .code = variant.code.code(),
                       .entries = variant.entries,
                       .failed_fetches = variant.failed_fetches,
                       .region_starts = variant.region_starts});
+    for (const auto &path : variant.fixed_passes) {
+      passes.push_back({.variant = variant.id, .path = path, .device_reads = stable_reads});
+    }
     for (const auto &words : variant.guard_sets) {
       choices.push_back({.variant = variant.id,
                          .resumes = variant.resumes,
@@ -423,8 +442,15 @@ vi::dsp::Program prepare(const Object &root,
       transitions.push_back({.from = from, .to = to, .entry = word(transfer, "entry")});
     }
   }
-  return prepare_dsp_program(
-      {.variants = source}, choices, layouts, interrupts, transitions, cache, mode, preparation);
+  return prepare_dsp_program({.variants = source},
+                             choices,
+                             layouts,
+                             interrupts,
+                             transitions,
+                             cache,
+                             mode,
+                             preparation,
+                             passes);
 }
 }
 

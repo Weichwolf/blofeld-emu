@@ -114,7 +114,8 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
                                   const std::span<const dsp56300::CodeTransition> transitions,
                                   const std::filesystem::path &cache,
                                   const dsp56300::CompileOptions::MemoryMode mode,
-                                  const host::aot::Preparation preparation) {
+                                  const host::aot::Preparation preparation,
+                                  const std::span<const dsp56300::FixedPassDeclaration> passes) {
   using dsp56300::CallbackBinding;
   using dsp56300::CallbackRole;
   std::vector callbacks{
@@ -146,7 +147,8 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
                                          .callbacks = callbacks,
                                          .bindings = {},
                                          .memory_mode = mode,
-                                         .region_modes = region_modes};
+                                         .region_modes = region_modes,
+                                         .fixed_passes = passes};
   const auto semantic =
       detail::prepare_semantic<dsp56300::Core>(image, options, cache, preparation);
   std::vector<native::Export> exports;
@@ -196,8 +198,9 @@ vi::dsp::Program prepare_dsp_program(const dsp56300::CodeImage image,
                                      const std::span<const dsp56300::CodeTransition> transitions,
                                      const std::filesystem::path &cache,
                                      const dsp56300::CompileOptions::MemoryMode mode,
-                                     const host::aot::Preparation preparation) {
-  return {prepare_dsp(image, memory, interrupts, transitions, cache, mode, preparation),
+                                     const host::aot::Preparation preparation,
+                                     const std::span<const dsp56300::FixedPassDeclaration> passes) {
+  return {prepare_dsp(image, memory, interrupts, transitions, cache, mode, preparation, passes),
           image,
           choices,
           transitions,
