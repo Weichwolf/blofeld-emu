@@ -13,6 +13,8 @@
 #include "macos/midi/input.hpp"
 #include "macos/midi/output.hpp"
 #include "midi/live_clock.hpp"
+#elif defined(__linux__)
+#include "linux/dsp_placement.hpp"
 #endif
 
 #include <atomic>
@@ -88,6 +90,7 @@ private:
   std::chrono::steady_clock::time_point next_connect_;
 #else
   std::optional<host::midi::Packet> pending_;
+  DspPlacement dsp_placement_;
 #endif
   vi::VmContext *vm_ = nullptr;
   std::uint64_t ignored_ = 0, received_ = 0;
