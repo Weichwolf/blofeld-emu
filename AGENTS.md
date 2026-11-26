@@ -52,8 +52,8 @@ lives here and reaches the cores through their public interfaces.
 - Run compiler builds and AOT preparation with `nice -n 15`. Keep builds
   outside live measurement intervals.
 - Commit reviewed increments. Validate your native host without breaking the
-  other. Both platforms use identical firmware, images and settings.
-  Shared presets come from ../blofeld-src/tools/blofeld_image.py.
+  other. Both platforms use identical firmware, images and settings from the
+  public Desktop profile recipe.
 - Use GitHub issues for concrete remaining work. Keep closed issues with useful
   technical evidence and write short, result-first comments. Keep original
   firmware, private traces and raw disassembly local.

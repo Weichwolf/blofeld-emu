@@ -227,6 +227,7 @@ if(APPLE)
   target_link_libraries(blofeld_app_live PRIVATE blofeld_app_live_clock blofeld_host_midi_input)
 endif()
 target_link_libraries(blofeld-headless PRIVATE blofeld_app_live blofeld_app_boot)
+include(cmake/DesktopProfile.cmake)
 
 option(BLOFELD_CENSUS "Build opt-in owner/thread attribution (runtime BLOFELD_CENSUS=1)" OFF)
 if(BLOFELD_CENSUS)

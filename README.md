@@ -1,10 +1,11 @@
 # blofeld-emu
 
-A standalone Waldorf Blofeld Desktop SL emulator for Linux x86-64 and macOS
+A standalone Waldorf Blofeld Desktop emulator for Linux x86-64 and macOS
 ARM64. It boots the original Blofeld 1.25 firmware and runs the original synth
 engine. Play over MIDI, open the LCD viewer, or render a MIDI file to stereo WAV.
 
-Firmware, factory samples and populated images are local inputs.
+[Linux quickstart](doc/quickstart.md) · [Architecture](doc/architecture.md) ·
+[License](LICENSE) · [Dependency notices](THIRD_PARTY.txt)
 
 ## Build
 
@@ -14,61 +15,29 @@ Ninja, Git, Python 3.11+ and zlib. On Linux, install the JACK development header
 `llvm@19` through Homebrew.
 
 ```sh
-cmake --preset release
-cmake --build --preset release --target blofeld-headless
+nice -n 15 cmake --preset release
+nice -n 15 cmake --build --preset release --target blofeld-headless
 ```
 
 The core revisions are pinned in [cmake/dependencies.json](cmake/dependencies.json).
 To use matching local checkouts, set `BLOFELD_CPU12_ROOT` and
 `BLOFELD_DSP56300_ROOT` when configuring.
 
-## Prepare a profile
+## Prepare and run
 
-Use the image generator in `../blofeld-src/tools/blofeld_image.py` for a
-Desktop SL device and its sample image. Supply the original update, the boot
-ROM and the matching MCU/DSP executable catalogues. Paths in the profile are
-relative to the profile file.
-
-```text
-firmware "Blofeld_Firmware_V1.25.zip"
-boot-rom "boot-rom.bin"
-mcu-catalogue "mcu-code.json"
-dsp-catalogue "dsp-code.json"
-device-state "device.bfnvm"
-nand "samples.bfnand"
-```
+Save the original Waldorf firmware, factory sounds and MIDI samples as
+`firmware.zip`, `sounds.zip` and `samples.zip` in `build/local/downloads/`.
+Install `pdftotext` (Poppler). The preparation target creates a local Desktop
+profile and compiles the firmware for your host.
 
 ```sh
-build/release/blofeld-headless --profile instrument.profile --prepare
-build/release/blofeld-headless --profile instrument.profile
+nice -n 15 cmake --build --preset release --target blofeld-prepare
+build/release/blofeld-headless --profile build/release/desktop/desktop.profile
 ```
 
-Run `--prepare` again when the prepared assets no longer match the build or
-profile. With no arguments, the emulator reads
-`${XDG_CONFIG_HOME:-$HOME/.config}/blofeld-emu/default.profile`.
+On Linux, connect MIDI and stereo audio through JACK. On macOS, audio goes to
+the system output and `--midi-source ID` selects a Core MIDI endpoint. Run
+`tools/blofeld-display` for the LCD viewer (GTK 4, PyGObject and Cairo).
 
-## Play or render
-
-On Linux, use real-time JACK at 44.1 kHz with a period of 128 frames or less.
-Connect your MIDI source to `blofeld-emu:midi_in` and route `midi_out` for
-replies. Route stereo audio in your JACK graph or with:
-
-```sh
-jack_connect blofeld-emu:audio_l system:playback_1
-jack_connect blofeld-emu:audio_r system:playback_2
-```
-
-On macOS, audio goes to the system output. Select Core MIDI endpoints with
-`--midi-source ID` and `--midi-destination ID`.
-
-```sh
-tools/blofeld-display
-build/release/blofeld-headless --profile instrument.profile \
-  --midi score.mid --wav render.wav --tail 5
-```
-
-The LCD viewer requires GTK 4, PyGObject and Cairo bindings. The WAV command
-renders offline and `--tail` adds whole seconds after the MIDI file ends.
-
-[Architecture](doc/architecture.md) · [References](doc/README.txt) ·
-[License](LICENSE) · [Dependency notices](THIRD_PARTY.txt)
+Render offline by adding `--midi score.mid --wav render.wav --tail 5`. The
+`--tail` option adds seconds after the MIDI file ends.
