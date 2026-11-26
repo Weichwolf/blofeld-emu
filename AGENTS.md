@@ -3,8 +3,8 @@
 Goal: OBJECTIVE.md. Target design: doc/architecture.md. Highest priority is uninterrupted
 live playback of unchanged original 1.25 firmware on A18 Pro, i5-1135G7 and
 i5-10400 under simultaneous 16-part Multi, 25-voice and dense MIDI load.
-Qualify the i5-1135G7 at its 2.4 GHz maximum. Physical key-to-analog latency
-targets 2-5 ms (maximum 10 ms).
+Use the host's normal clock policy and record the effective frequency.
+Physical key-to-analog latency targets 2-5 ms (maximum 10 ms).
 Decide everything else yourself.
 
 ## Fixed limits

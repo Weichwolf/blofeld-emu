@@ -51,18 +51,24 @@ Keep manufacturer inputs/generated artifacts local with source/size/hash identit
   sustains the full twenty-five voices, with distinct sounds, effects and
   authentic SL samples. Record voice allocation, release and stealing.
 - Qualify each host with the same reproducible combined workload. Record the
-  actual audio backend, sample rate, buffer sizes, run duration and callback
-  deadlines. Deliver every buffer on time with continuous, correctly ordered
-  original PCM, including during MIDI bursts and first use of sounds. Require
-  zero underruns, missed deadlines, lost frames and repeated frames.
+  actual audio backend, sample rate, buffer sizes, run duration, callback
+  deadlines and effective clock under the host's normal clock policy. Deliver
+  every buffer on time with continuous, correctly ordered original PCM,
+  including during MIDI bursts and first use of sounds. Require zero underruns,
+  missed deadlines, lost frames and repeated frames.
   Require real-time playback in every reference scenario. Once each scenario
   meets that floor, use W5 to decide performance trade-offs.
-- On the local Linux host, qualify sustained idle at no more than 2.0% of total
-  host CPU capacity at the configured 4.2 GHz maximum, 44.1 kHz, and 64 JACK
-  frames. About 3.5% at 2.4 GHz is a planning estimate. Report measured CPU time,
-  effective clock and wakeups per owner before and after, including after
-  release and effect tails. Label any clock-normalized estimate separately.
-  Record the result in #52.
+- On the local Linux host, qualify A013 and W1-W5 on the OCTA-CAPTURE at
+  44.1 kHz and 64 JACK frames with the normal clock policy. Repeat W5 for
+  30 minutes in one live session and record minimum PCM publication margin,
+  effective clock, PCM underruns and JACK xruns in #17. Preserve exact PCM on
+  replay of the admitted MIDI timeline and preserve every MIDI event.
+- Qualify settled idle on the same JACK setup after release and effect tails.
+  The target is at most 2.0% of total host CPU capacity normalized to 4.2 GHz.
+  Report raw CPU usage, effective clock and wakeups per owner and label the
+  normalized value as an estimate. Preserve exact PCM, MIDI timing, retrigger
+  latency and the W5 publication margin with the same buffer settings. Record
+  the result in #52.
 - Close issues against their scoped live, functional and qualification criteria.
   The deferred throughput and idle milestones have their own acceptance in #103
   and #104.
@@ -93,10 +99,11 @@ Keep manufacturer inputs/generated artifacts local with source/size/hash identit
 ## Deferred throughput and idle targets
 
 After the remaining live, functional and qualification issues are closed, qualify
-sustained 2× W5 headless rendering and at most 2% idle CPU on the local Linux
-i5-1135G7 at 2.4 GHz in #103. Use the JACK setup from #52. Then qualify 4× W5
-rendering and at most 1% idle CPU on A18 Pro in #104. Use native CoreAudio for
-its idle measurement and record the actual buffer size. At 44.1 kHz, the
-render targets are 88,200 and 176,400 valid stereo frames per host second.
+sustained 2× W5 headless rendering and at most 2% measured idle CPU on the local
+Linux i5-1135G7 under its normal clock policy in #103. Use the JACK setup from
+#52. Then qualify 4× W5 rendering and at most 1% idle CPU on A18 Pro in #104.
+Use native CoreAudio for its idle measurement and record the actual buffer size.
+At 44.1 kHz, the render targets are 88,200 and 176,400 valid stereo frames per
+host second.
 Use exact original PCM and guest timing over the full workload. Report W1–W5
 and A013 throughput with startup and preparation measured separately.
