@@ -154,16 +154,10 @@ void Live::status(const bool terminal) const {
   } else {
     std::cerr << '?';
   }
-#if defined(__linux__)
-  const auto xruns = audio_.jack_xruns();
-  const auto host_underruns = host.underruns + xruns;
-#else
-  const auto host_underruns = host.underruns;
-#endif
-  std::cerr << " underruns=" << host_underruns << '/' << source.device_underruns
+  std::cerr << " underruns=" << host.underruns << '/' << source.device_underruns
             << " playing=" << yes_no(host.started);
 #if defined(__linux__)
-  std::cerr << " jack-xruns=" << xruns;
+  std::cerr << " jack-xruns=" << audio_.jack_xruns();
 #endif
   if (!terminal) { std::cerr << '\n'; }
 }
