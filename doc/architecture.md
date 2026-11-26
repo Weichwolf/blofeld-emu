@@ -1,23 +1,30 @@
 # Architecture
 
-Blofeld-emu runs the original Blofeld Desktop 1.25 firmware with SL in a
-standalone instrument. The MCU handles controls, MIDI and device state. The DSP
-runs the synth and produces the original stereo PCM.
+The emulated MCU starts the DSP during the original Blofeld Desktop 1.25 boot.
+The MCU handles controls, MIDI, the LCD and device state. The DSP runs the synth
+and produces stereo PCM.
+
+## Preparation
 
 ```text
- original firmware + code catalogues ──prepare──▶ native MCU/DSP modules
-                                                        │
- profile + persistent images ──────────────────────────▶│
-                                                        ▼
-                         MIDI ◀──────────────────────▶ app
-                                                        │
-                                                   virtual instrument
-                                               ┌─────────┴─────────┐
-                                               │ MCU ⇄ channels ⇄ DSP │
-                                               └─────────┬─────────┘
-                                                 LCD ────┤
-                                                 PCM ────┴──▶ audio or WAV
+Waldorf downloads + NXP bootstrap listing + project catalogues
+                           │ blofeld-profile
+                           ▼
+                  Local Desktop profile
+                    │              └── persistent storage ──────┐
+     firmware, ROM, catalogues                                   │
+                    │ --prepare (LLVM 19)                        ▼
+                    └──▶ Native MCU/DSP modules ────────▶ Instrument VM
+
+Live MIDI or MIDI file ──▶ MCU ◀── timed device I/O ──▶ DSP ──▶ Live audio or WAV
+                            │
+                            └──▶ LCD viewer (live)
 ```
+
+The CMake target `blofeld-prepare` builds the emulator, assembles the local
+profile with `blofeld-profile`, and runs `--prepare`. The last step compiles and
+validates the firmware and device bindings for the host, including the DSP code
+variants selected by the original loader. The cache stores the native modules.
 
 ## Components
 
@@ -28,12 +35,11 @@ runs the synth and produces the original stereo PCM.
 | [`src/host`](../src/host) | Native linking, files, scheduling and audio/MIDI transport |
 | cpu12 and dsp56300 | Independent CPU translators compiled through LLVM 19 |
 
-`--prepare` translates and validates the firmware modules before playback.
-Startup loads the prepared objects, creates fresh MCU and DSP state, and
-executes the original reset and boot. The cores run on separate owners and
-communicate through timestamped device channels. The host's audio demand
-paces live execution. Offline playback uses the MIDI file's timeline and
-writes the produced PCM to WAV.
+Startup loads the prepared modules and executes the original reset and boot.
+Each core runs on a separate host thread. The two cores communicate through
+timestamped device channels. The host's audio demand paces live execution.
+Offline rendering follows the MIDI file's timeline and writes the DSP's PCM
+to WAV.
 
 Linux uses JACK for audio and MIDI. macOS uses Core Audio and Core MIDI.
 The host callbacks exchange bounded audio and MIDI buffers. The LCD viewer
