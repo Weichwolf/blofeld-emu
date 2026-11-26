@@ -172,7 +172,6 @@ struct Machine {
 std::optional<bool> input_change(vi::Coupling &coupling,
                                  mcu::Speculation &source,
                                  const std::stop_source &stop,
-                                 std::uint64_t &serial,
                                  const std::uint64_t ticks) {
   std::promise<bool> result;
   auto ready = result.get_future();
@@ -181,13 +180,18 @@ std::optional<bool> input_change(vi::Coupling &coupling,
     result.set_value(coupling.outputs(ticks));
   });
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{1};
-  std::optional<vi::Coupling::Input> change;
-  while (!(change = coupling.input(serial)) && std::chrono::steady_clock::now() < deadline) {
+  bool changed = false;
+  while (std::chrono::steady_clock::now() < deadline) {
+    if (coupling.input() != nullptr) {
+      changed = true;
+      break;
+    }
     if (ready.wait_for(std::chrono::milliseconds{1}) == std::future_status::ready) { break; }
   }
   bool accepted = true;
-  if (change) {
-    serial = change->serial;
+  if (changed) {
+    require(ready.wait_for(std::chrono::seconds{0}) != std::future_status::ready,
+            "The DSP holds the input slot until MCU validation");
     accepted = source.poll();
     if (!accepted) { std::stop_source{stop}.request_stop(); }
   }
@@ -195,7 +199,8 @@ std::optional<bool> input_change(vi::Coupling &coupling,
               ready.get() == accepted,
           "DSP publication completes only after MCU validation or cancellation");
   producer.join();
-  return change ? std::optional{accepted} : std::nullopt;
+  require(!accepted || coupling.input() == nullptr, "The MCU releases the validated input slot");
+  return changed ? std::optional{accepted} : std::nullopt;
 }
 
 void masked_peer_observations() {
@@ -269,31 +274,29 @@ void masked_peer_observations() {
                             report,
                             nullptr,
                             nullptr);
-    std::uint64_t serial = 0;
     if (test.drive) {
-      require(input_change(coupling, source, stop, serial, 0) == true,
+      require(input_change(coupling, source, stop, 0) == true,
               "Publish the existing SHI configuration before testing GPIO changes");
       for (const auto raw : {Pins{.known = all, .value = last},
                              Pins{.known = test.drive->known, .value = test.drive->value}}) {
         machine.peer.dsp_data(raw);
-        require(!input_change(coupling, source, stop, serial, 0),
+        require(!input_change(coupling, source, stop, 0),
                 "Changes to released pins never publish to the MCU");
       }
     }
     machine.peer.dsp_data(test.drive.value_or(fully_driven));
-    require(input_change(coupling, source, stop, serial, 0) == true,
+    require(input_change(coupling, source, stop, 0) == true,
             "Publish the initial real DSP bus, including a direction-only enabling edge");
     vi::PeerPort::Sample sample;
     require(source.read(test.mask, machine.devices.clock.ticks(), sample) &&
                 sample == (test.drive ? visible : fully_driven),
             "The actual speculative channel supplies the observed pin values");
     machine.peer.dsp_data(test.changed);
-    require(input_change(coupling, source, stop, serial, 1) == test.accepted,
+    require(input_change(coupling, source, stop, 1) == test.accepted,
             "Only observed value, direction or knownness bits may invalidate a masked read");
     if (test.drive) {
       machine.peer.dsp_data({.known = all, .value = all});
-      require(input_change(coupling, source, stop, serial, machine.devices.clock.ticks() + 1) ==
-                  true,
+      require(input_change(coupling, source, stop, machine.devices.clock.ticks() + 1) == true,
               "Releasing driven pins publishes the new direction");
     }
   }

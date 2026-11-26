@@ -63,7 +63,12 @@ public:
   void cancel_checkpoint() noexcept;
   void publish(std::span<const mcu::Effects::Entry> entries, std::uint64_t frontier) noexcept;
   void request(std::uint64_t ticks) noexcept;
-  [[nodiscard]] std::optional<Input> input(std::uint64_t seen) const noexcept;
+
+  // Only the MCU owner reads this slot. The DSP cannot reuse it before acknowledgement.
+  [[nodiscard]] const Input *input() const noexcept {
+    return message_.load(std::memory_order_acquire) != 0 ? &input_ : nullptr;
+  }
+
   void acknowledge(std::uint64_t serial) noexcept;
   [[nodiscard]] bool pause_after(std::uint64_t ticks) const noexcept;
   [[nodiscard]] std::size_t consumed() const noexcept;

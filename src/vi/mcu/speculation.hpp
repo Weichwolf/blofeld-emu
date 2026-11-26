@@ -87,6 +87,8 @@ private:
   [[nodiscard]] bool data(PeerPort::Sample &sample, std::uint8_t mask) noexcept;
   void publish() noexcept;
   [[nodiscard]] bool observe(const Coupling::Input &update) noexcept;
+  [[nodiscard]] bool receive(const Coupling::Input &update) noexcept;
+  [[nodiscard]] bool poll_progress() noexcept;
   [[nodiscard]] bool settle(std::uint64_t time) noexcept;
   [[nodiscard]] std::optional<std::uint64_t>
   input(Epoch::Signal signal, std::uint64_t time, std::uint64_t mask = ~std::uint64_t{0}) noexcept;
@@ -129,8 +131,8 @@ private:
   unsigned further_windows_ = 0;
   std::vector<cpu12::Ram> grants_;
   std::vector<std::uint64_t> mounted_;
-  std::optional<Coupling::Input> pending_;
-  std::uint64_t seen_ = 0, binding_ = 0;
+  const Coupling::Input *pending_ = nullptr;
+  std::uint64_t binding_ = 0;
   const char *refused_ = nullptr;
   Action action_ = Action::run;
   bool active_ = false, replaying_ = false, pedal_ = false;

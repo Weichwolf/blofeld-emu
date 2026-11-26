@@ -112,15 +112,24 @@ bool Speculation::observe(const Coupling::Input &update) noexcept {
 
 bool Speculation::poll() noexcept {
   if (coupling_.stopped()) { return false; }
-  if (const auto update = coupling_.input(seen_)) {
-    seen_ = update->serial;
-    pending_ = update;
-    const bool valid = observe(*update);
-    if (valid) {
-      coupling_.acknowledge(update->serial);
-      pending_.reset();
+  if (pending_ == nullptr) {
+    if (const auto *update = coupling_.input(); update != nullptr) [[unlikely]] {
+      return receive(*update);
     }
   }
+  return poll_progress();
+}
+
+[[gnu::cold, gnu::noinline]] bool Speculation::receive(const Coupling::Input &update) noexcept {
+  pending_ = &update;
+  if (observe(update)) {
+    coupling_.acknowledge(update.serial);
+    pending_ = nullptr;
+  }
+  return poll_progress();
+}
+
+bool Speculation::poll_progress() noexcept {
   if (epoch_.cancelled()) { return false; }
   if (history_.error() != Epoch::Error::none || epoch_.error() != Epoch::Error::none) {
     return false;
@@ -546,7 +555,7 @@ void Speculation::confirm() {
 }
 
 void Speculation::recover() {
-  if (!pending_) { throw std::logic_error("Invalidated MCU epoch has no source event"); }
+  if (pending_ == nullptr) { throw std::logic_error("Invalidated MCU epoch has no source event"); }
   staged_.reset();
   further_windows_ = 0;
   coupling_.cancel_checkpoint();
@@ -577,7 +586,7 @@ void Speculation::recover() {
                                        coupling_.known(),
                                        prefix));
   }
-  pending_.reset();
+  pending_ = nullptr;
   coupling_.acknowledge(serial);
   publish();
 }

@@ -122,12 +122,6 @@ void Coupling::request(const std::uint64_t ticks) noexcept {
   notify();
 }
 
-std::optional<Coupling::Input> Coupling::input(const std::uint64_t seen) const noexcept {
-  const auto serial = message_.load(std::memory_order_acquire);
-  if (serial == 0 || serial == seen) { return {}; }
-  return input_;
-}
-
 void Coupling::acknowledge(const std::uint64_t serial) noexcept {
   auto expected = serial;
   if (!message_.compare_exchange_strong(expected, 0, std::memory_order_acq_rel)) {
