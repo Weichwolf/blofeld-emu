@@ -12,15 +12,21 @@
 #include <array>
 #include <atomic>
 #include <cerrno>
+#include <charconv>
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <pthread.h>
 #include <sched.h>
+#include <sstream>
 #include <stdexcept>
 #include <stop_token>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <thread>
 #include <vector>
@@ -50,19 +56,104 @@ cpu_set_t thread_siblings(const int cpu) {
   return mask;
 }
 
-std::vector<cpu_set_t> physical_cores(cpu_set_t remaining) {
-  std::vector<cpu_set_t> physical;
+struct CoreMasks {
+  cpu_set_t allowed, siblings;
+};
+
+std::vector<CoreMasks> physical_cores(cpu_set_t remaining) {
+  std::vector<CoreMasks> physical;
   const auto first = std::max(0, ::sched_getcpu());
   for (int offset = 0; offset < CPU_SETSIZE; ++offset) {
     const auto cpu = (first + offset) % CPU_SETSIZE;
     if (!CPU_ISSET(cpu, &remaining)) { continue; }
-    auto core = thread_siblings(cpu);
-    CPU_AND(&core, &core, &remaining);
-    if (!CPU_ISSET(cpu, &core)) { return {}; }
-    physical.push_back(core);
-    CPU_XOR(&remaining, &remaining, &core);
+    const auto siblings = thread_siblings(cpu);
+    cpu_set_t allowed{};
+    CPU_AND(&allowed, &siblings, &remaining);
+    if (!CPU_ISSET(cpu, &allowed)) { return {}; }
+    physical.push_back({allowed, siblings});
+    CPU_XOR(&remaining, &remaining, &allowed);
   }
   return physical;
+}
+
+struct CpuTime {
+  std::uint64_t active = 0, inactive = 0;
+};
+
+using CpuTimes = std::array<CpuTime, CPU_SETSIZE>;
+
+CpuTimes cpu_times() {
+  std::ifstream stat("/proc/stat");
+  CpuTimes result{};
+  for (std::string line; std::getline(stat, line);) {
+    if (!line.starts_with("cpu")) { break; }
+    std::istringstream fields(line);
+    std::string label;
+    fields >> label;
+    if (label.size() <= 3) { continue; }
+    const auto name = std::string_view(label).substr(3);
+    int cpu = 0;
+    const auto parsed = std::from_chars(name.data(), name.data() + name.size(), cpu);
+    if (parsed.ec != std::errc{} || parsed.ptr != name.data() + name.size() || cpu < 0 ||
+        cpu >= CPU_SETSIZE) {
+      continue;
+    }
+    std::uint64_t user{};
+    std::uint64_t nice{};
+    std::uint64_t system{};
+    std::uint64_t idle{};
+    std::uint64_t wait{};
+    std::uint64_t irq{};
+    std::uint64_t softirq{};
+    std::uint64_t steal{};
+    if (fields >> user >> nice >> system >> idle >> wait >> irq >> softirq >> steal) {
+      result[static_cast<std::size_t>(cpu)] = {
+          .active = user + nice + system + irq + softirq + steal, .inactive = idle + wait};
+    }
+  }
+  return result;
+}
+
+std::optional<std::size_t> least_busy_core(const std::vector<CoreMasks> &cores) {
+  // /proc/stat is tick-based. Sample before firmware execution.
+  constexpr std::chrono::milliseconds sample_interval{100};
+  const auto before = cpu_times();
+  std::this_thread::sleep_for(sample_interval);
+  const auto after = cpu_times();
+  double best_load = 0.0;
+  std::optional<std::size_t> best;
+  for (std::size_t core = 0; core < cores.size(); ++core) {
+    double load = 0.0;
+    for (int cpu = 0; cpu < CPU_SETSIZE; ++cpu) {
+      if (!CPU_ISSET(cpu, &cores[core].siblings)) { continue; }
+      const auto index = static_cast<std::size_t>(cpu);
+      const auto first = before[index];
+      const auto last = after[index];
+      if (first.active > last.active || first.inactive > last.inactive) { return {}; }
+      const auto active = last.active - first.active;
+      const auto elapsed = active + (last.inactive - first.inactive);
+      if (elapsed == 0) { return {}; }
+      load = std::max(load, static_cast<double>(active) / static_cast<double>(elapsed));
+    }
+    if (!best || load < best_load) {
+      best_load = load;
+      best = core;
+    }
+  }
+  return best;
+}
+
+std::optional<std::array<cpu_set_t, 2>> quiet_dsp_affinity(host::audio::Playback &audio,
+                                                           const std::vector<CoreMasks> &physical) {
+  const auto selected = least_busy_core(physical);
+  if (!selected) { return {}; }
+  const auto dsp = physical[*selected].allowed;
+  const auto mcu = physical[*selected == 0 ? 1U : 0U].allowed;
+  for (auto core = physical.rbegin(); core != physical.rend(); ++core) {
+    if (CPU_EQUAL(&dsp, &core->allowed) || CPU_EQUAL(&mcu, &core->allowed)) { continue; }
+    if (audio.pin_callback(core->allowed)) { return std::array{mcu, dsp}; }
+  }
+  return {};
 }
 
 std::array<cpu_set_t, 2> owner_affinity(host::audio::Playback &audio) {
@@ -71,13 +162,14 @@ std::array<cpu_set_t, 2> owner_affinity(host::audio::Playback &audio) {
   const auto physical = physical_cores(allowed);
   if (physical.size() < 2) { return {}; }
 
-  auto mcu = physical.front();
-  // Keep the three deadline-sensitive threads off each other's SMT siblings.
+  auto mcu = physical.front().allowed;
   if (physical.size() > 2) {
+    if (const auto selected = quiet_dsp_affinity(audio, physical)) { return *selected; }
+    // Keep the existing placement when topology, load or affinity is unavailable.
     for (auto core = physical.rbegin(); core != physical.rend(); ++core) {
-      if (!audio.pin_callback(*core)) { continue; }
-      CPU_XOR(&allowed, &allowed, &*core);
-      if (CPU_EQUAL(&mcu, &*core)) { mcu = physical[1]; }
+      if (!audio.pin_callback(core->allowed)) { continue; }
+      CPU_XOR(&allowed, &allowed, &core->allowed);
+      if (CPU_EQUAL(&mcu, &core->allowed)) { mcu = physical[1].allowed; }
       break;
     }
   }
@@ -85,6 +177,7 @@ std::array<cpu_set_t, 2> owner_affinity(host::audio::Playback &audio) {
   CPU_XOR(&dsp, &allowed, &mcu);
   return {mcu, dsp};
 }
+
 }
 
 Live::Live(host::audio::Playback &audio, DisplayPublication &display, const Options & /*options*/)
@@ -104,6 +197,8 @@ Live::Live(host::audio::Playback &audio, DisplayPublication &display, const Opti
 void Live::start_owners() {
   vm_->start([masks = owner_affinity(audio_)](const vi::VmContext::Owner owner) {
     const auto &mask = masks[owner == vi::VmContext::Owner::mcu ? 0U : 1U];
+    static_cast<void>(::pthread_setname_np(
+        ::pthread_self(), owner == vi::VmContext::Owner::mcu ? "blofeld-mcu" : "blofeld-dsp"));
     if (CPU_COUNT(&mask) != 0) {
       static_cast<void>(::pthread_setaffinity_np(::pthread_self(), sizeof(mask), &mask));
     }
