@@ -17,6 +17,8 @@ public:
     dsp56300::Word address = 0, value = 0;
   };
 
+  static constexpr dsp56300::Word audio_ring_first = 0x660, audio_ring_words = 64;
+
   struct Address {
     dsp56300::Space space = dsp56300::Space::x;
     dsp56300::Word address = 0;
@@ -30,6 +32,8 @@ public:
   [[nodiscard]] bool write(Write access) noexcept;
   [[nodiscard]] bool trigger(unsigned source) noexcept;
   void trigger_sources(unsigned sources) noexcept;
+
+  [[nodiscard]] std::optional<unsigned> slots_to_audio_phase() const noexcept;
 
   [[nodiscard]] bool pending() const noexcept { return pending_ != 0; }
 

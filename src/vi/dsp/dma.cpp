@@ -94,6 +94,36 @@ unsigned Dma::interrupts() const noexcept {
   return result;
 }
 
+std::optional<unsigned> Dma::slots_to_audio_phase() const noexcept {
+  // Only the verified dual audio transfers can run without touching DSP RAM.
+  constexpr Word fifo_tx0 = 0xffff80;
+  constexpr Word dax_data = 0xffffd2;
+  constexpr Word period = audio_ring_words;
+  constexpr Word half = period / 2;
+  constexpr Word row_count = (period - 1) << 6U;
+  constexpr Word repeat_slot =
+      enable | (5U << transfer_shift) | (22U << 11U) | three_dimensions | (32U << 4U);
+  constexpr Word esai = repeat_slot | (1U << priority_shift) | (1U << 2U);
+  if (pending() || failure_ || offsets_[0] != 1 ||
+      offsets_[1] != dsp56300::word_mask + 2U - period || channels_[0].control != esai ||
+      channels_[3].control != repeat_slot) {
+    return {};
+  }
+  constexpr std::array inactive{1U, 2U, 4U, 5U};
+  for (const unsigned i : inactive) {
+    if ((channels_[i].control & enable) != 0) { return {}; }
+  }
+  const auto valid_audio_source = [&](const Channel &channel, const Word to) {
+    return (channel.known & 7) == 7 && channel.destination == to && channel.reload == row_count &&
+           (channel.count & ~row_count) == 0 &&
+           channel.source == audio_ring_first + period - 1U - (channel.count >> 6U);
+  };
+  if (!valid_audio_source(channels_[0], fifo_tx0) || !valid_audio_source(channels_[3], dax_data)) {
+    return {};
+  }
+  return half - (channels_[0].source & (half - 1U));
+}
+
 bool Dma::acknowledge(const unsigned channel) noexcept {
   if (channel >= channel_count || (interrupts_ & (1U << channel)) == 0) { return false; }
   interrupts_ &= ~(1U << channel);

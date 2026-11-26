@@ -141,6 +141,16 @@ std::optional<std::uint64_t> Audio::deadline() const noexcept {
   return digital;
 }
 
+std::optional<std::uint64_t> Audio::transmit_deadline(const unsigned slots) const noexcept {
+  if (slots == 0 || slots > 32 || transmit_.step == 0) { return {}; }
+  const auto offset = std::uint64_t{slots - 1};
+  const auto fraction = transmit_.remainder + (offset * transmit_.step_remainder);
+  const auto increment = (offset * transmit_.step) + (fraction / transmit_.denominator) +
+                         std::uint64_t{fraction % transmit_.denominator != 0};
+  if (increment > std::numeric_limits<std::uint64_t>::max() - transmit_.floor) { return {}; }
+  return transmit_.floor + increment;
+}
+
 bool Audio::capture(const Esai::Slot &slot, const std::uint64_t cycles) noexcept {
   if ((slot.enabled & slot.known & 1) == 0) {
     return fail("ESAI_1 output word is disabled or unknown");

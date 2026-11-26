@@ -31,6 +31,10 @@ public:
 
   [[nodiscard]] bool connected() const noexcept { return connected_; }
 
+  [[nodiscard]] bool audio_dma_without_interrupts() const noexcept {
+    return connected_ && control_ == 8;
+  }
+
   [[nodiscard]] static bool contains(dsp56300::Word address) noexcept;
   [[nodiscard]] static bool data_register(dsp56300::Word address) noexcept;
   [[nodiscard]] bool read(dsp56300::Word address, dsp56300::Word &value) noexcept;
