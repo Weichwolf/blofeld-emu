@@ -3,6 +3,7 @@
 
 #include "audio/playback.hpp"
 #include "display/publication.hpp"
+#include "dsp_placement.hpp"
 #include "io/midi_port.hpp"
 #include "linux/jack/midi_queue.hpp"
 #include "midi/ump.hpp"
@@ -56,12 +57,8 @@ cpu_set_t thread_siblings(const int cpu) {
   return mask;
 }
 
-struct CoreMasks {
-  cpu_set_t allowed, siblings;
-};
-
-std::vector<CoreMasks> physical_cores(cpu_set_t remaining) {
-  std::vector<CoreMasks> physical;
+std::vector<PhysicalCore> physical_cores(cpu_set_t remaining) {
+  std::vector<PhysicalCore> physical;
   const auto first = std::max(0, ::sched_getcpu());
   for (int offset = 0; offset < CPU_SETSIZE; ++offset) {
     const auto cpu = (first + offset) % CPU_SETSIZE;
@@ -114,7 +111,7 @@ CpuTimes cpu_times() {
   return result;
 }
 
-std::optional<std::size_t> least_busy_core(const std::vector<CoreMasks> &cores) {
+std::optional<std::size_t> least_busy_core(const std::vector<PhysicalCore> &cores) {
   // /proc/stat is tick-based. Sample before firmware execution.
   constexpr std::chrono::milliseconds sample_interval{100};
   const auto before = cpu_times();
@@ -143,20 +140,28 @@ std::optional<std::size_t> least_busy_core(const std::vector<CoreMasks> &cores) 
   return best;
 }
 
-std::optional<std::array<cpu_set_t, 2>> quiet_dsp_affinity(host::audio::Playback &audio,
-                                                           const std::vector<CoreMasks> &physical) {
+std::optional<std::array<cpu_set_t, 2>>
+quiet_dsp_affinity(host::audio::Playback &audio,
+                   const std::vector<PhysicalCore> &physical,
+                   DspPlacement &placement) {
   const auto selected = least_busy_core(physical);
   if (!selected) { return {}; }
   const auto dsp = physical[*selected].allowed;
   const auto mcu = physical[*selected == 0 ? 1U : 0U].allowed;
   for (auto core = physical.rbegin(); core != physical.rend(); ++core) {
     if (CPU_EQUAL(&dsp, &core->allowed) || CPU_EQUAL(&mcu, &core->allowed)) { continue; }
-    if (audio.pin_callback(core->allowed)) { return std::array{mcu, dsp}; }
+    if (!audio.pin_callback(core->allowed)) { continue; }
+    const auto spare = std::ranges::find_if(physical, [&](const PhysicalCore &candidate) {
+      return !CPU_EQUAL(&candidate.allowed, &dsp) && !CPU_EQUAL(&candidate.allowed, &mcu) &&
+             !CPU_EQUAL(&candidate.allowed, &core->allowed);
+    });
+    if (spare != physical.end()) { placement.prepare(physical[*selected], *spare); }
+    return std::array{mcu, dsp};
   }
   return {};
 }
 
-std::array<cpu_set_t, 2> owner_affinity(host::audio::Playback &audio) {
+std::array<cpu_set_t, 2> owner_affinity(host::audio::Playback &audio, DspPlacement &placement) {
   cpu_set_t allowed{};
   if (::sched_getaffinity(0, sizeof(allowed), &allowed) != 0) { return {}; }
   const auto physical = physical_cores(allowed);
@@ -164,7 +169,7 @@ std::array<cpu_set_t, 2> owner_affinity(host::audio::Playback &audio) {
 
   auto mcu = physical.front().allowed;
   if (physical.size() > 2) {
-    if (const auto selected = quiet_dsp_affinity(audio, physical)) { return *selected; }
+    if (const auto selected = quiet_dsp_affinity(audio, physical, placement)) { return *selected; }
     // Keep the existing placement when topology, load or affinity is unavailable.
     for (auto core = physical.rbegin(); core != physical.rend(); ++core) {
       if (!audio.pin_callback(core->allowed)) { continue; }
@@ -195,12 +200,15 @@ Live::Live(host::audio::Playback &audio, DisplayPublication &display, const Opti
 }
 
 void Live::start_owners() {
-  vm_->start([masks = owner_affinity(audio_)](const vi::VmContext::Owner owner) {
+  const auto masks = owner_affinity(audio_, dsp_placement_);
+  vm_->start([this, masks](const vi::VmContext::Owner owner) {
     const auto &mask = masks[owner == vi::VmContext::Owner::mcu ? 0U : 1U];
     static_cast<void>(::pthread_setname_np(
         ::pthread_self(), owner == vi::VmContext::Owner::mcu ? "blofeld-mcu" : "blofeld-dsp"));
-    if (CPU_COUNT(&mask) != 0) {
-      static_cast<void>(::pthread_setaffinity_np(::pthread_self(), sizeof(mask), &mask));
+    if (CPU_COUNT(&mask) != 0 &&
+        ::pthread_setaffinity_np(::pthread_self(), sizeof(mask), &mask) == 0 &&
+        owner == vi::VmContext::Owner::dsp) {
+      dsp_placement_.attach();
     }
     if (::sched_getscheduler(0) != SCHED_OTHER) { return; }
     // Keep PCM production above normal tasks and below a real-time JACK callback.
@@ -215,6 +223,7 @@ void Live::start_owners() {
 
 void Live::control() {
   publish_display();
+  if (phase_.load(std::memory_order_acquire) == Phase::playing) { dsp_placement_.update(audio_); }
 }
 
 void Live::discard() {}
