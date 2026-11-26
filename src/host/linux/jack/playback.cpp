@@ -169,6 +169,10 @@ struct Playback::Impl {
   void cycle(const jack_nframes_t frames) noexcept {
     const std::span l(static_cast<float *>(jack_port_get_buffer(left, frames)), frames);
     const std::span r(static_cast<float *>(jack_port_get_buffer(right, frames)), frames);
+    const auto silence = [&] noexcept {
+      std::ranges::fill(l, 0.0F);
+      std::ranges::fill(r, 0.0F);
+    };
     auto *midi = jack_port_get_buffer(output, frames);
     jack_midi_clear_buffer(midi);
     if (frames != block) { fail("JACK server buffer size changed"); }
@@ -180,8 +184,7 @@ struct Playback::Impl {
     }
     if (closed.load(std::memory_order_acquire) ||
         error.load(std::memory_order_relaxed) != nullptr) {
-      std::ranges::fill(l, 0.0F);
-      std::ranges::fill(r, 0.0F);
+      silence();
       return;
     }
     const auto was_primed = primed;
@@ -190,6 +193,11 @@ struct Playback::Impl {
       const auto current = jack_last_frame_time(client.get());
       if (previous_cycle) {
         const auto elapsed = current - *previous_cycle;
+        // JACK can repeat a cycle position while recovering from an xrun.
+        if (elapsed == 0) {
+          silence();
+          return;
+        }
         if (elapsed > frames && elapsed < std::numeric_limits<jack_nframes_t>::max() / 2U) {
           const auto skipped = elapsed - frames;
           frame += skipped;
@@ -203,8 +211,7 @@ struct Playback::Impl {
       submitted.fetch_add(copied, std::memory_order_relaxed);
       if (copied != frames) { underruns.fetch_add(1, std::memory_order_relaxed); }
     } else {
-      std::ranges::fill(l, 0.0F);
-      std::ranges::fill(r, 0.0F);
+      silence();
       if (frame == 0) { return; }
     }
     receive(jack_port_get_buffer(input, frames), frames);
