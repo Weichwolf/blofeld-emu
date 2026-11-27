@@ -41,6 +41,8 @@ namespace blofeld::vi {
 // audio consumers extend this context; no host API handles or global stepper.
 class VmContext {
 public:
+  using PlaybackReady = void (*)(void *) noexcept;
+
   VmContext(std::unique_ptr<FlashImage> image,
             std::vector<dsp56300::Word> boot,
             std::shared_ptr<const mcu::Program> mcu_program,
@@ -50,7 +52,8 @@ public:
             std::shared_ptr<const dsp::Program> program = {},
             std::uint64_t speculation_window = Coupling::default_window,
             dsp::Memory::Storage dsp_memory = {},
-            dsp::Foreground dsp_foreground = {});
+            dsp::Foreground dsp_foreground = {},
+            PlaybackReady playback_ready = nullptr);
   ~VmContext();
   VmContext(const VmContext &) = delete;
   VmContext &operator=(const VmContext &) = delete;
@@ -84,6 +87,7 @@ public:
   enum class Owner : std::uint8_t { mcu, dsp };
   using OwnerSetup = std::function<void(Owner)>;
   void start(const OwnerSetup &setup = {});
+  void playback_ready() noexcept;
 
   [[nodiscard]] bool finished() const noexcept {
     return completed_.load(std::memory_order_acquire) != 0;
@@ -128,5 +132,6 @@ private:
 #endif
   std::unique_ptr<Coupling> coupling_;
   dsp::Foreground dsp_foreground_;
+  PlaybackReady playback_ready_;
 };
 }

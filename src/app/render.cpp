@@ -159,6 +159,7 @@ int OfflineRender::run(vi::VmContext &vm,
 #if defined(__APPLE__)
   vm.midi().begin_rendering(*origin);
 #endif
+  vm.playback_ready();
   ready_ = std::chrono::steady_clock::now();
   wav_.begin_at(*origin);
   std::cerr << "Ready: original MIDI identity and PCM; musical origin=" << *origin << " ticks";

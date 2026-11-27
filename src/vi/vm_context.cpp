@@ -45,7 +45,8 @@ VmContext::VmContext(std::unique_ptr<FlashImage> image,
                      std::shared_ptr<const dsp::Program> program,
                      const std::uint64_t speculation_window,
                      const dsp::Memory::Storage dsp_memory,
-                     const dsp::Foreground dsp_foreground)
+                     const dsp::Foreground dsp_foreground,
+                     const PlaybackReady playback_ready)
     : image_(std::move(image)),
       media_(std::move(media)),
       mcu_program_(std::move(mcu_program)),
@@ -54,7 +55,8 @@ VmContext::VmContext(std::unique_ptr<FlashImage> image,
       boot_(std::move(boot)),
       output_(output),
       midi_(input),
-      dsp_foreground_(dsp_foreground) {
+      dsp_foreground_(dsp_foreground),
+      playback_ready_(playback_ready) {
 #if defined(BLOFELD_CENSUS)
   if (host::inherited_setting("BLOFELD_MCU_STATE_PROBE") == "1") {
     state_probe_ = std::make_unique<mcu::StateProbe>(&stop_);
@@ -135,6 +137,10 @@ void VmContext::start(const OwnerSetup &setup) {
     completed_.fetch_add(1, std::memory_order_release);
     completed_.notify_one();
   });
+}
+
+void VmContext::playback_ready() noexcept {
+  if (playback_ready_ != nullptr) { playback_ready_(dsp_foreground_.context); }
 }
 
 std::array<ExecutionReport, 2> VmContext::wait() {
