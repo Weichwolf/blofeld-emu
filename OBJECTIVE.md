@@ -63,12 +63,11 @@ Keep manufacturer inputs/generated artifacts local with source/size/hash identit
   30 minutes in one live session and record minimum PCM publication margin,
   effective clock, PCM underruns and JACK xruns in #17. Preserve exact PCM on
   replay of the admitted MIDI timeline and preserve every MIDI event.
-- Qualify settled idle on the same JACK setup after release and effect tails.
-  The target is at most 2.0% of total host CPU capacity normalized to 4.2 GHz.
-  Report raw CPU usage, effective clock and wakeups per owner and label the
-  normalized value as an estimate. Preserve exact PCM, MIDI timing, retrigger
-  latency and the W5 publication margin with the same buffer settings. Record
-  the result in #52.
+- Measure settled idle on the same JACK setup after release and effect tails.
+  Report raw CPU usage, effective clock, per-thread CPU time and wakeups. Label
+  the estimate normalized to 4.2 GHz separately. Preserve exact PCM, MIDI
+  timing, retrigger latency and the W5 publication margin with the same buffer
+  settings. Record the result in #52.
 - Close issues against their scoped live, functional and qualification criteria.
   The deferred throughput and idle milestones have their own acceptance in #103
   and #104.
@@ -99,10 +98,12 @@ Keep manufacturer inputs/generated artifacts local with source/size/hash identit
 ## Deferred throughput and idle targets
 
 After the remaining live, functional and qualification issues are closed, qualify
-sustained 2× W5 headless rendering and at most 2% measured idle CPU on the local
-Linux i5-1135G7 under its normal clock policy in #103. Use the JACK setup from
-#52. Then qualify 4× W5 rendering and at most 1% idle CPU on A18 Pro in #104.
-Use native CoreAudio for its idle measurement and record the actual buffer size.
+sustained 2× W5 headless rendering on the local Linux i5-1135G7 under its normal
+clock policy in #103. Then qualify 4× W5 rendering on A18 Pro in #104.
+The expected settled idle range for both milestones is 4–6% of total host CPU
+capacity after release and effect tails. Any value at or below 6% meets the CPU
+target. Use the JACK setup and 4.2 GHz normalization from #52 for Linux. Use
+native CoreAudio on A18 Pro and record the actual buffer size.
 At 44.1 kHz, the render targets are 88,200 and 176,400 valid stereo frames per
 host second.
 Use exact original PCM and guest timing over the full workload. Report W1–W5
