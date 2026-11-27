@@ -47,7 +47,8 @@ void Timers::reset() noexcept {
     timer.preload = timer.halted = timer.level = false;
   }
   prescaler_ = prescaler_count_ = 0;
-  cycles_ = 0;
+  cycles_ = now_ = 0;
+  next_ = no_deadline;
   requests_ = 0;
   error_ = nullptr;
 }
@@ -56,7 +57,8 @@ bool Timers::contains(const Word address) noexcept {
   return address >= prescaler_count_address && address <= last_control;
 }
 
-bool Timers::read(const Word address, Word &value) const noexcept {
+bool Timers::read(const Word address, Word &value) noexcept {
+  materialize();
   if (address == prescaler_address) {
     value = prescaler_;
     return true;
@@ -120,23 +122,28 @@ bool Timers::write(const Write access) noexcept {
   if (!contains(access.address) || access.value > dsp56300::word_mask || error_ != nullptr) {
     return false;
   }
+  if (access.address == prescaler_count_address) { return true; }
+  materialize();
   if (access.address == prescaler_address) {
     if ((access.value >> prescaler_source_shift & 3) == 3 && prescaler_active()) {
       return fail("Reserved DSP timer prescaler source");
     }
     prescaler_ = access.value & prescaler_register_mask;
-    return true;
+  } else {
+    const auto index = (last_control - access.address) / 4;
+    auto &timer = timers_[index];
+    switch ((access.address - first_counter) & 3) {
+      case 0: return true; // TCR is read-only.
+      case 1: timer.compare = access.value; break;
+      case 2: timer.load = access.value; break;
+      case 3:
+        if (!control(index, access.value)) { return false; }
+        break;
+      default: return false;
+    }
   }
-  if (access.address == prescaler_count_address) { return true; }
-  const auto index = (last_control - access.address) / 4;
-  auto &timer = timers_[index];
-  switch ((access.address - first_counter) & 3) {
-    case 0: return true; // TCR is read-only.
-    case 1: timer.compare = access.value; return true;
-    case 2: timer.load = access.value; return true;
-    case 3: return control(index, access.value);
-    default: return false;
-  }
+  next_ = next_deadline();
+  return true;
 }
 
 std::uint64_t Timers::prescale(std::uint64_t ticks) noexcept {
@@ -186,9 +193,20 @@ void Timers::count(const unsigned index, std::uint64_t ticks) noexcept {
 
 bool Timers::advance(const std::uint64_t cycles) noexcept {
   if (error_ != nullptr) { return false; }
-  if (cycles < cycles_) { return fail("DSP timer clock moved backwards"); }
-  const auto ticks = (cycles / 2) - (cycles_ / 2);
-  cycles_ = cycles;
+  if (cycles < now_) { return fail("DSP timer clock moved backwards"); }
+  now_ = cycles;
+  // Counts become observable at the next event, register access, or input edge.
+  if (cycles >= next_ && next_ != no_deadline) {
+    materialize();
+    next_ = next_deadline();
+  }
+  return true;
+}
+
+void Timers::materialize() noexcept {
+  const auto ticks = (now_ / 2) - (cycles_ / 2);
+  cycles_ = now_;
+  if (ticks == 0) { return; }
   const auto divided =
       prescaler_active() && (prescaler_ >> prescaler_source_shift) == 0 ? prescale(ticks) : 0;
   for (unsigned index = 0; index < timers_.size(); ++index) {
@@ -199,7 +217,6 @@ bool Timers::advance(const std::uint64_t cycles) noexcept {
       count(index, ticks);
     }
   }
-  return true;
 }
 
 bool Timers::input(const unsigned index, const bool level) noexcept {
@@ -209,25 +226,28 @@ bool Timers::input(const unsigned index, const bool level) noexcept {
   const auto previous = timer.level;
   timer.level = level;
   if (previous == level) { return true; }
+  materialize();
   const auto source = prescaler_ >> prescaler_source_shift;
-  if (level && source == index + 1 && prescaler_active()) {
+  if (level && source == std::uint64_t{index} + 1 && prescaler_active()) {
     const auto ticks = prescale(1);
     for (unsigned target = 0; target < timers_.size(); ++target) {
       if ((timers_[target].control & use_prescaler) != 0) { count(target, ticks); }
     }
   }
-  if ((timer.control & enable) == 0 || level == ((timer.control & invert) != 0)) { return true; }
-  if (mode(timer.control) == 3 && (timer.control & use_prescaler) == 0) { count(index, 1); }
-  if (mode(timer.control) == 6 && !timer.halted) {
-    timer.captured = timer.count;
-    timer.halted = true;
-    event(index, compare);
+  if ((timer.control & enable) != 0 && level != ((timer.control & invert) != 0)) {
+    if (mode(timer.control) == 3 && (timer.control & use_prescaler) == 0) { count(index, 1); }
+    if (mode(timer.control) == 6 && !timer.halted) {
+      timer.captured = timer.count;
+      timer.halted = true;
+      event(index, compare);
+    }
   }
+  next_ = next_deadline();
   return true;
 }
 
-std::optional<std::uint64_t> Timers::deadline() const noexcept {
-  std::optional<std::uint64_t> result;
+std::uint64_t Timers::next_deadline() const noexcept {
+  auto result = no_deadline;
   for (const auto &timer : timers_) {
     if ((timer.control & enable) == 0 || timer.halted) { continue; }
     const bool prescaled = (timer.control & use_prescaler) != 0;
@@ -245,7 +265,7 @@ std::optional<std::uint64_t> Timers::deadline() const noexcept {
     const auto base = cycles_ / 2;
     if (ticks > std::numeric_limits<std::uint64_t>::max() / 2 - base) { continue; }
     const auto next = (base + ticks) * 2;
-    if (!result || next < *result) { result = next; }
+    result = std::min(result, next);
   }
   return result;
 }

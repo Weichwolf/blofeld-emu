@@ -27,7 +27,7 @@ void put(Timers &timers, const Timers::Write access) {
   require(timers.write(access), "Write a supported DSP timer register");
 }
 
-Word read(const Timers &timers, const Word address) {
+Word read(Timers &timers, const Word address) {
   Word value = 0;
   require(timers.read(address, value), "Read a readable DSP timer register");
   return value;

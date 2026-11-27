@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <dsp56300/memory.hpp>
+#include <limits>
 #include <optional>
 
 namespace blofeld::vi::dsp {
@@ -17,11 +18,16 @@ public:
 
   void reset() noexcept;
   [[nodiscard]] static bool contains(dsp56300::Word address) noexcept;
-  [[nodiscard]] bool read(dsp56300::Word address, dsp56300::Word &value) const noexcept;
+  [[nodiscard]] bool read(dsp56300::Word address, dsp56300::Word &value) noexcept;
   [[nodiscard]] bool write(Write access) noexcept;
   [[nodiscard]] bool advance(std::uint64_t cycles) noexcept;
   [[nodiscard]] bool input(unsigned index, bool level) noexcept;
-  [[nodiscard]] std::optional<std::uint64_t> deadline() const noexcept;
+
+  [[nodiscard]] std::optional<std::uint64_t> deadline() const noexcept {
+    if (next_ == no_deadline) { return {}; }
+    return next_;
+  }
+
   [[nodiscard]] std::optional<dsp56300::Word> interrupt() const noexcept;
   [[nodiscard]] bool acknowledge(dsp56300::Word vector) noexcept;
 
@@ -39,6 +45,9 @@ private:
     bool preload = false, halted = false, level = false;
   };
 
+  static constexpr auto no_deadline = std::numeric_limits<std::uint64_t>::max();
+  void materialize() noexcept;
+  [[nodiscard]] std::uint64_t next_deadline() const noexcept;
   [[nodiscard]] bool prescaler_active() const noexcept;
   [[nodiscard]] std::uint64_t prescale(std::uint64_t ticks) noexcept;
   void count(unsigned index, std::uint64_t ticks) noexcept;
@@ -47,7 +56,7 @@ private:
   [[nodiscard]] bool fail(const char *message) noexcept;
   std::array<Timer, 3> timers_;
   dsp56300::Word prescaler_ = 0, prescaler_count_ = 0;
-  std::uint64_t cycles_ = 0;
+  std::uint64_t cycles_ = 0, now_ = 0, next_ = no_deadline;
   unsigned requests_ = 0;
   const char *error_ = nullptr;
 };
