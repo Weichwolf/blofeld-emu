@@ -318,10 +318,14 @@ bool Playback::callback_preempts(const pthread_t producer) const noexcept {
   using Schedule = sched_param;
   Schedule callback_parameters{};
   Schedule producer_parameters{};
-  return callback != decltype(callback){} &&
-         ::pthread_getschedparam(callback, &callback_policy, &callback_parameters) == 0 &&
-         (callback_policy == SCHED_FIFO || callback_policy == SCHED_RR) &&
-         ::pthread_getschedparam(producer, &producer_policy, &producer_parameters) == 0 &&
+  if (callback == decltype(callback){} ||
+      ::pthread_getschedparam(callback, &callback_policy, &callback_parameters) != 0 ||
+      ::pthread_getschedparam(producer, &producer_policy, &producer_parameters) != 0) {
+    return false;
+  }
+  callback_policy &= ~SCHED_RESET_ON_FORK;
+  producer_policy &= ~SCHED_RESET_ON_FORK;
+  return (callback_policy == SCHED_FIFO || callback_policy == SCHED_RR) &&
          (producer_policy == SCHED_OTHER || producer_policy == SCHED_FIFO ||
           producer_policy == SCHED_RR) &&
          callback_parameters.sched_priority > producer_parameters.sched_priority;
