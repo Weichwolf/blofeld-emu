@@ -211,11 +211,14 @@ void Live::start_owners() {
         owner == vi::VmContext::Owner::dsp) {
       dsp_placement_.attach();
     }
-    if (::sched_getscheduler(0) != SCHED_OTHER) { return; }
+    const auto policy = ::sched_getscheduler(0);
+    if ((policy & ~SCHED_RESET_ON_FORK) != SCHED_OTHER) { return; }
     // Keep PCM production above normal tasks and below a real-time JACK callback.
+    // Preserve the reset flag because clearing it requires additional privileges.
+    const auto extra = policy & SCHED_RESET_ON_FORK;
     // NOLINTNEXTLINE(misc-include-cleaner) sched.h declares the POSIX type.
     const sched_param realtime{.sched_priority = ::sched_get_priority_min(SCHED_RR)};
-    const auto error = ::pthread_setschedparam(::pthread_self(), SCHED_RR, &realtime);
+    const auto error = ::pthread_setschedparam(::pthread_self(), SCHED_RR | extra, &realtime);
     if (error != 0 && error != EPERM) {
       throw std::system_error(error, std::generic_category(), "Set live VM scheduling");
     }
