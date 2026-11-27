@@ -10,10 +10,20 @@
 #include <cstdint>
 #include <dsp56300/core.hpp>
 #include <filesystem>
+#include <memory>
 #include <span>
 #include <string_view>
 
+namespace blofeld::host::aot {
+class Code;
+}
+
 namespace blofeld::app::aot {
+namespace detail {
+[[nodiscard]] dsp56300::NativeImage bind_dsp(const dsp56300::SemanticImage &semantic,
+                                             const std::shared_ptr<const host::aot::Code> &code);
+}
+
 struct DspSource {
   std::string_view name;
   std::span<const std::uint8_t> bytes;
