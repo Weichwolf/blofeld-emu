@@ -36,32 +36,77 @@ DspPlacement::Runtimes DspPlacement::runtimes() {
   return values;
 }
 
-void DspPlacement::prepare(const PhysicalCore primary, const PhysicalCore spare) {
-  if (CPU_COUNT(&primary.siblings) >= 2 && CPU_COUNT(&spare.allowed) != 0) {
-    cores_ = {primary, spare};
-  }
+void DspPlacement::prepare(const PhysicalCore primary,
+                           const PhysicalCore spare,
+                           const PhysicalCore callback) {
+  if (CPU_COUNT(&primary.siblings) >= 2) { cores_ = {primary, spare, callback}; }
 }
 
 void DspPlacement::attach() noexcept {
   const auto thread = ::pthread_self();
-  if (CPU_COUNT(&cores_[1].allowed) != 0 && ::pthread_getcpuclockid(thread, &owner_clock_) == 0) {
+  if (CPU_COUNT(&cores_[callback_core].allowed) != 0 &&
+      ::pthread_getcpuclockid(thread, &owner_clock_) == 0) {
     thread_.store(thread, std::memory_order_release);
   }
 }
 
-bool DspPlacement::move(host::audio::Playback &audio) {
-  constexpr unsigned sustained_samples = 3;
-  busy_samples_ = std::min(busy_samples_ + 1U, sustained_samples);
+bool DspPlacement::move(host::audio::Playback &audio, const Move target) {
+  if (pending_ != target.destination) {
+    pending_ = target.destination;
+    busy_samples_ = 0;
+  }
+  busy_samples_ = std::min(busy_samples_ + 1U, target.observations);
   const auto capacity = audio.grants().maximum_frames;
-  if (busy_samples_ < sustained_samples || audio.status().queued_frames < capacity - capacity / 4) {
+  if (busy_samples_ < target.observations ||
+      audio.status().queued_frames < capacity - capacity / 4) {
     return false;
   }
-  const auto destination = current_ ^ 1U;
-  const auto &mask = cores_[destination].allowed;
+  const auto &mask = cores_[target.destination].allowed;
   const auto thread = thread_.load(std::memory_order_relaxed);
-  if (::pthread_setaffinity_np(thread, sizeof(mask), &mask) == 0) { current_ = destination; }
+  if (::pthread_setaffinity_np(thread, sizeof(mask), &mask) == 0) { current_ = target.destination; }
   busy_samples_ = 0;
   return true;
+}
+
+std::optional<std::uint64_t>
+DspPlacement::runtime(const Runtimes &values, const cpu_set_t &mask, const bool total) const {
+  std::uint64_t used = 0;
+  for (int cpu = 0; cpu < CPU_SETSIZE; ++cpu) {
+    if (!CPU_ISSET(cpu, &mask)) { continue; }
+    const auto index = static_cast<std::size_t>(cpu);
+    if (previous_[index] == 0 || values[index] < previous_[index]) { return std::nullopt; }
+    const auto delta = values[index] - previous_[index];
+    used = total ? used + delta : std::max(used, delta);
+  }
+  return used;
+}
+
+std::optional<DspPlacement::Move> DspPlacement::select(host::audio::Playback &audio,
+                                                       const Runtimes &values,
+                                                       const Clock::duration elapsed,
+                                                       const std::uint64_t owner_elapsed) const {
+  constexpr double busy_sibling = 0.45;
+  constexpr double saturated_sibling = 0.75;
+  constexpr double idle_destination = 0.30;
+  const auto current_load = runtime(values, cores_[current_].siblings, true);
+  if (!current_load) { return {}; }
+  const auto wall_ns = std::chrono::duration<double, std::nano>(elapsed).count();
+  const auto other = static_cast<double>(*current_load) - static_cast<double>(owner_elapsed);
+  if (other < busy_sibling * wall_ns) { return {}; }
+  const auto quiet = [&](const std::size_t index) {
+    if (index == current_ || CPU_COUNT(&cores_[index].allowed) == 0) { return false; }
+    const auto used = runtime(values, cores_[index].siblings, false);
+    return used && static_cast<double>(*used) <= idle_destination * wall_ns;
+  };
+  const unsigned observations = other >= saturated_sibling * wall_ns ? 1U : 3U;
+  for (std::size_t index = 0; index < callback_core; ++index) {
+    if (quiet(index)) { return Move{.destination = index, .observations = observations}; }
+  }
+  // Borrow the callback's core only under contention and with verified RT priority.
+  if (quiet(callback_core) && audio.callback_preempts(thread_.load(std::memory_order_relaxed))) {
+    return Move{.destination = callback_core, .observations = observations};
+  }
+  return {};
 }
 
 void DspPlacement::update(host::audio::Playback &audio) {
@@ -74,32 +119,16 @@ void DspPlacement::update(host::audio::Playback &audio) {
   const auto now = Clock::now();
   const auto elapsed = now - last_sample_;
   const auto values = runtimes();
-  const auto load = [&](const cpu_set_t &mask, const bool total) -> std::optional<std::uint64_t> {
-    std::uint64_t used = 0;
-    for (int cpu = 0; cpu < CPU_SETSIZE; ++cpu) {
-      if (!CPU_ISSET(cpu, &mask)) { continue; }
-      const auto index = static_cast<std::size_t>(cpu);
-      if (previous_[index] == 0 || values[index] < previous_[index]) { return std::nullopt; }
-      const auto delta = values[index] - previous_[index];
-      used = total ? used + delta : std::max(used, delta);
-    }
-    return used;
-  };
   constexpr auto minimum_interval = std::chrono::milliseconds(5);
   constexpr auto maximum_interval = std::chrono::milliseconds(40);
-  constexpr double busy_sibling = 0.45;
-  constexpr double idle_destination = 0.30;
-  const auto current_load = load(cores_[current_].siblings, true);
-  const auto spare_load = load(cores_[current_ ^ 1U].siblings, false);
-  const auto wall_ns = std::chrono::duration<double, std::nano>(elapsed).count();
-  if (elapsed >= minimum_interval && elapsed <= maximum_interval && now >= next_move_ &&
-      owner_time >= previous_owner_ && current_load && spare_load &&
-      static_cast<double>(*current_load) - static_cast<double>(owner_time - previous_owner_) >=
-          busy_sibling * wall_ns &&
-      static_cast<double>(*spare_load) <= idle_destination * wall_ns) {
-    if (move(audio)) { next_move_ = now + std::chrono::seconds(1); }
-  } else {
+  const bool eligible = elapsed >= minimum_interval && elapsed <= maximum_interval &&
+                        now >= next_move_ && owner_time >= previous_owner_;
+  const auto target =
+      eligible ? select(audio, values, elapsed, owner_time - previous_owner_) : std::nullopt;
+  if (!target) {
     busy_samples_ = 0;
+  } else if (move(audio, *target)) {
+    next_move_ = now + std::chrono::seconds(1);
   }
   previous_ = values;
   previous_owner_ = owner_time;

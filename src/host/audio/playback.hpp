@@ -7,6 +7,7 @@
 #if defined(__linux__)
 #include "midi/ump.hpp"
 
+#include <pthread.h>
 #include <sched.h>
 #endif
 
@@ -77,6 +78,7 @@ public:
   [[nodiscard]] std::chrono::nanoseconds device_period() const noexcept;
 #elif defined(__linux__)
   [[nodiscard]] bool pin_callback(const cpu_set_t &mask) noexcept;
+  [[nodiscard]] bool callback_preempts(pthread_t producer) const noexcept;
   [[nodiscard]] std::uint64_t jack_xruns() const noexcept;
   // Frame zero starts the first live JACK cycle. The frontier starts the next cycle.
   [[nodiscard]] std::uint64_t midi_frontier() const noexcept;
