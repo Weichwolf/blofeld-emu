@@ -130,7 +130,7 @@ std::optional<std::size_t> least_busy_core(const std::vector<PhysicalCore> &core
       const auto active = last.active - first.active;
       const auto elapsed = active + (last.inactive - first.inactive);
       if (elapsed == 0) { return {}; }
-      load = std::max(load, static_cast<double>(active) / static_cast<double>(elapsed));
+      load += static_cast<double>(active) / static_cast<double>(elapsed);
     }
     if (!best || load < best_load) {
       best_load = load;

@@ -68,15 +68,14 @@ bool DspPlacement::move(host::audio::Playback &audio, const Move target) {
   return true;
 }
 
-std::optional<std::uint64_t>
-DspPlacement::runtime(const Runtimes &values, const cpu_set_t &mask, const bool total) const {
+std::optional<std::uint64_t> DspPlacement::runtime(const Runtimes &values,
+                                                   const cpu_set_t &mask) const {
   std::uint64_t used = 0;
   for (int cpu = 0; cpu < CPU_SETSIZE; ++cpu) {
     if (!CPU_ISSET(cpu, &mask)) { continue; }
     const auto index = static_cast<std::size_t>(cpu);
     if (previous_[index] == 0 || values[index] < previous_[index]) { return std::nullopt; }
-    const auto delta = values[index] - previous_[index];
-    used = total ? used + delta : std::max(used, delta);
+    used += values[index] - previous_[index];
   }
   return used;
 }
@@ -88,14 +87,15 @@ std::optional<DspPlacement::Move> DspPlacement::select(host::audio::Playback &au
   constexpr double busy_sibling = 0.45;
   constexpr double saturated_sibling = 0.75;
   constexpr double idle_destination = 0.30;
-  const auto current_load = runtime(values, cores_[current_].siblings, true);
+  const auto current_load = runtime(values, cores_[current_].siblings);
   if (!current_load) { return {}; }
   const auto wall_ns = std::chrono::duration<double, std::nano>(elapsed).count();
   const auto other = static_cast<double>(*current_load) - static_cast<double>(owner_elapsed);
   if (other < busy_sibling * wall_ns) { return {}; }
   const auto quiet = [&](const std::size_t index) {
     if (index == current_ || CPU_COUNT(&cores_[index].allowed) == 0) { return false; }
-    const auto used = runtime(values, cores_[index].siblings, false);
+    // Work on either SMT sibling consumes time on the destination core.
+    const auto used = runtime(values, cores_[index].siblings);
     return used && static_cast<double>(*used) <= idle_destination * wall_ns;
   };
   const unsigned observations = other >= saturated_sibling * wall_ns ? 1U : 3U;

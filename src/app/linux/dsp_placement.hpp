@@ -37,8 +37,8 @@ private:
 
   static constexpr std::size_t callback_core = 2;
   static Runtimes runtimes();
-  [[nodiscard]] std::optional<std::uint64_t>
-  runtime(const Runtimes &values, const cpu_set_t &mask, bool total) const;
+  [[nodiscard]] std::optional<std::uint64_t> runtime(const Runtimes &values,
+                                                     const cpu_set_t &mask) const;
   [[nodiscard]] std::optional<Move> select(host::audio::Playback &audio,
                                            const Runtimes &values,
                                            Clock::duration elapsed,
