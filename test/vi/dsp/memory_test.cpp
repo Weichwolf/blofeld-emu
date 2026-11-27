@@ -203,14 +203,19 @@ void retained_aliases() {
   Memory memory;
   require(memory.write({.space = Space::x, .address = x_address, .value = datum}),
           "Fill physical X RAM");
+  const auto physical = memory.physical_word(Space::x, x_address);
+  require(physical.has_value(), "Resolve mapped X RAM to its physical word");
   memory.configure(switched);
   Word value = 0;
   require(memory.read(Space::x, x_address, value) && value == 0 &&
+              !memory.physical_word(Space::x, x_address) &&
+              !memory.physical_word(Space::program, p_address) &&
               memory.read(Space::program, p_address, value) && value == datum &&
               memory.write({.space = Space::program, .address = p_address, .value = 7}),
           "The switched bank has one physical value and no simultaneous X alias");
   memory.configure(0);
   require(memory.read(Space::x, x_address, value) && value == 7 &&
+              memory.physical_word(Space::x, x_address) == physical &&
               !memory.read(Space::program, p_address, value),
           "Switching back preserves the actual modified word");
   constexpr std::array<Word, 3> modes{0x80, 0x200080, 0x400080};
@@ -239,6 +244,7 @@ void rom_and_reserved() {
               windows[1].words.data() == rom.data(),
           "Known immutable ROM is borrowed directly by native code");
   require(memory.read(Space::x, rom_first, value) && value == 1 &&
+              !memory.physical_word(Space::x, rom_first) &&
               memory.write({.space = Space::x, .address = rom_first, .value = 9}) &&
               memory.read(Space::x, rom_first, value) && value == 1 && rom[0] == 1,
           "Writes never replace supplied ROM contents");

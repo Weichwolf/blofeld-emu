@@ -153,6 +153,11 @@ public:
 
   [[nodiscard]] std::uint64_t epoch() const noexcept { return epoch_; }
 
+  // Check a prepared slice whose ordinary RAM stores would become visible
+  // before the first pending timer or audio event is serviced.
+  [[nodiscard]] ForegroundCrossing
+  foreground_crossing(std::uint64_t grant, std::uint64_t cycles, ForegroundStores stores) const;
+
   void finish(ExecutionReport &report) {
     static_cast<void>(flush_audio(report));
     if (report.failure) { report.failure->media = media_failure(); }
@@ -694,6 +699,9 @@ private:
            (static_cast<unsigned>(dax_.request()) << dax_request);
   }
 
+  [[nodiscard]] bool foreground_timer_quiet(std::uint64_t end, bool first) const noexcept;
+  [[nodiscard]] bool foreground_audio_quiet(std::uint64_t end, ForegroundStores stores) const;
+
   [[nodiscard]] std::uint64_t device_cycles() const noexcept {
     return core_->progress().estimated_cycles + idle_;
   }
@@ -825,19 +833,25 @@ private:
     return true;
   }
 
+  [[nodiscard]] static bool write_audio_dma(const Dma::Address access,
+                                            const dsp56300::Word value,
+                                            Esai &esai,
+                                            Dax &dax) noexcept {
+    if (access.space == dsp56300::Space::y && Esai::data_register(access.address)) {
+      return esai.connected() && esai.write({.address = access.address, .value = value});
+    }
+    return access.space == dsp56300::Space::x && Dax::data_register(access.address) &&
+           dax.connected() && dax.write({.address = access.address, .value = value});
+  }
+
   bool dma_write(const Dma::Address access, const dsp56300::Word value) noexcept {
     if (interrupted()) { return false; }
     constexpr dsp56300::Word peripheral_first = 0xffff80;
     constexpr dsp56300::Word shi_transmit = 0xffff93;
     if (access.space != dsp56300::Space::program && access.address >= peripheral_first) {
-      if (access.space == dsp56300::Space::y && Esai::data_register(access.address)) {
-        return esai_1_.connected() && esai_1_.write({.address = access.address, .value = value});
-      }
-      if (access.space == dsp56300::Space::x && Dax::data_register(access.address)) {
-        return dax_.connected() && dax_.write({.address = access.address, .value = value});
-      }
-      return access.space == dsp56300::Space::x && access.address == shi_transmit &&
-             blofeld_dsp_shi_write(&shi_, access.address, value);
+      return write_audio_dma(access, value, esai_1_, dax_) ||
+             (access.space == dsp56300::Space::x && access.address == shi_transmit &&
+              blofeld_dsp_shi_write(&shi_, access.address, value));
     }
     const bool changed =
         access.space == dsp56300::Space::program && installed_program_ &&

@@ -180,16 +180,29 @@ bool Audio::capture(const Esai::Slot &slot, const std::uint64_t cycles) noexcept
 }
 
 bool Audio::clock() {
+  return clock(esai_, dax_);
+}
+
+bool Audio::preview_clock(Esai &esai, Dax &dax, const std::uint64_t through) const noexcept {
+  if (&esai == &esai_ || &dax == &dax_) { return false; }
+  auto copy = *this;
+  const auto next = copy.deadline();
+  if (!next || *next > through || !copy.clock(esai, dax)) { return false; }
+  const auto following = copy.deadline();
+  return !following || *following > through;
+}
+
+bool Audio::clock(Esai &esai, Dax &dax) noexcept {
   const auto next = deadline();
   if (!next || error_ != nullptr) { return false; }
   if (transmit_.deadline() == next) {
-    const auto slot = esai_.clock_slot();
+    const auto slot = esai.clock_slot();
     if (!slot) { return fail("ESAI_1 clock produced no valid stereo word"); }
     if (!capture(*slot, *next)) { return false; }
     if (!transmit_.advance()) { return fail("ESAI_1 clock overflow"); }
   }
   if (digital_.deadline() == next) {
-    static_cast<void>(dax_.clock_subframe());
+    static_cast<void>(dax.clock_subframe());
     if (!digital_.advance()) { return fail("DAX clock overflow"); }
   }
   return true;

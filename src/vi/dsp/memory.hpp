@@ -58,6 +58,9 @@ public:
   [[nodiscard]] bool promote_initialized() noexcept;
   [[nodiscard]] bool
   read(dsp56300::Space space, dsp56300::Word address, dsp56300::Word &value) const noexcept;
+  // Resolve a data RAM address in the current mapping to a borrowed word index.
+  [[nodiscard]] std::optional<dsp56300::Word> physical_word(dsp56300::Space space,
+                                                            dsp56300::Word address) const noexcept;
   // Known reserved data writes are discarded, inferred from the original clear.
   // They never create readable RAM. Unknown I/O and program stores still fail.
   [[nodiscard]] bool write(Write access) noexcept;
