@@ -102,8 +102,9 @@ sustained 2× W5 headless rendering on the local Linux i5-1135G7 under its norma
 clock policy in #103. Then qualify 4× W5 rendering on A18 Pro in #104.
 The expected settled idle range for both milestones is 4–6% of total host CPU
 capacity after release and effect tails. Any value at or below 6% meets the CPU
-target. Use the JACK setup and 4.2 GHz normalization from #52 for Linux. Use
-native CoreAudio on A18 Pro and record the actual buffer size.
+target. Apply it to measured CPU usage under each host's normal clock policy.
+Use the JACK setup from #52 for Linux. Use native CoreAudio on A18 Pro and
+record the actual buffer size.
 At 44.1 kHz, the render targets are 88,200 and 176,400 valid stereo frames per
 host second.
 Use exact original PCM and guest timing over the full workload. Report W1–W5
