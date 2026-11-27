@@ -156,6 +156,10 @@ std::vector<Word> addresses(const Array &input) {
   return result;
 }
 
+std::vector<Word> optional_addresses(const Object &input, const llvm::StringRef field) {
+  return input.get(field) == nullptr ? std::vector<Word>{} : addresses(array(input, field));
+}
+
 std::vector<std::vector<Word>> fixed_paths(const Object &input) {
   std::vector<std::vector<Word>> result;
   if (input.get("fixed_passes") == nullptr) { return result; }
@@ -271,7 +275,7 @@ using Guards = std::vector<vi::dsp::ProgramWord>;
 struct Variant {
   std::uint64_t id;
   vi::dsp::CodeSource code;
-  std::vector<Word> entries, resumes, failed_fetches, region_starts;
+  std::vector<Word> entries, resumes, failed_fetches, region_starts, foreground_entries;
   std::vector<std::vector<Word>> fixed_passes;
   std::vector<Guards> guard_sets;
   std::vector<dsp56300::RegionLayout> memory;
@@ -294,14 +298,11 @@ Guards guards(const Array &input) {
 
 void admission(Variant &variant, const Object &input) {
   variant.entries = addresses(array(input, "entries"));
-  if (input.get("region_starts") != nullptr) {
-    variant.region_starts = addresses(array(input, "region_starts"));
-  }
+  variant.region_starts = optional_addresses(input, "region_starts");
+  variant.foreground_entries = optional_addresses(input, "foreground_entries");
   variant.resumes = addresses(array(input, "resumes"));
   std::ranges::sort(variant.resumes);
-  if (input.get("failed_fetches") != nullptr) {
-    variant.failed_fetches = addresses(array(input, "failed_fetches"));
-  }
+  variant.failed_fetches = optional_addresses(input, "failed_fetches");
   if (input.get("mode_mask") != nullptr) { variant.mode_mask = word(input, "mode_mask"); }
   if (input.get("mode") != nullptr) { variant.mode = word(input, "mode"); }
   if (input.get("guard_sets") != nullptr) {
@@ -402,12 +403,19 @@ vi::dsp::Program prepare(const Object &root,
   std::vector<dsp56300::FixedPassDeclaration> passes;
   static constexpr std::array stable_reads{
       dsp56300::StableRead{.space = dsp56300::Space::x, .address = 0xffffef}};
+#if defined(BLOFELD_CENSUS)
+  constexpr bool foreground = false;
+#else
+  constexpr bool foreground = true;
+#endif
   for (const auto &variant : owned) {
     source.push_back({.id = variant.id,
                       .code = variant.code.code(),
                       .entries = variant.entries,
                       .failed_fetches = variant.failed_fetches,
-                      .region_starts = variant.region_starts});
+                      .region_starts = variant.region_starts,
+                      .foreground_entries = foreground ? std::span(variant.foreground_entries)
+                                                       : std::span<const Word>{}});
     for (const auto &path : variant.fixed_passes) {
       passes.push_back({.variant = variant.id, .path = path, .device_reads = stable_reads});
     }

@@ -11,6 +11,7 @@
 
 #include "dsp/boot_rom.hpp"
 #include "dsp/execute.hpp"
+#include "dsp/foreground.hpp"
 #include "dsp/memory.hpp"
 #include "dsp/program.hpp"
 #include "execution.hpp"
@@ -43,7 +44,8 @@ VmContext::VmContext(std::unique_ptr<FlashImage> image,
                      const MidiPort::InputMode input,
                      std::shared_ptr<const dsp::Program> program,
                      const std::uint64_t speculation_window,
-                     const dsp::Memory::Storage dsp_memory)
+                     const dsp::Memory::Storage dsp_memory,
+                     const dsp::Foreground dsp_foreground)
     : image_(std::move(image)),
       media_(std::move(media)),
       mcu_program_(std::move(mcu_program)),
@@ -51,7 +53,8 @@ VmContext::VmContext(std::unique_ptr<FlashImage> image,
       dsp_memory_(dsp_memory),
       boot_(std::move(boot)),
       output_(output),
-      midi_(input) {
+      midi_(input),
+      dsp_foreground_(dsp_foreground) {
 #if defined(BLOFELD_CENSUS)
   if (host::inherited_setting("BLOFELD_MCU_STATE_PROBE") == "1") {
     state_probe_ = std::make_unique<mcu::StateProbe>(&stop_);
@@ -126,7 +129,8 @@ void VmContext::start(const OwnerSetup &setup) {
                                  &preparation_,
                                  program_.get(),
                                  coupling_.get(),
-                                 dsp_memory_);
+                                 dsp_memory_,
+                                 dsp_foreground_);
     } catch (...) { reports_[1].exception = std::current_exception(); }
     completed_.fetch_add(1, std::memory_order_release);
     completed_.notify_one();

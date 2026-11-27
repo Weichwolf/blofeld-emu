@@ -10,6 +10,7 @@
 #include "dsp/dax.hpp"
 #include "dsp/dma.hpp"
 #include "dsp/esai.hpp"
+#include "dsp/foreground.hpp"
 #include "dsp/interrupts.hpp"
 #include "dsp/memory.hpp"
 #include "dsp/midi.hpp"
@@ -77,9 +78,11 @@ public:
      PreparationClock *preparation,
      const Program &program,
      Coupling *coupling = nullptr,
-     const Memory::Storage storage = {})
+     const Memory::Storage storage = {},
+     const Foreground foreground = {})
       : coupling_(coupling),
         program_(program),
+        foreground_(foreground),
         boot_(boot),
         shi_(shi),
         reset_(reset),
@@ -140,6 +143,15 @@ public:
     bool ready = false;
     if (controller_.ready(ready)) { static_cast<void>(timers_.input(1, ready)); }
   }
+
+  [[nodiscard]] const dsp56300::ForegroundCommit *
+  offer_foreground(const dsp56300::ForegroundGrant &grant) noexcept override {
+    return foreground_.offer == nullptr
+               ? nullptr
+               : foreground_.offer(foreground_.context, *this, *core_, grant);
+  }
+
+  [[nodiscard]] std::uint64_t epoch() const noexcept { return epoch_; }
 
   void finish(ExecutionReport &report) {
     static_cast<void>(flush_audio(report));
@@ -988,6 +1000,7 @@ private:
 
   Coupling *coupling_;
   const Program &program_;
+  const Foreground foreground_;
   std::optional<std::uint64_t> installed_program_;
   BootRom boot_;
   Shi &shi_;
