@@ -88,6 +88,7 @@ std::optional<DspPlacement::Move> DspPlacement::select(host::audio::Playback &au
   constexpr double busy_sibling = 0.45;
   constexpr double saturated_sibling = 0.75;
   constexpr double idle_destination = 0.30;
+  constexpr double relative_destination = 0.60;
   const auto current_load = runtime(values, cores_[current_].siblings, true);
   if (!current_load) { return {}; }
   const auto wall_ns = std::chrono::duration<double, std::nano>(elapsed).count();
@@ -98,13 +99,24 @@ std::optional<DspPlacement::Move> DspPlacement::select(host::audio::Playback &au
     const auto used = runtime(values, cores_[index].siblings, false);
     return used && static_cast<double>(*used) <= idle_destination * wall_ns;
   };
-  const unsigned observations = other >= saturated_sibling * wall_ns ? 1U : 3U;
+  const bool saturated = other >= saturated_sibling * wall_ns;
+  const unsigned observations = saturated ? 1U : 3U;
   for (std::size_t index = 0; index < callback_core; ++index) {
     if (quiet(index)) { return Move{.destination = index, .observations = observations}; }
   }
   // Borrow the callback's core only under contention and with verified RT priority.
   if (quiet(callback_core) && audio.callback_preempts(thread_.load(std::memory_order_relaxed))) {
     return Move{.destination = callback_core, .observations = observations};
+  }
+  // A substantially quieter spare may still be useful when every core is busy.
+  if (saturated) {
+    for (std::size_t index = 0; index < callback_core; ++index) {
+      if (index == current_ || CPU_COUNT(&cores_[index].allowed) == 0) { continue; }
+      const auto used = runtime(values, cores_[index].siblings, true);
+      if (used && static_cast<double>(*used) <= relative_destination * other) {
+        return Move{.destination = index, .observations = 3U};
+      }
+    }
   }
   return {};
 }
