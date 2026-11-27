@@ -155,7 +155,8 @@ quiet_dsp_affinity(host::audio::Playback &audio,
       return !CPU_EQUAL(&candidate.allowed, &dsp) && !CPU_EQUAL(&candidate.allowed, &mcu) &&
              !CPU_EQUAL(&candidate.allowed, &core->allowed);
     });
-    if (spare != physical.end()) { placement.prepare(physical[*selected], *spare); }
+    placement.prepare(
+        physical[*selected], spare != physical.end() ? *spare : PhysicalCore{}, *core);
     return std::array{mcu, dsp};
   }
   return {};

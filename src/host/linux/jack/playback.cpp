@@ -309,6 +309,24 @@ bool Playback::pin_callback(const cpu_set_t &mask) noexcept {
          ::pthread_setaffinity_np(thread, sizeof(allowed), &allowed) == 0;
 }
 
+// NOLINTNEXTLINE(misc-include-cleaner) pthread.h declares the POSIX type.
+bool Playback::callback_preempts(const pthread_t producer) const noexcept {
+  const auto callback = jack_client_thread_id(impl_->client.get());
+  int callback_policy = 0;
+  int producer_policy = 0;
+  // NOLINTNEXTLINE(misc-include-cleaner) sched.h declares the POSIX type.
+  using Schedule = sched_param;
+  Schedule callback_parameters{};
+  Schedule producer_parameters{};
+  return callback != decltype(callback){} &&
+         ::pthread_getschedparam(callback, &callback_policy, &callback_parameters) == 0 &&
+         (callback_policy == SCHED_FIFO || callback_policy == SCHED_RR) &&
+         ::pthread_getschedparam(producer, &producer_policy, &producer_parameters) == 0 &&
+         (producer_policy == SCHED_OTHER || producer_policy == SCHED_FIFO ||
+          producer_policy == SCHED_RR) &&
+         callback_parameters.sched_priority > producer_parameters.sched_priority;
+}
+
 std::uint64_t Playback::jack_xruns() const noexcept {
   return impl_->jack_xruns.load(std::memory_order_relaxed);
 }
