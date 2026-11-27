@@ -230,6 +230,18 @@ target_link_libraries(blofeld-headless PRIVATE blofeld_app_live blofeld_app_boot
 include(cmake/DesktopProfile.cmake)
 
 option(BLOFELD_CENSUS "Build opt-in owner/thread attribution (runtime BLOFELD_CENSUS=1)" OFF)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$"
+   AND NOT BLOFELD_CENSUS)
+  set(blofeld_foreground_worker "${CMAKE_CURRENT_SOURCE_DIR}/src/app/linux/dsp_workers.cpp")
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${blofeld_foreground_worker}")
+  file(SHA256 "${blofeld_foreground_worker}" blofeld_foreground_pipeline)
+  target_sources(blofeld_app_live PRIVATE "${blofeld_foreground_worker}")
+  target_include_directories(blofeld_app_live SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
+  target_link_libraries(blofeld_app_live PRIVATE blofeld_app_memory LLVM)
+  target_compile_definitions(blofeld_app_live PUBLIC BLOFELD_FOREGROUND_WORKERS)
+  set_source_files_properties("${blofeld_foreground_worker}" PROPERTIES
+    COMPILE_DEFINITIONS "BLOFELD_FOREGROUND_PIPELINE=\"${blofeld_foreground_pipeline}\"")
+endif()
 if(BLOFELD_CENSUS)
   target_compile_definitions(blofeld_quality INTERFACE BLOFELD_CENSUS)
   target_link_libraries(blofeld_host_aot PRIVATE blofeld_host_process)

@@ -2,6 +2,9 @@
 #include "dsp_placement.hpp"
 
 #include "audio/playback.hpp"
+#if defined(BLOFELD_FOREGROUND_WORKERS)
+#include "dsp_workers.hpp"
+#endif
 
 #include <algorithm>
 #include <array>
@@ -39,7 +42,12 @@ DspPlacement::Runtimes DspPlacement::runtimes() {
 void DspPlacement::prepare(const PhysicalCore primary,
                            const PhysicalCore spare,
                            const PhysicalCore callback) {
-  if (CPU_COUNT(&primary.siblings) >= 2) { cores_ = {primary, spare, callback}; }
+  if (CPU_COUNT(&primary.siblings) >= 2) {
+    cores_ = {primary, spare, callback};
+#if defined(BLOFELD_FOREGROUND_WORKERS)
+    if (workers_ != nullptr) { workers_->exclude_dsp_core(primary.siblings); }
+#endif
+  }
 }
 
 void DspPlacement::attach() noexcept {
@@ -63,7 +71,12 @@ bool DspPlacement::move(host::audio::Playback &audio, const Move target) {
   }
   const auto &mask = cores_[target.destination].allowed;
   const auto thread = thread_.load(std::memory_order_relaxed);
-  if (::pthread_setaffinity_np(thread, sizeof(mask), &mask) == 0) { current_ = target.destination; }
+  if (::pthread_setaffinity_np(thread, sizeof(mask), &mask) == 0) {
+    current_ = target.destination;
+#if defined(BLOFELD_FOREGROUND_WORKERS)
+    if (workers_ != nullptr) { workers_->exclude_dsp_core(cores_[current_].siblings); }
+#endif
+  }
   busy_samples_ = 0;
   return true;
 }

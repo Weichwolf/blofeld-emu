@@ -52,7 +52,8 @@ Sources load_sources(const std::string_view document, const std::filesystem::pat
 vi::dsp::Program load_dsp_program(const Profile &profile,
                                   const vi::dsp::BootRom boot,
                                   const dsp56300::CompileOptions::MemoryMode mode,
-                                  const host::aot::Preparation preparation) {
+                                  const host::aot::Preparation preparation,
+                                  const PrepareForeground &prepare_foreground) {
   if (profile.firmware.empty() || profile.dsp_catalogue.empty()) {
     throw std::invalid_argument("AOT requires firmware and dsp-catalogue profile paths");
   }
@@ -67,6 +68,7 @@ vi::dsp::Program load_dsp_program(const Profile &profile,
                                sources,
                                std::filesystem::path{BLOFELD_AOT_CACHE_DIRECTORY},
                                mode,
-                               preparation);
+                               preparation,
+                               prepare_foreground);
 }
 }

@@ -46,6 +46,10 @@ The host callbacks exchange bounded audio and MIDI buffers. The LCD viewer
 runs independently. Device settings and sample storage live in the selected
 profile's persistent images.
 
+On Linux x86-64, two workers run selected original DSP voice code on private
+register and RAM snapshots. The DSP owner applies completed work in guest order
+after checking the original inputs, the memory mapping and pending device events.
+
 ## DSP memory
 
 The product uses host page protections for direct P/X/Y accesses. The checked

@@ -378,13 +378,32 @@ void validate_admissions(const std::span<const Variant> variants) {
   }
 }
 
+std::vector<dsp56300::CodeTransition> code_transitions(const Object &root) {
+  std::vector<dsp56300::CodeTransition> transitions;
+  for (const auto &value : array(root, "transitions")) {
+    const auto &transfer = object(value);
+    const auto from = number(transfer, "from");
+    const auto to = number(transfer, "to");
+    if (const auto *entries = transfer.getArray("entry")) {
+      if (entries->empty()) { invalid("empty transition entry list"); }
+      for (const auto &entry : *entries) {
+        transitions.push_back({.from = from, .to = to, .entry = word(number(entry))});
+      }
+    } else {
+      transitions.push_back({.from = from, .to = to, .entry = word(transfer, "entry")});
+    }
+  }
+  return transitions;
+}
+
 vi::dsp::Program prepare(const Object &root,
                          const vi::FirmwareUpdate &firmware,
                          const vi::dsp::BootRom boot,
                          const std::span<const DspSource> sources,
                          const std::filesystem::path &cache,
                          const dsp56300::CompileOptions::MemoryMode mode,
-                         const host::aot::Preparation preparation) {
+                         const host::aot::Preparation preparation,
+                         const PrepareForeground &prepare_foreground) {
   std::vector<Variant> owned;
   std::vector<dsp56300::VariantLayout> layouts;
   for (const auto &value : array(root, "variants")) {
@@ -403,10 +422,12 @@ vi::dsp::Program prepare(const Object &root,
   std::vector<dsp56300::FixedPassDeclaration> passes;
   static constexpr std::array stable_reads{
       dsp56300::StableRead{.space = dsp56300::Space::x, .address = 0xffffef}};
+  const auto *foreground_plan = root.getObject("foreground");
+  if (foreground_plan == nullptr && root.get("foreground") != nullptr) { invalid("foreground"); }
 #if defined(BLOFELD_CENSUS)
   constexpr bool foreground = false;
 #else
-  constexpr bool foreground = true;
+  const bool foreground = foreground_plan == nullptr || static_cast<bool>(prepare_foreground);
 #endif
   for (const auto &variant : owned) {
     source.push_back({.id = variant.id,
@@ -436,19 +457,9 @@ vi::dsp::Program prepare(const Object &root,
     interrupts.push_back(
         {.vector = word(request, "vector"), .level = static_cast<unsigned>(level)});
   }
-  std::vector<dsp56300::CodeTransition> transitions;
-  for (const auto &value : array(root, "transitions")) {
-    const auto &transfer = object(value);
-    const auto from = number(transfer, "from");
-    const auto to = number(transfer, "to");
-    if (const auto *entries = transfer.getArray("entry")) {
-      if (entries->empty()) { invalid("empty transition entry list"); }
-      for (const auto &entry : *entries) {
-        transitions.push_back({.from = from, .to = to, .entry = word(number(entry))});
-      }
-    } else {
-      transitions.push_back({.from = from, .to = to, .entry = word(transfer, "entry")});
-    }
+  const auto transitions = code_transitions(root);
+  if (foreground && foreground_plan != nullptr && prepare_foreground) {
+    prepare_foreground({.variants = source}, boot, *foreground_plan, cache / "foreground");
   }
   return prepare_dsp_program({.variants = source},
                              choices,
@@ -468,12 +479,13 @@ vi::dsp::Program prepare_dsp_catalogue(const std::string_view document,
                                        const std::span<const DspSource> sources,
                                        const std::filesystem::path &cache,
                                        const dsp56300::CompileOptions::MemoryMode mode,
-                                       const host::aot::Preparation preparation) {
+                                       const host::aot::Preparation preparation,
+                                       const PrepareForeground &prepare_foreground) {
   auto parsed = llvm::json::parse(document);
   if (!parsed) { throw std::invalid_argument(llvm::toString(parsed.takeError())); }
   const auto &root = object(*parsed);
   if (number(root, "format") != 1) { invalid("format"); }
   inputs(root, firmware, boot, sources);
-  return prepare(root, firmware, boot, sources, cache, mode, preparation);
+  return prepare(root, firmware, boot, sources, cache, mode, preparation, prepare_foreground);
 }
 }

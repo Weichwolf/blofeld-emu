@@ -6,6 +6,7 @@
 #include "boot_rom.hpp"
 #include "display/publication.hpp"
 #include "dsp/boot_rom.hpp"
+#include "dsp/foreground.hpp"
 #include "dsp/memory.hpp"
 #include "dsp/program.hpp"
 #include "dsp_memory.hpp"
@@ -24,6 +25,9 @@
 #include "storage/flash_image.hpp"
 #include "storage/media_image.hpp"
 #include "vm_context.hpp"
+#if defined(BLOFELD_FOREGROUND_WORKERS)
+#include "linux/dsp_workers.hpp"
+#endif
 
 #include <chrono>
 #include <cstddef>
@@ -57,6 +61,23 @@ int main(const int argc, char **argv) try {
   const auto mode = blofeld::app::dsp_memory_mode();
   using blofeld::host::aot::Preparation;
   const auto preparation = options.prepare ? Preparation::allow : Preparation::load_only;
+  const auto memory =
+      !options.prepare && mode == dsp56300::CompileOptions::MemoryMode::direct
+          ? std::make_unique<blofeld::app::DspMemory>(blofeld::vi::dsp::BootRom::document(boot))
+          : nullptr;
+  const auto dsp_storage = memory ? memory->storage() : blofeld::vi::dsp::Memory::Storage{};
+  blofeld::app::aot::PrepareForeground foreground;
+#if defined(BLOFELD_FOREGROUND_WORKERS)
+  blofeld::app::DspWorkers workers(dsp_storage);
+  if (mode == dsp56300::CompileOptions::MemoryMode::direct) {
+    foreground = [&workers, preparation](const dsp56300::CodeImage source,
+                                         const blofeld::vi::dsp::BootRom rom,
+                                         const llvm::json::Object &plan,
+                                         const std::filesystem::path &cache) {
+      workers.prepare(source, rom, plan, cache, preparation);
+    };
+  }
+#endif
   blofeld::host::FileRevision media_revision;
   std::future<std::unique_ptr<blofeld::vi::MediaImage>> media_input;
   if (!options.prepare) {
@@ -73,7 +94,7 @@ int main(const int argc, char **argv) try {
   });
   const auto program =
       std::make_shared<blofeld::vi::dsp::Program>(blofeld::app::aot::load_dsp_program(
-          profile, blofeld::vi::dsp::BootRom::document(boot), mode, preparation));
+          profile, blofeld::vi::dsp::BootRom::document(boot), mode, preparation, foreground));
   const auto mcu_program = std::make_shared<blofeld::vi::mcu::Program>(mcu.get());
   const auto loaded = std::chrono::steady_clock::now();
   const std::chrono::duration<double> modules = loaded - loading;
@@ -89,11 +110,12 @@ int main(const int argc, char **argv) try {
   auto image =
       std::make_unique<blofeld::vi::FlashImage>(blofeld::vi::FlashImage::decode(device_state));
   auto media = media_input.get();
-  const auto memory =
-      mode == dsp56300::CompileOptions::MemoryMode::direct
-          ? std::make_unique<blofeld::app::DspMemory>(blofeld::vi::dsp::BootRom::document(boot))
-          : nullptr;
-  const auto dsp_storage = memory ? memory->storage() : blofeld::vi::dsp::Memory::Storage{};
+  blofeld::vi::dsp::Foreground worker;
+  blofeld::vi::VmContext::PlaybackReady ready = nullptr;
+#if defined(BLOFELD_FOREGROUND_WORKERS)
+  worker = workers.foreground();
+  ready = blofeld::app::DspWorkers::playback_ready;
+#endif
   const blofeld::host::memory::Faults faults(dsp56300::Core::host_fault);
   if (offline) {
     blofeld::app::OfflineRender render(options);
@@ -105,7 +127,9 @@ int main(const int argc, char **argv) try {
                               blofeld::vi::MidiPort::InputMode::stream,
                               program,
                               blofeld::vi::Coupling::default_window,
-                              dsp_storage);
+                              dsp_storage,
+                              worker,
+                              ready);
     return render.run(vm, signals, launched);
   }
   constexpr unsigned sample_rate = 44100;
@@ -115,6 +139,9 @@ int main(const int argc, char **argv) try {
   std::cerr << "Display: " << display_path << '\n';
   blofeld::host::audio::Playback audio(sample_rate, "blofeld-emu");
   blofeld::app::Live live(audio, display, options);
+#if defined(BLOFELD_FOREGROUND_WORKERS)
+  live.dsp_workers(&workers);
+#endif
   blofeld::vi::VmContext vm(std::move(image),
                             std::move(boot),
                             mcu_program,
@@ -123,7 +150,9 @@ int main(const int argc, char **argv) try {
                             blofeld::vi::MidiPort::InputMode::audio,
                             program,
                             blofeld::vi::Coupling::default_window,
-                            dsp_storage);
+                            dsp_storage,
+                            worker,
+                            ready);
   const auto result = live.run(vm, signals, launched);
   if (result.save_storage) {
     const auto storage = vm.stopped_storage();
