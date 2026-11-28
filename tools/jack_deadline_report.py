@@ -109,6 +109,8 @@ def analyze(args):
     begin, done = records[begin_index], records[end_index]
     if before > after or done.ns < before:
         raise ValueError("PCM and JACK timestamps don't bracket the underfill")
+    available_upper_bound = after - begin.ns
+    cpu_ns = done.cpu_ns - begin.cpu_ns
     wakeups = sorted(map(int, args.wakeups.read_text().split())) if args.wakeups else []
     wall_end = done.ns
     events = list(switches(args.switches, tid)) if args.switches else []
@@ -119,8 +121,10 @@ def analyze(args):
         "missing_frames": missing,
         "queued_frame_debt": required - head,
         "available_ns": before - begin.ns,
+        "available_upper_bound_ns": available_upper_bound,
         "publication_observed_late_ns": done.ns - before,
-        "dsp_cpu_ns": done.cpu_ns - begin.cpu_ns,
+        "dsp_cpu_ns": cpu_ns,
+        "dsp_cpu_overrun_lower_bound_ns": max(0, cpu_ns - available_upper_bound),
         "measured_wall_ns": wall_end - begin.ns,
         "scheduler_ns": time_by_state(events, wakeups,
                                      begin.ns, wall_end),
