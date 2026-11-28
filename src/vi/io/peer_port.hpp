@@ -57,6 +57,7 @@ public:
   void retire_mcu_data() noexcept;
   [[nodiscard]] Sample dsp_data() const noexcept;
   // Actual PDRC data writes, distinct from direction/mux/latch publication.
+  [[nodiscard]] bool dsp_write(std::uint64_t ticks) noexcept;
   [[nodiscard]] bool dsp_write(Sample value, std::uint64_t ticks) noexcept;
   [[nodiscard]] std::optional<Sample> read_dsp_data(Read access) noexcept;
 
@@ -81,6 +82,7 @@ public:
   [[nodiscard]] std::optional<std::uint64_t> dsp_interrupt(const bool edge) const noexcept {
     return to_dsp_.pending(edge);
   }
+
   [[nodiscard]] std::optional<std::uint64_t> mcu_interrupt() const noexcept;
   [[nodiscard]] bool acknowledge_dsp(std::uint64_t observed) noexcept;
   [[nodiscard]] bool acknowledge_mcu(std::uint64_t observed) noexcept;
@@ -114,11 +116,13 @@ private:
   struct Reply {
     std::mutex mutex;
     std::array<Input, 16> bytes{};
-    unsigned written = 0, read = 0;
+    std::atomic<unsigned> written{0};
+    unsigned read = 0;
     std::atomic<bool> active{false}, recording{false}, announced{false};
   };
 
   [[nodiscard]] bool start_reply() noexcept;
+  [[nodiscard]] bool record_reply(Sample value, std::uint64_t ticks) noexcept;
   [[nodiscard]] bool fail(const char *message) noexcept;
 
   struct Request {
@@ -133,6 +137,7 @@ private:
       }
       return count > accepted.load(std::memory_order_relaxed) ? std::optional{count} : std::nullopt;
     }
+
     [[nodiscard]] bool acknowledge(std::uint64_t observed) noexcept;
   };
 

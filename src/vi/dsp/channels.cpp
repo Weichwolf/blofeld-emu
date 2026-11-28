@@ -113,6 +113,6 @@ bool blofeld_dsp_peer_ports(PeerPort *const channel,
 }
 
 bool blofeld_dsp_peer_write(PeerPort *const channel, const std::uint64_t ticks) noexcept {
-  return channel->dsp_write(channel->dsp_data(), ticks);
+  return channel->dsp_write(ticks);
 }
 }
