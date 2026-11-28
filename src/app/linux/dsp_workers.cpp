@@ -259,17 +259,8 @@ private:
   mutable unsigned irq_queries_ = 0;
 };
 
-constexpr Word taint = 1U << 31;
-constexpr Word input_tag = 1U << 30;
-constexpr Word epoch_bits = 0x3f000000U;
-constexpr Word tag_bits = taint | input_tag;
-constexpr const auto *epoch_symbol = "blofeld_probe_set_access_epoch";
-using SetEpoch = void (*)(Word);
-
-struct Prepared {
-  NativeImage image;
-  SetEpoch set_epoch;
-};
+// Both tags fit in the high byte of an otherwise 24-bit private DSP word.
+constexpr Word word_written = 1U << 31, word_read = 1U << 30;
 
 constexpr std::size_t page_bytes = 4096;
 constexpr std::size_t page_words = page_bytes / sizeof(Word);
@@ -740,43 +731,19 @@ void tag(llvm::Module &module) {
       }
     }
   }
-  auto &context = module.getContext();
-  auto *i32 = llvm::Type::getInt32Ty(context);
-  auto *epoch = new llvm::GlobalVariable(module,
-                                         i32,
-                                         false,
-                                         llvm::GlobalValue::InternalLinkage,
-                                         llvm::ConstantInt::get(i32, 0),
-                                         "access_epoch");
-  auto *setter =
-      llvm::Function::Create(llvm::FunctionType::get(llvm::Type::getVoidTy(context), {i32}, false),
-                             llvm::GlobalValue::ExternalLinkage,
-                             epoch_symbol,
-                             module);
-  llvm::IRBuilder<> initialize(llvm::BasicBlock::Create(context, "entry", setter));
-  initialize.CreateStore(setter->getArg(0), epoch);
-  initialize.CreateRetVoid();
-
   auto *const recorder = emit_touched_page(module);
-  const auto old_flags = [&](llvm::IRBuilder<> &builder, llvm::Value *old, llvm::Value *current) {
-    auto *prior = builder.CreateAnd(old, builder.getInt32(epoch_bits));
-    return builder.CreateSelect(builder.CreateICmpEQ(prior, current),
-                                builder.CreateAnd(old, builder.getInt32(tag_bits)),
-                                builder.getInt32(0));
-  };
   for (auto *load : reads) {
     llvm::IRBuilder<> builder(load->getNextNode());
     builder.SetCurrentDebugLocation(load->getDebugLoc());
     auto *plain = builder.CreateAnd(load, builder.getInt32(word_mask));
     load->replaceUsesWithIf(plain,
                             [plain](const llvm::Use &use) { return use.getUser() != plain; });
-    auto *current = builder.CreateLoad(i32, epoch);
-    auto *prior = builder.CreateAnd(load, builder.getInt32(epoch_bits));
-    auto *first_touch = builder.CreateICmpNE(prior, current);
+    auto *flags = builder.CreateAnd(load, builder.getInt32(word_read | word_written));
+    auto *first_touch = builder.CreateICmpEQ(flags, builder.getInt32(0));
     auto *record = llvm::SplitBlockAndInsertIfThen(first_touch, builder.GetInsertPoint(), false);
     builder.SetInsertPoint(record);
     builder.CreateCall(recorder, {load->getPointerOperand()});
-    auto *metadata = builder.CreateOr(current, builder.getInt32(input_tag));
+    auto *metadata = builder.getInt32(word_read);
     builder.CreateStore(builder.CreateOr(plain, metadata), load->getPointerOperand())
         ->setVolatile(true);
   }
@@ -785,12 +752,9 @@ void tag(llvm::Module &module) {
     builder.SetCurrentDebugLocation(store->getDebugLoc());
     auto *old = builder.CreateLoad(builder.getInt32Ty(), store->getPointerOperand());
     old->setVolatile(true);
-    auto *current = builder.CreateLoad(i32, epoch);
-    auto *preserved =
-        builder.CreateAnd(old_flags(builder, old, current), builder.getInt32(input_tag));
+    auto *preserved = builder.CreateAnd(old, builder.getInt32(word_read));
     auto *word = builder.CreateAnd(store->getValueOperand(), builder.getInt32(word_mask));
-    auto *metadata =
-        builder.CreateOr(current, builder.CreateOr(preserved, builder.getInt32(taint)));
+    auto *metadata = builder.CreateOr(preserved, builder.getInt32(word_written));
     builder.CreateCall(recorder, {store->getPointerOperand()});
     store->setOperand(0, builder.CreateOr(word, metadata));
   }
@@ -839,10 +803,10 @@ std::vector<std::byte> instrument_worker(const SemanticImage &semantic,
   return {bytes.begin(), bytes.end()};
 }
 
-Prepared prepare_worker_image(const CodeImage code,
-                              const CompileOptions options,
-                              const std::filesystem::path &cache,
-                              const native::Preparation preparation) {
+NativeImage prepare_worker_image(const CodeImage code,
+                                 const CompileOptions options,
+                                 const std::filesystem::path &cache,
+                                 const native::Preparation preparation) {
   const auto semantic =
       blofeld::app::aot::detail::prepare_semantic<Core>(code, options, cache, preparation);
   const auto key = std::string(semantic.identity()) +
@@ -854,12 +818,6 @@ Prepared prepare_worker_image(const CodeImage code,
   for (const auto symbol : semantic.exports()) {
     exports.push_back({.name = symbol.name, .abi = symbol.abi});
   }
-  const Owner<LLVMContextRef, LLVMContextDispose> context(LLVMContextCreate());
-  const auto source = parse_worker(context.get(), bitcode);
-  auto *setter = LLVMGetNamedFunction(source.get(), epoch_symbol);
-  check(setter != nullptr, "The foreground worker must export an epoch initializer");
-  const auto setter_abi = native::detail::abi(setter);
-  exports.push_back({.name = epoch_symbol, .abi = setter_abi});
   const std::array modules{native::Module{.bitcode = bitcode, .exports = exports}};
   const auto binary = std::make_shared<native::Code>(modules,
                                                      std::span<const native::Import>{},
@@ -867,14 +825,12 @@ Prepared prepare_worker_image(const CodeImage code,
                                                      native::Code::ExecutableMemory::standard,
                                                      preparation);
 
-  auto image = blofeld::app::aot::detail::bind_dsp(semantic, binary);
-  return {.image = std::move(image),
-          .set_epoch = std::bit_cast<SetEpoch>(binary->address(epoch_symbol))};
+  return blofeld::app::aot::detail::bind_dsp(semantic, binary);
 }
 
-Prepared load_worker(const WorkerPartition &body,
-                     const std::filesystem::path &cache,
-                     const native::Preparation preparation) {
+NativeImage load_worker(const WorkerPartition &body,
+                        const std::filesystem::path &cache,
+                        const native::Preparation preparation) {
   const std::array variants{CodeVariant{.id = body.program.variant,
                                         .code = body.program.spans,
                                         .entries = body.program.entries,
@@ -896,8 +852,6 @@ Prepared load_worker(const WorkerPartition &body,
                               preparation);
 }
 
-constexpr Word word_written = 1U << 31, word_read = 1U << 30;
-constexpr Word epoch = 1U << 24;
 // A private lane stops if it fails to reach the original mixer transfer.
 constexpr std::uint64_t worker_cycle_limit = 8192;
 constexpr std::size_t words = geometry::physical_words;
@@ -1368,7 +1322,7 @@ namespace blofeld::app {
 class DspWorkers::Impl {
 public:
   Impl(const WorkerPartition &partition,
-       const Prepared &prepared,
+       const NativeImage &prepared,
        vi::dsp::BootRom boot,
        vi::dsp::Memory::Storage storage);
 
@@ -1799,7 +1753,7 @@ private:
 };
 
 DspWorkers::Impl::Impl(const WorkerPartition &partition,
-                       const Prepared &prepared,
+                       const NativeImage &prepared,
                        const vi::dsp::BootRom boot,
                        const vi::dsp::Memory::Storage storage)
     : canonical_ram_(storage.physical),
@@ -1822,10 +1776,9 @@ DspWorkers::Impl::Impl(const WorkerPartition &partition,
   };
   for (const auto span : partition.program.spans) { fill(span); }
   for (const auto span : partition.exit_spans) { fill(span); }
-  prepared.set_epoch(epoch);
   const Registers start{.pc = next_setup, .omr = voice_mode};
   for (auto &voice : voices_) {
-    voice = std::make_unique<Voice>(seed_, start, rom_, prepared.image, variant_);
+    voice = std::make_unique<Voice>(seed_, start, rom_, prepared, variant_);
   }
   for (std::size_t index = 0; index < workers_.size(); ++index) {
     workers_[index] = std::jthread([this, index](const std::stop_token &stop) {
