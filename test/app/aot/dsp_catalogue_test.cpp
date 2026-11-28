@@ -125,7 +125,7 @@ Object catalogue(const Fixture &fixture) {
       {.K = "code", .V = code_range(Array{0, initial.size()})},
       {.K = "entries", .V = Array{0}},
       {.K = "resumes", .V = Array{0}},
-      {.K = "guards", .V = Array{Object{{.K = "address", .V = 0}, {.K = "value", .V = literal}}}}};
+      {.K = "guards", .V = Array{Object{{.K = "address", .V = 0}}}}};
   Object changed{{.K = "id", .V = 2},
                  {.K = "writes",
                   .V = Array{Object{{.K = "kind", .V = "block"},
@@ -143,7 +143,7 @@ Object catalogue(const Fixture &fixture) {
                  {.K = "mode_mask", .V = 0x80},
                  {.K = "mode", .V = 0},
                  {.K = "guards",
-                  .V = Array{Object{{.K = "address", .V = 0}, {.K = "value", .V = stop}},
+                  .V = Array{Object{{.K = "address", .V = 0}},
                              Object{{.K = "address", .V = 1}, {.K = "value", .V = stop}}}},
                  {.K = "failed_fetches", .V = Array{}}};
   Object result;
@@ -465,6 +465,10 @@ void invalid_catalogues(const Fixture &fixture) {
   rejects(fixture, [](auto &input) { variant(input)["region_starts"] = false; });
   rejects(fixture, [](auto &input) { variant(input)["region_starts"] = Array{0}; });
   rejects(fixture, [](auto &input) { variant(input)["foreground_entries"] = false; });
+  rejects(fixture, [](auto &input) {
+    constexpr Word missing = 32;
+    variant(input, 1)["guards"] = Array{Object{{.K = "address", .V = missing}}};
+  });
   rejects(fixture, [](auto &input) {
     variant(input)["guard_sets"] =
         Array{Array{Object{{.K = "address", .V = 0}, {.K = "value", .V = literal}}}};

@@ -23,6 +23,7 @@
 #include <filesystem>
 #include <format>
 #include <optional>
+#include <ranges>
 #include <set>
 #include <span>
 #include <stdexcept>
@@ -218,6 +219,15 @@ public:
     return {writes_, ranges(code)};
   }
 
+  [[nodiscard]] Word word_at(const Word address) const {
+    for (const auto &write : writes_ | std::views::reverse) {
+      if (address >= write.address && address - write.address < write.words.size()) {
+        return write.words[address - write.address];
+      }
+    }
+    invalid("guard address has no stored program word");
+  }
+
 private:
   std::vector<std::vector<Word>> words_;
   std::vector<dsp56300::CodeSpan> writes_;
@@ -283,20 +293,24 @@ struct Variant {
   bool fixed_memory = false;
 };
 
-Guards guards(const Array &input) {
+Guards guards(const Array &input, const Stored &stored) {
   Guards result;
   for (const auto &value : input) {
     const auto &guard = object(value);
+    const auto address = word(guard, "address");
     const auto *expected = guard.get("value");
-    if (expected == nullptr) { invalid("guard value"); }
-    const auto word_value = expected->kind() == llvm::json::Value::Null ? std::optional<Word>{}
-                                                                        : word(number(*expected));
-    result.push_back({.address = word(guard, "address"), .value = word_value});
+    std::optional<Word> word_value;
+    if (expected == nullptr) {
+      word_value = stored.word_at(address);
+    } else if (expected->kind() != llvm::json::Value::Null) {
+      word_value = word(number(*expected));
+    }
+    result.push_back({.address = address, .value = word_value});
   }
   return result;
 }
 
-void admission(Variant &variant, const Object &input) {
+void admission(Variant &variant, const Object &input, const Stored &stored) {
   variant.entries = addresses(array(input, "entries"));
   variant.region_starts = optional_addresses(input, "region_starts");
   variant.foreground_entries = optional_addresses(input, "foreground_entries");
@@ -311,10 +325,10 @@ void admission(Variant &variant, const Object &input) {
     for (const auto &set : sets) {
       const auto *words = set.getAsArray();
       if (words == nullptr || words->empty()) { invalid("guard set"); }
-      variant.guard_sets.push_back(guards(*words));
+      variant.guard_sets.push_back(guards(*words, stored));
     }
   } else {
-    variant.guard_sets.push_back(guards(array(input, "guards")));
+    variant.guard_sets.push_back(guards(array(input, "guards"), stored));
   }
   variant.fixed_memory = input.get("memory") != nullptr;
   if (variant.fixed_memory) {
@@ -413,7 +427,7 @@ vi::dsp::Program prepare(const Object &root,
       stored_write(stored, object(write), firmware, boot, sources);
     }
     auto &variant = owned.emplace_back(number(input, "id"), stored.classify(array(input, "code")));
-    admission(variant, input);
+    admission(variant, input, stored);
     variant.fixed_passes = fixed_paths(input);
   }
   validate_admissions(owned);
