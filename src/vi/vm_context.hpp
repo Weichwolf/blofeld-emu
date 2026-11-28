@@ -7,6 +7,7 @@
 #endif
 #include "display/st7565.hpp"
 #include "display/state.hpp"
+#include "dsp/foreground.hpp"
 #include "dsp/memory.hpp"
 #include "dsp/program.hpp"
 #include "execution.hpp"
@@ -40,6 +41,8 @@ namespace blofeld::vi {
 // audio consumers extend this context; no host API handles or global stepper.
 class VmContext {
 public:
+  using PlaybackReady = void (*)(void *) noexcept;
+
   VmContext(std::unique_ptr<FlashImage> image,
             std::vector<dsp56300::Word> boot,
             std::shared_ptr<const mcu::Program> mcu_program,
@@ -48,7 +51,9 @@ public:
             MidiPort::InputMode input = MidiPort::InputMode::live,
             std::shared_ptr<const dsp::Program> program = {},
             std::uint64_t speculation_window = Coupling::default_window,
-            dsp::Memory::Storage dsp_memory = {});
+            dsp::Memory::Storage dsp_memory = {},
+            dsp::Foreground dsp_foreground = {},
+            PlaybackReady playback_ready = nullptr);
   ~VmContext();
   VmContext(const VmContext &) = delete;
   VmContext &operator=(const VmContext &) = delete;
@@ -82,6 +87,7 @@ public:
   enum class Owner : std::uint8_t { mcu, dsp };
   using OwnerSetup = std::function<void(Owner)>;
   void start(const OwnerSetup &setup = {});
+  void playback_ready() noexcept;
 
   [[nodiscard]] bool finished() const noexcept {
     return completed_.load(std::memory_order_acquire) != 0;
@@ -119,11 +125,13 @@ private:
   MidiPort midi_;
   std::atomic<unsigned> completed_{0};
   Controls controls_;
+  bool started_ = false;
 #if defined(BLOFELD_CENSUS)
   Census census_;
   std::unique_ptr<mcu::StateProbe> state_probe_;
 #endif
   std::unique_ptr<Coupling> coupling_;
-  bool started_ = false;
+  dsp::Foreground dsp_foreground_;
+  PlaybackReady playback_ready_;
 };
 }

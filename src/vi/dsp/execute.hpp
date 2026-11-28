@@ -2,6 +2,7 @@
 #pragma once
 
 #include "dsp/boot_rom.hpp"
+#include "dsp/foreground.hpp"
 #include "dsp/memory.hpp"
 #include "dsp/program.hpp"
 #include "execution.hpp"
@@ -30,5 +31,6 @@ namespace blofeld::vi::dsp {
                                       PreparationClock *preparation = nullptr,
                                       const Program *program = nullptr,
                                       Coupling *coupling = nullptr,
-                                      Memory::Storage memory = {});
+                                      Memory::Storage memory = {},
+                                      Foreground foreground = {});
 }

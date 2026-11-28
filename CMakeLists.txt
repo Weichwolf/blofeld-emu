@@ -148,7 +148,7 @@ target_link_libraries(blofeld_vi_midi PUBLIC blofeld_quality Threads::Threads)
 add_library(blofeld_vi_execution
   src/vi/display/port.cpp
   src/vi/io/coupling.cpp
-  src/vi/dsp/channels.cpp src/vi/dsp/media_transfer.cpp
+  src/vi/dsp/channels.cpp src/vi/dsp/foreground.cpp src/vi/dsp/media_transfer.cpp
   src/vi/io/memory_controller.cpp src/vi/io/dsp_reset.cpp src/vi/io/shi.cpp src/vi/io/sci.cpp src/vi/io/usb.cpp src/vi/io/mcu_flash.cpp
   src/vi/mcu/boot_port.cpp src/vi/mcu/channels.cpp src/vi/mcu/ports.cpp src/vi/mcu/timer.cpp src/vi/mcu/clock.cpp
   src/vi/mcu/execute.cpp src/vi/mcu/speculation.cpp src/vi/mcu/program.cpp src/vi/dsp/audio.cpp src/vi/dsp/clock.cpp src/vi/dsp/dax.cpp src/vi/dsp/dma.cpp src/vi/dsp/esai.cpp src/vi/dsp/interrupts.cpp src/vi/dsp/memory.cpp src/vi/dsp/midi.cpp src/vi/dsp/ports.cpp src/vi/dsp/timers.cpp src/vi/dsp/execute.cpp src/vi/dsp/program.cpp src/vi/vm_context.cpp)
@@ -178,6 +178,11 @@ if(APPLE)
     "${BLOFELD_COREAUDIO}" "${BLOFELD_AUDIOTOOLBOX}" "${BLOFELD_COREFOUNDATION}")
 else()
   target_link_libraries(blofeld_host_audio PRIVATE PkgConfig::JACK)
+  option(BLOFELD_JACK_DEADLINE_TRACE "Enable opt-in JACK deadline capture" OFF)
+  if(BLOFELD_JACK_DEADLINE_TRACE)
+    target_compile_definitions(blofeld_host_audio PRIVATE BLOFELD_JACK_DEADLINE_TRACE)
+    target_link_libraries(blofeld_host_audio PRIVATE blofeld_host_process)
+  endif()
 endif()
 add_library(blofeld_host_wav src/host/audio/wav.cpp)
 target_include_directories(blofeld_host_wav PUBLIC src/host)
@@ -230,6 +235,18 @@ target_link_libraries(blofeld-headless PRIVATE blofeld_app_live blofeld_app_boot
 include(cmake/DesktopProfile.cmake)
 
 option(BLOFELD_CENSUS "Build opt-in owner/thread attribution (runtime BLOFELD_CENSUS=1)" OFF)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$"
+   AND NOT BLOFELD_CENSUS)
+  set(blofeld_foreground_worker "${CMAKE_CURRENT_SOURCE_DIR}/src/app/linux/dsp_workers.cpp")
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${blofeld_foreground_worker}")
+  file(SHA256 "${blofeld_foreground_worker}" blofeld_foreground_pipeline)
+  target_sources(blofeld_app_live PRIVATE "${blofeld_foreground_worker}")
+  target_include_directories(blofeld_app_live SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
+  target_link_libraries(blofeld_app_live PRIVATE blofeld_app_memory LLVM)
+  target_compile_definitions(blofeld_app_live PUBLIC BLOFELD_FOREGROUND_WORKERS)
+  set_source_files_properties("${blofeld_foreground_worker}" PROPERTIES
+    COMPILE_DEFINITIONS "BLOFELD_FOREGROUND_PIPELINE=\"${blofeld_foreground_pipeline}\"")
+endif()
 if(BLOFELD_CENSUS)
   target_compile_definitions(blofeld_quality INTERFACE BLOFELD_CENSUS)
   target_link_libraries(blofeld_host_aot PRIVATE blofeld_host_process)

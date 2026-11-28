@@ -16,6 +16,7 @@ namespace blofeld::vi {
 namespace {
 static_assert(std::atomic<std::uint32_t>::is_always_lock_free);
 static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
+static_assert(std::atomic<unsigned>::is_always_lock_free);
 constexpr std::uint64_t admitting = 1, notified = 2, admission_flags = 3, next_admission = 4;
 
 std::uint32_t encode(const PeerPort::Sample value) noexcept {
@@ -140,7 +141,7 @@ bool PeerPort::dsp_data(const Sample value) noexcept {
   if (value.mask != byte_mask && reply_.recording.load(std::memory_order_acquire)) {
     const std::lock_guard lock(reply_.mutex);
     reply_.recording.store(false, std::memory_order_release);
-    if (reply_.written != reply_.bytes.size()) {
+    if (reply_.written.load(std::memory_order_relaxed) != reply_.bytes.size()) {
       static_cast<void>(fail("DSP released an incomplete peer response block"));
     }
   }
@@ -184,22 +185,39 @@ bool PeerPort::start_reply() noexcept {
       reply_.recording.load(std::memory_order_relaxed)) {
     return fail("MCU requested a peer response before completing the preceding block");
   }
-  reply_.written = reply_.read = 0;
+  reply_.read = 0;
+  reply_.written.store(0, std::memory_order_relaxed);
   reply_.active.store(true, std::memory_order_release);
   reply_.recording.store(true, std::memory_order_release);
   return true;
 }
 
+bool PeerPort::dsp_write(const std::uint64_t ticks) noexcept {
+  if (!reply_.recording.load(std::memory_order_acquire) ||
+      dsp_held_.load(std::memory_order_acquire)) {
+    return true;
+  }
+  return record_reply(decode(dsp_.load(std::memory_order_relaxed)), ticks);
+}
+
 bool PeerPort::dsp_write(const Sample value, const std::uint64_t ticks) noexcept {
-  if (dsp_held_.load(std::memory_order_acquire)) { return true; }
-  if (!reply_.recording.load(std::memory_order_acquire)) { return true; }
-  const std::lock_guard lock(reply_.mutex);
-  if (!reply_.recording.load(std::memory_order_relaxed)) { return true; }
-  if (reply_.written == reply_.bytes.size()) { return fail("DSP peer response block overflow"); }
-  if (reply_.written != 0 && ticks < reply_.bytes[reply_.written - 1].ticks) {
+  if (!reply_.recording.load(std::memory_order_acquire) ||
+      dsp_held_.load(std::memory_order_acquire)) {
+    return true;
+  }
+  return record_reply(value, ticks);
+}
+
+bool PeerPort::record_reply(const Sample value, const std::uint64_t ticks) noexcept {
+  // Only the DSP writes while recording. Ending or resetting the recording
+  // also runs on the DSP owner, and the MCU observes each byte after publication.
+  const auto written = reply_.written.load(std::memory_order_relaxed);
+  if (written == reply_.bytes.size()) { return fail("DSP peer response block overflow"); }
+  if (written != 0 && ticks < reply_.bytes[written - 1].ticks) {
     return fail("DSP peer response time moved backwards");
   }
-  reply_.bytes[reply_.written++] = {.ticks = ticks, .data = value};
+  reply_.bytes[written] = {.ticks = ticks, .data = value};
+  reply_.written.store(written + 1, std::memory_order_release);
   return true;
 }
 
@@ -212,7 +230,7 @@ std::optional<PeerPort::Sample> PeerPort::read_dsp_data(const Read access) noexc
   }
   const std::lock_guard lock(reply_.mutex);
   if (!reply_.active.load(std::memory_order_relaxed)) { return dsp_data(); }
-  if (reply_.read == reply_.written) {
+  if (reply_.read == reply_.written.load(std::memory_order_acquire)) {
     static_cast<void>(fail("MCU read a peer response byte before the DSP produced it"));
     return {};
   }
@@ -326,7 +344,8 @@ void PeerPort::reset_dsp() noexcept {
     reply_.active.store(false, std::memory_order_release);
     reply_.recording.store(false, std::memory_order_release);
     reply_.announced.store(false, std::memory_order_release);
-    reply_.read = reply_.written = 0;
+    reply_.read = 0;
+    reply_.written.store(0, std::memory_order_relaxed);
     error_.store(nullptr, std::memory_order_release);
   }
   dsp_.store(0, std::memory_order_release);

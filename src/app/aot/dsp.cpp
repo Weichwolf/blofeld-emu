@@ -165,7 +165,13 @@ dsp56300::NativeImage prepare_dsp(const dsp56300::CodeImage image,
 #endif
   const auto code = std::make_shared<native::Code>(
       modules, channels.entries(), cache, executable_memory, preparation);
+  return detail::bind_dsp(semantic, code);
+}
+
+dsp56300::NativeImage detail::bind_dsp(const dsp56300::SemanticImage &semantic,
+                                       const std::shared_ptr<const native::Code> &code) {
   std::vector<dsp56300::NativeSymbol> symbols;
+  symbols.reserve(semantic.exports().size());
   for (const auto symbol : semantic.exports()) {
     symbols.push_back({.name = symbol.name, .address = code->address(symbol.name)});
   }

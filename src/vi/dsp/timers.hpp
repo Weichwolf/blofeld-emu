@@ -21,6 +21,11 @@ public:
   [[nodiscard]] bool write(Write access) noexcept;
   [[nodiscard]] bool advance(std::uint64_t cycles) noexcept;
   [[nodiscard]] bool input(unsigned index, bool level) noexcept;
+
+  [[nodiscard]] bool input_is(unsigned index, bool level) const noexcept {
+    return index < timers_.size() && timers_[index].level == level;
+  }
+
   [[nodiscard]] std::optional<std::uint64_t> deadline() const noexcept;
   [[nodiscard]] std::optional<dsp56300::Word> interrupt() const noexcept;
   [[nodiscard]] bool acknowledge(dsp56300::Word vector) noexcept;

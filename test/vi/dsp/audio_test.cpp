@@ -94,6 +94,18 @@ void memory_to_pcm() {
   for (const auto item : configuration) { require(dma.write(item), "Configure actual DMA state"); }
   require(esai.write({.address = tx0, .value = words.back()}),
           "Prime the word preceding the DMA ring");
+  auto preview_esai = esai;
+  auto preview_dax = dax;
+  require(!audio.preview_clock(esai, preview_dax, nominal_slot) &&
+              audio.preview_clock(preview_esai, preview_dax, nominal_slot) &&
+              preview_esai.request() && !esai.request() && audio.deadline() == nominal_slot &&
+              consumer.frames.empty(),
+          "Only copied peripherals advance and request DMA during the preview");
+  preview_esai = esai;
+  preview_dax = dax;
+  require(!audio.preview_clock(preview_esai, preview_dax, std::uint64_t{2} * nominal_slot) &&
+              audio.deadline() == nominal_slot && !esai.request(),
+          "A second due slot prevents a single-event preview from granting the interval");
   constexpr unsigned request = 22;
   for (unsigned index = 0; index < words.size(); ++index) {
     require(audio.deadline() == (std::uint64_t{index + 1} * nominal_slot) && audio.clock() &&

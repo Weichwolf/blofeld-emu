@@ -16,6 +16,10 @@ class Playback;
 }
 
 namespace blofeld::app {
+#if defined(BLOFELD_FOREGROUND_WORKERS)
+class DspWorkers;
+#endif
+
 struct PhysicalCore {
   cpu_set_t allowed, siblings;
 };
@@ -24,6 +28,11 @@ class DspPlacement {
 public:
   void prepare(PhysicalCore primary, PhysicalCore spare, PhysicalCore callback);
   void attach() noexcept;
+
+#if defined(BLOFELD_FOREGROUND_WORKERS)
+  void workers(DspWorkers *value) noexcept { workers_ = value; }
+#endif
+
   void update(host::audio::Playback &audio);
 
 private:
@@ -46,6 +55,9 @@ private:
   bool move(host::audio::Playback &audio, Move target);
 
   std::array<PhysicalCore, callback_core + 1> cores_{};
+#if defined(BLOFELD_FOREGROUND_WORKERS)
+  DspWorkers *workers_ = nullptr;
+#endif
   std::atomic<pthread_t> thread_;
   clockid_t owner_clock_{};
   std::uint64_t previous_owner_ = 0;

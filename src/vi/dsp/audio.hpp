@@ -30,6 +30,9 @@ public:
   // before advancing to another event or submitting a complete PCM block.
   [[nodiscard]] std::optional<std::uint64_t> transmit_deadline(unsigned slots) const noexcept;
   [[nodiscard]] bool clock();
+  // Advance one event on the supplied copies and reject any second event
+  // through the horizon. The live clock and PCM producer stay unchanged.
+  [[nodiscard]] bool preview_clock(Esai &esai, Dax &dax, std::uint64_t through) const noexcept;
   [[nodiscard]] bool submit(bool partial = false);
 
   [[nodiscard]] const char *error() const noexcept { return error_; }
@@ -52,6 +55,7 @@ private:
   };
 
   [[nodiscard]] bool capture(const Esai::Slot &slot, std::uint64_t cycles) noexcept;
+  [[nodiscard]] bool clock(Esai &esai, Dax &dax) noexcept;
   [[nodiscard]] bool fail(const char *message) noexcept;
   Esai &esai_;
   Dax &dax_;

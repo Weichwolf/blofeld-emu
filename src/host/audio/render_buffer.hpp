@@ -26,6 +26,11 @@ public:
 
   [[nodiscard]] std::size_t capacity() const noexcept { return frames_.size(); }
 
+  // Read by the consumer after render or discard.
+  [[nodiscard]] std::uint64_t tail() const noexcept {
+    return tail_.load(std::memory_order_relaxed);
+  }
+
   void discard() noexcept;
 
 private:

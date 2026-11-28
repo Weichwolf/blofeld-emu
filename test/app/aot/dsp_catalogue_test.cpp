@@ -2,6 +2,7 @@
 #include "aot/dsp.hpp"
 #include "dsp/boot_rom.hpp"
 #include "dsp/execute.hpp"
+#include "dsp/foreground.hpp"
 #include "execution.hpp"
 #include "firmware.hpp"
 #include "io/dsp_reset.hpp"
@@ -124,7 +125,7 @@ Object catalogue(const Fixture &fixture) {
       {.K = "code", .V = code_range(Array{0, initial.size()})},
       {.K = "entries", .V = Array{0}},
       {.K = "resumes", .V = Array{0}},
-      {.K = "guards", .V = Array{Object{{.K = "address", .V = 0}, {.K = "value", .V = literal}}}}};
+      {.K = "guards", .V = Array{Object{{.K = "address", .V = 0}}}}};
   Object changed{{.K = "id", .V = 2},
                  {.K = "writes",
                   .V = Array{Object{{.K = "kind", .V = "block"},
@@ -142,7 +143,7 @@ Object catalogue(const Fixture &fixture) {
                  {.K = "mode_mask", .V = 0x80},
                  {.K = "mode", .V = 0},
                  {.K = "guards",
-                  .V = Array{Object{{.K = "address", .V = 0}, {.K = "value", .V = stop}},
+                  .V = Array{Object{{.K = "address", .V = 0}},
                              Object{{.K = "address", .V = 1}, {.K = "value", .V = stop}}}},
                  {.K = "failed_fetches", .V = Array{}}};
   Object result;
@@ -159,9 +160,15 @@ std::string document(Object input) {
   return llvm::formatv("{0}", llvm::json::Value(std::move(input))).str();
 }
 
-void normal_owner(const Fixture &fixture, const bool fixed = false, const bool unseeded = false) {
+void normal_owner(const Fixture &fixture,
+                  const bool fixed = false,
+                  const bool unseeded = false,
+                  const bool foreground = false) {
   auto input = catalogue(fixture);
   if (unseeded) { (*(*input.getArray("variants"))[1].getAsObject())["entries"] = Array{2}; }
+  if (foreground) {
+    (*(*input.getArray("variants"))[1].getAsObject())["foreground_entries"] = Array{0};
+  }
   if (fixed) {
     constexpr Word low_x_words = 0x3000;
     constexpr Word high_first = 0xc000;
@@ -185,6 +192,19 @@ void normal_owner(const Fixture &fixture, const bool fixed = false, const bool u
       document(std::move(input)), fixture.firmware, fixture.boot_rom());
   vi::Shi shi;
   vi::DspReset reset;
+  unsigned offered = 0;
+  const vi::dsp::Foreground callback{.context = &offered,
+                                     .offer = [](void *context,
+                                                 vi::dsp::Io & /*device*/,
+                                                 const dsp56300::Core &owner,
+                                                 const dsp56300::ForegroundGrant &grant) noexcept
+                                         -> const dsp56300::ForegroundCommit * {
+                                       if (grant.variant == 1 && grant.pc == 0 &&
+                                           owner.registers().pc == 0) {
+                                         ++*static_cast<unsigned *>(context);
+                                       }
+                                       return nullptr;
+                                     }};
   const auto result = vi::dsp::execute(fixture.boot_rom(),
                                        shi,
                                        reset,
@@ -195,7 +215,16 @@ void normal_owner(const Fixture &fixture, const bool fixed = false, const bool u
                                        nullptr,
                                        nullptr,
                                        nullptr,
-                                       &program);
+                                       &program,
+                                       nullptr,
+                                       {},
+                                       callback);
+#if defined(BLOFELD_CENSUS)
+  require(offered == 0, "The precise census does not offer accelerated foreground work");
+#else
+  require(offered == static_cast<unsigned>(foreground),
+          "Only the declared native PC offers work through the VM");
+#endif
   require(!result.failure && !result.exception && result.instructions == 15 &&
               result.stopped_pc == 1 &&
               result.prepared_native_bytes == program.report().native_bytes,
@@ -435,6 +464,11 @@ void invalid_catalogues(const Fixture &fixture) {
   rejects(fixture, [](auto &input) { variant(input)["failed_fetches"] = false; });
   rejects(fixture, [](auto &input) { variant(input)["region_starts"] = false; });
   rejects(fixture, [](auto &input) { variant(input)["region_starts"] = Array{0}; });
+  rejects(fixture, [](auto &input) { variant(input)["foreground_entries"] = false; });
+  rejects(fixture, [](auto &input) {
+    constexpr Word missing = 32;
+    variant(input, 1)["guards"] = Array{Object{{.K = "address", .V = missing}}};
+  });
   rejects(fixture, [](auto &input) {
     variant(input)["guard_sets"] =
         Array{Array{Object{{.K = "address", .V = 0}, {.K = "value", .V = literal}}}};
@@ -704,6 +738,7 @@ int main(const int argc, const char *const *argv) try {
     changed_inputs(fixture);
   } else if (group == "boundaries") {
     normal_owner(Fixture{}, false, true);
+    normal_owner(Fixture{}, false, false, true);
   } else if (group == "failed") {
     failed_entry();
   } else if (group == "targets") {

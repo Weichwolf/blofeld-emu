@@ -192,6 +192,7 @@ Live::Result Live::run(vi::VmContext &vm,
   while (!vm.finished()) {
     control();
     if (phase_.load(std::memory_order_acquire) == Phase::playing && !announced) {
+      vm.playback_ready();
       const std::chrono::duration<double> boot = booted - booting;
       const std::chrono::duration<double> elapsed = std::chrono::steady_clock::now() - launched;
       std::cerr << "Live MIDI input active: native audio started. Firmware boot=" << boot.count()

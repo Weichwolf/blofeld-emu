@@ -30,6 +30,10 @@
 namespace blofeld::app {
 class Live {
 public:
+#if defined(BLOFELD_FOREGROUND_WORKERS)
+  void dsp_workers(DspWorkers *workers) noexcept { dsp_placement_.workers(workers); }
+#endif
+
   Live(host::audio::Playback &audio, DisplayPublication &display, const Options &options);
   [[nodiscard]] vi::PcmOutput output() noexcept;
 

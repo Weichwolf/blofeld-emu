@@ -23,6 +23,7 @@
 #include <filesystem>
 #include <format>
 #include <optional>
+#include <ranges>
 #include <set>
 #include <span>
 #include <stdexcept>
@@ -156,6 +157,10 @@ std::vector<Word> addresses(const Array &input) {
   return result;
 }
 
+std::vector<Word> optional_addresses(const Object &input, const llvm::StringRef field) {
+  return input.get(field) == nullptr ? std::vector<Word>{} : addresses(array(input, field));
+}
+
 std::vector<std::vector<Word>> fixed_paths(const Object &input) {
   std::vector<std::vector<Word>> result;
   if (input.get("fixed_passes") == nullptr) { return result; }
@@ -212,6 +217,15 @@ public:
 
   [[nodiscard]] vi::dsp::CodeSource classify(const Array &code) const {
     return {writes_, ranges(code)};
+  }
+
+  [[nodiscard]] Word word_at(const Word address) const {
+    for (const auto &write : writes_ | std::views::reverse) {
+      if (address >= write.address && address - write.address < write.words.size()) {
+        return write.words[address - write.address];
+      }
+    }
+    invalid("guard address has no stored program word");
   }
 
 private:
@@ -271,7 +285,7 @@ using Guards = std::vector<vi::dsp::ProgramWord>;
 struct Variant {
   std::uint64_t id;
   vi::dsp::CodeSource code;
-  std::vector<Word> entries, resumes, failed_fetches, region_starts;
+  std::vector<Word> entries, resumes, failed_fetches, region_starts, foreground_entries;
   std::vector<std::vector<Word>> fixed_passes;
   std::vector<Guards> guard_sets;
   std::vector<dsp56300::RegionLayout> memory;
@@ -279,29 +293,30 @@ struct Variant {
   bool fixed_memory = false;
 };
 
-Guards guards(const Array &input) {
+Guards guards(const Array &input, const Stored &stored) {
   Guards result;
   for (const auto &value : input) {
     const auto &guard = object(value);
+    const auto address = word(guard, "address");
     const auto *expected = guard.get("value");
-    if (expected == nullptr) { invalid("guard value"); }
-    const auto word_value = expected->kind() == llvm::json::Value::Null ? std::optional<Word>{}
-                                                                        : word(number(*expected));
-    result.push_back({.address = word(guard, "address"), .value = word_value});
+    std::optional<Word> word_value;
+    if (expected == nullptr) {
+      word_value = stored.word_at(address);
+    } else if (expected->kind() != llvm::json::Value::Null) {
+      word_value = word(number(*expected));
+    }
+    result.push_back({.address = address, .value = word_value});
   }
   return result;
 }
 
-void admission(Variant &variant, const Object &input) {
+void admission(Variant &variant, const Object &input, const Stored &stored) {
   variant.entries = addresses(array(input, "entries"));
-  if (input.get("region_starts") != nullptr) {
-    variant.region_starts = addresses(array(input, "region_starts"));
-  }
+  variant.region_starts = optional_addresses(input, "region_starts");
+  variant.foreground_entries = optional_addresses(input, "foreground_entries");
   variant.resumes = addresses(array(input, "resumes"));
   std::ranges::sort(variant.resumes);
-  if (input.get("failed_fetches") != nullptr) {
-    variant.failed_fetches = addresses(array(input, "failed_fetches"));
-  }
+  variant.failed_fetches = optional_addresses(input, "failed_fetches");
   if (input.get("mode_mask") != nullptr) { variant.mode_mask = word(input, "mode_mask"); }
   if (input.get("mode") != nullptr) { variant.mode = word(input, "mode"); }
   if (input.get("guard_sets") != nullptr) {
@@ -310,10 +325,10 @@ void admission(Variant &variant, const Object &input) {
     for (const auto &set : sets) {
       const auto *words = set.getAsArray();
       if (words == nullptr || words->empty()) { invalid("guard set"); }
-      variant.guard_sets.push_back(guards(*words));
+      variant.guard_sets.push_back(guards(*words, stored));
     }
   } else {
-    variant.guard_sets.push_back(guards(array(input, "guards")));
+    variant.guard_sets.push_back(guards(array(input, "guards"), stored));
   }
   variant.fixed_memory = input.get("memory") != nullptr;
   if (variant.fixed_memory) {
@@ -377,13 +392,32 @@ void validate_admissions(const std::span<const Variant> variants) {
   }
 }
 
+std::vector<dsp56300::CodeTransition> code_transitions(const Object &root) {
+  std::vector<dsp56300::CodeTransition> transitions;
+  for (const auto &value : array(root, "transitions")) {
+    const auto &transfer = object(value);
+    const auto from = number(transfer, "from");
+    const auto to = number(transfer, "to");
+    if (const auto *entries = transfer.getArray("entry")) {
+      if (entries->empty()) { invalid("empty transition entry list"); }
+      for (const auto &entry : *entries) {
+        transitions.push_back({.from = from, .to = to, .entry = word(number(entry))});
+      }
+    } else {
+      transitions.push_back({.from = from, .to = to, .entry = word(transfer, "entry")});
+    }
+  }
+  return transitions;
+}
+
 vi::dsp::Program prepare(const Object &root,
                          const vi::FirmwareUpdate &firmware,
                          const vi::dsp::BootRom boot,
                          const std::span<const DspSource> sources,
                          const std::filesystem::path &cache,
                          const dsp56300::CompileOptions::MemoryMode mode,
-                         const host::aot::Preparation preparation) {
+                         const host::aot::Preparation preparation,
+                         const PrepareForeground &prepare_foreground) {
   std::vector<Variant> owned;
   std::vector<dsp56300::VariantLayout> layouts;
   for (const auto &value : array(root, "variants")) {
@@ -393,7 +427,7 @@ vi::dsp::Program prepare(const Object &root,
       stored_write(stored, object(write), firmware, boot, sources);
     }
     auto &variant = owned.emplace_back(number(input, "id"), stored.classify(array(input, "code")));
-    admission(variant, input);
+    admission(variant, input, stored);
     variant.fixed_passes = fixed_paths(input);
   }
   validate_admissions(owned);
@@ -402,12 +436,21 @@ vi::dsp::Program prepare(const Object &root,
   std::vector<dsp56300::FixedPassDeclaration> passes;
   static constexpr std::array stable_reads{
       dsp56300::StableRead{.space = dsp56300::Space::x, .address = 0xffffef}};
+  const auto *foreground_plan = root.getObject("foreground");
+  if (foreground_plan == nullptr && root.get("foreground") != nullptr) { invalid("foreground"); }
+#if defined(BLOFELD_CENSUS)
+  constexpr bool foreground = false;
+#else
+  const bool foreground = foreground_plan == nullptr || static_cast<bool>(prepare_foreground);
+#endif
   for (const auto &variant : owned) {
     source.push_back({.id = variant.id,
                       .code = variant.code.code(),
                       .entries = variant.entries,
                       .failed_fetches = variant.failed_fetches,
-                      .region_starts = variant.region_starts});
+                      .region_starts = variant.region_starts,
+                      .foreground_entries = foreground ? std::span(variant.foreground_entries)
+                                                       : std::span<const Word>{}});
     for (const auto &path : variant.fixed_passes) {
       passes.push_back({.variant = variant.id, .path = path, .device_reads = stable_reads});
     }
@@ -428,19 +471,9 @@ vi::dsp::Program prepare(const Object &root,
     interrupts.push_back(
         {.vector = word(request, "vector"), .level = static_cast<unsigned>(level)});
   }
-  std::vector<dsp56300::CodeTransition> transitions;
-  for (const auto &value : array(root, "transitions")) {
-    const auto &transfer = object(value);
-    const auto from = number(transfer, "from");
-    const auto to = number(transfer, "to");
-    if (const auto *entries = transfer.getArray("entry")) {
-      if (entries->empty()) { invalid("empty transition entry list"); }
-      for (const auto &entry : *entries) {
-        transitions.push_back({.from = from, .to = to, .entry = word(number(entry))});
-      }
-    } else {
-      transitions.push_back({.from = from, .to = to, .entry = word(transfer, "entry")});
-    }
+  const auto transitions = code_transitions(root);
+  if (foreground && foreground_plan != nullptr && prepare_foreground) {
+    prepare_foreground({.variants = source}, boot, *foreground_plan, cache / "foreground");
   }
   return prepare_dsp_program({.variants = source},
                              choices,
@@ -460,12 +493,13 @@ vi::dsp::Program prepare_dsp_catalogue(const std::string_view document,
                                        const std::span<const DspSource> sources,
                                        const std::filesystem::path &cache,
                                        const dsp56300::CompileOptions::MemoryMode mode,
-                                       const host::aot::Preparation preparation) {
+                                       const host::aot::Preparation preparation,
+                                       const PrepareForeground &prepare_foreground) {
   auto parsed = llvm::json::parse(document);
   if (!parsed) { throw std::invalid_argument(llvm::toString(parsed.takeError())); }
   const auto &root = object(*parsed);
   if (number(root, "format") != 1) { invalid("format"); }
   inputs(root, firmware, boot, sources);
-  return prepare(root, firmware, boot, sources, cache, mode, preparation);
+  return prepare(root, firmware, boot, sources, cache, mode, preparation, prepare_foreground);
 }
 }

@@ -7,6 +7,7 @@
 #endif
 
 #include "dsp/boot_rom.hpp"
+#include "dsp/foreground.hpp"
 #include "dsp/io.hpp"
 #include "execution.hpp"
 #include "io/coupling.hpp"
@@ -252,7 +253,8 @@ ExecutionReport execute(const BootRom boot,
                         PreparationClock *preparation,
                         const Program *program,
                         Coupling *coupling,
-                        const Memory::Storage memory) {
+                        const Memory::Storage memory,
+                        const Foreground foreground) {
   if (program == nullptr) {
     throw std::invalid_argument("DSP execution requires a complete prepared program");
   }
@@ -272,7 +274,8 @@ ExecutionReport execute(const BootRom boot,
         preparation,
         *program,
         coupling,
-        memory);
+        memory,
+        foreground);
   ExecutionReport report;
   report.prepared_native_bytes = program->report().native_bytes;
   std::uint64_t applied = 0;

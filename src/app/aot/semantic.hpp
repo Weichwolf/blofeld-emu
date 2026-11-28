@@ -54,6 +54,9 @@ semantic_inputs(const auto image, const auto options, const std::string_view com
     if constexpr (requires { variant.region_starts; }) {
       key.bytes(std::as_bytes(variant.region_starts));
     }
+    if constexpr (requires { variant.foreground_entries; }) {
+      key.bytes(std::as_bytes(variant.foreground_entries));
+    }
   });
   key.sequence(options.memory, [&](const auto &variant) {
     key.number(variant.id);

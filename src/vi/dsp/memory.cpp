@@ -153,6 +153,15 @@ bool Memory::read(const dsp56300::Space space,
   return true;
 }
 
+std::optional<dsp56300::Word> Memory::physical_word(const dsp56300::Space space,
+                                                    const dsp56300::Word address) const noexcept {
+  if (space != dsp56300::Space::x && space != dsp56300::Space::y) { return {}; }
+  const auto cell = locate(space, address);
+  if (!cell || !cell->writable) { return {}; }
+  const auto *base = storage_.physical.empty() ? owned_.data() : storage_.physical.data();
+  return static_cast<dsp56300::Word>(cell->value - base);
+}
+
 bool Memory::write(const Write access) noexcept {
   if (access.value > dsp56300::word_mask || access.address >= dsp56300::address_words) {
     return false;
