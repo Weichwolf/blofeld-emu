@@ -4,6 +4,9 @@
 #include "audio/pcm_frame.hpp"
 #include "audio/render_buffer.hpp"
 #include "linux/jack/midi_queue.hpp"
+#if defined(BLOFELD_JACK_DEADLINE_TRACE)
+#include "linux/jack/deadline_capture.hpp"
+#endif
 #include "midi/ump.hpp"
 
 #include <algorithm>
@@ -90,7 +93,12 @@ struct Playback::Impl {
     }
   }
 
-  ~Impl() { stop(); }
+  ~Impl() {
+    stop();
+#if defined(BLOFELD_JACK_DEADLINE_TRACE)
+    if (capture) { capture->save(jack_xruns.load(std::memory_order_relaxed)); }
+#endif
+  }
 
   void stop() noexcept {
     if (!closed.exchange(true, std::memory_order_acq_rel)) {
@@ -166,6 +174,22 @@ struct Playback::Impl {
     }
   }
 
+#if defined(BLOFELD_JACK_DEADLINE_TRACE)
+  [[nodiscard]] std::size_t observed_render(const std::span<float> left_samples,
+                                            const std::span<float> right_samples) noexcept {
+    const auto before = capture ? capture->start() : 0;
+    const auto copied = pcm.render(left_samples, right_samples, &late_frames);
+    if (capture && copied < left_samples.size()) {
+      capture->missed(previous_cycle.value_or(0),
+                      pcm.tail(),
+                      late_frames,
+                      left_samples.size() - copied,
+                      before);
+    }
+    return copied;
+  }
+#endif
+
   void cycle(const jack_nframes_t frames) noexcept {
     const std::span l(static_cast<float *>(jack_port_get_buffer(left, frames)), frames);
     const std::span r(static_cast<float *>(jack_port_get_buffer(right, frames)), frames);
@@ -205,7 +229,11 @@ struct Playback::Impl {
       previous_cycle = current;
     }
     if (primed) {
+#if defined(BLOFELD_JACK_DEADLINE_TRACE)
+      const auto copied = observed_render(l, r);
+#else
       const auto copied = pcm.render(l, r, &late_frames);
+#endif
       submitted.fetch_add(copied, std::memory_order_relaxed);
       if (copied != frames) { underruns.fetch_add(1, std::memory_order_relaxed); }
     } else {
@@ -223,6 +251,9 @@ struct Playback::Impl {
   const std::size_t block;
   RenderBuffer pcm;
   const Grants grants;
+#if defined(BLOFELD_JACK_DEADLINE_TRACE)
+  const std::unique_ptr<DeadlineCapture> capture = DeadlineCapture::open();
+#endif
   jack_port_t *left = nullptr, *right = nullptr, *input = nullptr, *output = nullptr;
   JackMidiQueue incoming, outgoing;
   std::atomic<bool> closed{false}, resetting{false};
@@ -264,6 +295,9 @@ bool Playback::write(std::span<const Frame> frames, const std::stop_token &stop)
     check();
     if (stop.stop_requested() || impl_->closed.load(std::memory_order_relaxed)) { return false; }
     const auto consumed = impl_->pcm.produce(frames);
+#if defined(BLOFELD_JACK_DEADLINE_TRACE)
+    if (impl_->capture) { impl_->capture->published(consumed); }
+#endif
     frames = frames.subspan(consumed);
     if (consumed == 0) { std::this_thread::sleep_for(poll); }
   }
