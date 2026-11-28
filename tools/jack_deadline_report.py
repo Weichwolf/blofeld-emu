@@ -7,6 +7,8 @@ BLOFELD_JACK_TRACE to a new output path for a live session. The application
 writes its first underfill and recent publications on exit. An optional
 perf capture uses --switch-events, --clockid mono and the DSP writer TID.
 Supply wakeups only when they were captured on the same clock for that TID.
+Scheduler time before the PCM read is reported separately from time until
+the missing frames were published.
 """
 
 import argparse
@@ -126,6 +128,7 @@ def analyze(args):
         "dsp_cpu_ns": cpu_ns,
         "dsp_cpu_overrun_lower_bound_ns": max(0, cpu_ns - available_upper_bound),
         "measured_wall_ns": wall_end - begin.ns,
+        "scheduler_before_read_ns": time_by_state(events, wakeups, begin.ns, before),
         "scheduler_ns": time_by_state(events, wakeups,
                                      begin.ns, wall_end),
     }
